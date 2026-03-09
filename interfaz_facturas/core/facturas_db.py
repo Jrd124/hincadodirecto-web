@@ -17,7 +17,7 @@ try:
 except ImportError:
   from interfaz_facturas.config import EMPRESAS_DIR, EMPRESAS_CLIENTE
 
-from core.db import get_conn as _get_conn
+from core.db import get_conn as _get_conn, conectar as _conectar
 
 # Columnas equivalentes al CSV base_maestra_facturas (sin id).
 # Nota: 'tarjeta_id' y 'liquidacion_periodo' son opcionales (solo en BD).
@@ -114,29 +114,23 @@ def get_facturas_empresa(empresa_id: str) -> list[dict]:
   Cada dict incluye 'id' y el resto de columnas (flag_error como bool).
   """
   init_facturas_db()
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     cur = conn.execute(
       "SELECT * FROM facturas_proveedor WHERE empresa_id = ? ORDER BY id",
       (empresa_id,),
     )
     return [_row_to_dict(r) for r in cur.fetchall()]
-  finally:
-    conn.close()
 
 
 def hay_facturas_en_bd(empresa_id: str) -> bool:
   """True si hay al menos una factura en SQLite para esta empresa."""
   init_facturas_db()
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     r = conn.execute(
       "SELECT 1 FROM facturas_proveedor WHERE empresa_id = ? LIMIT 1",
       (empresa_id,),
     ).fetchone()
     return r is not None
-  finally:
-    conn.close()
 
 
 def update_factura(empresa_id: str, factura: dict) -> bool:
