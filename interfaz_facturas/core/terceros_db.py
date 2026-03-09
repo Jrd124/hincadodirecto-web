@@ -8,7 +8,6 @@ from __future__ import annotations
 import csv
 import logging
 import sqlite3
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 from pathlib import Path
@@ -16,18 +15,13 @@ from typing import Any
 
 # Importación según contexto (backend corre desde interfaz_facturas)
 try:
-  from config import GESTION_DB, EMPRESAS_DIR, EMPRESAS_CLIENTE
+  from config import EMPRESAS_DIR, EMPRESAS_CLIENTE
   from config import PROVEEDORES_MAESTROS_NOMBRE, CAMPOS_PROVEEDORES_MAESTROS
 except ImportError:
-  from interfaz_facturas.config import GESTION_DB, EMPRESAS_DIR, EMPRESAS_CLIENTE
+  from interfaz_facturas.config import EMPRESAS_DIR, EMPRESAS_CLIENTE
   from interfaz_facturas.config import PROVEEDORES_MAESTROS_NOMBRE, CAMPOS_PROVEEDORES_MAESTROS
 
-
-def _get_conn() -> sqlite3.Connection:
-  GESTION_DB.parent.mkdir(parents=True, exist_ok=True)
-  conn = sqlite3.connect(str(GESTION_DB))
-  conn.row_factory = sqlite3.Row
-  return conn
+from core.db import get_conn as _get_conn, now_iso as _now
 
 
 def init_terceros_db() -> None:
@@ -74,10 +68,6 @@ def init_terceros_db() -> None:
     conn.commit()
   finally:
     conn.close()
-
-
-def _now() -> str:
-  return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _buscar_o_crear_tercero(conn: sqlite3.Connection, row: dict) -> int:

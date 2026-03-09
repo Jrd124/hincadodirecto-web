@@ -13,26 +13,11 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from datetime import datetime
 from typing import Any, List, Dict
 
 logger = logging.getLogger(__name__)
 
-try:
-  from config import GESTION_DB
-except ImportError:
-  from interfaz_facturas.config import GESTION_DB
-
-
-def _get_conn() -> sqlite3.Connection:
-  GESTION_DB.parent.mkdir(parents=True, exist_ok=True)
-  conn = sqlite3.connect(str(GESTION_DB))
-  conn.row_factory = sqlite3.Row
-  return conn
-
-
-def _now() -> str:
-  return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+from core.db import get_conn as _get_conn, now_iso as _now
 
 
 def init_tarjetas_db() -> None:

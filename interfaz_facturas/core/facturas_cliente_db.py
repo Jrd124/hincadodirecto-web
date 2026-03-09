@@ -13,9 +13,11 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 try:
-  from config import GESTION_DB, EMPRESAS_DIR, EMPRESAS_CLIENTE
+  from config import EMPRESAS_DIR, EMPRESAS_CLIENTE
 except ImportError:
-  from interfaz_facturas.config import GESTION_DB, EMPRESAS_DIR, EMPRESAS_CLIENTE
+  from interfaz_facturas.config import EMPRESAS_DIR, EMPRESAS_CLIENTE
+
+from core.db import get_conn as _get_conn
 
 # Columnas equivalentes al CSV facturas_clientes (sin id).
 # Debe coincidir con CAMPOS_FACTURAS_CLIENTES del backend para compatibilidad.
@@ -38,13 +40,6 @@ CAMPOS_FACTURAS_CLIENTE = [
   "ruta_archivo",
   "hash_archivo",
 ]
-
-
-def _get_conn() -> sqlite3.Connection:
-  GESTION_DB.parent.mkdir(parents=True, exist_ok=True)
-  conn = sqlite3.connect(str(GESTION_DB))
-  conn.row_factory = sqlite3.Row
-  return conn
 
 
 def init_facturas_cliente_db() -> None:
