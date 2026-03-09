@@ -13,8 +13,6 @@ import shutil
 import sqlite3
 import time
 import unicodedata
-import urllib.parse
-import urllib.request
 import zipfile
 
 logger = logging.getLogger(__name__)
@@ -48,6 +46,17 @@ from core import terceros_db, facturas_db, tarjetas_db, facturas_cliente_db
 from core.facturas_db import CAMPOS_FACTURAS_PROVEEDOR
 from core.facturas_cliente_db import CAMPOS_FACTURAS_CLIENTE
 from core.ocr import leer_texto_factura as _leer_texto_factura
+from core.geocoding import (
+  obtener_pais_desde_localidad as _obtener_pais_desde_localidad,
+  enriquecer_pais_desde_localidad as _enriquecer_pais_desde_localidad,
+)
+from core.archivador import (
+  hash_archivo as _hash_archivo,
+  normalizar_fecha_factura_clave as _normalizar_fecha_factura_clave,
+  clave_logica_factura_proveedor as _clave_logica_factura_proveedor,
+  añadir_hashes_tabla as _añadir_hashes_tabla,
+  archivar_por_fecha as _archivar_por_fecha,
+)
 from core.parser import (
   normalizar_texto as _normalizar_texto,
   normalizar_importe_str as _normalizar_importe_str,
@@ -846,204 +855,8 @@ def _revisor_basico(filas: list[dict]) -> list[dict]:
   return filas
 
 
-def _hash_archivo(ruta: Path) -> str:
-  """Calcula SHA-256 del contenido del archivo. Devuelve cadena hexadecimal o vacía si error."""
-  try:
-    with open(ruta, "rb") as f:
-      return hashlib.sha256(f.read()).hexdigest()
-  except Exception as e:
-    logger.warning("No se pudo calcular hash de %s: %s", ruta, e)
-    return ""
 
 
-def _normalizar_fecha_factura_clave(s: str) -> str:
-  """Normaliza una fecha a YYYY-MM-DD para comparar facturas (evitar duplicados por formato distinto)."""
-  s = (s or "").strip()[:10]
-  if not s:
-    return ""
-  try:
-    datetime.strptime(s, "%Y-%m-%d")
-    return s
-  except Exception as e:
-    logger.debug("Fecha no es YYYY-MM-DD '%s': %s", s, e)
-  try:
-    d = datetime.strptime((s or "").strip(), "%d/%m/%Y")
-    return d.strftime("%Y-%m-%d")
-  except Exception as e:
-    logger.debug("Fecha no es DD/MM/YYYY '%s': %s", s, e)
-  try:
-    d = datetime.strptime((s or "").strip(), "%d-%m-%Y")
-    return d.strftime("%Y-%m-%d")
-  except Exception as e:
-    logger.debug("Fecha no es DD-MM-YYYY '%s': %s", s, e)
-    return s
-
-
-def _clave_logica_factura_proveedor(numero: str, proveedor: str, fecha: str) -> tuple[str, str, str]:
-  """Clave normalizada (numero, proveedor, fecha) para detectar duplicados lógicos."""
-  n = (numero or "").strip().lower()
-  p = (proveedor or "").strip().lower()
-  f = _normalizar_fecha_factura_clave(fecha or "")
-  return (n, p, f)
-
-
-def _añadir_hashes_tabla_proveedor(tabla: list[dict]) -> None:
-  """Añade hash_archivo a cada fila que tenga ruta_archivo (antes de que el archivador mueva el archivo)."""
-  for fila in tabla:
-    ruta_str = (fila.get("ruta_archivo") or "").strip()
-    if not ruta_str:
-      fila["hash_archivo"] = ""
-      continue
-    p = Path(ruta_str)
-    fila["hash_archivo"] = _hash_archivo(p) if p.exists() else ""
-
-
-def _añadir_hashes_tabla_clientes(tabla: list[dict]) -> None:
-  """Añade hash_archivo a cada fila que tenga ruta_archivo (antes de que el archivador mueva el archivo)."""
-  for fila in tabla:
-    ruta_str = (fila.get("ruta_archivo") or "").strip()
-    if not ruta_str:
-      fila["hash_archivo"] = ""
-      continue
-    p = Path(ruta_str)
-    fila["hash_archivo"] = _hash_archivo(p) if p.exists() else ""
-
-
-def _archivador_por_empresa_y_fecha(filas: list[dict]) -> list[dict]:
-  """
-  Archivador: mueve archivos a Facturas Recibidas/{Empresa}/{Año}/{MM. Mes}/
-  usando la fecha de factura si existe, o 'Sin fecha' en caso contrario.
-  """
-  resultados: list[dict] = []
-
-  for fila in filas:
-    ruta_actual = Path(fila["ruta_archivo"])
-    empresa_id = fila.get("empresa_id") or "sin_empresa"
-    fecha_str = (fila.get("fecha_factura") or "").strip()
-
-    if fecha_str:
-      año = "Sin_fecha"
-      mes_carpeta = "Sin fecha"
-      try:
-        # Se asume formato ISO básico YYYY-MM-DD; si no, se cae al except.
-        dt = datetime.fromisoformat(fecha_str[:10])
-        año = str(dt.year)
-        mes_carpeta = f"{dt.month:02d}. {dt.strftime('%B')}"
-      except Exception as e:
-        logger.debug("Fecha no parseable para archivar '%s': %s", fecha_str, e)
-        año = "Sin_fecha"
-        mes_carpeta = "Sin fecha"
-    else:
-      año = "Sin_fecha"
-      mes_carpeta = "Sin fecha"
-
-    destino_dir = FACTURAS_RECIBIDAS_DIR / empresa_id / año / mes_carpeta
-    destino_dir.mkdir(parents=True, exist_ok=True)
-
-    nombre = ruta_actual.name
-    destino = destino_dir / nombre
-
-    # Evitar sobrescribir: si ya existe, añadir sufijo numérico.
-    contador = 2
-    while destino.exists():
-      destino = destino_dir / f"{ruta_actual.stem}_{contador}{ruta_actual.suffix}"
-      contador += 1
-
-    shutil.move(str(ruta_actual), destino)
-    fila["ruta_destino"] = str(destino)
-    resultados.append(fila)
-
-  return resultados
-
-
-# Cache localidad -> país para no repetir peticiones a Nominatim en el mismo lote.
-# Se persiste en JSON entre reinicios para no repetir peticiones.
-_cache_pais_localidad: dict[str, str] = {}
-_cache_nominatim_loaded = False
-
-CACHE_NOMINATIM_PATH = DATOS_DIR / "cache_nominatim_pais_localidad.json"
-
-
-def _cargar_cache_nominatim() -> None:
-  """Carga el cache de Nominatim desde disco (localidad_norm -> país)."""
-  global _cache_nominatim_loaded
-  if _cache_nominatim_loaded:
-    return
-  _cache_nominatim_loaded = True
-  if not CACHE_NOMINATIM_PATH.exists():
-    return
-  try:
-    with CACHE_NOMINATIM_PATH.open("r", encoding="utf-8") as f:
-      data = json.load(f)
-    if isinstance(data, dict):
-      for k, v in data.items():
-        if isinstance(k, str) and isinstance(v, str):
-          _cache_pais_localidad[k] = v
-  except Exception as e:
-    logger.warning("Error cargando cache Nominatim: %s", e)
-
-
-def _guardar_cache_nominatim() -> None:
-  """Persiste el cache de Nominatim en disco."""
-  try:
-    CACHE_NOMINATIM_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with CACHE_NOMINATIM_PATH.open("w", encoding="utf-8") as f:
-      json.dump(_cache_pais_localidad, f, ensure_ascii=False, indent=0)
-  except Exception as e:
-    logger.warning("Error guardando cache Nominatim: %s", e)
-
-
-def _obtener_pais_desde_localidad(localidad: str) -> str:
-  """
-  Obtiene el país a partir del nombre de la localidad usando Nominatim (OpenStreetMap).
-  Respeta 1 petición por segundo. Devuelve cadena vacía si no se encuentra o hay error.
-  Usa cache en memoria y persistente (JSON) entre reinicios.
-  """
-  _cargar_cache_nominatim()
-  localidad = (localidad or "").strip()
-  if not localidad or len(localidad) < 2:
-    return ""
-  localidad_norm = localidad.lower()
-  if localidad_norm in _cache_pais_localidad:
-    return _cache_pais_localidad[localidad_norm]
-
-  try:
-    url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode({
-      "q": localidad,
-      "format": "json",
-      "addressdetails": 1,
-      "limit": 1,
-    })
-    req = urllib.request.Request(url, headers={"User-Agent": "FacturasApp/1.0 (dato pais por localidad)"})
-    with urllib.request.urlopen(req, timeout=10) as resp:
-      data = json.loads(resp.read().decode())
-    time.sleep(1.0)
-    if data and isinstance(data, list) and len(data) > 0:
-      addr = data[0].get("address") or {}
-      pais = (addr.get("country") or "").strip()
-      if pais:
-        _cache_pais_localidad[localidad_norm] = pais
-        _guardar_cache_nominatim()
-        return pais
-  except Exception as e:
-    logger.warning("Error consultando Nominatim para '%s': %s", localidad, e)
-  _cache_pais_localidad[localidad_norm] = ""
-  _guardar_cache_nominatim()
-  return ""
-
-
-def _enriquecer_pais_desde_localidad(tabla: list[dict]) -> list[dict]:
-  """
-  Rellena pais_proveedor cuando esté vacío usando la localidad y una búsqueda en internet (Nominatim).
-  """
-  for fila in tabla:
-    pais = (fila.get("pais_proveedor") or "").strip()
-    localidad = (fila.get("localidad_proveedor") or "").strip()
-    if not pais and localidad:
-      pais = _obtener_pais_desde_localidad(localidad)
-      if pais:
-        fila["pais_proveedor"] = pais
-  return tabla
 
 
 # --- Homogeneización de proveedores (listado maestro + doble verificación) ---
@@ -1342,7 +1155,7 @@ def procesar_lote(empresa_id: str, carpeta: Path, tarjeta_id: str | None = None)
     logger.info("Extractor LLM: %d filas extraídas", len(tabla))
 
   tabla = _revisor_basico(tabla)
-  _añadir_hashes_tabla_proveedor(tabla)
+  _añadir_hashes_tabla(tabla)
   hashes_existentes = facturas_db.get_hashes_empresa_proveedor(empresa_id)
   claves_existentes = {
     _clave_logica_factura_proveedor(num, prov, fec)
@@ -1362,7 +1175,7 @@ def procesar_lote(empresa_id: str, carpeta: Path, tarjeta_id: str | None = None)
   duplicados_omitidos = len(tabla) - len(tabla_sin_duplicados)
   if duplicados_omitidos:
     logger.info("Duplicados omitidos: %d", duplicados_omitidos)
-  tabla = _archivador_por_empresa_y_fecha(tabla_sin_duplicados)
+  tabla = _archivar_por_fecha(tabla_sin_duplicados, FACTURAS_RECIBIDAS_DIR)
   tabla = _homogeneizar_proveedores(tabla, empresa_id)
   tabla = _enriquecer_pais_desde_localidad(tabla)
 
@@ -2755,47 +2568,6 @@ def _revisor_basico_clientes(filas: list[dict]) -> list[dict]:
   return filas
 
 
-def _archivador_facturas_emitidas(filas: list[dict]) -> list[dict]:
-  """Archivador: mueve archivos a Facturas Emitidas/{Empresa}/{Año}/{MM. Mes}/."""
-  resultados: list[dict] = []
-
-  for fila in filas:
-    ruta_actual = Path(fila["ruta_archivo"])
-    empresa_id = fila.get("empresa_id") or "sin_empresa"
-    fecha_str = (fila.get("fecha_factura") or "").strip()
-
-    if fecha_str:
-      año = "Sin_fecha"
-      mes_carpeta = "Sin fecha"
-      try:
-        dt = datetime.fromisoformat(fecha_str[:10])
-        año = str(dt.year)
-        mes_carpeta = f"{dt.month:02d}. {dt.strftime('%B')}"
-      except Exception as e:
-        logger.debug("Fecha no parseable para archivar '%s': %s", fecha_str, e)
-        año = "Sin_fecha"
-        mes_carpeta = "Sin fecha"
-    else:
-      año = "Sin_fecha"
-      mes_carpeta = "Sin fecha"
-
-    destino_dir = FACTURAS_EMITIDAS_DIR / empresa_id / año / mes_carpeta
-    destino_dir.mkdir(parents=True, exist_ok=True)
-
-    nombre = ruta_actual.name
-    destino = destino_dir / nombre
-
-    contador = 2
-    while destino.exists():
-      destino = destino_dir / f"{ruta_actual.stem}_{contador}{ruta_actual.suffix}"
-      contador += 1
-
-    shutil.move(str(ruta_actual), destino)
-    fila["ruta_destino"] = str(destino)
-    fila["ruta_archivo"] = str(destino)
-    resultados.append(fila)
-
-  return resultados
 
 
 def _get_hashes_csv_clientes(empresa_id: str) -> set[str]:
@@ -2839,14 +2611,14 @@ def procesar_lote_clientes(empresa_id: str, carpeta: Path) -> dict:
         fila["pais"] = pais_detectado
 
   tabla = _revisor_basico_clientes(tabla)
-  _añadir_hashes_tabla_clientes(tabla)
+  _añadir_hashes_tabla(tabla)
   hashes_existentes = _get_hashes_csv_clientes(empresa_id)
   tabla_sin_duplicados = [
     f for f in tabla
     if (f.get("hash_archivo") or "").strip() and (f.get("hash_archivo") or "").strip() not in hashes_existentes
   ]
   duplicados_omitidos = len(tabla) - len(tabla_sin_duplicados)
-  tabla = _archivador_facturas_emitidas(tabla_sin_duplicados)
+  tabla = _archivar_por_fecha(tabla_sin_duplicados, FACTURAS_EMITIDAS_DIR, actualizar_ruta_archivo=True)
   resumen_bd = _base_maestra_csv_clientes(tabla, empresa_id)
   facturas_con_vision = sum(1 for f in tabla if str(f.get("extraccion_vision") or "").strip() == "1")
 
