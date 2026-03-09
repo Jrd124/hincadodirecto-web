@@ -18,9 +18,12 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, Blueprint, jsonify, request, send_file, send_from_directory, Response
+from flask import Flask, Blueprint, jsonify, redirect, request, send_file, send_from_directory, Response, url_for
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 
 from config import (
+  ADMIN_PASSWORD,
+  ADMIN_USER,
   BASE_DIR,
   BANCOS_DIR,
   DATOS_DIR,
@@ -31,6 +34,7 @@ from config import (
   GESTION_DB,
   MOVIMIENTOS_DB,
   OPENROUTESERVICE_API_KEY,
+  SECRET_KEY,
   SUBIDAS_DIR,
   client,
 )
@@ -617,14 +621,65 @@ def procesar_lote(empresa_id: str, carpeta: Path, tarjeta_id: str | None = None)
 
 
 app = Flask(__name__, static_folder=".", static_url_path="")
+app.secret_key = SECRET_KEY
+
+# ─── Autenticación (Flask-Login) ─────────────────────────────────────────────
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login_page"
+
+
+class _User(UserMixin):
+  def __init__(self, username: str):
+    self.id = username
+
+
+@login_manager.user_loader
+def _load_user(user_id: str):
+  if user_id == ADMIN_USER:
+    return _User(user_id)
+  return None
+
+
+@app.before_request
+def _require_login():
+  """Protege todas las rutas excepto login y archivos estáticos del login."""
+  rutas_publicas = ("login_page", "login_post", "static")
+  if request.endpoint in rutas_publicas:
+    return
+  if not current_user.is_authenticated:
+    if request.path.startswith("/api/"):
+      return jsonify({"error": "No autenticado"}), 401
+    return redirect(url_for("login_page"))
+
+
+@app.get("/login")
+def login_page():
+  if current_user.is_authenticated:
+    return redirect("/")
+  return send_from_directory(app.static_folder, "login.html")
+
+
+@app.post("/login")
+def login_post():
+  username = (request.form.get("username") or "").strip()
+  password = (request.form.get("password") or "")
+  if username == ADMIN_USER and password == ADMIN_PASSWORD:
+    login_user(_User(username))
+    return redirect("/")
+  return redirect("/login?error=1")
+
+
+@app.get("/logout")
+def logout():
+  logout_user()
+  return redirect("/login")
 
 
 @app.get("/")
 def index():
-  """
-  Sirve la página principal de la interfaz de facturas.
-  """
-  # Sirve el index.html que está en el mismo directorio que este backend.
+  """Sirve la página principal de la interfaz de facturas."""
   return send_from_directory(app.static_folder, "index.html")
 
 

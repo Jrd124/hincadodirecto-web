@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iniciar sesión</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f0f2f5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .login-card {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+      padding: 2.5rem 2rem;
+      width: 100%;
+      max-width: 380px;
+    }
+    .login-card h1 {
+      font-size: 1.5rem;
+      color: #333;
+      margin-bottom: 1.5rem;
+      text-align: center;
+    }
+    .login-card label {
+      display: block;
+      font-size: 0.875rem;
+      color: #555;
+      margin-bottom: 0.3rem;
+    }
+    .login-card input[type="text"],
+    .login-card input[type="password"] {
+      width: 100%;
+      padding: 0.6rem 0.75rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 1rem;
+      margin-bottom: 1rem;
+    }
+    .login-card input:focus {
+      outline: none;
+      border-color: #4a90d9;
+      box-shadow: 0 0 0 2px rgba(74,144,217,0.2);
+    }
+    .login-card button {
+      width: 100%;
+      padding: 0.7rem;
+      background: #4a90d9;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-top: 0.5rem;
+    }
+    .login-card button:hover { background: #3a7bc8; }
+    .error {
+      background: #fce4e4;
+      color: #c0392b;
+      padding: 0.5rem 0.75rem;
+      border-radius: 4px;
+      font-size: 0.875rem;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <form class="login-card" method="POST" action="/login">
+    <h1>Iniciar sesión</h1>
+    <div id="error-msg" class="error" style="display:none;"></div>
+    <label for="username">Usuario</label>
+    <input type="text" id="username" name="username" autocomplete="username" required autofocus>
+    <label for="password">Contraseña</label>
+    <input type="password" id="password" name="password" autocomplete="current-password" required>
+    <button type="submit">Entrar</button>
+  </form>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("error") === "1") {
+      const el = document.getElementById("error-msg");
+      el.textContent = "Usuario o contraseña incorrectos.";
+      el.style.display = "block";
+    }
+  </script>
+</body>
+</html>
