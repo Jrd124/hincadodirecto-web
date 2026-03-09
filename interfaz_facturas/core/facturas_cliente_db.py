@@ -42,8 +42,14 @@ CAMPOS_FACTURAS_CLIENTE = [
 ]
 
 
+_initialized = False
+
+
 def init_facturas_cliente_db() -> None:
-  """Crea la tabla facturas_cliente si no existe."""
+  """Crea la tabla facturas_cliente si no existe. No-op tras la primera llamada."""
+  global _initialized
+  if _initialized:
+    return
   conn = _get_conn()
   try:
     columnas_sql = [
@@ -78,6 +84,7 @@ def init_facturas_cliente_db() -> None:
     conn.commit()
   finally:
     conn.close()
+  _initialized = True
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict:

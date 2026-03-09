@@ -24,8 +24,14 @@ except ImportError:
 from core.db import get_conn as _get_conn, now_iso as _now
 
 
+_initialized = False
+
+
 def init_terceros_db() -> None:
-  """Crea las tablas terceros y empresa_tercero si no existen."""
+  """Crea las tablas terceros y empresa_tercero si no existen. No-op tras la primera llamada."""
+  global _initialized
+  if _initialized:
+    return
   conn = _get_conn()
   try:
     conn.executescript("""
@@ -68,6 +74,7 @@ def init_terceros_db() -> None:
     conn.commit()
   finally:
     conn.close()
+  _initialized = True
 
 
 def _buscar_o_crear_tercero(conn: sqlite3.Connection, row: dict) -> int:

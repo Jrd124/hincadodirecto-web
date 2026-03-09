@@ -20,8 +20,14 @@ logger = logging.getLogger(__name__)
 from core.db import get_conn as _get_conn, now_iso as _now
 
 
+_initialized = False
+
+
 def init_tarjetas_db() -> None:
-  """Crea la tabla tarjetas si no existe."""
+  """Crea la tabla tarjetas si no existe. No-op tras la primera llamada."""
+  global _initialized
+  if _initialized:
+    return
   conn = _get_conn()
   try:
     conn.execute(
@@ -48,6 +54,7 @@ def init_tarjetas_db() -> None:
     conn.commit()
   finally:
     conn.close()
+  _initialized = True
 
 
 def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:

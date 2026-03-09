@@ -93,14 +93,19 @@ _MAX_WORKERS_EXTRACTOR_LLM = 4
 
 
 def ensure_dirs() -> None:
+  """Crea directorios e inicializa todas las bases de datos."""
   DATOS_DIR.mkdir(exist_ok=True)
   SUBIDAS_DIR.mkdir(exist_ok=True)
   FACTURAS_RECIBIDAS_DIR.mkdir(exist_ok=True)
   FACTURAS_EMITIDAS_DIR.mkdir(exist_ok=True)
   EMPRESAS_DIR.mkdir(exist_ok=True)
   BANCOS_DIR.mkdir(parents=True, exist_ok=True)
+  # Inicializar todas las BDs al arranque (idempotente gracias a flags internos)
   facturas_db.init_facturas_db()
   facturas_cliente_db.init_facturas_cliente_db()
+  terceros_db.init_terceros_db()
+  tarjetas_db.init_tarjetas_db()
+  _init_movimientos_db()
 
 
 def _ocr_pagina_fitz(page: "fitz.Page") -> str:
@@ -3899,8 +3904,14 @@ def _get_bancos_db():
   return sqlite3.connect(MOVIMIENTOS_DB)
 
 
+_movimientos_db_initialized = False
+
+
 def _init_movimientos_db():
-  """Crea la tabla movimientos si no existe y añade columnas de conciliación si faltan."""
+  """Crea la tabla movimientos si no existe y añade columnas de conciliación si faltan. No-op tras la primera llamada."""
+  global _movimientos_db_initialized
+  if _movimientos_db_initialized:
+    return
   conn = _get_bancos_db()
   try:
     conn.execute("""
@@ -3944,6 +3955,7 @@ def _init_movimientos_db():
     conn.commit()
   finally:
     conn.close()
+  _movimientos_db_initialized = True
 
 
 def _hash_dedup(banco: str, fecha_operacion: str, importe: float, concepto: str) -> str:
