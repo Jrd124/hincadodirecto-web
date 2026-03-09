@@ -4,7 +4,6 @@ import csv
 import difflib
 import hashlib
 import io
-import json
 import logging
 import os
 import re
@@ -24,7 +23,6 @@ from flask import Flask, Blueprint, jsonify, request, send_file, send_from_direc
 from config import (
   BASE_DIR,
   BANCOS_DIR,
-  CAMPOS_PROVEEDORES_MAESTROS,
   DATOS_DIR,
   EMPRESAS_CLIENTE,
   EMPRESAS_DIR,
@@ -32,10 +30,7 @@ from config import (
   FACTURAS_RECIBIDAS_DIR,
   GESTION_DB,
   MOVIMIENTOS_DB,
-  NOMBRES_EMPRESAS_CLIENTE,
-  OPENAI_API_KEY,
   OPENROUTESERVICE_API_KEY,
-  PROVEEDORES_MAESTROS_NOMBRE,
   SUBIDAS_DIR,
   client,
 )
@@ -140,14 +135,6 @@ def ensure_dirs() -> None:
   terceros_db.init_terceros_db()
   tarjetas_db.init_tarjetas_db()
   _init_movimientos_db()
-
-
-
-
-
-
-
-
 
 
 def _recolector(carpeta: Path) -> list[Path]:
@@ -535,16 +522,6 @@ def _sugerencias_heuristicas(fila: dict, errores: list[str], tipo: str) -> list[
       })
 
   return sugerencias
-
-
-
-
-
-
-
-
-
-
 
 
 def _base_maestra_csv(filas: list[dict], empresa_id: str) -> dict:
@@ -1683,7 +1660,6 @@ def descargar_facturas_zip():
   )
 
 
-
 # Cache en memoria de listados por empresa (invalidación al editar/eliminar/procesar)
 _cache_listado_facturas_proveedores: dict[str, list[dict]] = {}
 _cache_listado_facturas_clientes: dict[str, list[dict]] = {}
@@ -1955,10 +1931,6 @@ def _extractor_basico_clientes(rutas: list[Path], empresa_id: str) -> list[dict]
   return filas
 
 
-
-
-
-
 def _get_hashes_csv_clientes(empresa_id: str) -> set[str]:
   """Devuelve el conjunto de hash_archivo ya presentes en la BD de clientes de la empresa."""
   return facturas_cliente_db.get_hashes_empresa_cliente(empresa_id)
@@ -2024,13 +1996,6 @@ def procesar_lote_clientes(empresa_id: str, carpeta: Path) -> dict:
 
 
 # ─── Facturas de Clientes (Facturas Emitidas) – CRUD ─────────────────────────
-
-
-def _ruta_csv_clientes(empresa_id: str) -> Path:
-  empresa_dir = EMPRESAS_DIR / empresa_id
-  empresa_dir.mkdir(parents=True, exist_ok=True)
-  return empresa_dir / "facturas_clientes.csv"
-
 
 
 def _get_clientes_unicos_empresa(empresa_id: str) -> list[dict]:
