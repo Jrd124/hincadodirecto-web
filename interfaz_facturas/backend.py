@@ -23,10 +23,14 @@ import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
 
-# Configurar ruta de Tesseract en Windows si no está en el PATH
-_TESSERACT_WIN = Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe")
-if _TESSERACT_WIN.exists():
-  pytesseract.pytesseract.tesseract_cmd = str(_TESSERACT_WIN)
+# Configurar ruta de Tesseract: variable de entorno > ruta Windows > ruta Linux > PATH
+_TESSERACT_CMD = os.getenv("TESSERACT_CMD", "")
+if _TESSERACT_CMD and Path(_TESSERACT_CMD).exists():
+  pytesseract.pytesseract.tesseract_cmd = _TESSERACT_CMD
+elif Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe").exists():
+  pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+elif Path("/usr/bin/tesseract").exists():
+  pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 from flask import Flask, Blueprint, jsonify, request, send_file, send_from_directory, Response
 
 from config import (
