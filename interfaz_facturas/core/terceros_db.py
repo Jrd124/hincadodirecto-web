@@ -21,7 +21,7 @@ except ImportError:
   from interfaz_facturas.config import EMPRESAS_DIR, EMPRESAS_CLIENTE
   from interfaz_facturas.config import PROVEEDORES_MAESTROS_NOMBRE, CAMPOS_PROVEEDORES_MAESTROS
 
-from core.db import get_conn as _get_conn, now_iso as _now
+from core.db import conectar as _conectar, now_iso as _now
 
 
 _initialized = False
@@ -32,8 +32,7 @@ def init_terceros_db() -> None:
   global _initialized
   if _initialized:
     return
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     conn.executescript("""
       CREATE TABLE IF NOT EXISTS terceros (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,9 +70,6 @@ def init_terceros_db() -> None:
       CREATE INDEX IF NOT EXISTS ix_empresa_tercero_empresa ON empresa_tercero(empresa_id);
       CREATE INDEX IF NOT EXISTS ix_empresa_tercero_tercero ON empresa_tercero(tercero_id);
     """)
-    conn.commit()
-  finally:
-    conn.close()
   _initialized = True
 
 
@@ -147,15 +143,13 @@ def migrar_proveedores_desde_csv() -> dict[str, Any]:
   Devuelve { "empresas_procesadas": int, "terceros_creados": int, "relaciones_creadas": int, "errores": list }.
   """
   init_terceros_db()
-  conn = _get_conn()
   resultado: dict[str, Any] = {
     "empresas_procesadas": 0,
     "terceros_totales": 0,
     "relaciones_creadas": 0,
     "errores": [],
   }
-  try:
-    # Carpetas de empresa: las definidas en TOML o las que existan bajo EMPRESAS_DIR
+  with _conectar() as conn:
     empresas = list(EMPRESAS_CLIENTE.keys()) if EMPRESAS_CLIENTE else []
     if not empresas:
       for d in EMPRESAS_DIR.iterdir():
@@ -178,7 +172,6 @@ def migrar_proveedores_desde_csv() -> dict[str, Any]:
       for p in lista:
         try:
           tercero_id = _buscar_o_crear_tercero(conn, p)
-          # ¿Relación ya existe?
           cur = conn.execute(
             "SELECT id FROM empresa_tercero WHERE empresa_id = ? AND tercero_id = ?",
             (empresa_id, tercero_id),
@@ -196,9 +189,6 @@ def migrar_proveedores_desde_csv() -> dict[str, Any]:
           resultado["errores"].append(f"{empresa_id} / {p.get('nombre_canonico','')}: {e}")
       resultado["empresas_procesadas"] += 1
     resultado["terceros_totales"] = conn.execute("SELECT COUNT(*) FROM terceros").fetchone()[0]
-    conn.commit()
-  finally:
-    conn.close()
   return resultado
 
 
@@ -209,8 +199,7 @@ def get_proveedores_empresa(empresa_id: str) -> list[dict]:
   Si la tabla empresa_tercero está vacía para esta empresa, devuelve [].
   """
   init_terceros_db()
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     cur = conn.execute(
       """SELECT t.nif, t.nombre_canonico, t.direccion, t.localidad, t.pais, t.email, t.telefono, e.centro_coste
          FROM empresa_tercero e
@@ -233,19 +222,14 @@ def get_proveedores_empresa(empresa_id: str) -> list[dict]:
       }
       for r in filas
     ]
-  finally:
-    conn.close()
 
 
 def hay_proveedores_en_bd() -> bool:
   """True si hay al menos una fila en empresa_tercero (proveedores migrados)."""
   init_terceros_db()
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     r = conn.execute("SELECT 1 FROM empresa_tercero LIMIT 1").fetchone()
     return r is not None
-  finally:
-    conn.close()
 
 
 def guardar_proveedores_empresa(empresa_id: str, lista: list[dict]) -> None:
@@ -254,8 +238,7 @@ def guardar_proveedores_empresa(empresa_id: str, lista: list[dict]) -> None:
   Solo toca filas con es_proveedor=1 para no afectar a clientes.
   """
   init_terceros_db()
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     conn.execute("DELETE FROM empresa_tercero WHERE empresa_id = ? AND es_proveedor = 1", (empresa_id,))
     for p in lista:
       nombre = (p.get("nombre_canonico") or "").strip()
@@ -268,9 +251,6 @@ def guardar_proveedores_empresa(empresa_id: str, lista: list[dict]) -> None:
            VALUES (?, ?, ?, 1, 1, 0, ?, ?)""",
         (empresa_id, tercero_id, centro, _now(), _now()),
       )
-    conn.commit()
-  finally:
-    conn.close()
 
 
 def get_clientes_empresa(empresa_id: str) -> list[dict]:
@@ -279,8 +259,7 @@ def get_clientes_empresa(empresa_id: str) -> list[dict]:
   Formato: cliente (nombre_canonico), cif_nif, pais, localidad, proyecto (alias_local), direccion, email, telefono.
   """
   init_terceros_db()
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     cur = conn.execute(
       """SELECT t.nif, t.nombre_canonico, t.direccion, t.localidad, t.pais, t.email, t.telefono, e.alias_local
          FROM empresa_tercero e
@@ -303,19 +282,14 @@ def get_clientes_empresa(empresa_id: str) -> list[dict]:
       }
       for r in filas
     ]
-  finally:
-    conn.close()
 
 
 def hay_clientes_en_bd() -> bool:
   """True si hay al menos una relación empresa_tercero con es_cliente=1."""
   init_terceros_db()
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     r = conn.execute("SELECT 1 FROM empresa_tercero WHERE es_cliente = 1 LIMIT 1").fetchone()
     return r is not None
-  finally:
-    conn.close()
 
 
 def guardar_clientes_empresa(empresa_id: str, lista: list[dict]) -> None:
@@ -324,8 +298,7 @@ def guardar_clientes_empresa(empresa_id: str, lista: list[dict]) -> None:
   Cada dict: cliente, cif_nif, pais, localidad, proyecto, direccion, email, telefono.
   """
   init_terceros_db()
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     conn.execute("DELETE FROM empresa_tercero WHERE empresa_id = ? AND es_cliente = 1", (empresa_id,))
     for c in lista:
       nombre = (c.get("cliente") or c.get("nombre_canonico") or "").strip()
@@ -338,6 +311,3 @@ def guardar_clientes_empresa(empresa_id: str, lista: list[dict]) -> None:
            VALUES (?, ?, ?, 1, 0, 1, ?, ?)""",
         (empresa_id, tercero_id, proyecto, _now(), _now()),
       )
-    conn.commit()
-  finally:
-    conn.close()

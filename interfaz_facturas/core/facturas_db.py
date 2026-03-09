@@ -17,7 +17,7 @@ try:
 except ImportError:
   from interfaz_facturas.config import EMPRESAS_DIR, EMPRESAS_CLIENTE
 
-from core.db import get_conn as _get_conn, conectar as _conectar
+from core.db import conectar as _conectar
 
 # Columnas equivalentes al CSV base_maestra_facturas (sin id).
 # Nota: 'tarjeta_id' y 'liquidacion_periodo' son opcionales (solo en BD).
@@ -40,8 +40,7 @@ def init_facturas_db() -> None:
   global _initialized
   if _initialized:
     return
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     columnas_sql = [
       "id INTEGER PRIMARY KEY AUTOINCREMENT",
       "empresa_id TEXT NOT NULL",
@@ -76,7 +75,6 @@ def init_facturas_db() -> None:
     conn.execute(
       "CREATE TABLE IF NOT EXISTS facturas_proveedor (\n  " + ",\n  ".join(columnas_sql) + "\n)"
     )
-    # Migración suave: añadir columna tarjeta_id si falta en instalaciones existentes.
     cur = conn.execute("PRAGMA table_info(facturas_proveedor)")
     cols_existentes = {row[1] for row in cur.fetchall()}
     if "tarjeta_id" not in cols_existentes:
@@ -87,9 +85,6 @@ def init_facturas_db() -> None:
       conn.execute("ALTER TABLE facturas_proveedor ADD COLUMN hash_archivo TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS ix_facturas_proveedor_empresa ON facturas_proveedor(empresa_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS ix_facturas_proveedor_ruta ON facturas_proveedor(empresa_id, ruta_destino)")
-    conn.commit()
-  finally:
-    conn.close()
   _initialized = True
 
 
@@ -144,8 +139,7 @@ def update_factura(empresa_id: str, factura: dict) -> bool:
   ruta_arch = (factura.get("ruta_archivo") or "").strip()
   if not ruta_dest and not ruta_arch:
     return False
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     cur = conn.execute(
       """SELECT id FROM facturas_proveedor
          WHERE empresa_id = ? AND (ruta_destino = ? OR ruta_archivo = ? OR ruta_destino = ? OR ruta_archivo = ?)
@@ -166,10 +160,7 @@ def update_factura(empresa_id: str, factura: dict) -> bool:
       "UPDATE facturas_proveedor SET " + ", ".join(f"{c} = ?" for c in CAMPOS_FACTURAS_PROVEEDOR) + " WHERE id = ?",
       valores + [row["id"]],
     )
-    conn.commit()
     return True
-  finally:
-    conn.close()
 
 
 def update_facturas_proveedor_nombre_nif(
@@ -182,18 +173,13 @@ def update_facturas_proveedor_nombre_nif(
   if not (old_proveedor or old_nif):
     return 0
   init_facturas_db()
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     cur = conn.execute(
       """UPDATE facturas_proveedor SET proveedor = ?, nif_proveedor = ?
          WHERE empresa_id = ? AND TRIM(COALESCE(proveedor, '')) = ? AND TRIM(COALESCE(nif_proveedor, '')) = ?""",
       (new_proveedor.strip(), new_nif.strip(), empresa_id, old_proveedor.strip(), old_nif.strip()),
     )
-    n = cur.rowcount
-    conn.commit()
-    return n
-  finally:
-    conn.close()
+    return cur.rowcount
 
 
 def delete_facturas(empresa_id: str, rutas: list[str]) -> int:
@@ -207,33 +193,25 @@ def delete_facturas(empresa_id: str, rutas: list[str]) -> int:
   rutas_set = set(r.strip() for r in rutas if isinstance(r, str) and r.strip())
   if not rutas_set:
     return 0
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     placeholders = ",".join("?" * len(rutas_set))
     cur = conn.execute(
       f"""DELETE FROM facturas_proveedor
           WHERE empresa_id = ? AND (ruta_destino IN ({placeholders}) OR ruta_archivo IN ({placeholders}))""",
       (empresa_id,) + tuple(rutas_set) + tuple(rutas_set),
     )
-    n = cur.rowcount
-    conn.commit()
-    return n
-  finally:
-    conn.close()
+    return cur.rowcount
 
 
 def get_hashes_empresa_proveedor(empresa_id: str) -> set[str]:
   """Devuelve el conjunto de hash_archivo ya existentes para la empresa (para evitar duplicados)."""
   init_facturas_db()
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     cur = conn.execute(
       "SELECT hash_archivo FROM facturas_proveedor WHERE empresa_id = ? AND hash_archivo IS NOT NULL AND hash_archivo != ''",
       (empresa_id,),
     )
     return {str(row[0]).strip() for row in cur.fetchall() if row[0]}
-  finally:
-    conn.close()
 
 
 def get_claves_facturas_proveedor(empresa_id: str) -> list[tuple[str, str, str]]:
@@ -242,15 +220,12 @@ def get_claves_facturas_proveedor(empresa_id: str) -> list[tuple[str, str, str]]
   Sirve para detectar duplicados por identidad lógica (mismo número, proveedor y fecha).
   """
   init_facturas_db()
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     cur = conn.execute(
       "SELECT numero_factura, proveedor, fecha_factura FROM facturas_proveedor WHERE empresa_id = ?",
       (empresa_id,),
     )
     return [(str(r[0] or "").strip(), str(r[1] or "").strip(), str(r[2] or "").strip()) for r in cur.fetchall()]
-  finally:
-    conn.close()
 
 
 def insert_facturas(empresa_id: str, filas: list[dict]) -> int:
@@ -261,8 +236,7 @@ def insert_facturas(empresa_id: str, filas: list[dict]) -> int:
   if not filas:
     return 0
   init_facturas_db()
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     cols = ["empresa_id"] + [c for c in CAMPOS_FACTURAS_PROVEEDOR if c != "empresa_id"]
     placeholders = ", ".join("?" * len(cols))
     insertados = 0
@@ -281,10 +255,7 @@ def insert_facturas(empresa_id: str, filas: list[dict]) -> int:
         valores,
       )
       insertados += 1
-    conn.commit()
     return insertados
-  finally:
-    conn.close()
 
 
 def migrar_desde_csv() -> dict[str, Any]:
@@ -331,32 +302,29 @@ def migrar_desde_csv() -> dict[str, Any]:
     resultado["empresas_procesadas"] += 1
     if not filas:
       continue
-    conn = _get_conn()
     try:
-      conn.execute("DELETE FROM facturas_proveedor WHERE empresa_id = ?", (empresa_id,))
-      for fila in filas:
-        valores = [empresa_id]
-        for c in CAMPOS_FACTURAS_PROVEEDOR:
-          if c == "empresa_id":
-            continue
-          v = fila.get(c)
-          if c == "flag_error":
-            if isinstance(v, bool):
-              valores.append(1 if v else 0)
+      with _conectar() as conn:
+        conn.execute("DELETE FROM facturas_proveedor WHERE empresa_id = ?", (empresa_id,))
+        for fila in filas:
+          valores = [empresa_id]
+          for c in CAMPOS_FACTURAS_PROVEEDOR:
+            if c == "empresa_id":
+              continue
+            v = fila.get(c)
+            if c == "flag_error":
+              if isinstance(v, bool):
+                valores.append(1 if v else 0)
+              else:
+                valores.append(1 if str(v or "").strip().lower() in ("true", "1") else 0)
             else:
-              valores.append(1 if str(v or "").strip().lower() in ("true", "1") else 0)
-          else:
-            valores.append((v if isinstance(v, str) else str(v or "")).strip())
-        cols = ["empresa_id"] + [c for c in CAMPOS_FACTURAS_PROVEEDOR if c != "empresa_id"]
-        placeholders = ", ".join("?" * len(cols))
-        conn.execute(
-          f"INSERT INTO facturas_proveedor ({', '.join(cols)}) VALUES ({placeholders})",
-          valores,
-        )
-      conn.commit()
+              valores.append((v if isinstance(v, str) else str(v or "")).strip())
+          cols = ["empresa_id"] + [c for c in CAMPOS_FACTURAS_PROVEEDOR if c != "empresa_id"]
+          placeholders = ", ".join("?" * len(cols))
+          conn.execute(
+            f"INSERT INTO facturas_proveedor ({', '.join(cols)}) VALUES ({placeholders})",
+            valores,
+          )
       resultado["filas_migradas"] += len(filas)
     except Exception as e:
       resultado["errores"].append(f"{empresa_id} insert: {e}")
-    finally:
-      conn.close()
   return resultado

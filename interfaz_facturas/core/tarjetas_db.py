@@ -17,7 +17,7 @@ from typing import Any, List, Dict
 
 logger = logging.getLogger(__name__)
 
-from core.db import get_conn as _get_conn, now_iso as _now
+from core.db import conectar as _conectar, now_iso as _now
 
 
 _initialized = False
@@ -28,8 +28,7 @@ def init_tarjetas_db() -> None:
   global _initialized
   if _initialized:
     return
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     conn.execute(
       """
       CREATE TABLE IF NOT EXISTS tarjetas (
@@ -51,9 +50,6 @@ def init_tarjetas_db() -> None:
     conn.execute(
       "CREATE INDEX IF NOT EXISTS ix_tarjetas_empresa_activa ON tarjetas(empresa_id, activa)"
     )
-    conn.commit()
-  finally:
-    conn.close()
   _initialized = True
 
 
@@ -74,8 +70,7 @@ def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
 def get_tarjetas_empresa(empresa_id: str, solo_activas: bool = True) -> List[Dict[str, Any]]:
   """Devuelve las tarjetas de una empresa. Por defecto solo activas."""
   init_tarjetas_db()
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     params: list[Any] = [empresa_id]
     where = "WHERE empresa_id = ?"
     if solo_activas:
@@ -90,15 +85,12 @@ def get_tarjetas_empresa(empresa_id: str, solo_activas: bool = True) -> List[Dic
       params,
     )
     return [_row_to_dict(r) for r in cur.fetchall()]
-  finally:
-    conn.close()
 
 
 def get_tarjeta_por_id(tarjeta_id: int) -> Dict[str, Any] | None:
   """Devuelve una tarjeta por id o None si no existe."""
   init_tarjetas_db()
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     cur = conn.execute(
       """
       SELECT id, empresa_id, banco, persona, ultimos4, alias, activa, created_at, updated_at
@@ -109,15 +101,12 @@ def get_tarjeta_por_id(tarjeta_id: int) -> Dict[str, Any] | None:
     )
     row = cur.fetchone()
     return _row_to_dict(row) if row else None
-  finally:
-    conn.close()
 
 
 def crear_tarjeta(empresa_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
   """Crea una tarjeta para la empresa y devuelve el dict resultante."""
   init_tarjetas_db()
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     ahora = _now()
     banco = (data.get("banco") or "").strip()
     persona = (data.get("persona") or "").strip()
@@ -132,9 +121,6 @@ def crear_tarjeta(empresa_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
       (empresa_id, banco, persona, ultimos4, alias, activa, ahora, ahora),
     )
     tarjeta_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-    conn.commit()
-  finally:
-    conn.close()
   return get_tarjeta_por_id(int(tarjeta_id))
 
 
@@ -144,8 +130,7 @@ def actualizar_tarjeta(tarjeta_id: int, empresa_id: str, data: Dict[str, Any]) -
   No permite cambiar empresa_id.
   """
   init_tarjetas_db()
-  conn = _get_conn()
-  try:
+  with _conectar() as conn:
     cur = conn.execute(
       "SELECT empresa_id FROM tarjetas WHERE id = ?",
       (tarjeta_id,),
@@ -156,7 +141,6 @@ def actualizar_tarjeta(tarjeta_id: int, empresa_id: str, data: Dict[str, Any]) -
     if (row["empresa_id"] or "").strip() != (empresa_id or "").strip():
       raise ValueError("La tarjeta no pertenece a la empresa indicada")
     ahora = _now()
-    # Leer valores actuales para solo sobrescribir lo presente en data
     cur = conn.execute(
       """
       SELECT banco, persona, ultimos4, alias, activa
@@ -186,8 +170,5 @@ def actualizar_tarjeta(tarjeta_id: int, empresa_id: str, data: Dict[str, Any]) -
       """,
       (banco, persona, ultimos4, alias, activa, ahora, tarjeta_id),
     )
-    conn.commit()
-  finally:
-    conn.close()
   return get_tarjeta_por_id(int(tarjeta_id))
 
