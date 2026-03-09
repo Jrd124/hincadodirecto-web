@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-import re
+import tomllib
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -27,21 +27,14 @@ load_dotenv(BASE_DIR / ".env")
 def _cargar_empresas_desde_toml() -> dict[str, str]:
   """Carga el diccionario id -> nombre desde config/empresas.toml."""
   ruta = BASE_DIR / "config" / "empresas.toml"
-  out: dict[str, str] = {}
   if not ruta.exists():
-    return out
+    return {}
   try:
-    texto = ruta.read_text(encoding="utf-8")
-    for m in re.finditer(r"\[\[empresa\]\](.*?)(?=\[\[empresa\]\]|\Z)", texto, re.DOTALL):
-      bloque = m.group(1)
-      id_m = re.search(r'id\s*=\s*"([^"]*)"', bloque)
-      nom_m = re.search(r'nombre\s*=\s*"([^"]*)"', bloque)
-      if id_m and nom_m:
-        out[id_m.group(1).strip()] = nom_m.group(1).strip()
+    with open(ruta, "rb") as f:
+      data = tomllib.load(f)
+    return {e["id"]: e["nombre"] for e in data.get("empresa", [])}
   except Exception:
-    # Si hay un error leyendo el TOML, devolvemos lo que tengamos (o vacío)
-    pass
-  return out
+    return {}
 
 
 # Empresas: una sola fuente de verdad
