@@ -4,6 +4,7 @@ import os
 import re
 from pathlib import Path
 
+from dotenv import load_dotenv
 from openai import OpenAI
 
 
@@ -18,6 +19,9 @@ BANCOS_DIR = DATOS_DIR / "bancos"
 MOVIMIENTOS_DB = BANCOS_DIR / "movimientos.db"
 # Base de datos de gestión (terceros, empresa_tercero; futuro: más entidades ERP)
 GESTION_DB = DATOS_DIR / "gestion.db"
+
+# Cargar variables de entorno desde .env
+load_dotenv(BASE_DIR / ".env")
 
 
 def _cargar_empresas_desde_toml() -> dict[str, str]:
@@ -59,38 +63,10 @@ CAMPOS_PROVEEDORES_MAESTROS = [
 ]
 
 
-# Configuración de OpenAI: intenta primero variable de entorno, luego .env local
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "") or ""
-if not OPENAI_API_KEY:
-  env_path = BASE_DIR / ".env"
-  try:
-    if env_path.exists():
-      for line in env_path.read_text(encoding="utf-8").splitlines():
-        if line.strip().startswith("OPENAI_API_KEY="):
-          OPENAI_API_KEY = line.split("=", 1)[1].strip()
-          break
-  except Exception:
-    OPENAI_API_KEY = ""
-
+# Configuración de OpenAI
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 # OpenRouteService (rutas y geocoding) - opcional para Proyectos > Transporte
-def _env(key: str, default: str = "") -> str:
-  """Lee key desde .env (prioridad) o desde os.environ."""
-  v = ""
-  env_path = BASE_DIR / ".env"
-  if env_path.exists():
-    try:
-      for line in env_path.read_text(encoding="utf-8").splitlines():
-        if line.strip().startswith(key + "="):
-          v = line.split("=", 1)[1].strip().strip('"').strip("'")
-          break
-    except Exception:
-      pass
-  if not v:
-    v = (os.getenv(key, "") or "").strip() or default
-  return v
-
-
-OPENROUTESERVICE_API_KEY = _env("OPENROUTESERVICE_API_KEY", "")
+OPENROUTESERVICE_API_KEY = os.getenv("OPENROUTESERVICE_API_KEY", "")
 
