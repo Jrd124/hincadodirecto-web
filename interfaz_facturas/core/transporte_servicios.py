@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 import math
+
+logger = logging.getLogger(__name__)
 import unicodedata
 import urllib.parse
 import urllib.request
@@ -138,7 +141,8 @@ def geocode_ors(texto: str, api_key: str) -> tuple[float, float] | None:
     req = urllib.request.Request(url, headers={"Authorization": api_key})
     with urllib.request.urlopen(req, timeout=10) as resp:
       data = json.loads(resp.read().decode("utf-8"))
-  except Exception:
+  except Exception as e:
+    logger.warning("Error en geocoding ORS para '%s': %s", texto.strip(), e)
     return None
   features = data.get("features") or []
   if not features:
@@ -180,7 +184,8 @@ def directions_ors_multi(puntos: list[tuple[float, float]], api_key: str) -> dic
     )
     with urllib.request.urlopen(req, timeout=30) as resp:
       data = json.loads(resp.read().decode("utf-8"))
-  except Exception:
+  except Exception as e:
+    logger.warning("Error en directions ORS: %s", e)
     return None
   routes = data.get("routes") or []
   if not routes:

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 import os
 import tomllib
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -33,7 +36,8 @@ def _cargar_empresas_desde_toml() -> dict[str, str]:
     with open(ruta, "rb") as f:
       data = tomllib.load(f)
     return {e["id"]: e["nombre"] for e in data.get("empresa", [])}
-  except Exception:
+  except Exception as e:
+    logger.warning("Error leyendo empresas.toml: %s", e)
     return {}
 
 

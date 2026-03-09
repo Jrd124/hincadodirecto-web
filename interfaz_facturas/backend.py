@@ -6,6 +6,7 @@ import difflib
 import hashlib
 import io
 import json
+import logging
 import os
 import re
 import shutil
@@ -15,6 +16,8 @@ import unicodedata
 import urllib.parse
 import urllib.request
 import zipfile
+
+logger = logging.getLogger(__name__)
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
@@ -108,7 +111,8 @@ def _ocr_pagina_fitz(page: "fitz.Page") -> str:
     img_bytes = pix.tobytes("png")
     img_pil = Image.open(io.BytesIO(img_bytes))
     return pytesseract.image_to_string(img_pil, lang="spa+eng")
-  except Exception:
+  except Exception as e:
+    logger.warning("OCR falló en página: %s", e)
     return ""
 
 
@@ -133,7 +137,8 @@ def _leer_texto_factura(ruta: Path) -> str:
               t = page.get_text()
               if t.strip():
                 partes.append(t)
-          except Exception:
+          except Exception as e:
+            logger.debug("Fallback get_text en página: %s", e)
             t = page.get_text()
             if t.strip():
               partes.append(t)
@@ -147,8 +152,8 @@ def _leer_texto_factura(ruta: Path) -> str:
                 if t2.strip():
                   partes.append(t2)
                   break
-              except Exception:
-                pass
+              except Exception as e:
+                logger.debug("OCR de imagen embebida falló: %s", e)
           texto_ocr = _ocr_pagina_fitz(page)
           if texto_ocr.strip():
             partes_ocr.append(texto_ocr.strip())
@@ -165,8 +170,8 @@ def _leer_texto_factura(ruta: Path) -> str:
           try:
             from PIL import ImageOps
             img = ImageOps.exif_transpose(img)
-          except Exception:
-            pass
+          except Exception as e:
+            logger.debug("No se pudo corregir orientación EXIF: %s", e)
 
           if img.mode not in ("L", "RGB", "RGBA"):
             img = img.convert("RGB")
@@ -183,8 +188,8 @@ def _leer_texto_factura(ruta: Path) -> str:
           try:
             from PIL import ImageOps
             img_gray = ImageOps.autocontrast(img_gray)
-          except Exception:
-            pass
+          except Exception as e:
+            logger.debug("No se pudo aplicar autocontraste: %s", e)
 
           # Primera pasada OCR (bloque de texto estándar)
           texto = pytesseract.image_to_string(
@@ -202,9 +207,11 @@ def _leer_texto_factura(ruta: Path) -> str:
             config="--oem 3 --psm 3",
           )
           return texto_alt
-      except Exception:
+      except Exception as e:
+        logger.warning("Error leyendo imagen %s: %s", ruta.name, e)
         return ""
-  except Exception:
+  except Exception as e:
+    logger.error("Error leyendo factura %s: %s", ruta, e)
     return ""
 
 
@@ -267,7 +274,8 @@ def _extraer_campos_llm(texto: str, empresa_id: str, tipo: str = "proveedor") ->
     for clave in claves_defecto:
       datos.setdefault(clave, "" if clave not in ["bases", "retenciones"] else [])
     return datos
-  except Exception:
+  except Exception as e:
+    logger.warning("Error extrayendo campos LLM (tipo=%s): %s", tipo, e)
     return {}
 
 
@@ -370,7 +378,8 @@ def _extraer_campos_vision(ruta: Path, empresa_id: str, tipo: str = "proveedor")
     return {}
   try:
     raw = ruta.read_bytes()
-  except Exception:
+  except Exception as e:
+    logger.warning("No se pudo leer imagen para visión %s: %s", ruta.name, e)
     return {}
   b64 = base64.standard_b64encode(raw).decode("ascii")
   mime = "image/jpeg" if suf in (".jpg", ".jpeg") else "image/png" if suf == ".png" else "image/webp" if suf == ".webp" else "image/gif"
@@ -404,7 +413,8 @@ def _extraer_campos_vision(ruta: Path, empresa_id: str, tipo: str = "proveedor")
     for clave in claves_defecto:
       datos.setdefault(clave, "" if clave not in ["bases", "retenciones"] else [])
     return datos
-  except Exception:
+  except Exception as e:
+    logger.warning("Error extrayendo campos visión %s (tipo=%s): %s", ruta.name, tipo, e)
     return {}
 
 
@@ -420,8 +430,8 @@ def _registrar_vision_control(empresa_id: str, nombre_archivo: str, ruta_archivo
       if not existe:
         w.writerow(cabecera)
       w.writerow(fila)
-  except Exception:
-    pass
+  except Exception as e:
+    logger.debug("No se pudo registrar uso de visión: %s", e)
 
 
 def _normalizar_importe_str(valor: str) -> float | None:
@@ -896,8 +906,8 @@ def _extractor_llm(rutas: list[Path], empresa_id: str) -> list[dict]:
         fila = fut.result()
         if fila is not None:
           filas.append(fila)
-      except Exception:
-        pass
+      except Exception as e:
+        logger.warning("Error procesando factura en paralelo: %s", e)
   return filas
 
 
@@ -982,8 +992,8 @@ def _analizar_fila_proveedor(fila: dict) -> list[str]:
       fecha_dt = datetime.fromisoformat(fecha[:10]).date()
       if fecha_dt > datetime.now().date():
         errores.append(f"Fecha futura ({fecha[:10]}).")
-    except Exception:
-      pass
+    except Exception as e:
+      logger.debug("No se pudo parsear fecha '%s': %s", fecha[:10], e)
 
   base_str = (fila.get("base_imponible") or fila.get("base_imponible_total") or "").strip()
   iva_str = (fila.get("iva") or fila.get("iva_cuota_total") or "").strip()
@@ -1018,8 +1028,8 @@ def _analizar_fila_cliente(fila: dict) -> list[str]:
       fecha_dt = datetime.fromisoformat(fecha[:10]).date()
       if fecha_dt > datetime.now().date():
         errores.append(f"Fecha futura ({fecha[:10]}).")
-    except Exception:
-      pass
+    except Exception as e:
+      logger.debug("No se pudo parsear fecha '%s': %s", fecha[:10], e)
 
   iva_val = _normalizar_importe_str(fila.get("iva") or "")
   total_val = _normalizar_importe_str(fila.get("total_a_pagar") or "")
@@ -1198,7 +1208,8 @@ def _sugerencias_llm(fila: dict, errores: list[str], tipo: str) -> list[dict]:
         "motivo": str(s.get("motivo") or "").strip() or "Sugerencia del asistente.",
       })
     return out
-  except Exception:
+  except Exception as e:
+    logger.warning("Error parseando sugerencias LLM: %s", e)
     return []
 
 
@@ -1228,8 +1239,8 @@ def _revisor_basico(filas: list[dict]) -> list[dict]:
           fila["flag_error"] = True
           motivo = fila.get("motivo_error") or ""
           fila["motivo_error"] = (motivo + f" Fecha futura ({fecha[:10]}).").strip()
-      except Exception:
-        pass
+      except Exception as e:
+        logger.debug("No se pudo parsear fecha '%s': %s", fecha[:10], e)
 
     if proveedor and not num_factura and (re.match(r"^[A-Z0-9\/\-\.]+\s*$", proveedor) or re.match(r"^\d+", proveedor)):
       fila["numero_factura"] = proveedor[:60]
@@ -1277,7 +1288,8 @@ def _hash_archivo(ruta: Path) -> str:
   try:
     with open(ruta, "rb") as f:
       return hashlib.sha256(f.read()).hexdigest()
-  except Exception:
+  except Exception as e:
+    logger.warning("No se pudo calcular hash de %s: %s", ruta, e)
     return ""
 
 
@@ -1289,17 +1301,18 @@ def _normalizar_fecha_factura_clave(s: str) -> str:
   try:
     datetime.strptime(s, "%Y-%m-%d")
     return s
-  except Exception:
-    pass
+  except Exception as e:
+    logger.debug("Fecha no es YYYY-MM-DD '%s': %s", s, e)
   try:
     d = datetime.strptime((s or "").strip(), "%d/%m/%Y")
     return d.strftime("%Y-%m-%d")
-  except Exception:
-    pass
+  except Exception as e:
+    logger.debug("Fecha no es DD/MM/YYYY '%s': %s", s, e)
   try:
     d = datetime.strptime((s or "").strip(), "%d-%m-%Y")
     return d.strftime("%Y-%m-%d")
-  except Exception:
+  except Exception as e:
+    logger.debug("Fecha no es DD-MM-YYYY '%s': %s", s, e)
     return s
 
 
@@ -1353,7 +1366,8 @@ def _archivador_por_empresa_y_fecha(filas: list[dict]) -> list[dict]:
         dt = datetime.fromisoformat(fecha_str[:10])
         año = str(dt.year)
         mes_carpeta = f"{dt.month:02d}. {dt.strftime('%B')}"
-      except Exception:
+      except Exception as e:
+        logger.debug("Fecha no parseable para archivar '%s': %s", fecha_str, e)
         año = "Sin_fecha"
         mes_carpeta = "Sin fecha"
     else:
@@ -1402,8 +1416,8 @@ def _cargar_cache_nominatim() -> None:
       for k, v in data.items():
         if isinstance(k, str) and isinstance(v, str):
           _cache_pais_localidad[k] = v
-  except Exception:
-    pass
+  except Exception as e:
+    logger.warning("Error cargando cache Nominatim: %s", e)
 
 
 def _guardar_cache_nominatim() -> None:
@@ -1412,8 +1426,8 @@ def _guardar_cache_nominatim() -> None:
     CACHE_NOMINATIM_PATH.parent.mkdir(parents=True, exist_ok=True)
     with CACHE_NOMINATIM_PATH.open("w", encoding="utf-8") as f:
       json.dump(_cache_pais_localidad, f, ensure_ascii=False, indent=0)
-  except Exception:
-    pass
+  except Exception as e:
+    logger.warning("Error guardando cache Nominatim: %s", e)
 
 
 def _obtener_pais_desde_localidad(localidad: str) -> str:
@@ -1448,8 +1462,8 @@ def _obtener_pais_desde_localidad(localidad: str) -> str:
         _cache_pais_localidad[localidad_norm] = pais
         _guardar_cache_nominatim()
         return pais
-  except Exception:
-    pass
+  except Exception as e:
+    logger.warning("Error consultando Nominatim para '%s': %s", localidad, e)
   _cache_pais_localidad[localidad_norm] = ""
   _guardar_cache_nominatim()
   return ""
@@ -1503,8 +1517,8 @@ def _cargar_proveedores_maestros(empresa_id: str) -> list[dict]:
   try:
     if terceros_db.hay_proveedores_en_bd():
       return terceros_db.get_proveedores_empresa(empresa_id)
-  except Exception:
-    pass
+  except Exception as e:
+    logger.warning("Error leyendo proveedores de BD, fallback a CSV: %s", e)
   return _cargar_proveedores_maestros_csv(empresa_id)
 
 
@@ -1540,7 +1554,8 @@ def _listar_proveedores_para_selector(empresa_id: str) -> list[dict]:
     vistos.add((nom, nif))
   try:
     facturas = facturas_db.get_facturas_empresa(empresa_id)
-  except Exception:
+  except Exception as e:
+    logger.warning("Error leyendo facturas para selector proveedores: %s", e)
     facturas = []
   for f in facturas:
     prov = (f.get("proveedor") or "").strip()
@@ -1570,8 +1585,8 @@ def _guardar_proveedores_maestros(empresa_id: str, lista: list[dict]) -> None:
     if terceros_db.hay_proveedores_en_bd():
       terceros_db.guardar_proveedores_empresa(empresa_id, lista)
       return
-  except Exception:
-    pass
+  except Exception as e:
+    logger.warning("Error guardando proveedores en BD, fallback a CSV: %s", e)
   _guardar_proveedores_maestros_csv(empresa_id, lista)
 
 
@@ -1753,11 +1768,15 @@ def procesar_lote(empresa_id: str, carpeta: Path, tarjeta_id: str | None = None)
       "empresa_id": empresa_id,
       "carpeta_entrada": str(carpeta),
     }
+  logger.info("Procesando %d archivos para empresa '%s'", len(archivos), empresa_id)
 
   # Primero intentamos con el extractor LLM (OpenAI). Si falla o no devuelve filas, usamos el backup.
   tabla = _extractor_llm(archivos, empresa_id)
   if not tabla:
+    logger.info("Extractor LLM sin resultados, usando extractor básico")
     tabla = _extractor_basico(archivos, empresa_id)
+  else:
+    logger.info("Extractor LLM: %d filas extraídas", len(tabla))
 
   tabla = _revisor_basico(tabla)
   _añadir_hashes_tabla_proveedor(tabla)
@@ -1778,6 +1797,8 @@ def procesar_lote(empresa_id: str, carpeta: Path, tarjeta_id: str | None = None)
       continue
     tabla_sin_duplicados.append(f)
   duplicados_omitidos = len(tabla) - len(tabla_sin_duplicados)
+  if duplicados_omitidos:
+    logger.info("Duplicados omitidos: %d", duplicados_omitidos)
   tabla = _archivador_por_empresa_y_fecha(tabla_sin_duplicados)
   tabla = _homogeneizar_proveedores(tabla, empresa_id)
   tabla = _enriquecer_pais_desde_localidad(tabla)
@@ -1797,6 +1818,10 @@ def procesar_lote(empresa_id: str, carpeta: Path, tarjeta_id: str | None = None)
         fila["estado_pago"] = "pagada"
   resumen_bd = _base_maestra_csv(tabla, empresa_id)
   facturas_con_vision = sum(1 for f in tabla if (str(f.get("extraccion_vision") or "").strip() == "1"))
+  logger.info(
+    "Lote completado: %d facturas procesadas, %d con visión, %d añadidas a BD",
+    len(tabla_sin_duplicados), facturas_con_vision, resumen_bd["filas_añadidas"],
+  )
 
   return {
     "procesado": True,
@@ -2134,7 +2159,8 @@ def resumen_liquidaciones_tarjetas(empresa_id: str):
       total_facturas = row["total_facturas"] or 0.0
       try:
         total_facturas = float(total_facturas)
-      except Exception:
+      except Exception as e:
+        logger.debug("No se pudo convertir total_facturas a float: %s", e)
         total_facturas = 0.0
       porcentaje = 100.0 if total_facturas > 0 else 0.0
       filas.append(
@@ -2633,8 +2659,8 @@ def exportar_facturas():
           if not alias:
             alias = ((t.get("banco") or "").strip() + " " + (t.get("persona") or "").strip()).strip() or "Tarjeta"
           tarjeta_map[int(tid)] = alias
-    except Exception:
-      pass
+    except Exception as e:
+      logger.warning("Error cargando tarjetas para export: %s", e)
     for f in facturas_filtradas:
       row = {k: str(f.get(k) or "").strip() for k in CAMPOS_EXPORT}
       tid = f.get("tarjeta_id")
@@ -2648,8 +2674,8 @@ def exportar_facturas():
       if not row.get("estado_pago"):
         row["estado_pago"] = (f.get("estado_pago") or "pendiente").strip() or "pendiente"
       filas_export.append(row)
-  except Exception:
-    pass
+  except Exception as e:
+    logger.warning("Error preparando facturas para export: %s", e)
   if not filas_export:
     ruta_csv = EMPRESAS_DIR / empresa_id / "base_maestra_facturas.csv"
     if ruta_csv.exists():
@@ -2755,7 +2781,8 @@ def _facturas_filtradas_por_fecha(
   """Devuelve facturas de la empresa filtradas por año, mes y opcionalmente proveedor. Usa BD primero (misma fuente que el listado), luego CSV si existe."""
   try:
     facturas_bd = facturas_db.get_facturas_empresa(empresa_id)
-  except Exception:
+  except Exception as e:
+    logger.warning("Error leyendo facturas de BD: %s", e)
     facturas_bd = []
   filas_bd = _filtrar_facturas_en_memoria(facturas_bd, year, month, proveedor)
   if filas_bd:
@@ -2945,8 +2972,8 @@ def actualizar_factura():
       dt = datetime.fromisoformat(nueva_fecha[:10])
       ano_dest = str(dt.year)
       mes_dest = f"{dt.month:02d}. {dt.strftime('%B')}"
-    except Exception:
-      pass
+    except Exception as e:
+      logger.debug("Fecha no parseable al reubicar factura '%s': %s", nueva_fecha, e)
     destino_dir = FACTURAS_RECIBIDAS_DIR / empresa_id / ano_dest / mes_dest
     destino_dir.mkdir(parents=True, exist_ok=True)
     destino_final = destino_dir / ruta_archivo_actual.name
@@ -3096,8 +3123,8 @@ def _extractor_llm_clientes(rutas: list[Path], empresa_id: str) -> list[dict]:
         fila = fut.result()
         if fila is not None:
           filas.append(fila)
-      except Exception:
-        pass
+      except Exception as e:
+        logger.warning("Error procesando factura cliente en paralelo: %s", e)
   return filas
 
 
@@ -3156,8 +3183,8 @@ def _revisor_basico_clientes(filas: list[dict]) -> list[dict]:
           fila["flag_error"] = True
           motivo = fila.get("motivo_error") or ""
           fila["motivo_error"] = (motivo + f" Fecha futura ({fecha[:10]}).").strip()
-      except Exception:
-        pass
+      except Exception as e:
+        logger.debug("No se pudo parsear fecha '%s': %s", fecha[:10], e)
 
     iva_val = _normalizar_importe_str(fila.get("iva") or "")
     total_val = _normalizar_importe_str(fila.get("total_a_pagar") or "")
@@ -3194,7 +3221,8 @@ def _archivador_facturas_emitidas(filas: list[dict]) -> list[dict]:
         dt = datetime.fromisoformat(fecha_str[:10])
         año = str(dt.year)
         mes_carpeta = f"{dt.month:02d}. {dt.strftime('%B')}"
-      except Exception:
+      except Exception as e:
+        logger.debug("Fecha no parseable para archivar '%s': %s", fecha_str, e)
         año = "Sin_fecha"
         mes_carpeta = "Sin fecha"
     else:
@@ -3936,8 +3964,8 @@ def _normalizar_fecha_dd_mm_yyyy(val) -> str | None:
       base = datetime(1899, 12, 30)
       dt = base + timedelta(days=float(val))
       return dt.strftime("%Y-%m-%d")
-    except Exception:
-      pass
+    except Exception as e:
+      logger.debug("No se pudo convertir serial Excel %s a fecha: %s", val, e)
   s = str(val).strip()
   if not s:
     return None
@@ -4147,7 +4175,8 @@ def _parse_santander_excel(stream) -> list[dict]:
         "referencia_1": ref1,
         "referencia_2": ref2,
       })
-    except Exception:
+    except Exception as e:
+      logger.debug("Fila Santander no parseable: %s", e)
       continue
   return resultado
 
@@ -4217,7 +4246,8 @@ def _parse_bbva_excel(stream) -> list[dict]:
         "referencia_1": None,
         "referencia_2": None,
       })
-    except Exception:
+    except Exception as e:
+      logger.debug("Fila BBVA no parseable: %s", e)
       continue
   return resultado
 
@@ -4600,7 +4630,8 @@ def conciliacion_sugerencias():
       return None
     try:
       return datetime.strptime(str(s).strip()[:10], "%Y-%m-%d")
-    except Exception:
+    except Exception as e:
+      logger.debug("Fecha no parseable en conciliación '%s': %s", s, e)
       return None
 
   sugerencias: list[dict] = []
@@ -4952,7 +4983,8 @@ def conciliacion_resumen_factura_proveedor(factura_id: int):
 
   try:
     facturas_db.init_facturas_db()
-  except Exception:
+  except Exception as e:
+    logger.warning("No se pudo inicializar BD facturas: %s", e)
     return jsonify({"error": "Base de datos de facturas no disponible", "total_factura": 0, "total_pagado": 0, "pendiente": 0, "movimientos": []}), 200
 
   try:
@@ -4981,7 +5013,8 @@ def conciliacion_resumen_factura_proveedor(factura_id: int):
   try:
     _init_movimientos_db()
     conn_bancos = _get_bancos_db()
-  except Exception:
+  except Exception as e:
+    logger.warning("No se pudo conectar a BD movimientos: %s", e)
     pendiente = max(0.0, total_factura - total_pagado)
     return jsonify({
       "total_factura": round(total_factura, 2),
@@ -5288,6 +5321,17 @@ app.register_blueprint(transporte_bp)
 
 
 if __name__ == "__main__":
+  # Configurar logging: consola + archivo persistente
+  _log_dir = DATOS_DIR / "logs"
+  _log_dir.mkdir(parents=True, exist_ok=True)
+  logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+      logging.StreamHandler(),
+      logging.FileHandler(_log_dir / "app.log", encoding="utf-8"),
+    ],
+  )
   ensure_dirs()
   app.run(debug=True, port=8000)
 

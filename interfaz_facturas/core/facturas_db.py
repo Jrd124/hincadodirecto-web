@@ -5,9 +5,12 @@ Migración desde base_maestra_facturas.csv por empresa.
 from __future__ import annotations
 
 import csv
+import logging
 import sqlite3
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 try:
   from config import GESTION_DB, EMPRESAS_DIR, EMPRESAS_CLIENTE
@@ -97,7 +100,8 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
   if "tarjeta_id" in d and d["tarjeta_id"] is not None and d["tarjeta_id"] != "":
     try:
       d["tarjeta_id"] = int(d["tarjeta_id"])
-    except Exception:
+    except Exception as e:
+      logger.debug("tarjeta_id no convertible a int: %s", e)
       d["tarjeta_id"] = None
   return d
 

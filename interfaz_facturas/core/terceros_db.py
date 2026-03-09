@@ -6,8 +6,11 @@ Migración desde proveedores_maestros.csv y lectura unificada para la API.
 from __future__ import annotations
 
 import csv
+import logging
 import sqlite3
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 from pathlib import Path
 from typing import Any
 

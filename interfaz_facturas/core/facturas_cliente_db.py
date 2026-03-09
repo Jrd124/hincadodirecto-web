@@ -5,9 +5,12 @@ Migración desde facturas_clientes.csv por empresa (Parte J del plan maestro).
 from __future__ import annotations
 
 import csv
+import logging
 import sqlite3
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 try:
   from config import GESTION_DB, EMPRESAS_DIR, EMPRESAS_CLIENTE

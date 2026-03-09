@@ -11,9 +11,12 @@ Se usa desde el módulo de Bancos para:
 """
 from __future__ import annotations
 
+import logging
 import sqlite3
 from datetime import datetime
 from typing import Any, List, Dict
+
+logger = logging.getLogger(__name__)
 
 try:
   from config import GESTION_DB
