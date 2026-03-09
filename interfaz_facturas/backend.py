@@ -57,6 +57,8 @@ from config import (
 from core.facturas_servicios import filtrar_filas_csv as _filtrar_filas_csv
 from core.transporte_servicios import buscar_ruta_y_proveedores as _buscar_ruta_y_proveedores
 from core import terceros_db, facturas_db, tarjetas_db, facturas_cliente_db
+from core.facturas_db import CAMPOS_FACTURAS_PROVEEDOR
+from core.facturas_cliente_db import CAMPOS_FACTURAS_CLIENTE
 
 # ─── Validación de entrada centralizada (respuestas 400 consistentes) ─────────
 
@@ -1930,7 +1932,7 @@ def listar_facturas():
   if empresa_id in _cache_listado_facturas_proveedores:
     facturas = _cache_listado_facturas_proveedores[empresa_id]
   else:
-    facturas = _leer_facturas_proveedores_desde_csv(empresa_id)
+    facturas = facturas_db.get_facturas_empresa(empresa_id)
     _cache_listado_facturas_proveedores[empresa_id] = facturas
 
   proveedor_filtro = (request.args.get("proveedor") or "").strip()
@@ -2884,14 +2886,6 @@ def descargar_facturas_zip():
   )
 
 
-CAMPOS_CSV_LISTA = [
-  "empresa_id", "fecha_factura", "proveedor", "nif_proveedor", "pais_proveedor",
-  "localidad_proveedor", "resumen_concepto", "numero_factura", "base_imponible",
-  "base_imponible_detalle", "iva", "iva_cuota_detalle", "retenciones_total",
-  "retenciones_detalle", "total_factura", "total_a_pagar", "total", "categoria",
-  "ruta_archivo", "ruta_destino", "flag_error", "motivo_error", "comentarios_revision",
-  "extraccion_vision", "estado_pago", "tarjeta_id", "liquidacion_periodo",
-]
 
 # Cache en memoria de listados por empresa (invalidación al editar/eliminar/procesar)
 _cache_listado_facturas_proveedores: dict[str, list[dict]] = {}
@@ -2906,11 +2900,6 @@ def _invalidar_cache_listado_proveedores(empresa_id: str) -> None:
 def _invalidar_cache_listado_clientes(empresa_id: str) -> None:
   """Invalida el cache de listado de facturas clientes para una empresa."""
   _cache_listado_facturas_clientes.pop(empresa_id, None)
-
-
-def _leer_facturas_proveedores_desde_csv(empresa_id: str) -> list[dict]:
-  """Lee todas las facturas de proveedores desde SQLite (siempre BD; empresas nuevas empiezan vacías)."""
-  return facturas_db.get_facturas_empresa(empresa_id)
 
 
 @facturas_proveedores_bp.post("/api/facturas/migrar-desde-csv")
@@ -2955,12 +2944,12 @@ def actualizar_factura():
   actualizado = None
   for f in todas:
     if ((f.get("ruta_destino") or f.get("ruta_archivo")) or "").strip() == ruta_identificar:
-      actualizado = {c: (f.get(c) or "") for c in CAMPOS_CSV_LISTA}
+      actualizado = {c: (f.get(c) or "") for c in CAMPOS_FACTURAS_PROVEEDOR}
       break
   if not actualizado:
     return jsonify({"error": "No se encontró la factura con esa ruta"}), 404
   for k, v in factura.items():
-    if k in CAMPOS_CSV_LISTA:
+    if k in CAMPOS_FACTURAS_PROVEEDOR:
       actualizado[k] = (v.strip() if isinstance(v, str) else str(v or ""))
   actualizado["empresa_id"] = empresa_id
   actualizado["flag_error"] = False
@@ -3317,27 +3306,7 @@ def procesar_lote_clientes(empresa_id: str, carpeta: Path) -> dict:
   }
 
 
-# ─── Facturas de Clientes (Facturas Emitidas) – Constantes y CRUD ────────────
-
-CAMPOS_FACTURAS_CLIENTES = [
-  "empresa_id",
-  "fecha_factura",
-  "cliente",
-  "cif_nif",
-  "pais",
-  "localidad",
-  "proyecto",
-  "tipologia",
-  "num_hincadoras",
-  "num_ayudantes",
-  "pricing_servicio",
-  "pricing_transporte",
-  "iva",
-  "total_a_pagar",
-  "numero_factura",
-  "ruta_archivo",
-  "hash_archivo",
-]
+# ─── Facturas de Clientes (Facturas Emitidas) – CRUD ─────────────────────────
 
 
 def _ruta_csv_clientes(empresa_id: str) -> Path:
@@ -3345,12 +3314,6 @@ def _ruta_csv_clientes(empresa_id: str) -> Path:
   empresa_dir.mkdir(parents=True, exist_ok=True)
   return empresa_dir / "facturas_clientes.csv"
 
-
-def _leer_facturas_clientes_desde_csv(empresa_id: str) -> list[dict]:
-  """Lee todas las facturas de clientes de la empresa desde SQLite (BD).
-  Mantiene el mismo contrato que antes (lista de dicts con CAMPOS_FACTURAS_CLIENTES)
-  para no romper listados, export, clientes únicos ni cache."""
-  return facturas_cliente_db.get_facturas_cliente_empresa(empresa_id)
 
 
 def _get_clientes_unicos_empresa(empresa_id: str) -> list[dict]:
@@ -3360,7 +3323,7 @@ def _get_clientes_unicos_empresa(empresa_id: str) -> list[dict]:
   (y opcionalmente proyecto) tomados de la primera factura que aparezca para ese cliente.
   Compatible con el maestro de terceros (GET /api/empresas/<id>/clientes fusiona maestro + este agregado).
   """
-  facturas = _leer_facturas_clientes_desde_csv(empresa_id)
+  facturas = facturas_cliente_db.get_facturas_cliente_empresa(empresa_id)
   vistos: dict[tuple[str, str], dict] = {}
   for f in facturas:
     cliente = (f.get("cliente") or "").strip()
@@ -3434,7 +3397,7 @@ def listar_facturas_clientes():
   if empresa_id in _cache_listado_facturas_clientes:
     facturas = list(_cache_listado_facturas_clientes[empresa_id])
   else:
-    facturas = _leer_facturas_clientes_desde_csv(empresa_id)
+    facturas = facturas_cliente_db.get_facturas_cliente_empresa(empresa_id)
     _cache_listado_facturas_clientes[empresa_id] = facturas
   if filtro_cliente:
     facturas = [f for f in facturas if (f.get("cliente") or "").strip() == filtro_cliente]
@@ -3465,7 +3428,7 @@ def clientes_unicos():
   if empresa_id in _cache_listado_facturas_clientes:
     facturas = _cache_listado_facturas_clientes[empresa_id]
   else:
-    facturas = _leer_facturas_clientes_desde_csv(empresa_id)
+    facturas = facturas_cliente_db.get_facturas_cliente_empresa(empresa_id)
     _cache_listado_facturas_clientes[empresa_id] = facturas
   nombres: set[str] = set((f.get("cliente") or "").strip() for f in facturas if (f.get("cliente") or "").strip())
   return jsonify({"clientes": sorted(nombres), "empresa_id": empresa_id})
@@ -3746,7 +3709,7 @@ def crear_factura_cliente():
   factura = data.get("factura")
   if not isinstance(factura, dict):
     return _bad_request("Falta empresa_id o factura")
-  row = {c: str(factura.get(c, "") or "").strip() for c in CAMPOS_FACTURAS_CLIENTES}
+  row = {c: str(factura.get(c, "") or "").strip() for c in CAMPOS_FACTURAS_CLIENTE}
   row["empresa_id"] = empresa_id
   facturas_cliente_db.insert_factura_cliente(empresa_id, row)
   _invalidar_cache_listado_clientes(empresa_id)
@@ -3769,7 +3732,7 @@ def actualizar_factura_cliente():
   id_cliente = (clave_original.get("cliente") or factura.get("cliente") or "").strip()
   if not id_num and not id_fecha and not id_cliente:
     return _bad_request("No se puede identificar la factura a actualizar")
-  actualizado = {c: (factura.get(c) or "").strip() for c in CAMPOS_FACTURAS_CLIENTES}
+  actualizado = {c: (factura.get(c) or "").strip() for c in CAMPOS_FACTURAS_CLIENTE}
   actualizado["empresa_id"] = empresa_id
   _revisor_basico_clientes([actualizado])
   ok = facturas_cliente_db.update_factura_cliente(empresa_id, actualizado, clave_original)
@@ -3819,13 +3782,13 @@ def control_calidad_analizar():
     if empresa_id in _cache_listado_facturas_proveedores:
       filas_proveedores = _cache_listado_facturas_proveedores[empresa_id]
     else:
-      filas_proveedores = _leer_facturas_proveedores_desde_csv(empresa_id)
+      filas_proveedores = facturas_db.get_facturas_empresa(empresa_id)
       _cache_listado_facturas_proveedores[empresa_id] = filas_proveedores
   if tipo in ("clientes", "ambos"):
     if empresa_id in _cache_listado_facturas_clientes:
       filas_clientes = _cache_listado_facturas_clientes[empresa_id]
     else:
-      filas_clientes = _leer_facturas_clientes_desde_csv(empresa_id)
+      filas_clientes = facturas_cliente_db.get_facturas_cliente_empresa(empresa_id)
       _cache_listado_facturas_clientes[empresa_id] = filas_clientes
 
   # Análisis por fila (tarea 1.1)
@@ -4429,7 +4392,7 @@ def listar_movimientos():
         key = (m.get("factura_cliente_key") or "").strip()
         if not empresa_id_m or not key:
           continue
-        facturas_cli = _leer_facturas_clientes_desde_csv(empresa_id_m)
+        facturas_cli = facturas_cliente_db.get_facturas_cliente_empresa(empresa_id_m)
         for fc in facturas_cli:
           n = (fc.get("numero_factura") or "").strip()
           f = (fc.get("fecha_factura") or "").strip()[:10]
@@ -4861,7 +4824,7 @@ def conciliacion_confirmar_cliente():
   finally:
     conn_bancos.close()
 
-  facturas_cli = _leer_facturas_clientes_desde_csv(empresa_id)
+  facturas_cli = facturas_cliente_db.get_facturas_cliente_empresa(empresa_id)
   key = _factura_cliente_key(numero_factura, fecha_factura, cliente)
   encontrada = any(
     _factura_cliente_key(f.get("numero_factura"), f.get("fecha_factura"), f.get("cliente")) == key
