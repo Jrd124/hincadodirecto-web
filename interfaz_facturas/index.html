@@ -1,0 +1,1099 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Interfaz de facturas</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/static/css/app.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  </head>
+  <body>
+    <div class="header-sticky">
+      <nav class="menu-principal" aria-label="Navegación principal">
+        <ul>
+          <li><a href="#" id="nav-finanzas-modulo" class="activo">Finanzas</a></li>
+          <li><a href="#" id="nav-proyectos-modulo">Proyectos</a></li>
+          <li><a href="#" id="nav-rrhh-modulo">RRHH</a></li>
+        </ul>
+      </nav>
+      <nav class="submenu visible" id="submenu-finanzas" aria-label="Submenú Finanzas">
+        <ul>
+          <li><a href="#" id="nav-finanzas-proveedores" class="activo">Proveedores</a></li>
+          <li><a href="#" id="nav-finanzas-clientes">Clientes</a></li>
+          <li><a href="#" id="nav-finanzas-control-calidad">Control de calidad</a></li>
+          <li><a href="#" id="nav-finanzas-bancos">Bancos</a></li>
+        </ul>
+      </nav>
+      <nav class="submenu submenu-inner" id="submenu-proveedores" aria-label="Submenú Proveedores">
+        <ul>
+          <li><a href="#" id="nav-proveedores">Únicos</a></li>
+          <li><a href="#" id="nav-facturas" class="activo">Facturas</a></li>
+          <li><a href="#" id="nav-cecos">CeCos</a></li>
+        </ul>
+      </nav>
+      <nav class="submenu submenu-inner" id="submenu-clientes" aria-label="Submenú Clientes">
+        <ul>
+          <li><a href="#" id="nav-clientes-listado">Únicos</a></li>
+          <li><a href="#" id="nav-clientes-facturas" class="activo">Facturas</a></li>
+        </ul>
+      </nav>
+      <nav class="submenu" id="submenu-control-calidad" aria-label="Submenú Control de calidad"><ul></ul></nav>
+      <nav class="submenu" id="submenu-proyectos" aria-label="Submenú Proyectos">
+        <ul>
+          <li><a href="#" id="nav-proyectos-cotizados">Cotizados</a></li>
+          <li><a href="#" id="nav-proyectos-vivos">Vivos</a></li>
+          <li><a href="#" id="nav-proyectos-terminados">Terminados</a></li>
+          <li><a href="#" id="nav-proyectos-transporte">Transporte</a></li>
+          <li><a href="#" id="nav-proyectos-onboarding">Onboarding</a></li>
+        </ul>
+      </nav>
+      <nav class="submenu" id="submenu-bancos" aria-label="Submenú Bancos"><ul></ul></nav>
+      <nav class="submenu" id="submenu-rrhh" aria-label="Submenú RRHH">
+        <ul>
+          <li><a href="#" id="nav-rrhh-equipo">Equipo</a></li>
+          <li><a href="#" id="nav-rrhh-reserva">Reserva</a></li>
+          <li><a href="#" id="nav-rrhh-alumni">Alumni</a></li>
+          <li><a href="#" id="nav-rrhh-nominas">Nominas</a></li>
+          <li><a href="#" id="nav-rrhh-adelantos">Adelantos</a></li>
+        </ul>
+      </nav>
+      <nav class="submenu" id="submenu-onboarding" aria-label="Submenú Onboarding"><ul></ul></nav>
+    </div>
+    <div class="container">
+      <div id="panel-facturas" class="panel-facturas visible">
+      <div class="layout">
+        <section class="col-left">
+          <div class="card">
+            <h1>Procesar facturas</h1>
+            <p class="subtitle">
+              Elige la empresa, sube las facturas y deja que el equipo de agentes las procese y archive.
+            </p>
+
+            <form id="facturas-form">
+              <label for="empresa">Empresa</label>
+              <select id="empresa" name="empresa" class="select-empresa" required>
+                <option value="">Selecciona empresa…</option>
+              </select>
+
+              <label for="facturas-tarjeta">Pagado con tarjeta (opcional)</label>
+              <select id="facturas-tarjeta" name="tarjeta_id">
+                <option value="">Sin tarjeta / pago directo</option>
+              </select>
+
+              <label for="archivos">Facturas / tickets</label>
+              <input id="archivos" name="archivos" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,image/*" />
+              <button type="button" class="btn-seleccionar-facturas" id="btn-seleccionar-facturas">Seleccionar facturas</button>
+              <ul class="lista-archivos" id="lista-archivos" aria-live="polite"></ul>
+
+              <button type="submit" class="primary">Procesar</button>
+            </form>
+
+            <div class="status" id="status"></div>
+          </div>
+        </section>
+
+        <section class="col-right">
+          <div class="card">
+            <div class="titulo-con-filtro-empresa">
+              <h1>Facturas cargadas</h1>
+              <div class="filtro-empresa-en-titulo">
+                <select id="empresa-listado" class="select-empresa">
+                  <option value="">Selecciona empresa…</option>
+                </select>
+              </div>
+            </div>
+            <p class="subtitle">
+              Elige la empresa, filtra por fecha y exporta el listado a Excel.
+            </p>
+
+            <div class="listado-header">
+              <select id="filtro-anio">
+                <option value="">Todos los años</option>
+              </select>
+              <select id="filtro-mes">
+                <option value="">Todos los meses</option>
+                <option value="01">01 - Enero</option>
+                <option value="02">02 - Febrero</option>
+                <option value="03">03 - Marzo</option>
+                <option value="04">04 - Abril</option>
+                <option value="05">05 - Mayo</option>
+                <option value="06">06 - Junio</option>
+                <option value="07">07 - Julio</option>
+                <option value="08">08 - Agosto</option>
+                <option value="09">09 - Septiembre</option>
+                <option value="10">10 - Octubre</option>
+                <option value="11">11 - Noviembre</option>
+                <option value="12">12 - Diciembre</option>
+              </select>
+              <select id="filtro-estado-pago" aria-label="Estado Pago">
+                <option value="">Estado Pago</option>
+                <option value="pendiente">Pendiente</option>
+                <option value="parcial">Parcial</option>
+                <option value="pagada">Pagada</option>
+              </select>
+              <select id="filtro-tarjeta" aria-label="Tarjeta">
+                <option value="">Todas las tarjetas</option>
+              </select>
+
+              <button type="button" class="secondary" id="btn-cargar-listado">Cargar listado</button>
+              <button type="button" class="secondary" id="btn-filtro-alertas" style="background:#fef2f2;color:#b91c1c;border-color:#fca5a5;display:none;" title="Mostrar solo facturas con alertas">⚠ Alertas</button>
+              <button type="button" class="secondary" id="btn-exportar">Descargar Excel</button>
+              <button type="button" class="secondary" id="btn-descargar-facturas">Descargar facturas</button>
+              <button type="button" class="btn-eliminar-seleccionadas" id="btn-eliminar-seleccionadas">Eliminar seleccionadas</button>
+              <span class="contador" id="contador"></span>
+            </div>
+
+            <div class="tabla-wrapper">
+              <table id="tabla-facturas">
+                <thead>
+                  <tr>
+                    <th class="col-check"><input type="checkbox" id="check-all-facturas" title="Seleccionar todas" /></th>
+                    <th>Fecha</th>
+                    <th>Proveedor</th>
+                    <th>CIF/NIF</th>
+                    <th>País</th>
+                    <th>Localidad</th>
+                    <th>Concepto</th>
+                    <th>Nº factura</th>
+                    <th class="numero">Base</th>
+                    <th class="numero">IVA</th>
+                    <th class="numero">Retenciones</th>
+                    <th class="numero">Total a pagar</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-facturas"></tbody>
+              </table>
+            </div>
+            <div id="sin-datos" class="sin-datos" style="display: none;">
+              No hay facturas cargadas para esta empresa. Sube facturas con el formulario de la izquierda.
+            </div>
+          </div>
+        </section>
+      </div>
+      </div>
+
+      <div id="panel-proveedores" class="panel-proveedores">
+        <section class="bloque-proveedores">
+          <div class="card">
+            <div class="titulo-con-filtro-empresa">
+              <h1>Proveedores</h1>
+              <div class="filtro-empresa-en-titulo">
+                <select id="empresa-proveedores" class="select-empresa" aria-label="Empresa">
+                  <option value="">Selecciona empresa…</option>
+                </select>
+              </div>
+            </div>
+            <p class="subtitle">
+              Elige la empresa y un proveedor para ver el listado de facturas recibidas de ese proveedor.
+            </p>
+            <div class="proveedores-layout">
+              <div class="proveedores-lista-wrapper">
+                <label>Listado de proveedores</label>
+                <ul id="lista-proveedores" aria-label="Proveedores de la empresa"></ul>
+                <button type="button" class="secondary" id="btn-nuevo-proveedor" style="margin-top: 8px;">Nuevo proveedor</button>
+              </div>
+              <div class="proveedores-facturas-wrapper">
+                <h3 id="titulo-facturas-proveedor">Facturas del proveedor seleccionado</h3>
+                <div class="listado-header proveedores-filtros" id="proveedores-filtros-wrap" style="display: none;">
+                  <select id="filtro-anio-proveedor">
+                    <option value="">Todos los años</option>
+                  </select>
+                  <select id="filtro-mes-proveedor">
+                    <option value="">Todos los meses</option>
+                    <option value="01">01 - Enero</option>
+                    <option value="02">02 - Febrero</option>
+                    <option value="03">03 - Marzo</option>
+                    <option value="04">04 - Abril</option>
+                    <option value="05">05 - Mayo</option>
+                    <option value="06">06 - Junio</option>
+                    <option value="07">07 - Julio</option>
+                    <option value="08">08 - Agosto</option>
+                    <option value="09">09 - Septiembre</option>
+                    <option value="10">10 - Octubre</option>
+                    <option value="11">11 - Noviembre</option>
+                    <option value="12">12 - Diciembre</option>
+                  </select>
+                  <select id="filtro-estado-pago-proveedor" aria-label="Estado Pago">
+                    <option value="">Estado Pago</option>
+                    <option value="pendiente">Pendiente</option>
+                    <option value="parcial">Parcial</option>
+                    <option value="pagada">Pagada</option>
+                  </select>
+                  <select id="filtro-tarjeta-proveedor" aria-label="Tarjeta">
+                    <option value="">Todas las tarjetas</option>
+                  </select>
+                  <button type="button" class="secondary" id="btn-exportar-proveedor">Descargar Excel</button>
+                  <button type="button" class="secondary" id="btn-descargar-facturas-proveedor">Descargar facturas</button>
+                </div>
+                <div id="proveedores-sin-seleccion">Selecciona un proveedor de la lista.</div>
+                <div class="tabla-wrapper" id="tabla-facturas-proveedor-wrapper" style="display: none;">
+                  <table id="tabla-facturas-proveedor">
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Proveedor</th>
+                        <th>CIF/NIF</th>
+                        <th>País</th>
+                        <th>Localidad</th>
+                        <th>Concepto</th>
+                        <th>Nº factura</th>
+                        <th class="numero">Base</th>
+                        <th class="numero">IVA</th>
+                        <th class="numero">Retenciones</th>
+                        <th class="numero">Total a pagar</th>
+                        <th>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tbody-facturas-proveedor"></tbody>
+                  </table>
+                </div>
+                <p id="contador-facturas-proveedor" class="contador" style="margin-top: 8px;"></p>
+              </div>
+            </div>
+            <div id="modal-proveedor" class="modal-overlay" role="dialog" aria-labelledby="modal-proveedor-titulo" aria-modal="true">
+              <div class="modal-content">
+                <h2 id="modal-proveedor-titulo">Nuevo proveedor</h2>
+                <form id="form-proveedor" novalidate>
+                  <input type="hidden" id="proveedor-empresa-id" name="empresa_id" />
+                  <input type="hidden" id="proveedor-old-nombre" name="old_nombre_canonico" />
+                  <input type="hidden" id="proveedor-old-nif" name="old_nif" />
+                  <div class="form-group">
+                    <label for="proveedor-empresa-readonly">Empresa</label>
+                    <input type="text" id="proveedor-empresa-readonly" readonly class="readonly" aria-readonly="true" />
+                  </div>
+                  <div class="form-group">
+                    <label for="proveedor-nombre">Nombre canónico <span class="required">*</span></label>
+                    <input type="text" id="proveedor-nombre" name="nombre_canonico" required />
+                  </div>
+                  <div class="form-group">
+                    <label for="proveedor-nif">NIF/CIF <span class="required">*</span></label>
+                    <input type="text" id="proveedor-nif" name="nif" required />
+                  </div>
+                  <div class="form-group">
+                    <label for="proveedor-direccion">Dirección</label>
+                    <input type="text" id="proveedor-direccion" name="direccion" />
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label for="proveedor-localidad">Localidad</label>
+                      <input type="text" id="proveedor-localidad" name="localidad" />
+                    </div>
+                    <div class="form-group">
+                      <label for="proveedor-pais">País</label>
+                      <input type="text" id="proveedor-pais" name="pais" />
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label for="proveedor-email">Email</label>
+                      <input type="email" id="proveedor-email" name="email" />
+                    </div>
+                    <div class="form-group">
+                      <label for="proveedor-telefono">Teléfono</label>
+                      <input type="text" id="proveedor-telefono" name="telefono" />
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label for="proveedor-centro-coste">Centro de coste</label>
+                    <input type="text" id="proveedor-centro-coste" name="centro_coste" />
+                  </div>
+                  <div class="form-actions">
+                    <button type="submit" class="primary">Guardar</button>
+                    <button type="button" class="secondary" id="btn-cancelar-proveedor">Cancelar</button>
+                    <button type="button" class="secondary btn-danger" id="btn-eliminar-proveedor" style="margin-left: auto; display: none;">Eliminar</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div id="panel-cecos" class="panel-cecos">
+        <section class="bloque-cecos">
+          <div class="card">
+            <h1>CeCos</h1>
+            <p class="subtitle">
+              Asigna un centro de coste a cada proveedor para clasificar mejor los gastos.
+            </p>
+            <div class="cecos-centros-wrapper" id="cecos-centros-wrapper" style="display: none;">
+              <span class="cecos-centros-label">Centros de coste usados en esta empresa:</span>
+              <div class="cecos-centros-list" id="cecos-centros-list"></div>
+            </div>
+            <div class="cecos-layout">
+              <div class="cecos-empresa-wrapper">
+                <label for="empresa-cecos">Empresa</label>
+                <select id="empresa-cecos" class="select-empresa">
+                  <option value="">Selecciona empresa…</option>
+                </select>
+                <span class="empresa-contexto" id="empresa-contexto-cecos" aria-live="polite"></span>
+                <p class="subtitle" style="margin-top: 4px; font-size: 0.8rem;">
+                  Selecciona una empresa para ver sus proveedores y asignarles un centro de coste.
+                </p>
+              </div>
+              <div class="proveedores-facturas-wrapper">
+                <h3>Centros de coste por proveedor</h3>
+                <div class="tabla-wrapper">
+                  <table id="tabla-cecos">
+                    <thead>
+                      <tr>
+                        <th>Proveedor</th>
+                        <th>CIF/NIF</th>
+                        <th>Centro de coste</th>
+                        <th>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tbody-cecos"></tbody>
+                  </table>
+                </div>
+                <p id="cecos-mensaje" class="contador" style="margin-top: 8px;"></p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div id="panel-clientes-facturas" class="panel-clientes">
+        <div class="layout">
+          <section class="col-left">
+            <div class="card">
+              <h1>Procesar facturas de clientes</h1>
+              <p class="subtitle">
+                Sube las facturas emitidas y deja que los agentes extraigan la información y las archiven.
+              </p>
+
+              <form id="cli-procesar-form">
+                <label for="cli-empresa-proc">Empresa</label>
+                <select id="cli-empresa-proc" class="select-empresa" required>
+                  <option value="">Selecciona empresa…</option>
+                </select>
+
+                <label for="cli-archivos">Facturas emitidas</label>
+                <input id="cli-archivos" name="archivos" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,image/*" />
+                <button type="button" class="btn-seleccionar-facturas" id="cli-btn-seleccionar">Seleccionar facturas</button>
+                <ul class="lista-archivos" id="cli-lista-archivos" aria-live="polite"></ul>
+
+                <button type="submit" class="primary">Procesar</button>
+              </form>
+
+              <div class="status" id="cli-proc-status"></div>
+            </div>
+
+          </section>
+          <section class="col-right">
+            <div class="card">
+              <div class="titulo-con-filtro-empresa">
+                <h1>Facturas emitidas a clientes</h1>
+                <div class="filtro-empresa-en-titulo">
+                  <select id="cli-empresa-listado" class="select-empresa">
+                    <option value="">Selecciona empresa…</option>
+                  </select>
+                </div>
+              </div>
+              <p class="subtitle">Listado de facturas registradas. Filtra, ordena y gestiona.</p>
+              <div class="listado-header">
+                <select id="cli-filtro-anio"><option value="">Todos los años</option></select>
+                <select id="cli-filtro-mes">
+                  <option value="">Todos los meses</option>
+                  <option value="01">01 - Enero</option><option value="02">02 - Febrero</option>
+                  <option value="03">03 - Marzo</option><option value="04">04 - Abril</option>
+                  <option value="05">05 - Mayo</option><option value="06">06 - Junio</option>
+                  <option value="07">07 - Julio</option><option value="08">08 - Agosto</option>
+                  <option value="09">09 - Septiembre</option><option value="10">10 - Octubre</option>
+                  <option value="11">11 - Noviembre</option><option value="12">12 - Diciembre</option>
+                </select>
+                <button type="button" class="secondary" id="cli-btn-cargar">Cargar listado</button>
+                <button type="button" class="secondary" id="cli-btn-exportar">Descargar Excel</button>
+                <button type="button" class="secondary" id="cli-btn-descargar-facturas">Descargar facturas</button>
+                <button type="button" class="btn-eliminar-seleccionadas" id="cli-btn-eliminar">Eliminar seleccionadas</button>
+                <span class="contador" id="cli-contador"></span>
+              </div>
+              <div class="tabla-wrapper">
+                <table id="tabla-clientes-facturas">
+                  <thead><tr id="thead-clientes-facturas"></tr></thead>
+                  <tbody id="tbody-clientes-facturas"></tbody>
+                </table>
+              </div>
+              <div id="cli-sin-datos" class="sin-datos" style="display:none;">
+                No hay facturas de clientes para esta empresa.
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div id="panel-clientes-listado" class="panel-clientes">
+        <section class="bloque-proveedores">
+          <div class="card">
+            <div class="titulo-con-filtro-empresa">
+              <h1>Clientes</h1>
+              <div class="filtro-empresa-en-titulo">
+                <select id="empresa-clientes-listado" class="select-empresa" aria-label="Empresa">
+                  <option value="">Selecciona empresa…</option>
+                </select>
+              </div>
+            </div>
+            <p class="subtitle">
+              Elige la empresa y un cliente para ver el listado de facturas emitidas a ese cliente.
+            </p>
+            <div class="proveedores-layout">
+              <div class="proveedores-lista-wrapper">
+                <label>Listado de clientes</label>
+                <ul id="lista-clientes-unicos" aria-label="Clientes de la empresa"></ul>
+                <button type="button" class="secondary" id="btn-nuevo-cliente" style="margin-top: 8px;">Nuevo cliente</button>
+              </div>
+              <div class="proveedores-facturas-wrapper">
+                <h3 id="titulo-facturas-cliente">Facturas del cliente seleccionado</h3>
+                <div class="listado-header proveedores-filtros" id="clientes-listado-filtros-wrap" style="display: none;">
+                  <select id="filtro-anio-cliente-listado">
+                    <option value="">Todos los años</option>
+                  </select>
+                  <select id="filtro-mes-cliente-listado">
+                    <option value="">Todos los meses</option>
+                    <option value="01">01 - Enero</option><option value="02">02 - Febrero</option>
+                    <option value="03">03 - Marzo</option><option value="04">04 - Abril</option>
+                    <option value="05">05 - Mayo</option><option value="06">06 - Junio</option>
+                    <option value="07">07 - Julio</option><option value="08">08 - Agosto</option>
+                    <option value="09">09 - Septiembre</option><option value="10">10 - Octubre</option>
+                    <option value="11">11 - Noviembre</option><option value="12">12 - Diciembre</option>
+                  </select>
+                  <button type="button" class="secondary" id="cli-listado-btn-exportar">Descargar Excel</button>
+                  <button type="button" class="secondary" id="cli-listado-btn-descargar">Descargar facturas</button>
+                </div>
+                <div id="clientes-sin-seleccion">Selecciona un cliente de la lista.</div>
+                <div class="tabla-wrapper" id="tabla-facturas-cliente-wrapper" style="display: none;">
+                  <table id="tabla-facturas-cliente-listado">
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Cliente</th>
+                        <th>CIF/NIF</th>
+                        <th>País</th>
+                        <th>Localidad</th>
+                        <th>Nº factura</th>
+                        <th>Proyecto</th>
+                        <th>Tipología</th>
+                        <th>Nº hincadoras</th>
+                        <th>Nº ayudantes</th>
+                        <th class="numero">P. servicio</th>
+                        <th class="numero">P. transporte</th>
+                        <th class="numero">IVA</th>
+                        <th class="numero">Total a pagar</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tbody-facturas-cliente-listado"></tbody>
+                  </table>
+                </div>
+                <p id="contador-facturas-cliente-listado" class="contador" style="margin-top: 8px;"></p>
+              </div>
+            </div>
+            <div id="modal-cliente" class="modal-overlay" role="dialog" aria-labelledby="modal-cliente-titulo" aria-modal="true" aria-hidden="true">
+              <div class="modal-content">
+                <h2 id="modal-cliente-titulo">Nuevo cliente</h2>
+                <form id="form-cliente" novalidate>
+                  <input type="hidden" id="cliente-empresa-id" name="empresa_id" />
+                  <input type="hidden" id="cliente-old-nombre" name="old_cliente" />
+                  <input type="hidden" id="cliente-old-cif" name="old_cif_nif" />
+                  <div class="form-group">
+                    <label for="cliente-empresa-readonly">Empresa</label>
+                    <input type="text" id="cliente-empresa-readonly" readonly class="readonly" aria-readonly="true" />
+                  </div>
+                  <div class="form-group">
+                    <label for="cliente-nombre">Cliente <span class="required">*</span></label>
+                    <input type="text" id="cliente-nombre" name="cliente" required />
+                  </div>
+                  <div class="form-group">
+                    <label for="cliente-cif">CIF/NIF <span class="required">*</span></label>
+                    <input type="text" id="cliente-cif" name="cif_nif" required />
+                  </div>
+                  <div class="form-group">
+                    <label for="cliente-direccion">Dirección</label>
+                    <input type="text" id="cliente-direccion" name="direccion" />
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label for="cliente-localidad">Localidad</label>
+                      <input type="text" id="cliente-localidad" name="localidad" />
+                    </div>
+                    <div class="form-group">
+                      <label for="cliente-pais">País</label>
+                      <input type="text" id="cliente-pais" name="pais" />
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label for="cliente-proyecto">Proyecto</label>
+                    <input type="text" id="cliente-proyecto" name="proyecto" />
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label for="cliente-email">Email</label>
+                      <input type="email" id="cliente-email" name="email" />
+                    </div>
+                    <div class="form-group">
+                      <label for="cliente-telefono">Teléfono</label>
+                      <input type="text" id="cliente-telefono" name="telefono" />
+                    </div>
+                  </div>
+                  <div class="form-actions">
+                    <button type="submit" class="primary">Guardar</button>
+                    <button type="button" class="secondary" id="btn-cancelar-cliente">Cancelar</button>
+                    <button type="button" class="secondary btn-danger" id="btn-eliminar-cliente" style="margin-left: auto; display: none;">Eliminar</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+    </div>
+
+      <div id="panel-proyectos-inicio" class="panel-proyectos">
+        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+          <h1>Proyectos</h1>
+          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+        </div>
+      </div>
+
+      <div id="panel-proyectos-cotizados" class="panel-proyectos">
+        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+          <h1>Cotizados</h1>
+          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+        </div>
+      </div>
+      <div id="panel-proyectos-vivos" class="panel-proyectos">
+        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+          <h1>Vivos</h1>
+          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+        </div>
+      </div>
+      <div id="panel-proyectos-terminados" class="panel-proyectos">
+        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+          <h1>Terminados</h1>
+          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+        </div>
+      </div>
+
+      <div id="panel-proyectos-transporte" class="panel-proyectos panel-proyectos-transporte">
+        <div class="layout transporte-layout">
+          <section class="col-left">
+            <div class="card">
+              <h1>Transporte de maquinaria</h1>
+              <p class="subtitle">
+                Introduce origen y destino para calcular la ruta y ver proveedores situados a lo largo del trayecto.
+              </p>
+              <form id="form-transporte" class="transporte-form">
+                <label for="transporte-origen">Origen (dirección o localidad)</label>
+                <input type="text" id="transporte-origen" name="origen" placeholder="Ej. Madrid" required />
+                <div class="transporte-paradas-wrap">
+                  <label>Paradas intermedias</label>
+                  <div id="transporte-paradas-list" class="transporte-paradas-list" aria-label="Paradas intermedias de la ruta"></div>
+                  <button type="button" id="transporte-anadir-parada" class="transporte-btn-parada">+ Añadir parada</button>
+                </div>
+                <label for="transporte-destino">Destino (dirección o localidad)</label>
+                <input type="text" id="transporte-destino" name="destino" placeholder="Ej. Sevilla" required />
+                <button type="submit" class="primary" id="btn-transporte-buscar">Buscar ruta y proveedores</button>
+              </form>
+              <div id="transporte-status" class="status" style="margin-top:12px;display:none;" aria-live="polite"></div>
+              <div id="transporte-ruta-resumen" class="transporte-ruta-resumen" style="margin-top:12px;display:none;font-size:0.9rem;color:#64748b;"></div>
+            </div>
+          </section>
+          <section class="col-right transporte-map-section">
+            <div class="transporte-map-and-list">
+              <div class="transporte-map-wrapper">
+                <div id="map-transporte" class="map-transporte" role="img" aria-label="Mapa con la ruta y los proveedores de transporte"></div>
+                <div id="transporte-map-placeholder" class="transporte-map-placeholder">
+                  Introduce origen y destino y pulsa «Buscar ruta y proveedores» para ver el mapa.
+                </div>
+              </div>
+              <aside class="transporte-list-wrapper" aria-label="Proveedores de transporte en la ruta">
+                <div class="transporte-list-header">
+                  <div class="transporte-list-title">Proveedores en la ruta</div>
+                  <button type="button" id="transporte-btn-nuevo" class="transporte-btn-nuevo">+ Incorporar transportista</button>
+                </div>
+                <div class="transporte-whatsapp-box">
+                  <label for="transporte-whatsapp-mensaje">Mensaje</label>
+                  <textarea id="transporte-whatsapp-mensaje" rows="4" placeholder="Escribe aquí el mensaje que se pre-rellenará en WhatsApp para los transportistas."></textarea>
+                </div>
+                <div class="transporte-filtros-contacto" aria-label="Filtrar proveedores por datos de contacto">
+                  <button type="button" id="transporte-filtro-fijo" class="transporte-filter-pill" title="Con teléfono fijo">☎</button>
+                  <button type="button" id="transporte-filtro-movil" class="transporte-filter-pill" title="Con móvil">✆</button>
+                  <button type="button" id="transporte-filtro-email" class="transporte-filter-pill" title="Con email">✉</button>
+                  <button type="button" id="transporte-filtro-web" class="transporte-filter-pill" title="Con web">🌐</button>
+                </div>
+                <div id="transporte-listado-resumen" class="transporte-list-resumen"></div>
+                <div id="transporte-listado-proveedores" class="transporte-listado-proveedores"></div>
+                <div class="transporte-whatsapp-actions">
+                  <button type="button" id="transporte-btn-enviar-whatsapp" class="transporte-btn-enviar-whatsapp">Enviar por WhatsApp</button>
+                </div>
+              </aside>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div id="panel-bancos-inicio" class="panel-bancos">
+        <div class="bancos-tabs">
+          <button type="button" id="bancos-tab-movimientos" class="bancos-tab activo">Movimientos</button>
+          <button type="button" id="bancos-tab-tarjetas" class="bancos-tab">Tarjetas bancos</button>
+        </div>
+
+        <div id="bancos-seccion-movimientos" class="bancos-seccion bancos-seccion-activa">
+          <div class="card bancos-carga-bar">
+          <form id="form-bancos-importar" class="bancos-carga-form">
+            <span class="bancos-carga-label">Cargar extracto</span>
+            <select id="bancos-empresa" name="empresa_id" class="select-empresa" title="Empresa (obligatorio para importar)">
+              <option value="">Selecciona empresa…</option>
+            </select>
+            <select id="bancos-banco" name="banco">
+              <option value="santander">Santander</option>
+              <option value="bbva">BBVA</option>
+            </select>
+            <input type="file" id="bancos-archivo" name="archivo" accept=".xlsx,.xls" required title="Archivo Excel" />
+            <button type="submit" class="primary" id="btn-bancos-cargar">Cargar</button>
+          </form>
+          <div class="status" id="bancos-status" style="margin-top:6px;min-height:1em;font-size:0.85rem;"></div>
+          <div id="bancos-resultado" style="margin-top:4px;display:none;font-size:0.85rem;">
+            <span><strong>Resultado:</strong></span>
+            <ul id="bancos-resultado-lista" style="margin:2px 0 0 0.5rem;padding-left:0;color:#374151;"></ul>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:16px;">
+          <div class="titulo-con-filtro-empresa">
+            <h1>Movimientos de caja</h1>
+            <div class="filtro-empresa-en-titulo">
+              <select id="bancos-filtro-empresa" class="select-empresa" style="width:auto;min-width:140px;">
+                <option value="">Selecciona empresa…</option>
+              </select>
+            </div>
+          </div>
+          <p class="subtitle" style="font-size:0.95rem;color:#64748b;">
+            Listado unificado de todos los movimientos cargados. Filtra por banco y fechas.
+          </p>
+          <div id="bancos-conciliacion-block" style="display:none;margin-bottom:1rem;">
+            <div class="bancos-conciliacion-cabecera">
+              <h3 class="bancos-conciliacion-titulo">Sugerencias de conciliación</h3>
+              <p class="bancos-conciliacion-subtitle">Movimientos sin conciliar (y sin tarjeta) vs facturas pendientes o parciales: el importe del movimiento puede ser pago total o parcial (varios movimientos por factura). Mismo importe ± 0,50 € y fecha factura dentro del último año.</p>
+            </div>
+            <button type="button" class="secondary" id="bancos-btn-cargar-sugerencias">Cargar sugerencias</button>
+            <button type="button" class="secondary" id="bancos-btn-actualizar-sugerencias" title="Volver a cargar sugerencias">Actualizar</button>
+            <div id="bancos-sugerencias-list" style="margin-top:0.75rem;"></div>
+          </div>
+          <div class="listado-header">
+            <select id="bancos-filtro-banco">
+              <option value="">Todos los bancos</option>
+              <option value="santander">Santander</option>
+              <option value="bbva">BBVA</option>
+            </select>
+            <label for="bancos-filtro-fecha-desde" style="margin:0;display:inline-flex;align-items:center;gap:6px;">
+              Desde <input type="date" id="bancos-filtro-fecha-desde" style="width:auto;margin:0;" />
+            </label>
+            <label for="bancos-filtro-fecha-hasta" style="margin:0;display:inline-flex;align-items:center;gap:6px;">
+              Hasta <input type="date" id="bancos-filtro-fecha-hasta" style="width:auto;margin:0;" />
+            </label>
+            <label for="bancos-filtro-concepto" style="margin:0;display:inline-flex;align-items:center;gap:6px;">
+              Concepto <input type="text" id="bancos-filtro-concepto" placeholder="Buscar en concepto…" style="width:140px;margin:0;" />
+            </label>
+            <button type="button" class="secondary" id="bancos-btn-refrescar">Actualizar</button>
+            <button type="button" class="secondary" id="bancos-btn-exportar">Descargar Excel</button>
+            <button type="button" class="secondary" id="bancos-btn-borrar-seleccionados" title="Elimina los movimientos seleccionados">Borrar seleccionados</button>
+          </div>
+          <p class="contador" id="bancos-contador">0 movimientos</p>
+          <div class="tabla-wrapper" id="tabla-wrapper-movimientos-bancos">
+            <table id="tabla-movimientos-bancos">
+              <thead>
+                <tr>
+                  <th class="col-check"><input type="checkbox" id="bancos-check-all" title="Seleccionar todos" /></th>
+                  <th class="col-fecha">Fecha</th>
+                  <th class="col-banco">Banco</th>
+                  <th class="col-concepto">Concepto</th>
+                  <th class="numero">Importe</th>
+                  <th class="numero">Saldo</th>
+                  <th class="numero">Saldo acum.</th>
+                  <th>Conciliación</th>
+                  <th>Agrupación</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-movimientos-bancos">
+                <tr><td colspan="9" class="sin-datos">Cargando…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        </div>
+
+        <div id="bancos-seccion-tarjetas" class="bancos-seccion" style="margin-top:16px;">
+          <div class="card">
+            <div class="titulo-con-filtro-empresa">
+              <h1>Tarjetas de bancos</h1>
+              <div class="filtro-empresa-en-titulo">
+                <select id="bancos-tarjetas-empresa" class="select-empresa" style="width:auto;min-width:140px;">
+                  <option value="">Selecciona empresa…</option>
+                </select>
+              </div>
+            </div>
+            <p class="subtitle" style="font-size:0.95rem;color:#64748b;">
+              Maestro de tarjetas por empresa. Usa estas tarjetas para marcar facturas pagadas con tarjeta y preparar la conciliación de extractos.
+            </p>
+            <div class="bancos-tarjetas-actions">
+              <button type="button" class="secondary" id="btn-abrir-modal-tarjeta">+ Añadir tarjeta</button>
+            </div>
+            <div class="bancos-tarjetas-layout">
+              <div class="bancos-tarjetas-lista">
+                <table id="tabla-tarjetas-bancos">
+                  <thead>
+                    <tr>
+                      <th>Banco</th>
+                      <th>Persona</th>
+                      <th>Tarjeta</th>
+                      <th>Alias</th>
+                      <th>Estado</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-tarjetas-bancos">
+                    <tr><td colspan="6" class="sin-datos">Selecciona una empresa para ver las tarjetas.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="bancos-tarjetas-liquidaciones">
+              <h2 style="font-size:1rem;margin:1rem 0 0.25rem 0;">Extractos por tarjeta y periodo</h2>
+              <p class="subtitle" style="font-size:0.8rem;color:#64748b;margin-bottom:0.5rem;">
+                Se calculan automáticamente a partir de las facturas marcadas como pagadas con tarjeta.
+              </p>
+              <div class="listado-header" style="margin-bottom:0.5rem;">
+                <label for="extractos-filtro-tarjeta" style="margin:0;display:inline-flex;align-items:center;gap:6px;">
+                  Tarjeta
+                  <select id="extractos-filtro-tarjeta" style="width:auto;min-width:180px;">
+                    <option value="">Todas</option>
+                  </select>
+                </label>
+                <label for="extractos-filtro-periodo" style="margin:0;display:inline-flex;align-items:center;gap:6px;">
+                  Periodo
+                  <input type="month" id="extractos-filtro-periodo" style="width:auto;margin:0;" />
+                </label>
+                <span style="font-size:0.85rem;color:#64748b;">(dejar vacío = todos)</span>
+              </div>
+              <div class="tabla-wrapper">
+                <table id="tabla-tarjetas-liquidaciones">
+                  <thead>
+                    <tr>
+                      <th>Tarjeta</th>
+                      <th>Periodo</th>
+                      <th class="numero">Nº facturas</th>
+                      <th class="numero">Total facturas</th>
+                      <th class="numero">Importe mov.</th>
+                      <th class="numero">Pendiente</th>
+                      <th>Estado</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-tarjetas-liquidaciones">
+                    <tr><td colspan="8" class="sin-datos">Selecciona una empresa para ver los extractos.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="panel-rrhh-inicio" class="panel-rrhh">
+        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+          <h1>RRHH</h1>
+          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+        </div>
+      </div>
+      <div id="panel-rrhh-equipo" class="panel-rrhh">
+        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+          <h1>Equipo</h1>
+          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+        </div>
+      </div>
+      <div id="panel-rrhh-reserva" class="panel-rrhh">
+        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+          <h1>Reserva</h1>
+          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+        </div>
+      </div>
+      <div id="panel-rrhh-alumni" class="panel-rrhh">
+        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+          <h1>Alumni</h1>
+          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+        </div>
+      </div>
+      <div id="panel-rrhh-nominas" class="panel-rrhh">
+        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+          <h1>Nominas</h1>
+          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+        </div>
+      </div>
+      <div id="panel-rrhh-adelantos" class="panel-rrhh">
+        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+          <h1>Adelantos</h1>
+          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+        </div>
+      </div>
+
+      <div id="panel-onboarding-inicio" class="panel-onboarding">
+        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+          <h1>Onboarding</h1>
+          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+        </div>
+      </div>
+
+      <div id="panel-control-calidad-inicio" class="panel-control-calidad">
+        <div class="card" style="max-width:800px;margin:40px auto;">
+          <h1>Control de calidad</h1>
+          <p class="subtitle" style="font-size:1rem;color:#64748b;">
+            Analiza las bases de facturas (proveedores y/o clientes) y revisa las filas con errores.
+          </p>
+          <form id="form-control-calidad" novalidate>
+            <label for="empresa-control-calidad">Empresa</label>
+            <select id="empresa-control-calidad" name="empresa_id" class="select-empresa" required>
+              <option value="">Selecciona empresa…</option>
+            </select>
+            <label for="tipo-control-calidad">Tipo de facturas</label>
+            <select id="tipo-control-calidad" name="tipo">
+              <option value="ambos">Ambos</option>
+              <option value="proveedores">Facturas proveedores</option>
+              <option value="clientes">Facturas clientes</option>
+            </select>
+            <label style="display:flex;align-items:center;gap:8px;margin:8px 0;">
+              <input type="checkbox" id="incluir-tests-control-calidad" name="incluir_tests" />
+              <span>Incluir tests unitarios</span>
+            </label>
+            <button type="submit" class="primary" id="btn-analizar-bases-datos">Analizar bases de datos</button>
+          </form>
+          <div id="control-calidad-status" class="status" style="margin-top:1rem;display:none;" aria-live="polite"></div>
+          <div id="control-calidad-resultados" style="margin-top:1.5rem;display:none;">
+            <div id="control-calidad-tests" style="margin-bottom:1rem;display:none;"></div>
+            <label style="display:flex;align-items:center;gap:8px;margin-bottom:0.5rem;">
+              <input type="checkbox" id="usar-llm-sugerencias" />
+              <span>Incluir asistente (LLM) al obtener sugerencias: envía factura y errores para que sugiera correcciones</span>
+            </label>
+            <h2 style="font-size:1.1rem;margin-bottom:0.5rem;">Facturas con problemas</h2>
+            <p id="control-calidad-resumen" style="margin:0 0 8px 0;color:#64748b;font-size:0.95rem;"></p>
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px;">
+              <label for="control-calidad-filtro-tipo-error" style="display:flex;align-items:center;gap:4px;">Filtrar por tipo de error:</label>
+              <select id="control-calidad-filtro-tipo-error" style="padding:4px 8px;">
+                <option value="">Todos</option>
+                <option value="Descuadre">Descuadre</option>
+                <option value="Sin fecha">Sin fecha</option>
+                <option value="Fecha futura">Fecha futura</option>
+              </select>
+              <button type="button" class="secondary" id="control-calidad-exportar-csv">Exportar informe (CSV)</button>
+            </div>
+            <div id="control-calidad-lista"></div>
+          </div>
+        </div>
+      </div>
+
+    <div id="modal-editar-overlay" class="modal-overlay" aria-hidden="true">
+      <div class="modal-editar" role="dialog" aria-labelledby="modal-editar-titulo">
+        <h2 id="modal-editar-titulo">Editar factura</h2>
+        <form id="form-editar-factura">
+          <label for="ed-fecha">Fecha (YYYY-MM-DD)</label>
+          <input type="text" id="ed-fecha" name="fecha_factura" placeholder="2024-01-15" />
+          <div class="fila-selector-proveedor">
+            <label for="ed-selector-proveedor">Proveedor del maestro</label>
+            <div class="selector-proveedor-con-boton">
+              <select id="ed-selector-proveedor" aria-label="Seleccionar proveedor">
+                <option value="">Seleccionar proveedor…</option>
+              </select>
+              <button type="button" class="secondary" id="ed-btn-nuevo-proveedor">Crear nuevo proveedor</button>
+            </div>
+          </div>
+          <label for="ed-proveedor">Proveedor</label>
+          <input type="text" id="ed-proveedor" name="proveedor" />
+          <label for="ed-nif">CIF/NIF</label>
+          <input type="text" id="ed-nif" name="nif_proveedor" />
+          <label for="ed-pais">País</label>
+          <input type="text" id="ed-pais" name="pais_proveedor" />
+          <label for="ed-localidad">Localidad</label>
+          <input type="text" id="ed-localidad" name="localidad_proveedor" />
+          <label for="ed-concepto">Concepto</label>
+          <input type="text" id="ed-concepto" name="resumen_concepto" />
+          <label for="ed-numero">Nº factura</label>
+          <input type="text" id="ed-numero" name="numero_factura" />
+          <label for="ed-base">Base</label>
+          <input type="text" id="ed-base" name="base_imponible" />
+          <label for="ed-iva">IVA</label>
+          <input type="text" id="ed-iva" name="iva" />
+          <label for="ed-retenciones">Retenciones</label>
+          <input type="text" id="ed-retenciones" name="retenciones_total" />
+          <label for="ed-total">Total a pagar</label>
+          <input type="text" id="ed-total" name="total_a_pagar" />
+          <label for="ed-tarjeta">Pagado con tarjeta (opcional)</label>
+          <div class="fila-tarjeta-liquidacion">
+            <select id="ed-tarjeta" name="tarjeta_id" aria-label="Pagado con tarjeta">
+              <option value="">Sin tarjeta / pago directo</option>
+            </select>
+            <button type="button" class="secondary" id="ed-btn-extracto-mes-siguiente" title="Asignar esta factura al extracto del mes siguiente (el banco suele incluir cargos de fin de mes en la liquidación siguiente)">Extracto mes siguiente</button>
+          </div>
+          <input type="hidden" id="ed-liquidacion-periodo" name="liquidacion_periodo" />
+          <p id="ed-liquidacion-periodo-texto" class="subtitle" style="font-size:0.85rem;color:#64748b;margin-top:2px;min-height:1.2em;"></p>
+          <label for="ed-estado-pago">Estado de pago</label>
+          <select id="ed-estado-pago" name="estado_pago" aria-label="Estado de pago">
+            <option value="pendiente">Pendiente</option>
+            <option value="pagada">Pagada</option>
+            <option value="parcial">Parcial</option>
+          </select>
+          <div id="ed-conciliacion-wrap" class="ed-conciliacion-wrap" style="margin:1rem 0;padding:0.75rem;background:#f1f5f9;border-radius:6px;">
+            <h3 style="font-size:0.95rem;margin:0 0 0.5rem 0;">Conciliación bancaria</h3>
+            <p id="ed-conciliacion-resumen" style="margin:0 0 0.25rem 0;font-size:0.9rem;"></p>
+            <p id="ed-conciliacion-pendiente" style="margin:0;font-size:0.9rem;font-weight:600;"></p>
+            <div id="ed-conciliacion-movs" style="margin-top:0.5rem;font-size:0.85rem;"></div>
+          </div>
+          <label for="ed-comentarios">Comentarios revisión</label>
+          <textarea id="ed-comentarios" name="comentarios_revision"></textarea>
+          <div class="modal-actions">
+            <button type="button" class="secondary" id="btn-cerrar-editar">Cancelar</button>
+            <button type="submit" class="primary">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="modal-editar-cli-overlay" class="modal-overlay" aria-hidden="true">
+      <div class="modal-editar" role="dialog" aria-labelledby="modal-editar-cli-titulo">
+        <h2 id="modal-editar-cli-titulo">Editar factura de cliente</h2>
+        <form id="form-editar-factura-cli">
+          <label for="edc-fecha">Fecha (YYYY-MM-DD)</label>
+          <input type="text" id="edc-fecha" name="fecha_factura" placeholder="2026-01-15" />
+          <div class="fila-selector-proveedor">
+            <label for="edc-selector-cliente">Cliente del listado</label>
+            <div class="selector-proveedor-con-boton">
+              <select id="edc-selector-cliente" aria-label="Seleccionar cliente">
+                <option value="">Seleccionar cliente…</option>
+              </select>
+              <button type="button" class="secondary" id="edc-btn-nuevo-cliente">Crear nuevo cliente</button>
+            </div>
+          </div>
+          <label for="edc-cliente">Cliente</label>
+          <input type="text" id="edc-cliente" name="cliente" />
+          <label for="edc-nif">CIF / NIF</label>
+          <input type="text" id="edc-nif" name="cif_nif" />
+          <label for="edc-pais">País</label>
+          <input type="text" id="edc-pais" name="pais" />
+          <label for="edc-localidad">Localidad</label>
+          <input type="text" id="edc-localidad" name="localidad" />
+          <label for="edc-proyecto">Proyecto</label>
+          <input type="text" id="edc-proyecto" name="proyecto" />
+          <label for="edc-tipologia">Tipología</label>
+          <select id="edc-tipologia" name="tipologia">
+            <option value="">Seleccionar…</option>
+            <option value="Administración">Administración</option>
+            <option value="Producción">Producción</option>
+          </select>
+          <label for="edc-hincadoras">Nº hincadoras</label>
+          <input type="text" id="edc-hincadoras" name="num_hincadoras" />
+          <label for="edc-ayudantes">Nº ayudantes</label>
+          <input type="text" id="edc-ayudantes" name="num_ayudantes" />
+          <label for="edc-pricing-servicio">Pricing servicio</label>
+          <input type="text" id="edc-pricing-servicio" name="pricing_servicio" />
+          <label for="edc-pricing-transporte">Pricing transporte</label>
+          <input type="text" id="edc-pricing-transporte" name="pricing_transporte" />
+          <label for="edc-num-factura">Nº factura</label>
+          <input type="text" id="edc-num-factura" name="numero_factura" />
+          <label for="edc-iva">IVA</label>
+          <input type="text" id="edc-iva" name="iva" />
+          <label for="edc-total">Total a cobrar</label>
+          <input type="text" id="edc-total" name="total_a_pagar" />
+          <div id="edc-conciliacion-wrap" class="ed-conciliacion-wrap" style="display:none;margin:1rem 0;padding:0.75rem;background:#f1f5f9;border-radius:6px;">
+            <h3 style="font-size:0.95rem;margin:0 0 0.5rem 0;">Conciliación bancaria (cobros)</h3>
+            <p id="edc-conciliacion-resumen" style="margin:0 0 0.25rem 0;font-size:0.9rem;"></p>
+            <p id="edc-conciliacion-pendiente" style="margin:0;font-size:0.9rem;font-weight:600;"></p>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="secondary" id="btn-cerrar-editar-cli">Cancelar</button>
+            <button type="submit" class="primary">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="modal-tarjeta-overlay" class="modal-overlay" aria-hidden="true">
+      <div class="modal-editar" role="dialog" aria-labelledby="modal-tarjeta-titulo">
+        <h2 id="modal-tarjeta-titulo">Nueva tarjeta</h2>
+        <form id="form-tarjetas-bancos" novalidate>
+          <label for="tarjeta-banco">Banco</label>
+          <input type="text" id="tarjeta-banco" name="banco" placeholder="Ej. Santander" required />
+          <label for="tarjeta-persona">Persona titular</label>
+          <input type="text" id="tarjeta-persona" name="persona" placeholder="Nombre de la persona" required />
+          <label for="tarjeta-ultimos4">Últimos 4 dígitos (opcional)</label>
+          <input type="text" id="tarjeta-ultimos4" name="ultimos4" maxlength="4" placeholder="1234" />
+          <label for="tarjeta-alias">Alias (opcional)</label>
+          <input type="text" id="tarjeta-alias" name="alias" placeholder="Ej. Tarjeta marketing" />
+          <label style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+            <input type="checkbox" id="tarjeta-activa" name="activa" checked />
+            <span>Activa</span>
+          </label>
+          <div id="tarjetas-status" class="status" style="margin-top:6px;min-height:1em;font-size:0.85rem;"></div>
+          <div class="modal-actions">
+            <button type="button" class="secondary" id="btn-cerrar-modal-tarjeta">Cancelar</button>
+            <button type="submit" class="primary" id="btn-tarjeta-guardar">Guardar tarjeta</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="modal-vincular-extracto-overlay" class="modal-overlay" aria-hidden="true" aria-labelledby="modal-vincular-extracto-titulo">
+      <div class="modal-editar" role="dialog">
+        <h2 id="modal-vincular-extracto-titulo">Vincular movimiento a extracto de tarjeta</h2>
+        <p class="subtitle" style="font-size:0.9rem;color:#64748b;margin-bottom:1rem;">Elige la tarjeta y el periodo (liquidación) con el que conciliar este movimiento.</p>
+        <form id="form-vincular-extracto" novalidate>
+          <input type="hidden" id="vincular-extracto-movimiento-id" name="movimiento_id" />
+          <input type="hidden" id="vincular-extracto-empresa-id" name="empresa_id" />
+          <label for="vincular-extracto-tarjeta">Tarjeta</label>
+          <select id="vincular-extracto-tarjeta" name="tarjeta_id" required>
+            <option value="">Selecciona tarjeta…</option>
+          </select>
+          <label for="vincular-extracto-periodo">Periodo (YYYY-MM)</label>
+          <input type="month" id="vincular-extracto-periodo" name="periodo" required />
+          <div id="vincular-extracto-status" class="status" style="margin-top:6px;min-height:1em;font-size:0.85rem;"></div>
+          <div class="modal-actions">
+            <button type="button" class="secondary" id="btn-cerrar-modal-vincular-extracto">Cancelar</button>
+            <button type="submit" class="primary" id="btn-vincular-extracto-confirmar">Vincular</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="modal-conciliar-factura-overlay" class="modal-overlay" aria-hidden="true" aria-labelledby="modal-conciliar-factura-titulo">
+      <div class="modal-editar modal-conciliar-factura" role="dialog" style="max-width: 720px;">
+        <h2 id="modal-conciliar-factura-titulo">Conciliar factura</h2>
+        <p class="subtitle" style="font-size:0.9rem;color:#64748b;margin-bottom:0.5rem;">Vincular este movimiento a una factura pendiente o parcial de pago.</p>
+        <div id="conciliar-factura-mov-info" class="bancos-conciliar-mov-info" style="margin-bottom:1rem;padding:0.5rem;background:#f1f5f9;border-radius:4px;font-size:0.9rem;"></div>
+        <label for="conciliar-factura-buscar">Buscar facturas (proveedor, concepto, número)</label>
+        <input type="text" id="conciliar-factura-buscar" placeholder="Escriba para filtrar…" style="width:100%;margin-bottom:0.75rem;padding:6px 8px;" />
+        <div class="tabla-wrapper" style="max-height:280px;overflow:auto;">
+          <table id="tabla-conciliar-facturas">
+            <thead>
+              <tr>
+                <th class="col-fecha">Fecha</th>
+                <th>Proveedor</th>
+                <th>Concepto</th>
+                <th>Nº</th>
+                <th class="numero">Total</th>
+                <th>Estado</th>
+                <th class="col-acciones"></th>
+              </tr>
+            </thead>
+            <tbody id="tbody-conciliar-facturas"></tbody>
+          </table>
+        </div>
+        <p id="conciliar-factura-sin-datos" class="sin-datos" style="display:none;margin-top:0.5rem;">No hay facturas pendientes o parciales para esta empresa.</p>
+        <div class="modal-actions" style="margin-top:1rem;">
+          <button type="button" class="secondary" id="btn-cerrar-modal-conciliar-factura">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="/static/js/app.js"></script>
+  </body>
+</html>

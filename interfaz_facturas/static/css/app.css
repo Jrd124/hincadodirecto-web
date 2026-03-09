@@ -1,0 +1,1657 @@
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 0;
+        padding: 0;
+        background: #f3f4f6;
+        color: #111827;
+      }
+      .header-sticky {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: #bfdbfe;
+      }
+      .menu-principal {
+        background: #bfdbfe;
+        padding: 0 24px;
+        margin-bottom: 0;
+      }
+      .menu-principal ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+      }
+      .menu-principal li {
+        margin: 0;
+      }
+      .menu-principal a {
+        display: block;
+        padding: 16px 14px;
+        font-size: 0.9375rem;
+        font-weight: 500;
+        color: #374151;
+        text-decoration: none;
+        border-radius: 0;
+        transition: color 0.18s ease, background 0.18s ease;
+      }
+      .menu-principal a:hover {
+        color: #1f2937;
+        background: #93c5fd;
+      }
+      .menu-principal a.activo {
+        color: #fff;
+        font-weight: 700;
+        background: #334155;
+        border-radius: 0;
+      }
+      .submenu {
+        background: #dbeafe;
+        padding: 0 24px;
+        display: none;
+      }
+      .submenu.visible {
+        display: block;
+      }
+      .submenu ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 4px;
+      }
+      .submenu li {
+        margin: 0;
+      }
+      .submenu a {
+        display: block;
+        padding: 12px 14px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #374151;
+        text-decoration: none;
+        border-radius: 0;
+        transition: color 0.18s ease, background 0.18s ease;
+      }
+      .submenu a:hover {
+        color: #1f2937;
+        background: #bfdbfe;
+      }
+      .submenu a.activo {
+        color: #fff;
+        font-weight: 700;
+        background: #334155;
+        border-radius: 0;
+      }
+      .submenu-inner {
+        padding: 0 24px;
+        background: #eff6ff;
+      }
+      .submenu-inner a {
+        font-size: 0.8125rem;
+        padding: 10px 12px;
+        color: #374151;
+        border-radius: 0;
+      }
+      .submenu-inner a:hover {
+        background: #dbeafe;
+        color: #1f2937;
+      }
+      .submenu-inner a.activo {
+        color: #fff;
+        font-weight: 700;
+        background: #334155;
+        border-radius: 0;
+      }
+      .panel-facturas,
+      .panel-proveedores,
+      .panel-cecos,
+      .panel-clientes,
+      .panel-proyectos,
+      .panel-bancos,
+      .panel-rrhh,
+      .panel-onboarding,
+      .panel-control-calidad {
+        display: none;
+      }
+      .panel-facturas.visible,
+      .panel-proveedores.visible,
+      .panel-cecos.visible,
+      .panel-clientes.visible,
+      .panel-proyectos.visible,
+      .panel-bancos.visible,
+      .panel-rrhh.visible,
+      .panel-onboarding.visible,
+      .panel-control-calidad.visible {
+        display: block;
+      }
+      /* Alinear paneles Proyectos con el resto del contenido */
+      .panel-proyectos > .layout {
+        max-width: 1800px;
+        margin: 0 auto;
+        padding: 24px 20px;
+      }
+      .bancos-carga-bar {
+        padding: 12px 16px;
+      }
+      .bancos-carga-bar .bancos-carga-form {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+      }
+      .bancos-carga-bar .bancos-carga-label {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #374151;
+        margin-right: 4px;
+      }
+      .bancos-carga-bar .bancos-carga-form select {
+        padding: 6px 10px;
+        font-size: 0.875rem;
+        border-radius: 6px;
+        border: 1px solid #94a3b8;
+        background: #f8fafc;
+        min-width: 120px;
+      }
+      .bancos-carga-bar .bancos-carga-form input[type="file"] {
+        padding: 4px 6px;
+        font-size: 0.8rem;
+        max-width: 200px;
+      }
+      .bancos-carga-bar .bancos-carga-form button.primary {
+        width: auto;
+        padding: 8px 16px;
+        font-size: 0.875rem;
+        margin: 0;
+      }
+      .bancos-carga-bar #bancos-resultado ul {
+        list-style: none;
+        padding-left: 0;
+        margin: 0;
+        display: inline;
+      }
+      .bancos-carga-bar #bancos-resultado li {
+        display: inline;
+      }
+      .bancos-carga-bar #bancos-resultado li:not(:last-child)::after {
+        content: " · ";
+      }
+      .col-left input[type="text"],
+      .col-left input[type="date"],
+      .col-left select,
+      .col-left textarea {
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid #a8b4c0;
+        background: #f8fafc;
+        color: #1e293b;
+        font-size: 0.9rem;
+        margin-bottom: 10px;
+        box-sizing: border-box;
+      }
+      .container {
+        max-width: 1800px;
+        margin: 0 auto;
+        padding: 24px 20px;
+      }
+      .layout {
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+      }
+      .col-left {
+        flex: 0 0 16%;
+        min-width: 200px;
+      }
+      .col-right {
+        flex: 1 1 84%;
+        min-width: 0;
+      }
+      .card {
+        background: #ffffff;
+        border-radius: 14px;
+        padding: 20px 22px;
+        box-shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
+        border: 1px solid rgba(148, 163, 184, 0.3);
+      }
+      h1 {
+        font-size: 1.6rem;
+        margin: 0 0 4px;
+      }
+      p.subtitle {
+        margin: 0 0 20px;
+        color: #9ca3af;
+        font-size: 0.9rem;
+      }
+      label {
+        display: block;
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-bottom: 6px;
+        color: #374151;
+      }
+      .col-left select {
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid #a8b4c0;
+        background: #f8fafc;
+        color: #1e293b;
+        font-size: 0.9rem;
+        margin-bottom: 14px;
+      }
+      .col-left select:focus {
+        outline: none;
+        border-color: #64748b;
+      }
+      #archivos, #cli-archivos {
+        position: absolute;
+        width: 0.1px;
+        height: 0.1px;
+        opacity: 0;
+        overflow: hidden;
+        z-index: -1;
+      }
+      .btn-seleccionar-facturas {
+        width: 100%;
+        padding: 10px 14px;
+        border-radius: 8px;
+        border: 1px solid #94a3b8;
+        background: #f1f5f9;
+        color: #334155;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        margin-bottom: 8px;
+      }
+      .btn-seleccionar-facturas:hover {
+        background: #e2e8f0;
+        border-color: #64748b;
+      }
+      .lista-archivos {
+        list-style: none;
+        margin: 0 0 14px 0;
+        padding: 0;
+        font-size: 0.85rem;
+        color: #475569;
+        max-height: 120px;
+        overflow-y: auto;
+        word-break: break-all;
+      }
+      .lista-archivos li {
+        padding: 4px 0;
+        border-bottom: 1px solid #e2e8f0;
+      }
+      .lista-archivos li:last-child {
+        border-bottom: none;
+      }
+      .lista-archivos:empty {
+        display: none;
+      }
+      button.primary {
+        width: 100%;
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: none;
+        background: linear-gradient(135deg, #4f46e5, #06b6d4);
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+        font-size: 0.95rem;
+        margin-top: 4px;
+      }
+      button.primary:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      button.secondary {
+        padding: 10px 18px;
+        border-radius: 8px;
+        border: 1px solid #94a3b8;
+        background: #f1f5f9;
+        color: #334155;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 500;
+      }
+      button.secondary:hover {
+        background: #e2e8f0;
+        border-color: #64748b;
+      }
+      #btn-exportar {
+        background: #059669;
+        color: #fff;
+        border-color: #047857;
+      }
+      #btn-exportar:hover {
+        background: #047857;
+        border-color: #065f46;
+        color: #fff;
+      }
+      #btn-descargar-facturas {
+        background: #dc2626;
+        color: #fff;
+        border-color: #b91c1c;
+      }
+      #btn-descargar-facturas:hover {
+        background: #b91c1c;
+        border-color: #991b1b;
+        color: #fff;
+      }
+      #bancos-btn-exportar {
+        background: #059669;
+        color: #fff;
+        border-color: #047857;
+      }
+      #bancos-btn-exportar:hover {
+        background: #047857;
+        border-color: #065f46;
+        color: #fff;
+      }
+      .status {
+        margin-top: 14px;
+        font-size: 0.85rem;
+        color: #9ca3af;
+        min-height: 1.2em;
+      }
+      /* Vista listado */
+      .titulo-con-filtro-empresa {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+      .titulo-con-filtro-empresa h1 {
+        margin: 0;
+      }
+      .filtro-empresa-en-titulo {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .filtro-empresa-en-titulo .select-empresa {
+        width: auto;
+        min-width: 160px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        border: 1px solid #94a3b8;
+        background: #f8fafc;
+        color: #1e293b;
+        font-size: 0.9rem;
+      }
+      .listado-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 16px;
+      }
+      .listado-header select {
+        width: auto;
+        min-width: 140px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid #94a3b8;
+        background: #f8fafc;
+        color: #1e293b;
+        font-size: 0.9rem;
+      }
+      .empresa-contexto {
+        display: inline-block;
+        margin-left: 8px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #334155;
+      }
+      .empresa-contexto:empty {
+        display: none;
+      }
+      .tabla-wrapper {
+        overflow-x: auto;
+        border-radius: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+      }
+      #tabla-wrapper-movimientos-bancos {
+        max-height: 70vh;
+        overflow: auto;
+      }
+      .bancos-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .bancos-tab {
+        border: none;
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        background: #e5e7eb;
+        color: #4b5563;
+      }
+      .bancos-tab.activo {
+        background: #0f172a;
+        color: #f9fafb;
+      }
+      .bancos-seccion {
+        margin-top: 8px;
+      }
+      .bancos-tarjetas-actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 8px;
+      }
+      .bancos-tarjetas-layout {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+      .bancos-tarjetas-lista {
+        flex: 2 1 320px;
+        min-width: 280px;
+      }
+      .bancos-tarjetas-form-wrapper {
+        flex: 1 1 260px;
+        min-width: 240px;
+      }
+      .bancos-tarjetas-liquidaciones {
+        margin-top: 16px;
+      }
+      #tabla-tarjetas-liquidaciones th,
+      #tabla-tarjetas-liquidaciones td {
+        font-size: 0.75rem;
+      }
+      #tabla-tarjetas-bancos th,
+      #tabla-tarjetas-bancos td {
+        font-size: 0.75rem;
+      }
+      #tabla-tarjetas-bancos td {
+        max-width: 160px;
+      }
+      #tabla-movimientos-bancos thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #334155;
+        box-shadow: 0 1px 0 0 rgba(148, 163, 184, 0.15);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.72rem;
+      }
+      th, td {
+        padding: 6px 8px;
+        text-align: left;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+      }
+      th {
+        background: #334155;
+        color: #ffffff;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      th.numero {
+        text-align: right;
+      }
+      tr:hover td {
+        background: #f8fafc;
+      }
+      td {
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      td:last-child {
+        white-space: nowrap;
+        max-width: none;
+        overflow: visible;
+        text-overflow: initial;
+      }
+      td.numero {
+        text-align: right;
+        max-width: 90px;
+      }
+      td.numero.positivo {
+        color: #16a34a;
+        font-weight: 600;
+        background-color: rgba(22, 163, 74, 0.08);
+      }
+      #tabla-movimientos-bancos td.ingreso-texto {
+        color: #166534;
+        font-weight: 600;
+        background-color: rgba(22, 163, 74, 0.08);
+      }
+      #tabla-movimientos-bancos tr.mov-ingreso td {
+        background-color: rgba(22, 163, 74, 0.08);
+      }
+      #tabla-movimientos-bancos tr.mov-ingreso td.numero.positivo {
+        color: #166534;
+      }
+      #tabla-movimientos-bancos tr.mov-traspaso td {
+        background-color: #e5e7eb;
+        color: #6b7280;
+        font-weight: normal;
+      }
+      #tabla-movimientos-bancos .col-fecha {
+        padding-right: 4px;
+        width: 1%;
+        white-space: nowrap;
+      }
+      #tabla-movimientos-bancos .col-banco {
+        width: 80px;
+        max-width: 80px;
+        text-align: center;
+        white-space: nowrap;
+      }
+      #tabla-movimientos-bancos .col-concepto {
+        padding-left: 4px;
+        min-width: 80px;
+        width: 28%;
+        max-width: 28%;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: initial;
+      }
+      #tabla-movimientos-bancos .col-conciliacion,
+      #tabla-movimientos-bancos .col-agrupacion {
+        font-size: 0.7rem;
+        white-space: nowrap;
+        max-width: 260px;
+        min-width: 140px;
+        overflow: visible;
+        text-overflow: initial;
+      }
+      #tabla-movimientos-bancos .col-conciliacion .bancos-conciliacion-fecha,
+      #tabla-movimientos-bancos .col-agrupacion .bancos-conciliacion-fecha {
+        font-size: 0.7rem;
+      }
+      #tabla-movimientos-bancos .bancos-conciliacion-fecha {
+        color: #64748b;
+        margin-right: 6px;
+      }
+      #tabla-movimientos-bancos .bancos-conciliacion-btns {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      #tabla-movimientos-bancos .col-conciliacion .btn-small,
+      #tabla-movimientos-bancos .col-agrupacion .btn-small,
+      #tabla-movimientos-bancos .col-conciliacion .btn-link-small,
+      #tabla-movimientos-bancos .col-agrupacion .btn-link-small {
+        font-size: 0.7rem;
+        padding: 3px 8px;
+        line-height: 1.25;
+        min-height: auto;
+        flex-shrink: 0;
+      }
+      #tabla-movimientos-bancos .btn-small,
+      .btn-small {
+        font-size: 0.7rem;
+        padding: 2px 6px;
+        line-height: 1.2;
+        min-height: auto;
+      }
+      #tabla-movimientos-bancos .btn-link-small,
+      .btn-link-small {
+        font-size: 0.7rem;
+        padding: 2px 6px;
+        text-decoration: none;
+        color: #2563eb;
+        background: rgba(37, 99, 235, 0.1);
+        border-radius: 4px;
+        line-height: 1.2;
+      }
+      #tabla-movimientos-bancos .btn-link-small:hover,
+      .btn-link-small:hover {
+        background: rgba(37, 99, 235, 0.2);
+        text-decoration: none;
+        color: #1d4ed8;
+      }
+      .tabla-sugerencias {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.75rem;
+        margin-top: 0.25rem;
+        table-layout: fixed;
+      }
+      .tabla-sugerencias th,
+      .tabla-sugerencias td {
+        padding: 3px 5px;
+        text-align: left;
+        border-bottom: 1px solid #e5e7eb;
+        vertical-align: top;
+      }
+      .tabla-sugerencias th {
+        color: #fff;
+        font-weight: 600;
+        background: #334155;
+      }
+      .tabla-sugerencias .col-fecha {
+        width: 8%;
+      }
+      .tabla-sugerencias .col-concepto {
+        width: 27%;
+      }
+      .tabla-sugerencias .col-importe {
+        width: 13%;
+        white-space: nowrap;
+      }
+      .tabla-sugerencias .col-acciones {
+        width: 12%;
+      }
+      .tabla-sugerencias .col-mov-concepto {
+        word-wrap: break-word;
+        white-space: normal;
+        line-height: 1.25;
+      }
+      .tabla-sugerencias .col-fac-concepto {
+        word-wrap: break-word;
+        white-space: normal;
+        line-height: 1.25;
+      }
+      .tabla-sugerencias .sug-fecha {
+        color: #64748b;
+        white-space: nowrap;
+      }
+      .tabla-sugerencias .sug-acciones {
+        white-space: nowrap;
+      }
+      .tabla-sugerencias .sug-acciones .btn-link-small,
+      .tabla-sugerencias .sug-acciones .btn-conciliar-small {
+        margin-right: 4px;
+      }
+      .tabla-sugerencias .btn-conciliar-small {
+        font-size: 0.7rem;
+        padding: 2px 6px;
+        line-height: 1.2;
+        min-height: auto;
+        background: #2563eb;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .tabla-sugerencias .btn-conciliar-small:hover {
+        background: #1d4ed8;
+      }
+      .bancos-conciliacion-cabecera {
+        background: #334155;
+        color: #fff;
+        padding: 0.5rem 0.75rem;
+        border-radius: 6px 6px 0 0;
+      }
+      .bancos-conciliacion-titulo {
+        margin: 0 0 0.25rem 0;
+        font-size: 1rem;
+        color: #fff;
+        font-weight: 600;
+      }
+      .bancos-conciliacion-subtitle {
+        margin: 0;
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.9);
+      }
+      .sugerencias-resumen {
+        margin: 0 0 0.5rem 0;
+        color: #64748b;
+        font-size: 0.75rem;
+      }
+      .sug-pago-parcial {
+        font-size: 0.7rem;
+        color: #64748b;
+        white-space: nowrap;
+      }
+      .paginacion-sugerencias {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-top: 0.75rem;
+        padding: 0.5rem 0;
+      }
+      .paginacion-sugerencias .btn-pag-sug {
+        padding: 0.35rem 0.75rem;
+        font-size: 0.8rem;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.08);
+        color: #e2e8f0;
+        cursor: pointer;
+      }
+      .paginacion-sugerencias .btn-pag-sug:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.15);
+      }
+      .paginacion-sugerencias .btn-pag-sug:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .paginacion-sugerencias .texto-pagina-sug {
+        font-size: 0.8rem;
+        color: #94a3b8;
+      }
+      #tabla-movimientos-bancos th.numero,
+      #tabla-movimientos-bancos td.numero {
+        width: 100px;
+        min-width: 100px;
+        max-width: 100px;
+        text-align: right;
+      }
+      .sin-datos {
+        padding: 32px;
+        text-align: center;
+        color: #64748b;
+      }
+      .contador {
+        color: #64748b;
+        font-size: 0.9rem;
+      }
+      .link-ver-factura {
+        display: inline-flex;
+        align-items: center;
+        vertical-align: middle;
+        box-sizing: border-box;
+        height: 24px;
+        padding: 0 8px;
+        border-radius: 6px;
+        background: rgba(56, 189, 248, 0.2);
+        color: #38bdf8;
+        text-decoration: none;
+        font-size: 0.7rem;
+        font-weight: 500;
+      }
+      .link-ver-factura:hover {
+        background: rgba(56, 189, 248, 0.35);
+        text-decoration: none;
+      }
+      td .link-ver-factura {
+        white-space: nowrap;
+      }
+      .btn-editar-factura {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        vertical-align: middle;
+        box-sizing: border-box;
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        margin-left: 6px;
+        border: none;
+        border-radius: 6px;
+        background: #fef3c7;
+        color: #b45309;
+        cursor: pointer;
+        font-size: 0.85rem;
+      }
+      .btn-editar-factura:hover {
+        background: #fde68a;
+        color: #92400e;
+      }
+      .modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.4);
+        z-index: 100;
+        align-items: center;
+        justify-content: center;
+      }
+      .modal-overlay.visible {
+        display: flex;
+      }
+      .modal-editar {
+        background: #fff;
+        border-radius: 12px;
+        padding: 24px;
+        max-width: 520px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+      }
+      .modal-editar h2 {
+        margin: 0 0 16px;
+        font-size: 1.2rem;
+      }
+      .modal-editar label {
+        color: #374151;
+        font-size: 0.85rem;
+      }
+      .modal-editar input,
+      .modal-editar textarea {
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid #a8b4c0;
+        font-size: 0.9rem;
+        margin-bottom: 12px;
+        box-sizing: border-box;
+      }
+      .modal-editar textarea {
+        min-height: 60px;
+        resize: vertical;
+      }
+      .modal-editar .modal-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+        justify-content: flex-end;
+      }
+      .modal-editar .modal-actions button {
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        cursor: pointer;
+      }
+      .modal-editar .modal-actions button.primary {
+        width: auto;
+        margin-top: 0;
+      }
+      .modal-editar .modal-actions button.secondary {
+        background: #f1f5f9;
+        border: 1px solid #94a3b8;
+        color: #334155;
+      }
+      .modal-editar .fila-tarjeta-liquidacion {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+      .modal-editar .fila-tarjeta-liquidacion select { flex: 1; min-width: 160px; }
+      .modal-editar .fila-selector-proveedor { margin-bottom: 12px; }
+      .modal-editar .fila-selector-proveedor label { display: block; margin-bottom: 4px; }
+      .modal-editar .selector-proveedor-con-boton {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .modal-editar .selector-proveedor-con-boton select {
+        flex: 1;
+        min-width: 0;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid #94a3b8;
+        font-size: 0.9rem;
+      }
+      .modal-editar .selector-proveedor-con-boton button {
+        flex-shrink: 0;
+        padding: 8px 12px;
+        font-size: 0.85rem;
+      }
+      .modal-content {
+        background: #fff;
+        border-radius: 12px;
+        padding: 24px;
+        max-width: 520px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+      }
+      .modal-content h2 { margin: 0 0 16px; font-size: 1.2rem; }
+      .modal-content .form-group { margin-bottom: 12px; }
+      .modal-content .form-group label { display: block; color: #374151; font-size: 0.85rem; margin-bottom: 4px; }
+      .modal-content .form-group input { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #a8b4c0; font-size: 0.9rem; box-sizing: border-box; }
+      .modal-content .form-group input.readonly { background: #f1f5f9; color: #64748b; }
+      .modal-content .form-row { display: flex; gap: 12px; }
+      .modal-content .form-row .form-group { flex: 1; }
+      .modal-content .form-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+      .modal-content .form-actions button { padding: 8px 16px; border-radius: 8px; font-size: 0.9rem; cursor: pointer; }
+      .modal-content .form-actions button.primary { margin-top: 0; }
+      .modal-content .form-actions button.secondary { background: #f1f5f9; border: 1px solid #94a3b8; color: #334155; }
+      .modal-content .required { color: #b91c1c; }
+      .bloque-proveedores {
+        margin-top: 24px;
+      }
+      .bloque-proveedores #lista-proveedores li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .bloque-proveedores #lista-proveedores li > span {
+        flex: 1;
+        cursor: pointer;
+      }
+      .bloque-proveedores #lista-clientes-unicos li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .bloque-proveedores #lista-clientes-unicos li > span {
+        flex: 1;
+        cursor: pointer;
+      }
+      .bloque-proveedores .btn-editar-proveedor {
+        flex-shrink: 0;
+        padding: 4px 10px;
+        font-size: 0.8rem;
+        border-radius: 6px;
+        cursor: pointer;
+        background: #f1f5f9;
+        border: 1px solid #94a3b8;
+        color: #334155;
+      }
+      .bloque-proveedores .btn-editar-proveedor:hover {
+        background: #e2e8f0;
+      }
+      .bloque-proveedores .card {
+        padding: 22px 24px;
+      }
+      .proveedores-layout {
+        display: flex;
+        gap: 24px;
+        align-items: flex-start;
+      }
+      .proveedores-lista-wrapper {
+        flex: 0 0 320px;
+        min-width: 0;
+      }
+      .proveedores-lista-wrapper label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #374151;
+      }
+      .proveedores-lista-wrapper select {
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid #a8b4c0;
+        background: #f8fafc;
+        color: #1e293b;
+        font-size: 0.9rem;
+        margin-bottom: 14px;
+      }
+      #lista-proveedores,
+      #lista-clientes-unicos {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        max-height: 360px;
+        overflow-y: auto;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #fafafa;
+      }
+      #lista-proveedores li,
+      #lista-clientes-unicos li {
+        padding: 10px 12px;
+        border-bottom: 1px solid #e2e8f0;
+        cursor: pointer;
+        font-size: 0.88rem;
+        color: #334155;
+      }
+      #lista-proveedores li:last-child,
+      #lista-clientes-unicos li:last-child {
+        border-bottom: none;
+      }
+      #lista-proveedores li:hover,
+      #lista-clientes-unicos li:hover {
+        background: #f1f5f9;
+      }
+      #lista-proveedores li.seleccionado,
+      #lista-clientes-unicos li.seleccionado {
+        background: #dbeafe;
+        font-weight: 500;
+      }
+      .proveedores-facturas-wrapper {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .proveedores-facturas-wrapper h3 {
+        margin: 0 0 12px;
+        font-size: 1rem;
+        color: #475569;
+      }
+      #proveedores-sin-seleccion,
+      #clientes-sin-seleccion {
+        color: #94a3b8;
+        font-size: 0.9rem;
+        padding: 20px;
+      }
+      #tabla-facturas-proveedor {
+        font-size: 0.72rem;
+      }
+      .proveedores-filtros {
+        margin-bottom: 12px;
+      }
+      #btn-exportar-proveedor {
+        background: #059669;
+        color: #fff;
+        border-color: #047857;
+      }
+      #btn-exportar-proveedor:hover {
+        background: #047857;
+        border-color: #065f46;
+        color: #fff;
+      }
+      #btn-descargar-facturas-proveedor {
+        background: #dc2626;
+        color: #fff;
+        border-color: #b91c1c;
+      }
+      #btn-descargar-facturas-proveedor:hover {
+        background: #b91c1c;
+        border-color: #991b1b;
+        color: #fff;
+      }
+      #cli-btn-exportar {
+        background: #059669;
+        color: #fff;
+      }
+      #cli-btn-exportar:hover {
+        background: #047857;
+        border-color: #065f46;
+      }
+      #cli-btn-descargar-facturas {
+        background: #dc2626;
+        color: #fff;
+      }
+      #cli-btn-descargar-facturas:hover {
+        background: #b91c1c;
+        border-color: #991b1b;
+      }
+      #cli-listado-btn-exportar {
+        background: #059669;
+        color: #fff;
+      }
+      #cli-listado-btn-exportar:hover {
+        background: #047857;
+        border-color: #065f46;
+      }
+      #cli-listado-btn-descargar {
+        background: #dc2626;
+        color: #fff;
+      }
+      #cli-listado-btn-descargar:hover {
+        background: #b91c1c;
+        border-color: #991b1b;
+      }
+      .bloque-cecos {
+        margin-top: 24px;
+      }
+      .cecos-layout {
+        display: flex;
+        gap: 24px;
+        align-items: flex-start;
+      }
+      .cecos-empresa-wrapper {
+        flex: 0 0 260px;
+      }
+      .cecos-empresa-wrapper label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #374151;
+      }
+      .cecos-empresa-wrapper select {
+        width: 100%;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid #a8b4c0;
+        background: #f8fafc;
+        color: #1e293b;
+        font-size: 0.9rem;
+        margin-bottom: 14px;
+      }
+      table#tabla-cecos {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.8rem;
+      }
+      #tabla-cecos th,
+      #tabla-cecos td {
+        padding: 8px 10px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+        text-align: left;
+      }
+      #tabla-cecos th {
+        background: #e5e7eb;
+        color: #374151;
+        font-weight: 600;
+      }
+      #tabla-cecos input[type="text"] {
+        width: 100%;
+        padding: 4px 6px;
+        border-radius: 6px;
+        border: 1px solid #cbd5f5;
+        font-size: 0.8rem;
+        box-sizing: border-box;
+      }
+      .btn-guardar-ceco {
+        padding: 6px 10px;
+        border-radius: 6px;
+        border: 1px solid #94a3b8;
+        background: #f1f5f9;
+        color: #334155;
+        cursor: pointer;
+        font-size: 0.8rem;
+      }
+      .btn-guardar-ceco:hover {
+        background: #e2e8f0;
+        border-color: #64748b;
+      }
+      .fila-con-error {
+        background: #fef2f2;
+      }
+      .fila-con-error td {
+        border-bottom-color: rgba(248, 113, 113, 0.4);
+      }
+      .badge-alerta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: 6px;
+        width: 24px;
+        height: 24px;
+        vertical-align: middle;
+        border-radius: 4px;
+        background: #fee2e2;
+        color: #b91c1c;
+        font-size: 0.7rem;
+      }
+      .fila-ceco-asignado {
+        background: #f3f4f6;
+      }
+      .fila-ceco-pendiente {
+        background: #fee2e2;
+      }
+      .btn-eliminar-seleccionadas {
+        padding: 10px 18px;
+        border-radius: 8px;
+        border: 1px solid #b91c1c;
+        background: #dc2626;
+        color: #fff;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 500;
+        display: none;
+      }
+      .btn-eliminar-seleccionadas:hover {
+        background: #b91c1c;
+        border-color: #991b1b;
+      }
+      .btn-eliminar-seleccionadas.visible {
+        display: inline-block;
+      }
+      th.col-check, td.col-check {
+        width: 32px;
+        max-width: 32px;
+        text-align: center;
+        padding: 6px 4px;
+      }
+      th.col-check input, td.col-check input {
+        cursor: pointer;
+        width: 15px;
+        height: 15px;
+      }
+      tr.fila-seleccionada td {
+        background: #eff6ff;
+      }
+      th.sortable {
+        cursor: pointer;
+        user-select: none;
+        position: relative;
+        padding-right: 18px;
+      }
+      th.sortable:hover {
+        background: #475569;
+      }
+      th.sortable::after {
+        content: "⇅";
+        position: absolute;
+        right: 4px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 0.65rem;
+        opacity: 0.4;
+      }
+      th.sortable.sort-asc::after {
+        content: "▲";
+        opacity: 0.9;
+      }
+      th.sortable.sort-desc::after {
+        content: "▼";
+        opacity: 0.9;
+      }
+      .cecos-centros-wrapper {
+        margin-bottom: 16px;
+      }
+      .cecos-centros-label {
+        display: block;
+        font-size: 0.85rem;
+        color: #64748b;
+        margin-bottom: 6px;
+      }
+      .cecos-centros-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .cecos-centro-pill {
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: #e5e7eb;
+        color: #374151;
+        font-size: 0.78rem;
+        cursor: pointer;
+        user-select: none;
+        transition: background 0.15s, color 0.15s;
+      }
+      .cecos-centro-pill:hover {
+        background: #cbd5e1;
+      }
+      .cecos-centro-pill.activo {
+        background: #1e40af;
+        color: #fff;
+      }
+      .cecos-centro-pill.activo:hover {
+        background: #1e3a8a;
+      }
+
+      /* Proyectos > Transporte: layout y mapa */
+      .panel-proyectos-transporte .transporte-layout {
+        display: flex;
+        gap: 16px;
+        align-items: stretch;
+        min-height: calc(100vh - 140px);
+      }
+      .panel-proyectos-transporte .col-left {
+        flex: 0 0 320px;
+        min-width: 280px;
+      }
+      .panel-proyectos-transporte .col-right.transporte-map-section {
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 70vh;
+        min-height: 450px;
+        background: #e2e8f0;
+        border-radius: 14px;
+        padding: 10px;
+        overflow: hidden;
+      }
+      .panel-proyectos-transporte .transporte-map-and-list {
+        display: flex;
+        gap: 10px;
+        height: 100%;
+      }
+      .panel-proyectos-transporte .transporte-map-wrapper {
+        position: relative;
+        flex: 3 1 0;
+        min-width: 0;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #cbd5e1;
+      }
+      .panel-proyectos-transporte .transporte-list-wrapper {
+        flex: 1 1 240px;
+        min-width: 220px;
+        display: flex;
+        flex-direction: column;
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 10px 10px 8px;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+      }
+      .panel-proyectos-transporte .map-transporte {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1;
+      }
+      .panel-proyectos-transporte .transporte-map-placeholder {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #64748b;
+        font-size: 1rem;
+        text-align: center;
+        padding: 24px;
+        z-index: 0;
+      }
+      .panel-proyectos-transporte .transporte-map-placeholder.oculto {
+        display: none;
+      }
+      .panel-proyectos-transporte .transporte-ruta-resumen {
+        font-size: 0.9rem;
+        color: #475569;
+      }
+      .panel-proyectos-transporte .transporte-sin-proveedores {
+        margin-top: 8px;
+        font-size: 0.9rem;
+        color: #64748b;
+        font-style: italic;
+      }
+      .panel-proyectos-transporte .transporte-list-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        margin-bottom: 4px;
+        background: #1e293b;
+        color: #e5e7eb;
+        padding: 6px 8px;
+        border-radius: 10px 10px 0 0;
+      }
+      .panel-proyectos-transporte .transporte-list-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: inherit;
+      }
+      .panel-proyectos-transporte .transporte-btn-nuevo {
+        border-radius: 999px;
+        border: 1px solid #bfdbfe;
+        background: #0f172a;
+        color: #e5e7eb;
+        padding: 5px 10px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .panel-proyectos-transporte .transporte-btn-nuevo:hover {
+        background: #111827;
+      }
+      .panel-proyectos-transporte .transporte-list-resumen {
+        font-size: 0.8rem;
+        color: #64748b;
+        margin-bottom: 4px;
+      }
+      .panel-proyectos-transporte .transporte-whatsapp-box {
+        margin: 6px 0 4px;
+      }
+      .panel-proyectos-transporte .transporte-whatsapp-box label {
+        display: block;
+        font-size: 0.75rem;
+        color: #64748b;
+        margin-bottom: 4px;
+      }
+      .panel-proyectos-transporte .transporte-whatsapp-box textarea {
+        width: 100%;
+        min-height: 70px;
+        resize: vertical;
+        border-radius: 8px;
+        border: 1px solid #cbd5e1;
+        font-size: 0.8rem;
+        padding: 6px 8px;
+        font-family: inherit;
+        box-sizing: border-box;
+      }
+      .panel-proyectos-transporte .transporte-filtros-contacto {
+        display: flex;
+        gap: 6px;
+        margin: 4px 0 4px;
+      }
+      .panel-proyectos-transporte .transporte-filter-pill {
+        flex: 0 0 auto;
+        padding: 4px 8px;
+        border-radius: 999px;
+        border: 1px solid #cbd5e1;
+        background: #e5e7eb;
+        color: #0f172a;
+        font-size: 0.75rem;
+        cursor: pointer;
+      }
+      .panel-proyectos-transporte .transporte-filter-pill.activo {
+        background: #1d4ed8;
+        border-color: #1d4ed8;
+        color: #e5e7eb;
+      }
+      .panel-proyectos-transporte .transporte-listado-proveedores {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        padding-right: 4px;
+        font-size: 0.85rem;
+        color: #1f2933;
+      }
+      .panel-proyectos-transporte .transporte-whatsapp-actions {
+        margin-top: 6px;
+        display: flex;
+        justify-content: flex-end;
+      }
+      .panel-proyectos-transporte .transporte-btn-enviar-whatsapp {
+        border-radius: 999px;
+        border: 1px solid #22c55e;
+        background: #22c55e;
+        color: #f9fafb;
+        padding: 6px 14px;
+        font-size: 0.8rem;
+        cursor: pointer;
+      }
+      .panel-proyectos-transporte .transporte-btn-enviar-whatsapp:hover {
+        background: #16a34a;
+        border-color: #16a34a;
+      }
+      .panel-proyectos-transporte .transporte-list-empty {
+        padding: 6px 4px;
+        color: #94a3b8;
+        font-style: italic;
+      }
+      .panel-proyectos-transporte .transporte-list-item {
+        padding: 6px 6px 6px 10px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        margin-bottom: 4px;
+        cursor: pointer;
+        transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+      .panel-proyectos-transporte .transporte-list-item:hover {
+        background: #e5f2ff;
+        border-color: #bfdbfe;
+      }
+      .panel-proyectos-transporte .transporte-list-item.activo {
+        background: #dbeafe;
+        border-color: #2563eb;
+        box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.4);
+      }
+      .panel-proyectos-transporte .transporte-list-item-nombre {
+        font-weight: 600;
+        color: #0f172a;
+        word-break: break-word;
+        flex: 1 1 auto;
+      }
+      .panel-proyectos-transporte .transporte-list-item-linea {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 4px;
+        color: #64748b;
+        margin-bottom: 1px;
+      }
+      .panel-proyectos-transporte .transporte-list-select-wrap {
+        flex: 0 0 auto;
+      }
+      .panel-proyectos-transporte .transporte-list-select-wrap input {
+        width: 14px;
+        height: 14px;
+        cursor: pointer;
+      }
+      .panel-proyectos-transporte .transporte-list-item-linea span.numero {
+        font-variant-numeric: tabular-nums;
+      }
+      .panel-proyectos-transporte .transporte-list-icon-row {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .panel-proyectos-transporte .transporte-list-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        font-size: 10px;
+        font-weight: 600;
+        border: 1px solid #cbd5e1;
+        background: #e5e7eb;
+        color: #334155;
+      }
+      .panel-proyectos-transporte .transporte-list-icon.icon-fijo {
+        background: #e5f3ff;
+        border-color: #bfdbfe;
+        color: #1d4ed8;
+      }
+      .panel-proyectos-transporte .transporte-list-icon.icon-movil {
+        background: #ecfdf3;
+        border-color: #bbf7d0;
+        color: #15803d;
+      }
+      .panel-proyectos-transporte .transporte-list-icon.icon-email {
+        background: #fefce8;
+        border-color: #facc15;
+        color: #854d0e;
+      }
+      .panel-proyectos-transporte .transporte-list-icon.icon-web {
+        background: #e0f2fe;
+        border-color: #7dd3fc;
+        color: #0369a1;
+      }
+      .panel-proyectos-transporte .transporte-paradas-wrap {
+        margin: 14px 0;
+      }
+      .panel-proyectos-transporte .transporte-paradas-wrap label {
+        display: block;
+        margin-bottom: 6px;
+        font-weight: 500;
+        color: #334155;
+      }
+      .panel-proyectos-transporte .transporte-paradas-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .panel-proyectos-transporte .transporte-parada-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .panel-proyectos-transporte .transporte-parada-row input {
+        flex: 1;
+        padding: 8px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        font-size: 0.95rem;
+      }
+      .panel-proyectos-transporte .transporte-btn-parada {
+        background: #f1f5f9;
+        color: #475569;
+        border: 1px dashed #94a3b8;
+        padding: 8px 14px;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        cursor: pointer;
+      }
+      .panel-proyectos-transporte .transporte-btn-parada:hover {
+        background: #e2e8f0;
+        color: #334155;
+      }
+      .panel-proyectos-transporte .transporte-quitar-parada {
+        flex-shrink: 0;
+        color: #64748b;
+        font-size: 0.85rem;
+        cursor: pointer;
+        text-decoration: none;
+      }
+      .panel-proyectos-transporte .transporte-quitar-parada:hover {
+        color: #dc2626;
+      }
+      .transporte-popup {
+        min-width: 200px;
+        line-height: 1.4;
+      }
+      .transporte-popup a {
+        color: #1e40af;
+      }
+      .transporte-marker-origen .transporte-marker-pin,
+      .transporte-marker-destino .transporte-marker-pin {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        color: #fff;
+        font-weight: 700;
+        font-size: 12px;
+        border: 2px solid #fff;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+      }
+      .transporte-marker-origen .transporte-marker-pin {
+        background: #16a34a;
+      }
+      .transporte-marker-destino .transporte-marker-pin {
+        background: #dc2626;
+      }
+      .transporte-marker-parada .transporte-marker-pin {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        color: #fff;
+        font-weight: 700;
+        font-size: 11px;
+        border: 2px solid #fff;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+        background: #d97706;
+      }
+      .transporte-marker-proveedor .transporte-marker-pin-proveedor {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: #1e40af;
+        color: #fff;
+        font-size: 16px;
+        line-height: 1;
+        border: 2px solid #fff;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+      }
+      .transporte-tooltip-origen,
+      .transporte-tooltip-parada,
+      .transporte-tooltip-destino {
+        background: rgba(255,255,255,0.95);
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 12px;
+        white-space: nowrap;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+      }
+      .transporte-map-info {
+        background: rgba(255,255,255,0.95);
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 14px;
+        color: #334155;
+        box-shadow: 0 1px 6px rgba(0,0,0,0.2);
+        border: 1px solid #e2e8f0;
+      }

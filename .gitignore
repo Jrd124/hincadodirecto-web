@@ -1,0 +1,38 @@
+# Claves y secretos
+.env
+
+# Bases de datos (datos de producción, no código)
+*.db
+
+# Facturas y datos de empresa (no son código, son datos de producción)
+data/Facturas Recibidas/
+data/Facturas Emitidas/
+data/subidas/
+data/empresas/
+data/bancos/
+
+# Salidas generadas y caché
+data/resumen_expansion.txt
+data/expansion_texto.txt
+data/elmundo_directo_state.json
+data/cache_nominatim_pais_localidad.json
+data/control_vision_facturas.csv
+data/logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.so
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

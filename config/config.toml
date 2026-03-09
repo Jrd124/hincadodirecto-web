@@ -1,0 +1,35 @@
+# Configuración global
+display-name = "Javier Romero-Requejo"
+signature = "Regards,\n"
+signature-delim = "-- \n"
+downloads-dir = "~/Downloads"
+
+# Cuenta Gmail - javier.romeroca@gmail.com
+[accounts.gmail]
+default = true
+email = "javier.romeroca@gmail.com"
+
+# Aliases de carpetas para Gmail
+folder.aliases.inbox = "INBOX"
+folder.aliases.sent = "[Gmail]/Sent Mail"
+folder.aliases.drafts = "[Gmail]/Drafts"
+folder.aliases.trash = "[Gmail]/Trash"
+
+# IMAP (recibir correo)
+backend.type = "imap"
+backend.host = "imap.gmail.com"
+backend.port = 993
+backend.login = "javier.romeroca@gmail.com"
+backend.auth.type = "password"
+backend.auth.cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File c:/Users/javie/Desktop/cursor_test/scripts/powershell/get_gmail_pass.ps1"
+
+# SMTP (enviar correo)
+message.send.backend.type = "smtp"
+message.send.backend.host = "smtp.gmail.com"
+message.send.backend.port = 465
+message.send.backend.login = "javier.romeroca@gmail.com"
+message.send.backend.auth.type = "password"
+message.send.backend.auth.cmd = "powershell -NoProfile -ExecutionPolicy Bypass -File c:/Users/javie/Desktop/cursor_test/scripts/powershell/get_gmail_pass.ps1"
+
+# Guardar copia en Enviados
+message.send.save-copy = true
