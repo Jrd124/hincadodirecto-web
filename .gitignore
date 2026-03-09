@@ -14,7 +14,6 @@ data/bancos/
 # Salidas generadas y caché
 data/resumen_expansion.txt
 data/expansion_texto.txt
-data/elmundo_directo_state.json
 data/cache_nominatim_pais_localidad.json
 data/control_vision_facturas.csv
 data/logs/
