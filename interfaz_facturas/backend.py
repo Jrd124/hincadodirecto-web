@@ -39,7 +39,17 @@ from config import (
   client,
 )
 from core.facturas_servicios import filtrar_filas_csv as _filtrar_filas_csv
-from core.transporte_servicios import buscar_ruta_y_proveedores as _buscar_ruta_y_proveedores
+from core.transporte_servicios import (
+  buscar_ruta_y_proveedores as _buscar_ruta_y_proveedores,
+  parsear_xlsx_proveedores_desde_stream as _parsear_xlsx_proveedores_stream,
+)
+from core.proveedores_transporte_db import (
+  alta_proveedor as _alta_proveedor_transporte,
+  listar_proveedores_para_admin as _listar_proveedores_transporte_admin,
+  obtener_proveedor as _obtener_proveedor_transporte,
+  actualizar_proveedor as _actualizar_proveedor_transporte,
+  insertar_desde_lista as _insertar_proveedores_transporte_lista,
+)
 from core import terceros_db, facturas_db, tarjetas_db, facturas_cliente_db, crm_db
 from core.facturas_db import CAMPOS_FACTURAS_PROVEEDOR
 from core.facturas_cliente_db import CAMPOS_FACTURAS_CLIENTE
@@ -57,6 +67,7 @@ from core.proveedores import (
   normalizar_nif as _normalizar_nif,
   cargar_proveedores_maestros as _cargar_proveedores_maestros,
   listar_proveedores_para_selector as _listar_proveedores_para_selector,
+  listar_proveedores_con_facturas as _listar_proveedores_con_facturas,
   guardar_proveedores_maestros as _guardar_proveedores_maestros,
   sincronizar_proveedores_desde_facturas as _sincronizar_proveedores_desde_facturas,
   similitud_nombres as _similitud_nombres,
@@ -685,6 +696,140 @@ def index():
   return send_from_directory(app.static_folder, "index.html")
 
 
+@app.get("/api/dashboard")
+def api_dashboard():
+  """Devuelve datos agregados para el dashboard de inicio."""
+  from datetime import datetime as _dt
+  from core.db import conectar as _conectar_db
+  mes_actual = _dt.now().strftime("%Y-%m")
+  empresas = [{"id": id_, "nombre": nombre} for id_, nombre in EMPRESAS_CLIENTE.items()]
+  result = {
+    "usuario": current_user.id if current_user.is_authenticated else "",
+    "facturas_pendientes_count": 0,
+    "importe_pendiente_total": 0.0,
+    "facturas_mes_count": 0,
+    "empresas_activas": len(empresas),
+    "ultimas_facturas": [],
+    "pendientes_por_empresa": [],
+  }
+  try:
+    with _conectar_db() as conn:
+      # Facturas pendientes (total)
+      row = conn.execute(
+        "SELECT COUNT(*) as cnt, COALESCE(SUM(CAST(REPLACE(REPLACE(total_a_pagar, '.', ''), ',', '.') AS REAL)), 0) as total "
+        "FROM facturas_proveedor WHERE LOWER(TRIM(estado_pago)) = 'pendiente'"
+      ).fetchone()
+      if row:
+        result["facturas_pendientes_count"] = row["cnt"]
+        result["importe_pendiente_total"] = round(row["total"], 2)
+      # Facturas del mes actual
+      row2 = conn.execute(
+        "SELECT COUNT(*) as cnt FROM facturas_proveedor WHERE fecha_factura LIKE ?",
+        (mes_actual + "%",),
+      ).fetchone()
+      if row2:
+        result["facturas_mes_count"] = row2["cnt"]
+      # Últimas 5 facturas
+      rows = conn.execute(
+        "SELECT fecha_factura, proveedor, total_a_pagar, estado_pago, empresa_id "
+        "FROM facturas_proveedor ORDER BY fecha_factura DESC LIMIT 5"
+      ).fetchall()
+      emp_map = {e["id"]: e["nombre"] for e in empresas}
+      result["ultimas_facturas"] = [
+        {"fecha": r["fecha_factura"], "proveedor": r["proveedor"], "total": r["total_a_pagar"], "empresa": emp_map.get(r["empresa_id"], r["empresa_id"] or "—")}
+        for r in rows
+      ]
+      # Pendientes por empresa
+      rows2 = conn.execute(
+        "SELECT empresa_id, COUNT(*) as cnt, COALESCE(SUM(CAST(REPLACE(REPLACE(total_a_pagar, '.', ''), ',', '.') AS REAL)), 0) as total "
+        "FROM facturas_proveedor WHERE LOWER(TRIM(estado_pago)) = 'pendiente' GROUP BY empresa_id"
+      ).fetchall()
+      result["pendientes_por_empresa"] = [
+        {"empresa": emp_map.get(r["empresa_id"], r["empresa_id"]), "count": r["cnt"], "importe": round(r["total"], 2)}
+        for r in rows2
+      ]
+      # --- Datos para gráficos ---
+      _meses_es = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"]
+      from datetime import timedelta as _td
+      hoy = _dt.now()
+      meses_rango = []
+      for i in range(5, -1, -1):
+        d = hoy.replace(day=1) - _td(days=i * 28)
+        d = d.replace(day=1)
+        meses_rango.append((d.year, d.month))
+      # deduplicate preserving order
+      seen = set()
+      meses_uniq = []
+      for ym in meses_rango:
+        if ym not in seen:
+          seen.add(ym)
+          meses_uniq.append(ym)
+      # ensure exactly 6
+      if len(meses_uniq) < 6:
+        d = _dt(meses_uniq[0][0], meses_uniq[0][1], 1) - _td(days=1)
+        meses_uniq.insert(0, (d.year, d.month))
+      meses_uniq = meses_uniq[-6:]
+      facturas_por_mes = []
+      for y, m in meses_uniq:
+        prefix = f"{y}-{m:02d}"
+        r = conn.execute(
+          "SELECT COUNT(*) as cnt, COALESCE(SUM(CAST(REPLACE(REPLACE(total_a_pagar, '.', ''), ',', '.') AS REAL)), 0) as total "
+          "FROM facturas_proveedor WHERE fecha_factura LIKE ?", (prefix + "%",)
+        ).fetchone()
+        facturas_por_mes.append({"mes": _meses_es[m - 1], "count": r["cnt"], "importe": round(r["total"], 2)})
+      result["facturas_por_mes"] = facturas_por_mes
+      # Facturas por estado
+      estados = conn.execute(
+        "SELECT LOWER(TRIM(estado_pago)) as st, COUNT(*) as cnt FROM facturas_proveedor GROUP BY st"
+      ).fetchall()
+      estado_map = {"pendiente": 0, "pagada": 0, "parcial": 0}
+      for e in estados:
+        st = e["st"]
+        if st in estado_map:
+          estado_map[st] = e["cnt"]
+      result["facturas_por_estado"] = estado_map
+      # Top 5 proveedores
+      top = conn.execute(
+        "SELECT proveedor, COALESCE(SUM(CAST(REPLACE(REPLACE(total_a_pagar, '.', ''), ',', '.') AS REAL)), 0) as total "
+        "FROM facturas_proveedor GROUP BY proveedor ORDER BY total DESC LIMIT 5"
+      ).fetchall()
+      result["top_proveedores"] = [{"nombre": t["proveedor"], "importe": round(t["total"], 2)} for t in top]
+  except Exception as e:
+    logging.getLogger(__name__).warning("Error en /api/dashboard: %s", e)
+  return jsonify(result)
+
+
+@app.get("/api/finanzas/resumen")
+def api_finanzas_resumen():
+  """Resumen rápido para el dashboard del módulo Finanzas."""
+  from datetime import datetime as _dt
+  from core.db import conectar as _conectar_db
+  anio = _dt.now().strftime("%Y")
+  result = {"total_prov": 0.0, "total_cli": 0.0, "sin_conciliar": 0}
+  try:
+    with _conectar_db() as conn:
+      r = conn.execute(
+        "SELECT COALESCE(SUM(CAST(REPLACE(REPLACE(total_a_pagar,'.',''),',','.') AS REAL)),0) as t "
+        "FROM facturas_proveedor WHERE fecha_factura LIKE ?", (anio + "%",)
+      ).fetchone()
+      if r:
+        result["total_prov"] = round(r["t"], 2)
+      r2 = conn.execute(
+        "SELECT COALESCE(SUM(CAST(REPLACE(REPLACE(total_a_pagar,'.',''),',','.') AS REAL)),0) as t "
+        "FROM facturas_cliente WHERE fecha_factura LIKE ?", (anio + "%",)
+      ).fetchone()
+      if r2:
+        result["total_cli"] = round(r2["t"], 2)
+      r3 = conn.execute(
+        "SELECT COUNT(*) as cnt FROM movimientos_banco WHERE conciliado_at IS NULL OR TRIM(conciliado_at) = ''"
+      ).fetchone()
+      if r3:
+        result["sin_conciliar"] = r3["cnt"]
+  except Exception as e:
+    logging.getLogger(__name__).warning("Error en /api/finanzas/resumen: %s", e)
+  return jsonify(result)
+
+
 @app.get("/api/empresas")
 def listar_empresas():
   """
@@ -776,25 +921,36 @@ def listar_facturas():
 @proveedores_bp.get("/api/proveedores")
 def listar_proveedores():
   """
-  Devuelve el listado de proveedores para la empresa: maestro + proveedores únicos
-  que aparecen en facturas (para que en el desplegable de edición aparezcan todos).
+  Devuelve el listado de proveedores para la empresa.
+  Por defecto: maestro + proveedores únicos que aparecen en facturas (para el desplegable de edición).
+  Si solo_con_facturas=1 o true: solo proveedores que tienen al menos una factura (para el listado único, evita ver duplicados sin facturas).
   """
   empresa_id = request.args.get("empresa_id")
   empresa_id, err = _validar_empresa_id_requerido(empresa_id)
   if err:
     return jsonify({"proveedores": [], "error": "Falta empresa_id"}), 400
 
-  lista = _listar_proveedores_para_selector(empresa_id)
+  solo_con_facturas = request.args.get("solo_con_facturas", "").strip().lower() in ("1", "true", "yes")
+  lista = (
+    _listar_proveedores_con_facturas(empresa_id)
+    if solo_con_facturas
+    else _listar_proveedores_para_selector(empresa_id)
+  )
   return jsonify({"proveedores": lista, "empresa_id": empresa_id})
 
 
 @proveedores_bp.get("/api/empresas/<empresa_id>/proveedores")
 def listar_proveedores_por_empresa(empresa_id: str):
-  """Listado de proveedores de una empresa (misma respuesta que GET /api/proveedores?empresa_id=)."""
+  """Listado de proveedores de una empresa. Query solo_con_facturas=1 para listado único (solo con facturas)."""
   empresa_id, err = _validar_empresa_id_requerido(empresa_id)
   if err:
     return err[0], err[1]
-  lista = _listar_proveedores_para_selector(empresa_id)
+  solo_con_facturas = request.args.get("solo_con_facturas", "").strip().lower() in ("1", "true", "yes")
+  lista = (
+    _listar_proveedores_con_facturas(empresa_id)
+    if solo_con_facturas
+    else _listar_proveedores_para_selector(empresa_id)
+  )
   return jsonify({"proveedores": lista, "empresa_id": empresa_id})
 
 
@@ -1350,8 +1506,14 @@ def actualizar_proveedor():
   if idx < 0:
     lista.append(p)
     _guardar_proveedores_maestros(empresa_id, lista)
-    facturas_db.update_facturas_proveedor_nombre_nif(
-      empresa_id, old_nombre, old_nif, p["nombre_canonico"], p["nif"],
+    facturas_db.update_facturas_datos_proveedor(
+      empresa_id,
+      old_nombre,
+      old_nif,
+      p["nombre_canonico"],
+      p["nif"],
+      p.get("pais") or None,
+      p.get("localidad") or None,
     )
     _invalidar_cache_listado_proveedores(empresa_id)
     return jsonify({
@@ -1362,6 +1524,15 @@ def actualizar_proveedor():
     })
   lista[idx] = p
   _guardar_proveedores_maestros(empresa_id, lista)
+  facturas_db.update_facturas_datos_proveedor(
+    empresa_id,
+    old_nombre,
+    old_nif,
+    p["nombre_canonico"],
+    p["nif"],
+    p.get("pais") or None,
+    p.get("localidad") or None,
+  )
   _invalidar_cache_listado_proveedores(empresa_id)
   return jsonify({"ok": True, "proveedores": lista, "empresa_id": empresa_id})
 
@@ -1393,6 +1564,95 @@ def eliminar_proveedor():
   _guardar_proveedores_maestros(empresa_id, nueva_lista)
   _invalidar_cache_listado_proveedores(empresa_id)
   return jsonify({"ok": True, "proveedores": nueva_lista, "empresa_id": empresa_id, "mensaje": "Proveedor eliminado del maestro."})
+
+
+@proveedores_bp.post("/api/proveedores/sincronizar-facturas")
+def sincronizar_facturas_con_proveedores():
+  """
+  Actualiza las facturas existentes con los datos del maestro de proveedores.
+  Para cada factura se busca el proveedor en el maestro (por NIF o por similitud de nombre)
+  y se actualizan proveedor, nif_proveedor, pais_proveedor y localidad_proveedor.
+  Body opcional: { "empresa_id": "..." } para sincronizar solo una empresa; si se omite, se procesan todas.
+  """
+  data = request.get_json(silent=True) or {}
+  empresa_filtro = (data.get("empresa_id") or "").strip()
+  empresas = (
+    [empresa_filtro]
+    if empresa_filtro
+    else list(EMPRESAS_CLIENTE.keys())
+  )
+  if empresa_filtro and empresa_filtro not in EMPRESAS_CLIENTE:
+    return _bad_request("empresa_id no válida")
+
+  total_actualizadas = 0
+  detalle = {}
+  for empresa_id in empresas:
+    proveedores = _cargar_proveedores_maestros(empresa_id)
+    if not proveedores:
+      detalle[empresa_id] = 0
+      continue
+    try:
+      facturas = facturas_db.get_facturas_empresa(empresa_id)
+    except Exception as e:
+      logger.warning("Error leyendo facturas para sincronizar proveedores %s: %s", empresa_id, e)
+      facturas = []
+    count_empresa = 0
+    vistos_factura: set[tuple[str, str]] = set()
+    for f in facturas:
+      prov = (f.get("proveedor") or "").strip()
+      nif = (f.get("nif_proveedor") or "").strip()
+      if not prov and not nif:
+        continue
+      key_f = (_normalizar_texto_proveedor(prov), _normalizar_nif(nif))
+      if key_f in vistos_factura:
+        continue
+      vistos_factura.add(key_f)
+      match = None
+      nif_norm = _normalizar_nif(nif)
+      if nif_norm:
+        for p in proveedores:
+          if _normalizar_nif(p.get("nif") or "") == nif_norm:
+            match = p
+            break
+      if not match and prov:
+        mejor_ratio = 0.0
+        for p in proveedores:
+          nombre_m = (p.get("nombre_canonico") or "").strip()
+          if not nombre_m:
+            continue
+          r = _similitud_nombres(prov, nombre_m)
+          if r >= 0.82 and r > mejor_ratio:
+            mejor_ratio = r
+            match = p
+      if not match:
+        continue
+      nombre_new = (match.get("nombre_canonico") or "").strip()
+      nif_new = (match.get("nif") or "").strip()
+      pais_new = (match.get("pais") or "").strip()
+      localidad_new = (match.get("localidad") or "").strip()
+      if (
+        nombre_new == prov
+        and nif_new == nif
+        and (not pais_new or (f.get("pais_proveedor") or "").strip() == pais_new)
+        and (not localidad_new or (f.get("localidad_proveedor") or "").strip() == localidad_new)
+      ):
+        continue
+      n = facturas_db.update_facturas_datos_proveedor(
+        empresa_id, prov, nif, nombre_new, nif_new, pais_new or None, localidad_new or None,
+      )
+      count_empresa += n
+      total_actualizadas += n
+    detalle[empresa_id] = count_empresa
+    if count_empresa:
+      _invalidar_cache_listado_proveedores(empresa_id)
+
+  return jsonify({
+    "ok": True,
+    "mensaje": f"Facturas actualizadas con datos del maestro: {total_actualizadas} fila(s).",
+    "facturas_actualizadas": total_actualizadas,
+    "empresas_procesadas": len(empresas),
+    "detalle": detalle,
+  })
 
 
 @proveedores_bp.post("/api/terceros/migrar-desde-csv")
@@ -1478,8 +1738,7 @@ def exportar_facturas():
     "total_a_pagar",
     "estado_pago",
     "tarjeta_asociada",
-    "ruta_archivo",
-    "ruta_destino",
+    "Nombre del archivo",
   ]
 
   filas_export: list[dict] = []
@@ -1511,15 +1770,22 @@ def exportar_facturas():
         row["tarjeta_asociada"] = ""
       if not row.get("estado_pago"):
         row["estado_pago"] = (f.get("estado_pago") or "pendiente").strip() or "pendiente"
+      ruta = (f.get("ruta_destino") or f.get("ruta_archivo") or "").strip()
+      row["Nombre del archivo"] = Path(ruta).name if ruta else ""
       filas_export.append(row)
   except Exception as e:
     logger.warning("Error preparando facturas para export: %s", e)
   if not filas_export:
     ruta_csv = EMPRESAS_DIR / empresa_id / "base_maestra_facturas.csv"
     if ruta_csv.exists():
+      campos_para_csv = [
+        "fecha_factura", "proveedor", "nif_proveedor", "pais_proveedor", "localidad_proveedor",
+        "resumen_concepto", "numero_factura", "base_imponible", "iva", "retenciones_total",
+        "total_a_pagar", "estado_pago", "tarjeta_asociada", "ruta_archivo", "ruta_destino",
+      ]
       with ruta_csv.open("r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        campos_csv = list(CAMPOS_EXPORT) + (["tarjeta_id"] if tarjeta_id_filtro else [])
+        campos_csv = list(campos_para_csv) + (["tarjeta_id"] if tarjeta_id_filtro else [])
         filas_export = _filtrar_filas_csv(
           reader,
           campos_csv,
@@ -1530,6 +1796,11 @@ def exportar_facturas():
           skip_header_por_empresa=False,
         )
         filas_export = _aplicar_filtros_estado_tarjeta(filas_export, estado_pago_filtro, tarjeta_id_filtro)
+      for row in filas_export:
+        ruta = (row.get("ruta_destino") or row.get("ruta_archivo") or "").strip()
+        row["Nombre del archivo"] = Path(ruta).name if ruta else ""
+        row.pop("ruta_archivo", None)
+        row.pop("ruta_destino", None)
   if not filas_export:
     return jsonify({"error": "No hay facturas que cumplan el filtro para exportar"}), 404
 
@@ -2132,6 +2403,7 @@ def listar_facturas_clientes():
   if err:
     return jsonify({"facturas": [], "error": "Falta empresa_id"}), 400
   filtro_cliente = (request.args.get("cliente") or "").strip()
+  filtro_cobro = (request.args.get("estado_cobro") or "").strip().lower()
   solo_pendientes = request.args.get("solo_pendientes_vinculacion", "").strip().lower() in ("1", "true", "yes")
   if empresa_id in _cache_listado_facturas_clientes:
     facturas = list(_cache_listado_facturas_clientes[empresa_id])
@@ -2140,21 +2412,11 @@ def listar_facturas_clientes():
     _cache_listado_facturas_clientes[empresa_id] = facturas
   if filtro_cliente:
     facturas = [f for f in facturas if (f.get("cliente") or "").strip() == filtro_cliente]
+  if filtro_cobro:
+    facturas = [f for f in facturas if (f.get("estado_cobro") or "pendiente").strip().lower() == filtro_cobro]
   if solo_pendientes and facturas:
-    _init_movimientos_db()
-    conn_bancos = _get_bancos_db()
-    try:
-      rows = conn_bancos.execute(
-        "SELECT factura_cliente_key FROM movimientos WHERE empresa_id = ? AND factura_cliente_key IS NOT NULL AND TRIM(COALESCE(factura_cliente_key, '')) != ''",
-        (empresa_id,),
-      ).fetchall()
-      keys_vinculadas = {r[0].strip() for r in rows if r and r[0]}
-    finally:
-      conn_bancos.close()
-    facturas = [
-      f for f in facturas
-      if _factura_cliente_key(f.get("numero_factura"), f.get("fecha_factura"), f.get("cliente")) not in keys_vinculadas
-    ]
+    # Excluir las ya cobradas totalmente (para el modal de conciliación de cobros)
+    facturas = [f for f in facturas if (f.get("estado_cobro") or "pendiente").strip().lower() != "cobrada"]
   return jsonify({"facturas": facturas, "empresa_id": empresa_id})
 
 
@@ -3525,15 +3787,57 @@ def _factura_cliente_key(numero_factura: str, fecha_factura: str, cliente: str) 
   return f"{n}|{f}|{c}"
 
 
+def _recalcular_estado_cobro_cliente(factura_cli_id: int, factura: dict | None = None) -> str:
+  """Recalcula el estado_cobro de una factura de cliente sumando movimientos vinculados."""
+  if factura is None:
+    factura = facturas_cliente_db.get_factura_cliente_por_id(factura_cli_id)
+  if not factura:
+    return "pendiente"
+
+  total_fac = 0.0
+  for campo in ("total_a_pagar",):
+    v = factura.get(campo)
+    if v is not None and str(v).strip():
+      try:
+        total_fac = abs(float(str(v).strip().replace(",", ".")))
+        break
+      except (ValueError, TypeError):
+        pass
+
+  _init_movimientos_db()
+  conn_bancos = _get_bancos_db()
+  try:
+    row_sum = conn_bancos.execute(
+      "SELECT COALESCE(SUM(ABS(CAST(importe AS REAL))), 0) FROM movimientos WHERE factura_cliente_id = ?",
+      (factura_cli_id,),
+    ).fetchone()
+    total_cobrado = float(row_sum[0] or 0) if row_sum else 0.0
+  finally:
+    conn_bancos.close()
+
+  if total_cobrado < 0.01:
+    estado = "pendiente"
+  elif total_fac > 0 and total_cobrado >= total_fac - 0.02:
+    estado = "cobrada"
+  else:
+    estado = "parcial"
+
+  facturas_cliente_db.update_estado_cobro(factura_cli_id, estado)
+  return estado
+
+
 @bancos_bp.route("/api/bancos/conciliacion/confirmar-cliente", methods=["POST"])
 def conciliacion_confirmar_cliente():
   """
   Vincula un movimiento (entrada de caja) a una factura emitida a cliente.
-  Body: { "movimiento_id": int, "empresa_id": str, "numero_factura": str, "fecha_factura": str, "cliente": str }.
+  Body: { "movimiento_id": int, "empresa_id": str, "factura_cliente_id": int,
+          "numero_factura": str, "fecha_factura": str, "cliente": str }.
+  Acepta factura_cliente_id (preferente) o la terna numero_factura+fecha_factura+cliente (retrocompatible).
   """
   data = request.get_json(silent=True) or {}
   mov_id = data.get("movimiento_id")
   empresa_id = (data.get("empresa_id") or "").strip()
+  factura_cli_id = data.get("factura_cliente_id")
   numero_factura = (data.get("numero_factura") or "").strip()
   fecha_factura = (data.get("fecha_factura") or "").strip()
   cliente = (data.get("cliente") or "").strip()
@@ -3563,32 +3867,54 @@ def conciliacion_confirmar_cliente():
   finally:
     conn_bancos.close()
 
-  facturas_cli = facturas_cliente_db.get_facturas_cliente_empresa(empresa_id)
-  key = _factura_cliente_key(numero_factura, fecha_factura, cliente)
-  encontrada = any(
-    _factura_cliente_key(f.get("numero_factura"), f.get("fecha_factura"), f.get("cliente")) == key
-    for f in facturas_cli
+  # Resolver la factura de cliente por id o por clave compuesta
+  factura = None
+  if factura_cli_id is not None:
+    try:
+      factura_cli_id = int(factura_cli_id)
+    except (TypeError, ValueError):
+      return _bad_request("factura_cliente_id debe ser un número")
+    factura = facturas_cliente_db.get_factura_cliente_por_id(factura_cli_id)
+    if not factura:
+      return jsonify({"error": "Factura de cliente no encontrada"}), 404
+    if (factura.get("empresa_id") or "").strip() != empresa_id:
+      return jsonify({"error": "La factura no pertenece a esa empresa"}), 400
+  else:
+    facturas_cli = facturas_cliente_db.get_facturas_cliente_empresa(empresa_id)
+    key = _factura_cliente_key(numero_factura, fecha_factura, cliente)
+    for f in facturas_cli:
+      if _factura_cliente_key(f.get("numero_factura"), f.get("fecha_factura"), f.get("cliente")) == key:
+        factura = f
+        factura_cli_id = f.get("id")
+        break
+    if not factura:
+      return jsonify({"error": "Factura de cliente no encontrada en la base de la empresa"}), 404
+
+  key = _factura_cliente_key(
+    factura.get("numero_factura"), factura.get("fecha_factura"), factura.get("cliente")
   )
-  if not encontrada:
-    return jsonify({"error": "Factura de cliente no encontrada en la base de la empresa"}), 404
 
   conn_bancos = _get_bancos_db()
   try:
-    if mov_empresa:
-      conn_bancos.execute(
-        "UPDATE movimientos SET factura_cliente_key = ?, conciliado_at = ? WHERE id = ?",
-        (key, datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"), mov_id),
-      )
-    else:
-      conn_bancos.execute(
-        "UPDATE movimientos SET factura_cliente_key = ?, conciliado_at = ?, empresa_id = ? WHERE id = ?",
-        (key, datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"), empresa_id_mov, mov_id),
-      )
+    conn_bancos.execute(
+      "UPDATE movimientos SET factura_cliente_key = ?, factura_cliente_id = ?, conciliado_at = ?, empresa_id = ? WHERE id = ?",
+      (key, factura_cli_id, datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"), empresa_id_mov, mov_id),
+    )
     conn_bancos.commit()
   finally:
     conn_bancos.close()
 
-  return jsonify({"ok": True, "mensaje": "Entrada de caja vinculada a la factura de cliente."})
+  # G.11: recalcular estado_cobro
+  estado_cobro = _recalcular_estado_cobro_cliente(factura_cli_id, factura)
+  _invalidar_cache_listado_clientes(empresa_id)
+
+  if estado_cobro == "cobrada":
+    msg = "Entrada de caja vinculada. Factura marcada como cobrada."
+  elif estado_cobro == "parcial":
+    msg = "Entrada de caja vinculada. Factura marcada como cobro parcial."
+  else:
+    msg = "Entrada de caja vinculada a la factura de cliente."
+  return jsonify({"ok": True, "mensaje": msg, "estado_cobro": estado_cobro})
 
 
 @bancos_bp.route("/api/bancos/conciliacion/desvincular", methods=["POST"])
@@ -3622,12 +3948,23 @@ def conciliacion_desvincular():
     if not factura_id and not factura_cliente_key:
       return jsonify({"error": "El movimiento no está conciliado con ninguna factura"}), 400
     if factura_cliente_key:
+      # G.11: leer factura_cliente_id antes de limpiar
+      row_cli = conn_bancos.execute(
+        "SELECT factura_cliente_id FROM movimientos WHERE id = ?", (mov_id,)
+      ).fetchone()
+      fci_id = row_cli[0] if row_cli and row_cli[0] else None
       conn_bancos.execute(
-        "UPDATE movimientos SET factura_cliente_key = NULL, conciliado_at = NULL WHERE id = ?",
+        "UPDATE movimientos SET factura_cliente_key = NULL, factura_cliente_id = NULL, conciliado_at = NULL WHERE id = ?",
         (mov_id,),
       )
       conn_bancos.commit()
-      return jsonify({"ok": True, "mensaje": "Vinculación con factura de cliente eliminada."})
+      conn_bancos.close()
+      # G.11: recalcular estado_cobro
+      estado_cobro = "pendiente"
+      if fci_id:
+        estado_cobro = _recalcular_estado_cobro_cliente(fci_id)
+        _invalidar_cache_listado_clientes(empresa_id)
+      return jsonify({"ok": True, "mensaje": "Vinculación con factura de cliente eliminada. Estado: " + estado_cobro + "."})
     conn_bancos.execute(
       "UPDATE movimientos SET factura_proveedor_id = NULL, conciliado_at = NULL WHERE id = ?",
       (mov_id,),
@@ -4074,6 +4411,195 @@ def crm_actualizar_empresa(empresa_id: int):
 @crm_bp.get("/api/crm/stats")
 def crm_stats():
   return jsonify(crm_db.estadisticas_crm())
+
+
+@transporte_bp.route("/api/proyectos/transporte/proveedores", methods=["GET"])
+def transporte_listar_proveedores():
+  """Lista todos los proveedores de transporte (con id) para el modal de gestión."""
+  try:
+    lista = _listar_proveedores_transporte_admin()
+    return jsonify({"proveedores": lista})
+  except Exception as e:
+    return jsonify({"error": str(e)}), 500
+
+
+@transporte_bp.route("/api/proyectos/transporte/proveedores", methods=["POST"])
+def transporte_alta_proveedor():
+  """Añade un nuevo proveedor de transporte (incorporar transportista)."""
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return jsonify({"error": "El nombre es obligatorio"}), 400
+  try:
+    datos = {
+      "nombre": nombre,
+      "telefono": (data.get("telefono") or "").strip(),
+      "telefono_fijo": (data.get("telefono_fijo") or "").strip(),
+      "telefono_movil": (data.get("telefono_movil") or "").strip(),
+      "email": (data.get("email") or "").strip(),
+      "web": (data.get("web") or "").strip(),
+      "localidad": (data.get("localidad") or "").strip(),
+      "provincia": (data.get("provincia") or "").strip(),
+      "codigo_postal": (data.get("codigo_postal") or "").strip(),
+      "direccion": (data.get("direccion") or "").strip(),
+      "lat": data.get("lat"),
+      "lon": data.get("lon"),
+    }
+    if datos["lat"] is not None:
+      try:
+        datos["lat"] = float(datos["lat"])
+      except (TypeError, ValueError):
+        datos["lat"] = None
+    if datos["lon"] is not None:
+      try:
+        datos["lon"] = float(datos["lon"])
+      except (TypeError, ValueError):
+        datos["lon"] = None
+    id_ = _alta_proveedor_transporte(datos)
+    return jsonify({"ok": True, "id": id_})
+  except Exception as e:
+    return jsonify({"error": str(e)}), 500
+
+
+@transporte_bp.route("/api/proyectos/transporte/proveedores/<int:proveedor_id>", methods=["GET"])
+def transporte_obtener_proveedor(proveedor_id):
+  """Devuelve un proveedor por id."""
+  p = _obtener_proveedor_transporte(proveedor_id)
+  if not p:
+    return jsonify({"error": "Proveedor no encontrado"}), 404
+  return jsonify(p)
+
+
+@transporte_bp.route("/api/proyectos/transporte/proveedores/<int:proveedor_id>", methods=["PUT"])
+def transporte_actualizar_proveedor(proveedor_id):
+  """Actualiza un proveedor de transporte."""
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return jsonify({"error": "El nombre es obligatorio"}), 400
+  try:
+    datos = {
+      "nombre": nombre,
+      "telefono": (data.get("telefono") or "").strip(),
+      "telefono_fijo": (data.get("telefono_fijo") or "").strip(),
+      "telefono_movil": (data.get("telefono_movil") or "").strip(),
+      "email": (data.get("email") or "").strip(),
+      "web": (data.get("web") or "").strip(),
+      "localidad": (data.get("localidad") or "").strip(),
+      "provincia": (data.get("provincia") or "").strip(),
+      "codigo_postal": (data.get("codigo_postal") or "").strip(),
+      "direccion": (data.get("direccion") or "").strip(),
+      "lat": data.get("lat"),
+      "lon": data.get("lon"),
+    }
+    for key in ("lat", "lon"):
+      if datos[key] is not None:
+        try:
+          datos[key] = float(datos[key])
+        except (TypeError, ValueError):
+          datos[key] = None
+    ok = _actualizar_proveedor_transporte(proveedor_id, datos)
+    if not ok:
+      return jsonify({"error": "Proveedor no encontrado"}), 404
+    return jsonify({"ok": True})
+  except Exception as e:
+    return jsonify({"error": str(e)}), 500
+
+
+@transporte_bp.route("/api/proyectos/transporte/proveedores/carga-masiva", methods=["POST"])
+def transporte_carga_masiva():
+  """Subida masiva de proveedores desde un archivo Excel (.xlsx)."""
+  if "archivo" not in request.files:
+    return jsonify({"error": "Falta el archivo. Usa el campo 'archivo'."}), 400
+  f = request.files["archivo"]
+  if not f or not f.filename:
+    return jsonify({"error": "No se ha seleccionado ningún archivo"}), 400
+  if not f.filename.lower().endswith((".xlsx", ".xls")):
+    return jsonify({"error": "El archivo debe ser Excel (.xlsx o .xls)"}), 400
+  try:
+    contenido = f.read()
+  except Exception as e:
+    return jsonify({"error": "Error leyendo el archivo: " + str(e)}), 500
+  try:
+    from io import BytesIO
+    lista = _parsear_xlsx_proveedores_stream(BytesIO(contenido))
+  except Exception as e:
+    return jsonify({"error": "Error al parsear el Excel: " + str(e)}), 500
+  if not lista:
+    return jsonify({"error": "No se encontraron filas válidas en el Excel", "insertados": 0}), 400
+  try:
+    n = _insertar_proveedores_transporte_lista(lista)
+    return jsonify({"ok": True, "insertados": n, "total_filas": len(lista)})
+  except Exception as e:
+    return jsonify({"error": str(e)}), 500
+
+
+@transporte_bp.route("/api/proyectos/transporte/proveedores/exportar-excel", methods=["POST"])
+def transporte_exportar_proveedores_excel():
+  """Genera un Excel con los proveedores de la ruta (listado actual) e información de contacto."""
+  try:
+    import openpyxl
+    from openpyxl import Workbook
+  except ImportError:
+    return jsonify({"error": "openpyxl no instalado"}), 500
+  data = request.get_json(silent=True) or {}
+  proveedores = data.get("proveedores")
+  if not isinstance(proveedores, list):
+    return jsonify({"error": "Se espera un array 'proveedores' en el body"}), 400
+  ruta_info = data.get("ruta") or {}
+  wb = Workbook()
+  ws = wb.active
+  if ws is None:
+    return jsonify({"error": "No se pudo crear la hoja"}), 500
+  ws.title = "Proveedores ruta"
+  headers = [
+    "Nombre", "Provincia", "Localidad", "Código postal", "Dirección",
+    "Tel. fijo", "Tel. móvil", "Email", "Web", "Distancia (km)",
+  ]
+  row = 1
+  if ruta_info.get("texto") or ruta_info.get("distancia_km") is not None or ruta_info.get("duracion_min") is not None:
+    ws.cell(row=row, column=1, value="Ruta: " + (ruta_info.get("texto") or ""))
+    row += 1
+    if ruta_info.get("distancia_km") is not None or ruta_info.get("duracion_min") is not None:
+      ws.cell(row=row, column=1, value="Distancia: {} km · Duración: {} min".format(
+        ruta_info.get("distancia_km") if ruta_info.get("distancia_km") is not None else "",
+        ruta_info.get("duracion_min") if ruta_info.get("duracion_min") is not None else "",
+      ))
+      row += 1
+    row += 1
+  for col, h in enumerate(headers, 1):
+    ws.cell(row=row, column=col, value=h)
+  row += 1
+  for p in proveedores:
+    if not isinstance(p, dict):
+      continue
+    dist_km = p.get("distancia_km")
+    if dist_km is not None:
+      try:
+        dist_km = float(dist_km)
+      except (TypeError, ValueError):
+        dist_km = ""
+    ws.cell(row=row, column=1, value=(p.get("nombre") or ""))
+    ws.cell(row=row, column=2, value=(p.get("provincia") or ""))
+    ws.cell(row=row, column=3, value=(p.get("localidad") or ""))
+    ws.cell(row=row, column=4, value=(p.get("codigo_postal") or ""))
+    ws.cell(row=row, column=5, value=(p.get("direccion") or ""))
+    ws.cell(row=row, column=6, value=(p.get("telefono_fijo") or ""))
+    ws.cell(row=row, column=7, value=(p.get("telefono_movil") or ""))
+    ws.cell(row=row, column=8, value=(p.get("email") or ""))
+    ws.cell(row=row, column=9, value=(p.get("web") or ""))
+    ws.cell(row=row, column=10, value=round(dist_km, 2) if isinstance(dist_km, (int, float)) else (dist_km if dist_km != "" else ""))
+    row += 1
+  output = io.BytesIO()
+  wb.save(output)
+  output.seek(0)
+  filename = "proveedores_ruta.xlsx"
+  return send_file(
+    output,
+    mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    as_attachment=True,
+    download_name=filename,
+  )
 
 
 # Registrar blueprints

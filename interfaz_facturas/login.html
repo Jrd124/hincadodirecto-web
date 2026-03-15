@@ -4,88 +4,212 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Iniciar sesión</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #f0f2f5;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ===== MITAD IZQUIERDA ===== */
+    .login-brand {
+      flex: 1;
+      background: linear-gradient(160deg, #1E293B 0%, #0F172A 100%);
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
+      padding: 48px;
+    }
+    .login-brand-inner {
+      max-width: 400px;
+    }
+    .login-brand-title {
+      font-size: 32px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 12px;
+      line-height: 1.2;
+    }
+    .login-brand-subtitle {
+      font-size: 16px;
+      color: rgba(255,255,255,0.6);
+      line-height: 1.5;
+      margin-bottom: 36px;
+    }
+    .login-brand-features {
+      list-style: none;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .login-brand-features li {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      color: rgba(255,255,255,0.7);
+    }
+    .login-brand-features li::before {
+      content: "";
+      display: block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #3B82F6;
+      flex-shrink: 0;
+    }
+
+    /* ===== MITAD DERECHA ===== */
+    .login-form-side {
+      flex: 1;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 32px;
     }
     .login-card {
-      background: #fff;
-      border-radius: 8px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.1);
-      padding: 2.5rem 2rem;
       width: 100%;
       max-width: 380px;
     }
     .login-card h1 {
-      font-size: 1.5rem;
-      color: #333;
-      margin-bottom: 1.5rem;
-      text-align: center;
+      font-size: 24px;
+      font-weight: 700;
+      color: #1E293B;
+      margin-bottom: 8px;
+    }
+    .login-card .login-hint {
+      font-size: 14px;
+      color: #64748B;
+      margin-bottom: 32px;
+    }
+    .login-card .form-group {
+      margin-bottom: 20px;
     }
     .login-card label {
       display: block;
-      font-size: 0.875rem;
-      color: #555;
-      margin-bottom: 0.3rem;
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 6px;
     }
     .login-card input[type="text"],
     .login-card input[type="password"] {
       width: 100%;
-      padding: 0.6rem 0.75rem;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      font-size: 1rem;
-      margin-bottom: 1rem;
+      padding: 12px 16px;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: inherit;
+      color: #1E293B;
+      background: #fff;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .login-card input::placeholder {
+      color: #94A3B8;
     }
     .login-card input:focus {
       outline: none;
-      border-color: #4a90d9;
-      box-shadow: 0 0 0 2px rgba(74,144,217,0.2);
+      border-color: #2563EB;
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
     }
     .login-card button {
       width: 100%;
-      padding: 0.7rem;
-      background: #4a90d9;
+      padding: 12px;
+      background: #2563EB;
       color: #fff;
       border: none;
-      border-radius: 4px;
-      font-size: 1rem;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: inherit;
       cursor: pointer;
-      margin-top: 0.5rem;
+      transition: background 0.2s ease;
+      margin-top: 4px;
     }
-    .login-card button:hover { background: #3a7bc8; }
-    .error {
-      background: #fce4e4;
-      color: #c0392b;
-      padding: 0.5rem 0.75rem;
-      border-radius: 4px;
-      font-size: 0.875rem;
-      margin-bottom: 1rem;
+    .login-card button:hover {
+      background: #1D4ED8;
+    }
+    .login-card button:focus-visible {
+      outline: 2px solid #2563EB;
+      outline-offset: 2px;
+    }
+    .login-footer {
       text-align: center;
+      font-size: 12px;
+      color: #94A3B8;
+      margin-top: 24px;
+    }
+
+    /* ===== ERROR ===== */
+    .error {
+      background: #FEF2F2;
+      border: 1px solid #FECACA;
+      color: #DC2626;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 14px;
+      margin-bottom: 20px;
+      text-align: center;
+      line-height: 1.4;
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 768px) {
+      .login-brand {
+        display: none;
+      }
+      body {
+        background: #F8FAFC;
+      }
+      .login-form-side {
+        background: #F8FAFC;
+        padding: 32px 24px;
+      }
     }
   </style>
 </head>
 <body>
-  <form class="login-card" method="POST" action="/login">
-    <h1>Iniciar sesión</h1>
-    <div id="error-msg" class="error" style="display:none;"></div>
-    <label for="username">Usuario</label>
-    <input type="text" id="username" name="username" autocomplete="username" required autofocus>
-    <label for="password">Contraseña</label>
-    <input type="password" id="password" name="password" autocomplete="current-password" required>
-    <button type="submit">Entrar</button>
-  </form>
+  <div class="login-brand">
+    <div class="login-brand-inner">
+      <div class="login-brand-title">Gesti&oacute;n ERP</div>
+      <div class="login-brand-subtitle">Gesti&oacute;n integral de facturas, proyectos y equipo</div>
+      <ul class="login-brand-features">
+        <li>Extracci&oacute;n autom&aacute;tica con IA</li>
+        <li>Multi-empresa</li>
+        <li>Control financiero completo</li>
+      </ul>
+    </div>
+  </div>
+  <div class="login-form-side">
+    <form class="login-card" method="POST" action="/login">
+      <h1>Iniciar sesi&oacute;n</h1>
+      <p class="login-hint">Introduce tus credenciales para acceder</p>
+      <div id="error-msg" class="error" style="display:none;"></div>
+      <div class="form-group">
+        <label for="username">Usuario</label>
+        <input type="text" id="username" name="username" placeholder="usuario@empresa.com" autocomplete="username" required autofocus>
+      </div>
+      <div class="form-group">
+        <label for="password">Contrase&ntilde;a</label>
+        <input type="password" id="password" name="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password" required>
+      </div>
+      <button type="submit">Entrar</button>
+      <div class="login-footer">Acceso restringido a usuarios autorizados</div>
+    </form>
+  </div>
   <script>
     const params = new URLSearchParams(window.location.search);
     if (params.get("error") === "1") {
       const el = document.getElementById("error-msg");
-      el.textContent = "Usuario o contraseña incorrectos.";
+      el.innerHTML = "\u26A0 Usuario o contrase\u00F1a incorrectos.";
       el.style.display = "block";
     }
   </script>

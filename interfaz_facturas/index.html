@@ -4,153 +4,250 @@
     <meta charset="utf-8" />
     <title>Interfaz de facturas</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
     <link rel="stylesheet" href="/static/css/app.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
   </head>
   <body>
-    <div class="header-sticky">
-      <nav class="menu-principal" aria-label="Navegación principal">
-        <ul>
-          <li><a href="#" id="nav-finanzas-modulo" class="activo">Finanzas</a></li>
-          <li><a href="#" id="nav-crm-modulo">CRM</a></li>
-          <li><a href="#" id="nav-proyectos-modulo">Proyectos</a></li>
-          <li><a href="#" id="nav-rrhh-modulo">RRHH</a></li>
-        </ul>
-      </nav>
-      <nav class="submenu visible" id="submenu-finanzas" aria-label="Submenú Finanzas">
-        <ul>
-          <li><a href="#" id="nav-finanzas-proveedores" class="activo">Proveedores</a></li>
-          <li><a href="#" id="nav-finanzas-clientes">Clientes</a></li>
-          <li><a href="#" id="nav-finanzas-control-calidad">Control de calidad</a></li>
-          <li><a href="#" id="nav-finanzas-bancos">Bancos</a></li>
-        </ul>
-      </nav>
-      <nav class="submenu submenu-inner" id="submenu-proveedores" aria-label="Submenú Proveedores">
-        <ul>
-          <li><a href="#" id="nav-proveedores">Únicos</a></li>
-          <li><a href="#" id="nav-facturas" class="activo">Facturas</a></li>
-          <li><a href="#" id="nav-cecos">CeCos</a></li>
-        </ul>
-      </nav>
-      <nav class="submenu submenu-inner" id="submenu-clientes" aria-label="Submenú Clientes">
-        <ul>
-          <li><a href="#" id="nav-clientes-listado">Únicos</a></li>
-          <li><a href="#" id="nav-clientes-facturas" class="activo">Facturas</a></li>
-        </ul>
-      </nav>
-      <nav class="submenu" id="submenu-control-calidad" aria-label="Submenú Control de calidad"><ul></ul></nav>
-      <nav class="submenu" id="submenu-proyectos" aria-label="Submenú Proyectos">
-        <ul>
-          <li><a href="#" id="nav-proyectos-cotizados">Cotizados</a></li>
-          <li><a href="#" id="nav-proyectos-vivos">Vivos</a></li>
-          <li><a href="#" id="nav-proyectos-terminados">Terminados</a></li>
-          <li><a href="#" id="nav-proyectos-transporte">Transporte</a></li>
-          <li><a href="#" id="nav-proyectos-onboarding">Onboarding</a></li>
-        </ul>
-      </nav>
-      <nav class="submenu" id="submenu-bancos" aria-label="Submenú Bancos"><ul></ul></nav>
-      <nav class="submenu" id="submenu-rrhh" aria-label="Submenú RRHH">
-        <ul>
-          <li><a href="#" id="nav-rrhh-equipo">Equipo</a></li>
-          <li><a href="#" id="nav-rrhh-reserva">Reserva</a></li>
-          <li><a href="#" id="nav-rrhh-alumni">Alumni</a></li>
-          <li><a href="#" id="nav-rrhh-nominas">Nominas</a></li>
-          <li><a href="#" id="nav-rrhh-adelantos">Adelantos</a></li>
-        </ul>
-      </nav>
-      <nav class="submenu" id="submenu-onboarding" aria-label="Submenú Onboarding"><ul></ul></nav>
-      <nav class="submenu" id="submenu-crm" aria-label="Submenú CRM">
-        <ul>
-          <li><a href="#" id="nav-crm-inicio" class="activo">Inicio</a></li>
-          <li><a href="#" id="nav-crm-empresas">Empresas</a></li>
-          <li><a href="#" id="nav-crm-contactos">Contactos</a></li>
-          <li><a href="#" id="nav-crm-oportunidades">Oportunidades</a></li>
-          <li><a href="#" id="nav-crm-interacciones">Interacciones</a></li>
-        </ul>
-      </nav>
-    </div>
-    <div class="container">
-      <div id="panel-facturas" class="panel-facturas visible">
-      <div class="layout">
-        <section class="col-left">
-          <div class="card">
-            <h1>Procesar facturas</h1>
-            <p class="subtitle">
-              Elige la empresa, sube las facturas y deja que el equipo de agentes las procese y archive.
-            </p>
-
-            <form id="facturas-form">
-              <label for="empresa">Empresa</label>
-              <select id="empresa" name="empresa" class="select-empresa" required>
-                <option value="">Selecciona empresa…</option>
-              </select>
-
-              <label for="facturas-tarjeta">Pagado con tarjeta (opcional)</label>
-              <select id="facturas-tarjeta" name="tarjeta_id">
-                <option value="">Sin tarjeta / pago directo</option>
-              </select>
-
-              <label for="archivos">Facturas / tickets</label>
-              <input id="archivos" name="archivos" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,image/*" />
-              <button type="button" class="btn-seleccionar-facturas" id="btn-seleccionar-facturas">Seleccionar facturas</button>
-              <ul class="lista-archivos" id="lista-archivos" aria-live="polite"></ul>
-
-              <button type="submit" class="primary">Procesar</button>
-            </form>
-
-            <div class="status" id="status"></div>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <span class="sidebar-brand-text">Gestión ERP</span>
+        <button class="sidebar-toggle" id="sidebar-toggle" title="Colapsar menú">&laquo;</button>
+      </div>
+      <nav class="sidebar-nav" aria-label="Navegación principal">
+        <!-- Inicio -->
+        <a href="#" class="sidebar-item activo" id="nav-inicio-modulo">
+          <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 6.5L8 2l6 4.5V14a1 1 0 01-1 1H3a1 1 0 01-1-1V6.5z"/><path d="M6 15V9h4v6"/></svg>
+          <span class="sidebar-label">Inicio</span>
+        </a>
+        <!-- Finanzas -->
+        <div class="sidebar-group">
+          <a href="#" class="sidebar-item sidebar-parent" id="nav-finanzas-modulo" data-group="finanzas">
+            <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="14" height="11" rx="1.5"/><path d="M1 7h14"/><path d="M5 10h2"/></svg>
+            <span class="sidebar-label">Finanzas</span>
+            <svg class="sidebar-chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4"/></svg>
+          </a>
+          <div class="sidebar-children" id="sidebar-children-finanzas">
+            <a href="#" class="sidebar-child sidebar-parent" id="nav-finanzas-proveedores" data-group="proveedores">
+              Proveedores
+              <svg class="sidebar-chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4"/></svg>
+            </a>
+            <div class="sidebar-children sidebar-level3" id="sidebar-children-proveedores">
+              <a href="#" class="sidebar-leaf" id="nav-proveedores">Únicos</a>
+              <a href="#" class="sidebar-leaf" id="nav-facturas">Facturas</a>
+              <a href="#" class="sidebar-leaf" id="nav-cecos">CeCos</a>
+            </div>
+            <a href="#" class="sidebar-child sidebar-parent" id="nav-finanzas-clientes" data-group="clientes">
+              Clientes
+              <svg class="sidebar-chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4"/></svg>
+            </a>
+            <div class="sidebar-children sidebar-level3" id="sidebar-children-clientes">
+              <a href="#" class="sidebar-leaf" id="nav-clientes-listado">Únicos</a>
+              <a href="#" class="sidebar-leaf" id="nav-clientes-facturas">Facturas</a>
+            </div>
+            <a href="#" class="sidebar-child" id="nav-finanzas-control-calidad">Control de calidad</a>
+            <a href="#" class="sidebar-child" id="nav-finanzas-bancos">Bancos</a>
           </div>
-        </section>
+        </div>
+        <!-- Proyectos -->
+        <div class="sidebar-group">
+          <a href="#" class="sidebar-item sidebar-parent" id="nav-proyectos-modulo" data-group="proyectos">
+            <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 2.5h5l2 2h6v10h-13z"/></svg>
+            <span class="sidebar-label">Proyectos</span>
+            <svg class="sidebar-chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4"/></svg>
+          </a>
+          <div class="sidebar-children" id="sidebar-children-proyectos">
+            <a href="#" class="sidebar-child" id="nav-proyectos-cotizados">Cotizados</a>
+            <a href="#" class="sidebar-child" id="nav-proyectos-vivos">Vivos</a>
+            <a href="#" class="sidebar-child" id="nav-proyectos-terminados">Terminados</a>
+            <a href="#" class="sidebar-child" id="nav-proyectos-transporte">Transporte</a>
+            <a href="#" class="sidebar-child" id="nav-proyectos-onboarding">Onboarding</a>
+          </div>
+        </div>
+        <!-- RRHH -->
+        <div class="sidebar-group">
+          <a href="#" class="sidebar-item sidebar-parent" id="nav-rrhh-modulo" data-group="rrhh">
+            <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 15c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+            <span class="sidebar-label">RRHH</span>
+            <svg class="sidebar-chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4"/></svg>
+          </a>
+          <div class="sidebar-children" id="sidebar-children-rrhh">
+            <a href="#" class="sidebar-child" id="nav-rrhh-equipo">Equipo</a>
+            <a href="#" class="sidebar-child" id="nav-rrhh-reserva">Reserva</a>
+            <a href="#" class="sidebar-child" id="nav-rrhh-alumni">Alumni</a>
+            <a href="#" class="sidebar-child" id="nav-rrhh-nominas">Nóminas</a>
+            <a href="#" class="sidebar-child" id="nav-rrhh-adelantos">Adelantos</a>
+          </div>
+        </div>
+        <!-- CRM -->
+        <div class="sidebar-group">
+          <a href="#" class="sidebar-item sidebar-parent" id="nav-crm-modulo" data-group="crm">
+            <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1a4 4 0 014 4c0 2.5-4 6-4 6S4 7.5 4 5a4 4 0 014-4z"/><circle cx="8" cy="5" r="1.5"/></svg>
+            <span class="sidebar-label">CRM</span>
+            <svg class="sidebar-chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4"/></svg>
+          </a>
+          <div class="sidebar-children" id="sidebar-children-crm">
+            <a href="#" class="sidebar-child" id="nav-crm-inicio">Inicio</a>
+            <a href="#" class="sidebar-child" id="nav-crm-empresas">Empresas</a>
+            <a href="#" class="sidebar-child" id="nav-crm-contactos">Contactos</a>
+            <a href="#" class="sidebar-child" id="nav-crm-oportunidades">Oportunidades</a>
+            <a href="#" class="sidebar-child" id="nav-crm-interacciones">Interacciones</a>
+          </div>
+        </div>
+      </nav>
+      <div class="sidebar-footer" id="sidebar-footer">
+        <div class="sidebar-user">
+          <span class="sidebar-avatar" id="sidebar-avatar">??</span>
+          <span class="sidebar-username" id="sidebar-username">Usuario</span>
+        </div>
+        <a href="/logout" class="sidebar-logout">Cerrar sesión</a>
+      </div>
+    </aside>
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <button class="sidebar-hamburger" id="sidebar-hamburger" aria-label="Abrir menú">&#9776;</button>
 
-        <section class="col-right">
+    <!-- Hidden elements for JS compatibility -->
+    <div style="display:none;">
+      <span id="submenu-inicio"></span>
+      <span id="submenu-finanzas"></span>
+      <span id="submenu-proveedores"></span>
+      <span id="submenu-clientes"></span>
+      <span id="submenu-control-calidad"></span>
+      <span id="submenu-proyectos"></span>
+      <span id="submenu-bancos"></span>
+      <span id="submenu-rrhh"></span>
+      <span id="submenu-onboarding"></span>
+      <span id="submenu-crm"></span>
+    </div>
+
+    <div class="container">
+
+      <!-- ===== DASHBOARD INICIO ===== -->
+      <div id="seccion-inicio" class="seccion-inicio visible">
+        <div class="dashboard-header">
+          <h1 id="dashboard-saludo"></h1>
+          <p class="dashboard-fecha" id="dashboard-fecha"></p>
+        </div>
+        <div class="dashboard-cards">
+          <div class="dashboard-card dashboard-card-blue">
+            <span class="dashboard-card-label">Facturas pendientes</span>
+            <span class="dashboard-card-value" id="dash-pendientes-count">—</span>
+            <span class="dashboard-card-sub">Todas las empresas</span>
+          </div>
+          <div class="dashboard-card dashboard-card-yellow">
+            <span class="dashboard-card-label">Importe pendiente</span>
+            <span class="dashboard-card-value" id="dash-importe-pendiente">—</span>
+            <span class="dashboard-card-sub">Total por cobrar</span>
+          </div>
+          <div class="dashboard-card dashboard-card-green">
+            <span class="dashboard-card-label">Facturas este mes</span>
+            <span class="dashboard-card-value" id="dash-mes-count">—</span>
+            <span class="dashboard-card-sub" id="dash-mes-label">Mes actual</span>
+          </div>
+          <div class="dashboard-card dashboard-card-gray">
+            <span class="dashboard-card-label">Empresas activas</span>
+            <span class="dashboard-card-value" id="dash-empresas-count">—</span>
+            <span class="dashboard-card-sub">Configuradas</span>
+          </div>
+        </div>
+        <div class="dashboard-panels">
+          <div class="card dashboard-panel">
+            <h2 class="dashboard-panel-title">Últimas facturas recibidas</h2>
+            <div class="tabla-wrapper">
+              <table id="tabla-dash-ultimas">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Proveedor</th>
+                    <th class="numero">Total</th>
+                    <th>Empresa</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-dash-ultimas">
+                  <tr><td colspan="4" class="sin-datos">Cargando...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card dashboard-panel">
+            <h2 class="dashboard-panel-title">Facturas pendientes por empresa</h2>
+            <div class="tabla-wrapper">
+              <table id="tabla-dash-pendientes">
+                <thead>
+                  <tr>
+                    <th>Empresa</th>
+                    <th class="numero">Pendientes</th>
+                    <th class="numero">Importe</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-dash-pendientes">
+                  <tr><td colspan="3" class="sin-datos">Cargando...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="dashboard-panels dashboard-charts-row">
+          <div class="card dashboard-panel">
+            <h2 class="dashboard-panel-title">Facturación mensual</h2>
+            <div style="height:280px;position:relative;"><canvas id="chart-facturas-mes"></canvas></div>
+          </div>
+          <div class="card dashboard-panel">
+            <h2 class="dashboard-panel-title">Estado de facturas</h2>
+            <div style="height:280px;position:relative;"><canvas id="chart-estado-facturas"></canvas></div>
+          </div>
+        </div>
+        <div class="dashboard-panels dashboard-charts-row dashboard-charts-full">
+          <div class="card dashboard-panel" style="grid-column:1/-1;">
+            <h2 class="dashboard-panel-title">Top 5 proveedores por importe</h2>
+            <div style="height:250px;position:relative;"><canvas id="chart-top-proveedores"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="panel-facturas" class="panel-facturas">
+      <div>
+        <section>
           <div class="card">
+            <div class="breadcrumb-visual" id="breadcrumb-facturas-prov">Finanzas &rsaquo; Proveedores &rsaquo; Facturas</div>
             <div class="titulo-con-filtro-empresa">
-              <h1>Facturas cargadas</h1>
-              <div class="filtro-empresa-en-titulo">
-                <select id="empresa-listado" class="select-empresa">
-                  <option value="">Selecciona empresa…</option>
-                </select>
+              <h1>Facturas de proveedores</h1>
+              <div class="flex-row">
+                <button type="button" class="btn-small primary" id="btn-abrir-modal-procesar-prov" title="Subir y procesar facturas de proveedores">+ Procesar</button>
+                <div class="filtro-empresa-en-titulo">
+                  <select id="empresa-listado" class="select-empresa">
+                    <option value="">Selecciona empresa…</option>
+                  </select>
+                </div>
               </div>
             </div>
-            <p class="subtitle">
-              Elige la empresa, filtra por fecha y exporta el listado a Excel.
-            </p>
-
-            <div class="listado-header">
-              <select id="filtro-anio">
-                <option value="">Todos los años</option>
-              </select>
+            <div class="listado-filtros-bar">
+              <svg class="filtros-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+              <select id="filtro-anio"><option value="">Todos los años</option></select>
               <select id="filtro-mes">
                 <option value="">Todos los meses</option>
-                <option value="01">01 - Enero</option>
-                <option value="02">02 - Febrero</option>
-                <option value="03">03 - Marzo</option>
-                <option value="04">04 - Abril</option>
-                <option value="05">05 - Mayo</option>
-                <option value="06">06 - Junio</option>
-                <option value="07">07 - Julio</option>
-                <option value="08">08 - Agosto</option>
-                <option value="09">09 - Septiembre</option>
-                <option value="10">10 - Octubre</option>
-                <option value="11">11 - Noviembre</option>
-                <option value="12">12 - Diciembre</option>
+                <option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option>
+                <option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option>
+                <option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option>
+                <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
               </select>
               <select id="filtro-estado-pago" aria-label="Estado Pago">
                 <option value="">Estado Pago</option>
-                <option value="pendiente">Pendiente</option>
-                <option value="parcial">Parcial</option>
-                <option value="pagada">Pagada</option>
+                <option value="pendiente">Pendiente</option><option value="parcial">Parcial</option><option value="pagada">Pagada</option>
               </select>
-              <select id="filtro-tarjeta" aria-label="Tarjeta">
-                <option value="">Todas las tarjetas</option>
+              <select id="filtro-tarjeta" aria-label="Pagado vía">
+                <option value="">Pagado vía</option>
+                <option value="__banco__">Banco (sin tarjeta)</option>
               </select>
-
-              <button type="button" class="secondary" id="btn-cargar-listado">Cargar listado</button>
-              <button type="button" class="secondary" id="btn-filtro-alertas" style="background:#fef2f2;color:#b91c1c;border-color:#fca5a5;display:none;" title="Mostrar solo facturas con alertas">⚠ Alertas</button>
-              <button type="button" class="secondary" id="btn-exportar">Descargar Excel</button>
-              <button type="button" class="secondary" id="btn-descargar-facturas">Descargar facturas</button>
-              <button type="button" class="btn-eliminar-seleccionadas" id="btn-eliminar-seleccionadas">Eliminar seleccionadas</button>
-              <span class="contador" id="contador"></span>
+              <button type="button" class="btn-alerta-activa" id="btn-filtro-alertas" style="display:none;" title="Mostrar solo facturas con alertas">⚠ Alertas</button>
+              <div class="acciones-derecha">
+                <button type="button" class="btn-icon-accion" id="btn-cargar-listado" title="Actualizar listado"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg></button>
+                <button type="button" class="btn-icon-descarga" id="btn-exportar" title="Descargar Excel"><svg width="18" height="18" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="3" fill="#107C41"/><text x="12" y="15.5" text-anchor="middle" fill="#fff" font-size="7" font-weight="700" font-family="Inter,sans-serif">XLS</text></svg></button>
+                <button type="button" class="btn-icon-descarga" id="btn-descargar-facturas" title="Descargar facturas (PDF)"><svg width="18" height="18" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="3" fill="#DC2626"/><text x="12" y="15.5" text-anchor="middle" fill="#fff" font-size="7" font-weight="700" font-family="Inter,sans-serif">PDF</text></svg></button>
+                <button type="button" class="btn-icon-trash" id="btn-eliminar-seleccionadas" title="Eliminar seleccionadas"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                <span class="contador" id="contador"></span>
+              </div>
             </div>
 
             <div class="tabla-wrapper">
@@ -176,16 +273,43 @@
               </table>
             </div>
             <div id="sin-datos" class="sin-datos" style="display: none;">
-              No hay facturas cargadas para esta empresa. Sube facturas con el formulario de la izquierda.
+              No hay facturas cargadas para esta empresa. Usa el botón «+ Procesar facturas» para subir nuevas.
             </div>
           </div>
         </section>
+      </div>
+
+      <div id="modal-procesar-prov-overlay" class="modal-overlay" aria-hidden="true" aria-labelledby="modal-procesar-prov-titulo">
+        <div class="modal-editar modal-sm" role="dialog">
+          <h2 id="modal-procesar-prov-titulo">Procesar facturas de proveedores</h2>
+          <p class="subtitle">Elige la empresa, sube las facturas y deja que el equipo de agentes las procese y archive.</p>
+          <form id="facturas-form">
+            <label for="empresa">Empresa</label>
+            <select id="empresa" name="empresa" class="select-empresa" required>
+              <option value="">Selecciona empresa…</option>
+            </select>
+            <label for="facturas-tarjeta">Pagado con tarjeta (opcional)</label>
+            <select id="facturas-tarjeta" name="tarjeta_id">
+              <option value="">Sin tarjeta / pago directo</option>
+            </select>
+            <label for="archivos">Facturas / tickets</label>
+            <input id="archivos" name="archivos" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,image/*" />
+            <button type="button" class="btn-seleccionar-facturas" id="btn-seleccionar-facturas">Seleccionar facturas</button>
+            <ul class="lista-archivos" id="lista-archivos" aria-live="polite"></ul>
+            <div class="status mt-2" id="status"></div>
+            <div class="modal-actions">
+              <button type="button" class="secondary" id="btn-cerrar-modal-procesar-prov">Cerrar</button>
+              <button type="submit" class="primary">Procesar</button>
+            </div>
+          </form>
+        </div>
       </div>
       </div>
 
       <div id="panel-proveedores" class="panel-proveedores">
         <section class="bloque-proveedores">
           <div class="card">
+            <div class="breadcrumb-visual">Finanzas &rsaquo; Proveedores &rsaquo; Únicos</div>
             <div class="titulo-con-filtro-empresa">
               <h1>Proveedores</h1>
               <div class="filtro-empresa-en-titulo">
@@ -200,41 +324,35 @@
             <div class="proveedores-layout">
               <div class="proveedores-lista-wrapper">
                 <label>Listado de proveedores</label>
+                <div class="lista-acciones-top">
+                  <button type="button" class="primary btn-sm" id="btn-nuevo-proveedor">+ Nuevo proveedor</button>
+                  <button type="button" class="btn-icon-accion" id="btn-sincronizar-facturas-proveedores" title="Sincronizar facturas con maestro de proveedores"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg></button>
+                </div>
                 <ul id="lista-proveedores" aria-label="Proveedores de la empresa"></ul>
-                <button type="button" class="secondary" id="btn-nuevo-proveedor" style="margin-top: 8px;">Nuevo proveedor</button>
               </div>
               <div class="proveedores-facturas-wrapper">
                 <h3 id="titulo-facturas-proveedor">Facturas del proveedor seleccionado</h3>
-                <div class="listado-header proveedores-filtros" id="proveedores-filtros-wrap" style="display: none;">
-                  <select id="filtro-anio-proveedor">
-                    <option value="">Todos los años</option>
-                  </select>
+                <div class="listado-filtros-bar" id="proveedores-filtros-wrap" style="display: none;">
+                  <svg class="filtros-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                  <select id="filtro-anio-proveedor"><option value="">Todos los años</option></select>
                   <select id="filtro-mes-proveedor">
                     <option value="">Todos los meses</option>
-                    <option value="01">01 - Enero</option>
-                    <option value="02">02 - Febrero</option>
-                    <option value="03">03 - Marzo</option>
-                    <option value="04">04 - Abril</option>
-                    <option value="05">05 - Mayo</option>
-                    <option value="06">06 - Junio</option>
-                    <option value="07">07 - Julio</option>
-                    <option value="08">08 - Agosto</option>
-                    <option value="09">09 - Septiembre</option>
-                    <option value="10">10 - Octubre</option>
-                    <option value="11">11 - Noviembre</option>
-                    <option value="12">12 - Diciembre</option>
+                    <option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option>
+                    <option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option>
+                    <option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option>
+                    <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
                   </select>
                   <select id="filtro-estado-pago-proveedor" aria-label="Estado Pago">
                     <option value="">Estado Pago</option>
-                    <option value="pendiente">Pendiente</option>
-                    <option value="parcial">Parcial</option>
-                    <option value="pagada">Pagada</option>
+                    <option value="pendiente">Pendiente</option><option value="parcial">Parcial</option><option value="pagada">Pagada</option>
                   </select>
                   <select id="filtro-tarjeta-proveedor" aria-label="Tarjeta">
                     <option value="">Todas las tarjetas</option>
                   </select>
-                  <button type="button" class="secondary" id="btn-exportar-proveedor">Descargar Excel</button>
-                  <button type="button" class="secondary" id="btn-descargar-facturas-proveedor">Descargar facturas</button>
+                  <div class="acciones-derecha">
+                    <button type="button" class="btn-icon-descarga" id="btn-exportar-proveedor" title="Descargar Excel"><svg width="18" height="18" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="3" fill="#107C41"/><text x="12" y="15.5" text-anchor="middle" fill="#fff" font-size="7" font-weight="700" font-family="Inter,sans-serif">XLS</text></svg></button>
+                    <button type="button" class="btn-icon-descarga" id="btn-descargar-facturas-proveedor" title="Descargar facturas (PDF)"><svg width="18" height="18" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="3" fill="#DC2626"/><text x="12" y="15.5" text-anchor="middle" fill="#fff" font-size="7" font-weight="700" font-family="Inter,sans-serif">PDF</text></svg></button>
+                  </div>
                 </div>
                 <div id="proveedores-sin-seleccion">Selecciona un proveedor de la lista.</div>
                 <div class="tabla-wrapper" id="tabla-facturas-proveedor-wrapper" style="display: none;">
@@ -258,7 +376,7 @@
                     <tbody id="tbody-facturas-proveedor"></tbody>
                   </table>
                 </div>
-                <p id="contador-facturas-proveedor" class="contador" style="margin-top: 8px;"></p>
+                <p id="contador-facturas-proveedor" class="contador mt-2"></p>
               </div>
             </div>
             <div id="modal-proveedor" class="modal-overlay" role="dialog" aria-labelledby="modal-proveedor-titulo" aria-modal="true">
@@ -311,7 +429,7 @@
                   <div class="form-actions">
                     <button type="submit" class="primary">Guardar</button>
                     <button type="button" class="secondary" id="btn-cancelar-proveedor">Cancelar</button>
-                    <button type="button" class="secondary btn-danger" id="btn-eliminar-proveedor" style="margin-left: auto; display: none;">Eliminar</button>
+                    <button type="button" class="secondary btn-danger ml-auto" id="btn-eliminar-proveedor" style="display: none;">Eliminar</button>
                   </div>
                 </form>
               </div>
@@ -323,6 +441,7 @@
       <div id="panel-cecos" class="panel-cecos">
         <section class="bloque-cecos">
           <div class="card">
+            <div class="breadcrumb-visual">Finanzas &rsaquo; Proveedores &rsaquo; CeCos</div>
             <h1>CeCos</h1>
             <p class="subtitle">
               Asigna un centro de coste a cada proveedor para clasificar mejor los gastos.
@@ -338,7 +457,7 @@
                   <option value="">Selecciona empresa…</option>
                 </select>
                 <span class="empresa-contexto" id="empresa-contexto-cecos" aria-live="polite"></span>
-                <p class="subtitle" style="margin-top: 4px; font-size: 0.8rem;">
+                <p class="subtitle subtitle-sm mt-1">
                   Selecciona una empresa para ver sus proveedores y asignarles un centro de coste.
                 </p>
               </div>
@@ -357,7 +476,7 @@
                     <tbody id="tbody-cecos"></tbody>
                   </table>
                 </div>
-                <p id="cecos-mensaje" class="contador" style="margin-top: 8px;"></p>
+                <p id="cecos-mensaje" class="contador mt-2"></p>
               </div>
             </div>
           </div>
@@ -365,59 +484,44 @@
       </div>
 
       <div id="panel-clientes-facturas" class="panel-clientes">
-        <div class="layout">
-          <section class="col-left">
+        <div>
+          <section>
             <div class="card">
-              <h1>Procesar facturas de clientes</h1>
-              <p class="subtitle">
-                Sube las facturas emitidas y deja que los agentes extraigan la información y las archiven.
-              </p>
-
-              <form id="cli-procesar-form">
-                <label for="cli-empresa-proc">Empresa</label>
-                <select id="cli-empresa-proc" class="select-empresa" required>
-                  <option value="">Selecciona empresa…</option>
-                </select>
-
-                <label for="cli-archivos">Facturas emitidas</label>
-                <input id="cli-archivos" name="archivos" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,image/*" />
-                <button type="button" class="btn-seleccionar-facturas" id="cli-btn-seleccionar">Seleccionar facturas</button>
-                <ul class="lista-archivos" id="cli-lista-archivos" aria-live="polite"></ul>
-
-                <button type="submit" class="primary">Procesar</button>
-              </form>
-
-              <div class="status" id="cli-proc-status"></div>
-            </div>
-
-          </section>
-          <section class="col-right">
-            <div class="card">
+              <div class="breadcrumb-visual">Finanzas &rsaquo; Clientes &rsaquo; Facturas</div>
               <div class="titulo-con-filtro-empresa">
                 <h1>Facturas emitidas a clientes</h1>
-                <div class="filtro-empresa-en-titulo">
-                  <select id="cli-empresa-listado" class="select-empresa">
-                    <option value="">Selecciona empresa…</option>
-                  </select>
+                <div class="flex-row">
+                  <button type="button" class="btn-small primary" id="btn-abrir-modal-procesar-cli" title="Subir y procesar facturas de clientes">+ Procesar</button>
+                  <div class="filtro-empresa-en-titulo">
+                    <select id="cli-empresa-listado" class="select-empresa">
+                      <option value="">Selecciona empresa…</option>
+                    </select>
+                  </div>
                 </div>
               </div>
-              <p class="subtitle">Listado de facturas registradas. Filtra, ordena y gestiona.</p>
-              <div class="listado-header">
+              <div class="listado-filtros-bar">
+                <svg class="filtros-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                 <select id="cli-filtro-anio"><option value="">Todos los años</option></select>
                 <select id="cli-filtro-mes">
                   <option value="">Todos los meses</option>
-                  <option value="01">01 - Enero</option><option value="02">02 - Febrero</option>
-                  <option value="03">03 - Marzo</option><option value="04">04 - Abril</option>
-                  <option value="05">05 - Mayo</option><option value="06">06 - Junio</option>
-                  <option value="07">07 - Julio</option><option value="08">08 - Agosto</option>
-                  <option value="09">09 - Septiembre</option><option value="10">10 - Octubre</option>
-                  <option value="11">11 - Noviembre</option><option value="12">12 - Diciembre</option>
+                  <option value="01">Enero</option><option value="02">Febrero</option>
+                  <option value="03">Marzo</option><option value="04">Abril</option>
+                  <option value="05">Mayo</option><option value="06">Junio</option>
+                  <option value="07">Julio</option><option value="08">Agosto</option>
+                  <option value="09">Septiembre</option><option value="10">Octubre</option>
+                  <option value="11">Noviembre</option><option value="12">Diciembre</option>
                 </select>
-                <button type="button" class="secondary" id="cli-btn-cargar">Cargar listado</button>
-                <button type="button" class="secondary" id="cli-btn-exportar">Descargar Excel</button>
-                <button type="button" class="secondary" id="cli-btn-descargar-facturas">Descargar facturas</button>
-                <button type="button" class="btn-eliminar-seleccionadas" id="cli-btn-eliminar">Eliminar seleccionadas</button>
-                <span class="contador" id="cli-contador"></span>
+                <select id="cli-filtro-cobro" title="Filtrar por estado de cobro">
+                  <option value="">Todos los cobros</option>
+                  <option value="pendiente">Pendiente</option><option value="cobrada">Cobrada</option><option value="parcial">Parcial</option>
+                </select>
+              <div class="acciones-derecha">
+                  <button type="button" class="btn-icon-accion" id="cli-btn-cargar" title="Actualizar listado"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg></button>
+                  <button type="button" class="btn-icon-descarga" id="cli-btn-exportar" title="Descargar Excel"><svg width="18" height="18" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="3" fill="#107C41"/><text x="12" y="15.5" text-anchor="middle" fill="#fff" font-size="7" font-weight="700" font-family="Inter,sans-serif">XLS</text></svg></button>
+                  <button type="button" class="btn-icon-descarga" id="cli-btn-descargar-facturas" title="Descargar facturas (PDF)"><svg width="18" height="18" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="3" fill="#DC2626"/><text x="12" y="15.5" text-anchor="middle" fill="#fff" font-size="7" font-weight="700" font-family="Inter,sans-serif">PDF</text></svg></button>
+                  <button type="button" class="btn-icon-trash" id="cli-btn-eliminar" title="Eliminar seleccionadas"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                  <span class="contador" id="cli-contador"></span>
+                </div>
               </div>
               <div class="tabla-wrapper">
                 <table id="tabla-clientes-facturas">
@@ -431,11 +535,34 @@
             </div>
           </section>
         </div>
+
+        <div id="modal-procesar-cli-overlay" class="modal-overlay" aria-hidden="true" aria-labelledby="modal-procesar-cli-titulo">
+          <div class="modal-editar modal-sm" role="dialog">
+            <h2 id="modal-procesar-cli-titulo">Procesar facturas de clientes</h2>
+            <p class="subtitle">Sube las facturas emitidas y deja que los agentes extraigan la información y las archiven.</p>
+            <form id="cli-procesar-form">
+              <label for="cli-empresa-proc">Empresa</label>
+              <select id="cli-empresa-proc" class="select-empresa" required>
+                <option value="">Selecciona empresa…</option>
+              </select>
+              <label for="cli-archivos">Facturas emitidas</label>
+              <input id="cli-archivos" name="archivos" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,image/*" />
+              <button type="button" class="btn-seleccionar-facturas" id="cli-btn-seleccionar">Seleccionar facturas</button>
+              <ul class="lista-archivos" id="cli-lista-archivos" aria-live="polite"></ul>
+              <div class="status mt-2" id="cli-proc-status"></div>
+              <div class="modal-actions">
+                <button type="button" class="secondary" id="btn-cerrar-modal-procesar-cli">Cerrar</button>
+                <button type="submit" class="primary">Procesar</button>
+              </div>
+            </form>
+          </div>
+        </div>
       </div>
 
       <div id="panel-clientes-listado" class="panel-clientes">
         <section class="bloque-proveedores">
           <div class="card">
+            <div class="breadcrumb-visual">Finanzas &rsaquo; Clientes &rsaquo; Listado</div>
             <div class="titulo-con-filtro-empresa">
               <h1>Clientes</h1>
               <div class="filtro-empresa-en-titulo">
@@ -450,26 +577,29 @@
             <div class="proveedores-layout">
               <div class="proveedores-lista-wrapper">
                 <label>Listado de clientes</label>
+                <div class="lista-acciones-top">
+                  <button type="button" class="primary btn-sm" id="btn-nuevo-cliente">+ Nuevo cliente</button>
+                </div>
                 <ul id="lista-clientes-unicos" aria-label="Clientes de la empresa"></ul>
-                <button type="button" class="secondary" id="btn-nuevo-cliente" style="margin-top: 8px;">Nuevo cliente</button>
               </div>
               <div class="proveedores-facturas-wrapper">
                 <h3 id="titulo-facturas-cliente">Facturas del cliente seleccionado</h3>
-                <div class="listado-header proveedores-filtros" id="clientes-listado-filtros-wrap" style="display: none;">
-                  <select id="filtro-anio-cliente-listado">
-                    <option value="">Todos los años</option>
-                  </select>
+                <div class="listado-filtros-bar" id="clientes-listado-filtros-wrap" style="display: none;">
+                  <svg class="filtros-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                  <select id="filtro-anio-cliente-listado"><option value="">Todos los años</option></select>
                   <select id="filtro-mes-cliente-listado">
                     <option value="">Todos los meses</option>
-                    <option value="01">01 - Enero</option><option value="02">02 - Febrero</option>
-                    <option value="03">03 - Marzo</option><option value="04">04 - Abril</option>
-                    <option value="05">05 - Mayo</option><option value="06">06 - Junio</option>
-                    <option value="07">07 - Julio</option><option value="08">08 - Agosto</option>
-                    <option value="09">09 - Septiembre</option><option value="10">10 - Octubre</option>
-                    <option value="11">11 - Noviembre</option><option value="12">12 - Diciembre</option>
+                    <option value="01">Enero</option><option value="02">Febrero</option>
+                    <option value="03">Marzo</option><option value="04">Abril</option>
+                    <option value="05">Mayo</option><option value="06">Junio</option>
+                    <option value="07">Julio</option><option value="08">Agosto</option>
+                    <option value="09">Septiembre</option><option value="10">Octubre</option>
+                    <option value="11">Noviembre</option><option value="12">Diciembre</option>
                   </select>
-                  <button type="button" class="secondary" id="cli-listado-btn-exportar">Descargar Excel</button>
-                  <button type="button" class="secondary" id="cli-listado-btn-descargar">Descargar facturas</button>
+                  <div class="acciones-derecha">
+                    <button type="button" class="btn-icon-descarga" id="cli-listado-btn-exportar" title="Descargar Excel"><svg width="18" height="18" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="3" fill="#107C41"/><text x="12" y="15.5" text-anchor="middle" fill="#fff" font-size="7" font-weight="700" font-family="Inter,sans-serif">XLS</text></svg></button>
+                    <button type="button" class="btn-icon-descarga" id="cli-listado-btn-descargar" title="Descargar facturas (PDF)"><svg width="18" height="18" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="3" fill="#DC2626"/><text x="12" y="15.5" text-anchor="middle" fill="#fff" font-size="7" font-weight="700" font-family="Inter,sans-serif">PDF</text></svg></button>
+                  </div>
                 </div>
                 <div id="clientes-sin-seleccion">Selecciona un cliente de la lista.</div>
                 <div class="tabla-wrapper" id="tabla-facturas-cliente-wrapper" style="display: none;">
@@ -490,12 +620,13 @@
                         <th class="numero">P. transporte</th>
                         <th class="numero">IVA</th>
                         <th class="numero">Total a pagar</th>
+                        <th>Cobro</th>
                       </tr>
                     </thead>
                     <tbody id="tbody-facturas-cliente-listado"></tbody>
                   </table>
                 </div>
-                <p id="contador-facturas-cliente-listado" class="contador" style="margin-top: 8px;"></p>
+                <p id="contador-facturas-cliente-listado" class="contador mt-2"></p>
               </div>
             </div>
             <div id="modal-cliente" class="modal-overlay" role="dialog" aria-labelledby="modal-cliente-titulo" aria-modal="true" aria-hidden="true">
@@ -548,7 +679,7 @@
                   <div class="form-actions">
                     <button type="submit" class="primary">Guardar</button>
                     <button type="button" class="secondary" id="btn-cancelar-cliente">Cancelar</button>
-                    <button type="button" class="secondary btn-danger" id="btn-eliminar-cliente" style="margin-left: auto; display: none;">Eliminar</button>
+                    <button type="button" class="secondary btn-danger ml-auto" id="btn-eliminar-cliente" style="display: none;">Eliminar</button>
                   </div>
                 </form>
               </div>
@@ -557,31 +688,77 @@
         </section>
       </div>
 
-    </div>
+      <!-- ===== DASHBOARD FINANZAS ===== -->
+      <div id="panel-finanzas-inicio" class="panel-finanzas">
+        <div class="breadcrumb-visual">Finanzas</div>
+        <h1>Finanzas</h1>
+        <p class="subtitle" style="font-size:14px;color:#64748B;margin:0 0 20px;">Visión general del área financiera</p>
+        <div class="modulo-nav-grid">
+          <div class="modulo-nav-card modulo-nav-card-blue" data-nav="finanzas:proveedores">
+            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <div><span class="modulo-nav-title">Proveedores</span><p class="modulo-nav-desc">Facturas recibidas, maestro de proveedores y centros de coste</p></div>
+          </div>
+          <div class="modulo-nav-card modulo-nav-card-green" data-nav="finanzas:clientes">
+            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="7" r="3"/><path d="M2 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/><circle cx="18" cy="9" r="2.5"/><path d="M22 21c0-3-2.2-5.5-5-5.9"/></svg>
+            <div><span class="modulo-nav-title">Clientes</span><p class="modulo-nav-desc">Facturas emitidas, maestro de clientes y cobros</p></div>
+          </div>
+          <div class="modulo-nav-card modulo-nav-card-yellow" data-nav="finanzas:bancos">
+            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
+            <div><span class="modulo-nav-title">Bancos</span><p class="modulo-nav-desc">Movimientos bancarios, conciliación y tarjetas</p></div>
+          </div>
+          <div class="modulo-nav-card modulo-nav-card-red" data-nav="finanzas:control_calidad">
+            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            <div><span class="modulo-nav-title">Control de calidad</span><p class="modulo-nav-desc">Análisis de errores y validación de datos</p></div>
+          </div>
+        </div>
+        <div class="modulo-metricas" id="finanzas-metricas">
+          <span class="resumen-item"><span class="resumen-label">Facturado proveedores (año)</span><span class="resumen-valor" id="fin-met-prov">—</span></span>
+          <span class="resumen-item"><span class="resumen-label">Facturado clientes (año)</span><span class="resumen-valor" id="fin-met-cli">—</span></span>
+          <span class="resumen-item"><span class="resumen-label">Movimientos sin conciliar</span><span class="resumen-valor" id="fin-met-sinconc">—</span></span>
+        </div>
+      </div>
 
+      <!-- ===== DASHBOARD PROYECTOS ===== -->
       <div id="panel-proyectos-inicio" class="panel-proyectos">
-        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
-          <h1>Proyectos</h1>
-          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+        <div class="breadcrumb-visual">Proyectos</div>
+        <h1>Proyectos</h1>
+        <p class="subtitle" style="font-size:14px;color:#64748B;margin:0 0 20px;">Gestión de proyectos y logística</p>
+        <div class="modulo-nav-grid">
+          <div class="modulo-nav-card modulo-nav-card-blue" data-nav="proyectos:transporte">
+            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+            <div><span class="modulo-nav-title">Transporte</span><p class="modulo-nav-desc">Gestión de rutas, proveedores de transporte y cotizaciones</p></div>
+          </div>
+          <div class="modulo-nav-card modulo-nav-card-disabled">
+            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+            <div><span class="modulo-nav-title">Cotizados</span><span class="badge-proximamente">Próximamente</span></div>
+          </div>
+          <div class="modulo-nav-card modulo-nav-card-disabled">
+            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <div><span class="modulo-nav-title">Vivos</span><span class="badge-proximamente">Próximamente</span></div>
+          </div>
+          <div class="modulo-nav-card modulo-nav-card-disabled">
+            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <div><span class="modulo-nav-title">Terminados</span><span class="badge-proximamente">Próximamente</span></div>
+          </div>
         </div>
       </div>
 
       <div id="panel-proyectos-cotizados" class="panel-proyectos">
-        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+        <div class="card card-placeholder">
           <h1>Cotizados</h1>
-          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+          <p class="subtitle subtitle-lg">Próximamente</p>
         </div>
       </div>
       <div id="panel-proyectos-vivos" class="panel-proyectos">
-        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+        <div class="card card-placeholder">
           <h1>Vivos</h1>
-          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+          <p class="subtitle subtitle-lg">Próximamente</p>
         </div>
       </div>
       <div id="panel-proyectos-terminados" class="panel-proyectos">
-        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+        <div class="card card-placeholder">
           <h1>Terminados</h1>
-          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+          <p class="subtitle subtitle-lg">Próximamente</p>
         </div>
       </div>
 
@@ -589,24 +766,31 @@
         <div class="layout transporte-layout">
           <section class="col-left">
             <div class="card">
+              <div class="breadcrumb-visual">Proyectos &rsaquo; Transporte</div>
               <h1>Transporte de maquinaria</h1>
               <p class="subtitle">
                 Introduce origen y destino para calcular la ruta y ver proveedores situados a lo largo del trayecto.
               </p>
               <form id="form-transporte" class="transporte-form">
-                <label for="transporte-origen">Origen (dirección o localidad)</label>
-                <input type="text" id="transporte-origen" name="origen" placeholder="Ej. Madrid" required />
+                <label for="transporte-origen">Origen <span class="label-hint">(dirección o localidad)</span></label>
+                <div class="input-icon-wrap">
+                  <svg class="input-icon-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                  <input type="text" id="transporte-origen" name="origen" placeholder="Ej. Madrid" required class="input-with-icon" />
+                </div>
                 <div class="transporte-paradas-wrap">
                   <label>Paradas intermedias</label>
                   <div id="transporte-paradas-list" class="transporte-paradas-list" aria-label="Paradas intermedias de la ruta"></div>
                   <button type="button" id="transporte-anadir-parada" class="transporte-btn-parada">+ Añadir parada</button>
                 </div>
-                <label for="transporte-destino">Destino (dirección o localidad)</label>
-                <input type="text" id="transporte-destino" name="destino" placeholder="Ej. Sevilla" required />
+                <label for="transporte-destino">Destino <span class="label-hint">(dirección o localidad)</span></label>
+                <div class="input-icon-wrap">
+                  <svg class="input-icon-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                  <input type="text" id="transporte-destino" name="destino" placeholder="Ej. Sevilla" required class="input-with-icon" />
+                </div>
                 <button type="submit" class="primary" id="btn-transporte-buscar">Buscar ruta y proveedores</button>
               </form>
-              <div id="transporte-status" class="status" style="margin-top:12px;display:none;" aria-live="polite"></div>
-              <div id="transporte-ruta-resumen" class="transporte-ruta-resumen" style="margin-top:12px;display:none;font-size:0.9rem;color:#64748b;"></div>
+              <div id="transporte-status" class="status mt-3" style="display:none;" aria-live="polite"></div>
+              <div id="transporte-ruta-resumen" class="transporte-ruta-resumen mt-3" style="display:none;"></div>
             </div>
           </section>
           <section class="col-right transporte-map-section">
@@ -620,7 +804,10 @@
               <aside class="transporte-list-wrapper" aria-label="Proveedores de transporte en la ruta">
                 <div class="transporte-list-header">
                   <div class="transporte-list-title">Proveedores en la ruta</div>
-                  <button type="button" id="transporte-btn-nuevo" class="transporte-btn-nuevo">+ Incorporar transportista</button>
+                  <div class="transporte-list-header-buttons">
+                    <button type="button" id="transporte-btn-ver-listado" class="transporte-btn-listado">Ver transportistas</button>
+                    <button type="button" id="transporte-btn-nuevo" class="transporte-btn-nuevo">+ Nuevo</button>
+                  </div>
                 </div>
                 <div class="transporte-whatsapp-box">
                   <label for="transporte-whatsapp-mensaje">Mensaje</label>
@@ -635,6 +822,7 @@
                 <div id="transporte-listado-resumen" class="transporte-list-resumen"></div>
                 <div id="transporte-listado-proveedores" class="transporte-listado-proveedores"></div>
                 <div class="transporte-whatsapp-actions">
+                  <button type="button" id="transporte-btn-descargar-excel" class="transporte-btn-descargar-excel" title="Descargar listado de proveedores de la ruta en Excel">Descargar Excel</button>
                   <button type="button" id="transporte-btn-enviar-whatsapp" class="transporte-btn-enviar-whatsapp">Enviar por WhatsApp</button>
                 </div>
               </aside>
@@ -650,67 +838,68 @@
         </div>
 
         <div id="bancos-seccion-movimientos" class="bancos-seccion bancos-seccion-activa">
-          <div class="card bancos-carga-bar">
-          <form id="form-bancos-importar" class="bancos-carga-form">
-            <span class="bancos-carga-label">Cargar extracto</span>
-            <select id="bancos-empresa" name="empresa_id" class="select-empresa" title="Empresa (obligatorio para importar)">
-              <option value="">Selecciona empresa…</option>
-            </select>
-            <select id="bancos-banco" name="banco">
-              <option value="santander">Santander</option>
-              <option value="bbva">BBVA</option>
-            </select>
-            <input type="file" id="bancos-archivo" name="archivo" accept=".xlsx,.xls" required title="Archivo Excel" />
-            <button type="submit" class="primary" id="btn-bancos-cargar">Cargar</button>
-          </form>
-          <div class="status" id="bancos-status" style="margin-top:6px;min-height:1em;font-size:0.85rem;"></div>
-          <div id="bancos-resultado" style="margin-top:4px;display:none;font-size:0.85rem;">
-            <span><strong>Resultado:</strong></span>
-            <ul id="bancos-resultado-lista" style="margin:2px 0 0 0.5rem;padding-left:0;color:#374151;"></ul>
-          </div>
-        </div>
 
-        <div class="card" style="margin-top:16px;">
+        <div class="card">
+          <div class="breadcrumb-visual" id="bancos-breadcrumb">Finanzas &rsaquo; Bancos &rsaquo; Movimientos</div>
           <div class="titulo-con-filtro-empresa">
             <h1>Movimientos de caja</h1>
-            <div class="filtro-empresa-en-titulo">
-              <select id="bancos-filtro-empresa" class="select-empresa" style="width:auto;min-width:140px;">
-                <option value="">Selecciona empresa…</option>
-              </select>
+            <div class="flex-row" style="gap:10px;">
+              <button type="button" class="btn-outline-sm" id="btn-abrir-modal-importar" title="Importar extracto bancario"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-2px;margin-right:4px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Extracto</button>
+              <div class="filtro-empresa-en-titulo">
+                <select id="bancos-filtro-empresa" class="select-empresa select-inline">
+                  <option value="">Selecciona empresa…</option>
+                </select>
+              </div>
             </div>
           </div>
-          <p class="subtitle" style="font-size:0.95rem;color:#64748b;">
-            Listado unificado de todos los movimientos cargados. Filtra por banco y fechas.
-          </p>
-          <div id="bancos-conciliacion-block" style="display:none;margin-bottom:1rem;">
-            <div class="bancos-conciliacion-cabecera">
-              <h3 class="bancos-conciliacion-titulo">Sugerencias de conciliación</h3>
-              <p class="bancos-conciliacion-subtitle">Movimientos sin conciliar (y sin tarjeta) vs facturas pendientes o parciales: el importe del movimiento puede ser pago total o parcial (varios movimientos por factura). Mismo importe ± 0,50 € y fecha factura dentro del último año.</p>
+
+          <!-- Resumen de saldos (movido arriba) -->
+          <div id="bancos-resumen-periodo" class="bancos-resumen-periodo" style="display:none;"></div>
+
+          <!-- Conciliación colapsable -->
+          <div id="bancos-conciliacion-block" class="conciliacion-panel" style="display:none;">
+            <div class="conciliacion-panel-header" id="bancos-conciliacion-toggle">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+              <span>Sugerencias de conciliación</span>
+              <span class="conciliacion-badge" id="bancos-conciliacion-badge"></span>
+              <span class="conciliacion-tooltip" title="Movimientos sin conciliar vs facturas pendientes. Mismo importe ± umbral y fecha dentro del último año.">&#9432;</span>
+              <svg class="conciliacion-chevron" width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4"/></svg>
             </div>
-            <button type="button" class="secondary" id="bancos-btn-cargar-sugerencias">Cargar sugerencias</button>
-            <button type="button" class="secondary" id="bancos-btn-actualizar-sugerencias" title="Volver a cargar sugerencias">Actualizar</button>
-            <div id="bancos-sugerencias-list" style="margin-top:0.75rem;"></div>
+            <div class="conciliacion-panel-body" id="bancos-conciliacion-body" style="display:none;">
+              <div class="conciliacion-controls">
+                <label for="bancos-umbral-sugerencias" class="label-inline-sm">
+                  Umbral &euro; <input type="number" id="bancos-umbral-sugerencias" value="0.50" min="0" max="100" step="0.10" class="input-compact" title="Diferencia máxima en euros" />
+                </label>
+                <button type="button" class="secondary" id="bancos-btn-cargar-sugerencias">Cargar</button>
+                <button type="button" class="secondary" id="bancos-btn-actualizar-sugerencias" title="Recargar sugerencias">Actualizar</button>
+              </div>
+              <div id="bancos-sugerencias-list" class="mt-2"></div>
+            </div>
           </div>
-          <div class="listado-header">
+
+          <!-- Filtros compactos -->
+          <div class="listado-filtros-bar bancos-filtros-unificada">
+            <svg class="filtros-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
             <select id="bancos-filtro-banco">
               <option value="">Todos los bancos</option>
               <option value="santander">Santander</option>
               <option value="bbva">BBVA</option>
             </select>
-            <label for="bancos-filtro-fecha-desde" style="margin:0;display:inline-flex;align-items:center;gap:6px;">
-              Desde <input type="date" id="bancos-filtro-fecha-desde" style="width:auto;margin:0;" />
-            </label>
-            <label for="bancos-filtro-fecha-hasta" style="margin:0;display:inline-flex;align-items:center;gap:6px;">
-              Hasta <input type="date" id="bancos-filtro-fecha-hasta" style="width:auto;margin:0;" />
-            </label>
-            <label for="bancos-filtro-concepto" style="margin:0;display:inline-flex;align-items:center;gap:6px;">
-              Concepto <input type="text" id="bancos-filtro-concepto" placeholder="Buscar en concepto…" style="width:140px;margin:0;" />
-            </label>
-            <button type="button" class="secondary" id="bancos-btn-refrescar">Actualizar</button>
-            <button type="button" class="secondary" id="bancos-btn-exportar">Descargar Excel</button>
-            <button type="button" class="secondary" id="bancos-btn-borrar-seleccionados" title="Elimina los movimientos seleccionados">Borrar seleccionados</button>
+            <input type="date" id="bancos-filtro-fecha-desde" title="Desde" />
+            <input type="date" id="bancos-filtro-fecha-hasta" title="Hasta" />
+            <input type="text" id="bancos-filtro-concepto" placeholder="Concepto…" style="width:140px;" />
+            <div class="bancos-toggle-tipo" id="bancos-toggle-tipo">
+              <button type="button" class="activo" data-tipo="">Todos</button>
+              <button type="button" data-tipo="cargos">Cargos</button>
+              <button type="button" data-tipo="abonos">Abonos</button>
+            </div>
+            <div class="acciones-derecha">
+              <button type="button" class="btn-icon-accion" id="bancos-btn-refrescar" title="Actualizar listado"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg></button>
+              <button type="button" class="btn-icon-descarga" id="bancos-btn-exportar" title="Descargar Excel"><svg width="18" height="18" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="3" fill="#107C41"/><text x="12" y="15.5" text-anchor="middle" fill="#fff" font-size="7" font-weight="700" font-family="Inter,sans-serif">XLS</text></svg></button>
+              <button type="button" class="btn-icon-trash" id="bancos-btn-borrar-seleccionados" title="Eliminar seleccionados"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+              <span class="contador" id="bancos-contador">0 movimientos</span>
+            </div>
           </div>
-          <p class="contador" id="bancos-contador">0 movimientos</p>
           <div class="tabla-wrapper" id="tabla-wrapper-movimientos-bancos">
             <table id="tabla-movimientos-bancos">
               <thead>
@@ -722,70 +911,126 @@
                   <th class="numero">Importe</th>
                   <th class="numero">Saldo</th>
                   <th class="numero">Saldo acum.</th>
-                  <th>Conciliación</th>
-                  <th>Agrupación</th>
+                  <th>Vinculación</th>
                 </tr>
               </thead>
               <tbody id="tbody-movimientos-bancos">
-                <tr><td colspan="9" class="sin-datos">Cargando…</td></tr>
+                <tr><td colspan="8" class="sin-datos">Cargando…</td></tr>
               </tbody>
             </table>
           </div>
+          <div id="bancos-paginacion" class="bancos-paginacion" style="display:none;"></div>
         </div>
         </div>
 
-        <div id="bancos-seccion-tarjetas" class="bancos-seccion" style="margin-top:16px;">
+    <!-- Modal importar extracto -->
+    <div id="modal-importar-extracto-overlay" class="modal-overlay" aria-hidden="true">
+      <div class="modal-editar modal-sm" role="dialog" aria-labelledby="modal-importar-titulo">
+        <h2 id="modal-importar-titulo">Importar extracto bancario</h2>
+        <form id="form-bancos-importar" class="bancos-carga-form-modal">
+          <div class="form-group">
+            <label for="bancos-empresa">Empresa</label>
+            <select id="bancos-empresa" name="empresa_id" class="select-empresa" required>
+              <option value="">Selecciona empresa…</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="bancos-banco">Banco</label>
+            <select id="bancos-banco" name="banco">
+              <option value="santander">Santander</option>
+              <option value="bbva">BBVA</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Archivo</label>
+            <div class="file-upload-wrapper">
+              <input type="file" id="bancos-archivo" name="archivo" accept=".xlsx,.xls" required title="Archivo Excel" />
+              <label for="bancos-archivo" class="btn-file-upload">Seleccionar archivo</label>
+              <span class="file-upload-name" id="bancos-archivo-nombre">Ningún archivo</span>
+            </div>
+          </div>
+          <div class="status status-compact" id="bancos-status"></div>
+          <div id="bancos-resultado" class="bancos-resultado-wrap" style="display:none;">
+            <span><strong>Resultado:</strong></span>
+            <ul id="bancos-resultado-lista" class="bancos-resultado-items"></ul>
+          </div>
+          <div class="modal-actions">
+            <button type="submit" class="primary" id="btn-bancos-cargar">Cargar</button>
+            <button type="button" class="secondary" id="btn-cerrar-modal-importar">Cancelar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+        <div id="bancos-seccion-tarjetas" class="bancos-seccion mt-4">
           <div class="card">
             <div class="titulo-con-filtro-empresa">
               <h1>Tarjetas de bancos</h1>
               <div class="filtro-empresa-en-titulo">
-                <select id="bancos-tarjetas-empresa" class="select-empresa" style="width:auto;min-width:140px;">
+                <select id="bancos-tarjetas-empresa" class="select-empresa select-inline">
                   <option value="">Selecciona empresa…</option>
                 </select>
               </div>
             </div>
-            <p class="subtitle" style="font-size:0.95rem;color:#64748b;">
-              Maestro de tarjetas por empresa. Usa estas tarjetas para marcar facturas pagadas con tarjeta y preparar la conciliación de extractos.
-            </p>
-            <div class="bancos-tarjetas-actions">
-              <button type="button" class="secondary" id="btn-abrir-modal-tarjeta">+ Añadir tarjeta</button>
-            </div>
-            <div class="bancos-tarjetas-layout">
-              <div class="bancos-tarjetas-lista">
-                <table id="tabla-tarjetas-bancos">
-                  <thead>
-                    <tr>
-                      <th>Banco</th>
-                      <th>Persona</th>
-                      <th>Tarjeta</th>
-                      <th>Alias</th>
-                      <th>Estado</th>
-                      <th>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody id="tbody-tarjetas-bancos">
-                    <tr><td colspan="6" class="sin-datos">Selecciona una empresa para ver las tarjetas.</td></tr>
-                  </tbody>
-                </table>
+
+            <!-- Panel colapsable de tarjetas configuradas -->
+            <div class="conciliacion-panel" id="tarjetas-config-panel">
+              <div class="conciliacion-panel-header" id="tarjetas-config-toggle">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+                <span>Tarjetas configuradas</span>
+                <span class="conciliacion-badge" id="tarjetas-config-count"></span>
+                <button type="button" class="btn-small" id="btn-abrir-modal-tarjeta" style="margin-left:auto;" onclick="event.stopPropagation()">+ Añadir</button>
+                <svg class="conciliacion-chevron" width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4"/></svg>
+              </div>
+              <div class="conciliacion-panel-body" id="tarjetas-config-body" style="display:none;">
+                <p class="subtitle subtitle-sm mb-2">Maestro de tarjetas por empresa. Usa estas tarjetas para marcar facturas pagadas con tarjeta.</p>
+                <div class="tabla-wrapper">
+                  <table id="tabla-tarjetas-bancos">
+                    <thead>
+                      <tr>
+                        <th>Banco</th>
+                        <th>Persona</th>
+                        <th>Tarjeta</th>
+                        <th>Alias</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tbody-tarjetas-bancos">
+                      <tr><td colspan="6" class="sin-datos">Selecciona una empresa para ver las tarjetas.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
+
+            <div id="bancos-avisos-container"></div>
+
+            <!-- Extractos como contenido principal -->
             <div class="bancos-tarjetas-liquidaciones">
-              <h2 style="font-size:1rem;margin:1rem 0 0.25rem 0;">Extractos por tarjeta y periodo</h2>
-              <p class="subtitle" style="font-size:0.8rem;color:#64748b;margin-bottom:0.5rem;">
+              <h2 class="section-title-sm">Extractos por tarjeta y periodo</h2>
+              <p class="subtitle subtitle-sm mb-2">
                 Se calculan automáticamente a partir de las facturas marcadas como pagadas con tarjeta.
               </p>
-              <div class="listado-header" style="margin-bottom:0.5rem;">
-                <label for="extractos-filtro-tarjeta" style="margin:0;display:inline-flex;align-items:center;gap:6px;">
-                  Tarjeta
-                  <select id="extractos-filtro-tarjeta" style="width:auto;min-width:180px;">
-                    <option value="">Todas</option>
-                  </select>
-                </label>
-                <label for="extractos-filtro-periodo" style="margin:0;display:inline-flex;align-items:center;gap:6px;">
-                  Periodo
-                  <input type="month" id="extractos-filtro-periodo" style="width:auto;margin:0;" />
-                </label>
-                <span style="font-size:0.85rem;color:#64748b;">(dejar vacío = todos)</span>
+              <div class="listado-filtros-bar mb-2">
+                <svg class="filtros-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                <select id="extractos-filtro-tarjeta"><option value="">Todas las tarjetas</option></select>
+                <select id="extractos-filtro-mes">
+                  <option value="">Todos los meses</option>
+                  <option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option>
+                  <option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option>
+                  <option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option>
+                  <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+                </select>
+                <select id="extractos-filtro-anio">
+                  <option value="">Todos los años</option>
+                  <option value="2024">2024</option><option value="2025">2025</option><option value="2026">2026</option>
+                </select>
+                <div class="acciones-derecha extractos-leyenda" style="margin-bottom:0;">
+                  <svg width="16" height="16" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="3" fill="#107C41"/><text x="12" y="15.5" text-anchor="middle" fill="#fff" font-size="7" font-weight="700" font-family="Inter,sans-serif">XLS</text></svg><span class="ley-xls">Conciliación</span>
+                  <span style="color:#CBD5E1;margin:0 2px;">|</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="3" fill="#DC2626"/><text x="12" y="15.5" text-anchor="middle" fill="#fff" font-size="7" font-weight="700" font-family="Inter,sans-serif">PDF</text></svg><span class="ley-pdf">Facturas</span>
+                </div>
               </div>
               <div class="tabla-wrapper">
                 <table id="tabla-tarjetas-liquidaciones">
@@ -798,7 +1043,7 @@
                       <th class="numero">Importe mov.</th>
                       <th class="numero">Pendiente</th>
                       <th>Estado</th>
-                      <th>Acciones</th>
+                      <th>Descargar</th>
                     </tr>
                   </thead>
                   <tbody id="tbody-tarjetas-liquidaciones">
@@ -811,47 +1056,75 @@
         </div>
       </div>
 
+      <!-- ===== DASHBOARD RRHH ===== -->
       <div id="panel-rrhh-inicio" class="panel-rrhh">
-        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
-          <h1>RRHH</h1>
-          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+        <div class="breadcrumb-visual">RRHH</div>
+        <h1>Recursos Humanos</h1>
+        <p class="subtitle" style="font-size:14px;color:#64748B;margin:0 0 20px;">Gestión integral del equipo</p>
+        <div class="modulo-nav-grid">
+          <div class="modulo-nav-card modulo-nav-card-disabled">
+            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="7" r="3"/><path d="M2 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/><circle cx="18" cy="9" r="2.5"/><path d="M22 21c0-3-2.2-5.5-5-5.9"/></svg>
+            <div><span class="modulo-nav-title">Equipo</span><span class="badge-proximamente">Próximamente</span><p class="modulo-nav-desc">Gestión del equipo y asignación de proyectos</p></div>
+          </div>
+          <div class="modulo-nav-card modulo-nav-card-disabled">
+            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 9h20M8 15h2M14 15h2"/></svg>
+            <div><span class="modulo-nav-title">Nóminas</span><span class="badge-proximamente">Próximamente</span><p class="modulo-nav-desc">Gestión de nóminas mensuales y pagos</p></div>
+          </div>
+          <div class="modulo-nav-card modulo-nav-card-disabled">
+            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            <div><span class="modulo-nav-title">Adelantos</span><span class="badge-proximamente">Próximamente</span><p class="modulo-nav-desc">Control de adelantos de nómina</p></div>
+          </div>
+          <div class="modulo-nav-card modulo-nav-card-disabled">
+            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            <div><span class="modulo-nav-title">Reserva</span><span class="badge-proximamente">Próximamente</span><p class="modulo-nav-desc">Pool de candidatos y reserva de talento</p></div>
+          </div>
         </div>
       </div>
       <div id="panel-rrhh-equipo" class="panel-rrhh">
-        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+        <div class="card card-placeholder">
+          <svg class="placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="7" r="3"/><path d="M2 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/><circle cx="18" cy="9" r="2.5"/><path d="M22 21c0-3-2.2-5.5-5-5.9"/></svg>
           <h1>Equipo</h1>
-          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+          <span class="badge-proximamente">Próximamente</span>
+          <p class="placeholder-desc">Gestión del equipo y asignación de proyectos</p>
         </div>
       </div>
       <div id="panel-rrhh-reserva" class="panel-rrhh">
-        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+        <div class="card card-placeholder">
+          <svg class="placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="12" cy="16" r="1"/></svg>
           <h1>Reserva</h1>
-          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+          <span class="badge-proximamente">Próximamente</span>
+          <p class="placeholder-desc">Pool de candidatos y reserva de talento</p>
         </div>
       </div>
       <div id="panel-rrhh-alumni" class="panel-rrhh">
-        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+        <div class="card card-placeholder">
+          <svg class="placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 3 3 6 3s6-1 6-3v-5"/></svg>
           <h1>Alumni</h1>
-          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+          <span class="badge-proximamente">Próximamente</span>
+          <p class="placeholder-desc">Histórico de empleados y contacto con ex-miembros</p>
         </div>
       </div>
       <div id="panel-rrhh-nominas" class="panel-rrhh">
-        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
-          <h1>Nominas</h1>
-          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+        <div class="card card-placeholder">
+          <svg class="placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 9h20M8 15h2M14 15h2"/></svg>
+          <h1>Nóminas</h1>
+          <span class="badge-proximamente">Próximamente</span>
+          <p class="placeholder-desc">Gestión de nóminas mensuales y pagos al equipo</p>
         </div>
       </div>
       <div id="panel-rrhh-adelantos" class="panel-rrhh">
-        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+        <div class="card card-placeholder">
+          <svg class="placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
           <h1>Adelantos</h1>
-          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+          <span class="badge-proximamente">Próximamente</span>
+          <p class="placeholder-desc">Control de adelantos de nómina y liquidaciones</p>
         </div>
       </div>
 
       <div id="panel-onboarding-inicio" class="panel-onboarding">
-        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+        <div class="card card-placeholder">
           <h1>Onboarding</h1>
-          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+          <p class="subtitle subtitle-lg">Próximamente</p>
         </div>
       </div>
 
@@ -1069,51 +1342,64 @@
       </div>
 
       <div id="panel-control-calidad-inicio" class="panel-control-calidad">
-        <div class="card" style="max-width:800px;margin:40px auto;">
-          <h1>Control de calidad</h1>
-          <p class="subtitle" style="font-size:1rem;color:#64748b;">
-            Analiza las bases de facturas (proveedores y/o clientes) y revisa las filas con errores.
-          </p>
-          <form id="form-control-calidad" novalidate>
-            <label for="empresa-control-calidad">Empresa</label>
-            <select id="empresa-control-calidad" name="empresa_id" class="select-empresa" required>
-              <option value="">Selecciona empresa…</option>
-            </select>
-            <label for="tipo-control-calidad">Tipo de facturas</label>
-            <select id="tipo-control-calidad" name="tipo">
-              <option value="ambos">Ambos</option>
-              <option value="proveedores">Facturas proveedores</option>
-              <option value="clientes">Facturas clientes</option>
-            </select>
-            <label style="display:flex;align-items:center;gap:8px;margin:8px 0;">
-              <input type="checkbox" id="incluir-tests-control-calidad" name="incluir_tests" />
-              <span>Incluir tests unitarios</span>
-            </label>
-            <button type="submit" class="primary" id="btn-analizar-bases-datos">Analizar bases de datos</button>
-          </form>
-          <div id="control-calidad-status" class="status" style="margin-top:1rem;display:none;" aria-live="polite"></div>
-          <div id="control-calidad-resultados" style="margin-top:1.5rem;display:none;">
-            <div id="control-calidad-tests" style="margin-bottom:1rem;display:none;"></div>
-            <label style="display:flex;align-items:center;gap:8px;margin-bottom:0.5rem;">
-              <input type="checkbox" id="usar-llm-sugerencias" />
-              <span>Incluir asistente (LLM) al obtener sugerencias: envía factura y errores para que sugiera correcciones</span>
-            </label>
-            <h2 style="font-size:1.1rem;margin-bottom:0.5rem;">Facturas con problemas</h2>
-            <p id="control-calidad-resumen" style="margin:0 0 8px 0;color:#64748b;font-size:0.95rem;"></p>
-            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px;">
-              <label for="control-calidad-filtro-tipo-error" style="display:flex;align-items:center;gap:4px;">Filtrar por tipo de error:</label>
-              <select id="control-calidad-filtro-tipo-error" style="padding:4px 8px;">
-                <option value="">Todos</option>
-                <option value="Descuadre">Descuadre</option>
-                <option value="Sin fecha">Sin fecha</option>
-                <option value="Fecha futura">Fecha futura</option>
-              </select>
-              <button type="button" class="secondary" id="control-calidad-exportar-csv">Exportar informe (CSV)</button>
+        <div class="breadcrumb-visual">Finanzas &rsaquo; Control de calidad</div>
+        <h1 class="cc-titulo">Control de calidad</h1>
+        <p class="subtitle cc-subtitle">Analiza las bases de facturas y revisa las filas con errores.</p>
+
+        <!-- Formulario compacto -->
+        <div class="card cc-form-card">
+          <form id="form-control-calidad" class="cc-form" novalidate>
+            <div class="cc-form-row">
+              <div class="cc-form-field">
+                <label for="empresa-control-calidad">Empresa</label>
+                <select id="empresa-control-calidad" name="empresa_id" class="select-empresa" required>
+                  <option value="">Selecciona empresa…</option>
+                </select>
+              </div>
+              <div class="cc-form-field cc-form-field-sm">
+                <label for="tipo-control-calidad">Tipo</label>
+                <select id="tipo-control-calidad" name="tipo">
+                  <option value="ambos">Ambos</option>
+                  <option value="proveedores">Proveedores</option>
+                  <option value="clientes">Clientes</option>
+                </select>
+              </div>
+              <label class="label-checkbox cc-form-check">
+                <input type="checkbox" id="incluir-tests-control-calidad" name="incluir_tests" />
+                <span>Tests</span>
+              </label>
+              <button type="submit" class="primary cc-form-btn" id="btn-analizar-bases-datos">Analizar</button>
             </div>
-            <div id="control-calidad-lista"></div>
+            <label class="label-checkbox cc-form-llm">
+              <input type="checkbox" id="usar-llm-sugerencias" />
+              <span>Incluir asistente (LLM) en sugerencias</span>
+            </label>
+          </form>
+        </div>
+
+        <div id="control-calidad-status" class="status mt-3" style="display:none;" aria-live="polite"></div>
+
+        <!-- Resultados -->
+        <div id="control-calidad-resultados" style="display:none;">
+          <div id="control-calidad-tests" class="mb-3" style="display:none;"></div>
+          <!-- Barra de resumen -->
+          <div id="control-calidad-resumen-bar" class="cc-resumen-bar" style="display:none;"></div>
+          <!-- Filtro + exportar -->
+          <div class="cc-filtro-row">
+            <select id="control-calidad-filtro-tipo-error" class="select-compact">
+              <option value="">Todos los errores</option>
+              <option value="Descuadre">Descuadre</option>
+              <option value="Sin fecha">Sin fecha</option>
+              <option value="Fecha futura">Fecha futura</option>
+            </select>
+            <button type="button" class="btn-icon-descarga" id="control-calidad-exportar-csv" title="Exportar informe (CSV)"><svg width="18" height="18" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="3" fill="#64748B"/><text x="12" y="15.5" text-anchor="middle" fill="#fff" font-size="7" font-weight="700" font-family="Inter,sans-serif">CSV</text></svg></button>
           </div>
+          <!-- Grid de cards de errores -->
+          <div id="control-calidad-lista"></div>
         </div>
       </div>
+
+    </div><!-- /.container -->
 
     <div id="modal-editar-overlay" class="modal-overlay" aria-hidden="true">
       <div class="modal-editar" role="dialog" aria-labelledby="modal-editar-titulo">
@@ -1142,14 +1428,24 @@
           <input type="text" id="ed-concepto" name="resumen_concepto" />
           <label for="ed-numero">Nº factura</label>
           <input type="text" id="ed-numero" name="numero_factura" />
-          <label for="ed-base">Base</label>
-          <input type="text" id="ed-base" name="base_imponible" />
-          <label for="ed-iva">IVA</label>
-          <input type="text" id="ed-iva" name="iva" />
-          <label for="ed-retenciones">Retenciones</label>
-          <input type="text" id="ed-retenciones" name="retenciones_total" />
-          <label for="ed-total">Total a pagar</label>
-          <input type="text" id="ed-total" name="total_a_pagar" />
+          <div class="form-grid-2col">
+            <div class="form-grid-field">
+              <label for="ed-base">Base</label>
+              <input type="text" id="ed-base" name="base_imponible" />
+            </div>
+            <div class="form-grid-field">
+              <label for="ed-iva">IVA</label>
+              <input type="text" id="ed-iva" name="iva" />
+            </div>
+            <div class="form-grid-field">
+              <label for="ed-retenciones">Retenciones</label>
+              <input type="text" id="ed-retenciones" name="retenciones_total" />
+            </div>
+            <div class="form-grid-field">
+              <label for="ed-total">Total a pagar</label>
+              <input type="text" id="ed-total" name="total_a_pagar" />
+            </div>
+          </div>
           <label for="ed-tarjeta">Pagado con tarjeta (opcional)</label>
           <div class="fila-tarjeta-liquidacion">
             <select id="ed-tarjeta" name="tarjeta_id" aria-label="Pagado con tarjeta">
@@ -1158,18 +1454,18 @@
             <button type="button" class="secondary" id="ed-btn-extracto-mes-siguiente" title="Asignar esta factura al extracto del mes siguiente (el banco suele incluir cargos de fin de mes en la liquidación siguiente)">Extracto mes siguiente</button>
           </div>
           <input type="hidden" id="ed-liquidacion-periodo" name="liquidacion_periodo" />
-          <p id="ed-liquidacion-periodo-texto" class="subtitle" style="font-size:0.85rem;color:#64748b;margin-top:2px;min-height:1.2em;"></p>
+          <p id="ed-liquidacion-periodo-texto" class="subtitle ed-liquidacion-periodo-texto"></p>
           <label for="ed-estado-pago">Estado de pago</label>
           <select id="ed-estado-pago" name="estado_pago" aria-label="Estado de pago">
             <option value="pendiente">Pendiente</option>
             <option value="pagada">Pagada</option>
             <option value="parcial">Parcial</option>
           </select>
-          <div id="ed-conciliacion-wrap" class="ed-conciliacion-wrap" style="margin:1rem 0;padding:0.75rem;background:#f1f5f9;border-radius:6px;">
-            <h3 style="font-size:0.95rem;margin:0 0 0.5rem 0;">Conciliación bancaria</h3>
-            <p id="ed-conciliacion-resumen" style="margin:0 0 0.25rem 0;font-size:0.9rem;"></p>
-            <p id="ed-conciliacion-pendiente" style="margin:0;font-size:0.9rem;font-weight:600;"></p>
-            <div id="ed-conciliacion-movs" style="margin-top:0.5rem;font-size:0.85rem;"></div>
+          <div id="ed-conciliacion-wrap" class="ed-conciliacion-wrap conciliacion-box">
+            <h3 class="conciliacion-title">Conciliación bancaria</h3>
+            <p id="ed-conciliacion-resumen" class="conciliacion-text"></p>
+            <p id="ed-conciliacion-pendiente" class="conciliacion-highlight"></p>
+            <div id="ed-conciliacion-movs" class="conciliacion-detail"></div>
           </div>
           <label for="ed-comentarios">Comentarios revisión</label>
           <textarea id="ed-comentarios" name="comentarios_revision"></textarea>
@@ -1200,36 +1496,35 @@
           <input type="text" id="edc-cliente" name="cliente" />
           <label for="edc-nif">CIF / NIF</label>
           <input type="text" id="edc-nif" name="cif_nif" />
-          <label for="edc-pais">País</label>
-          <input type="text" id="edc-pais" name="pais" />
-          <label for="edc-localidad">Localidad</label>
-          <input type="text" id="edc-localidad" name="localidad" />
-          <label for="edc-proyecto">Proyecto</label>
-          <input type="text" id="edc-proyecto" name="proyecto" />
-          <label for="edc-tipologia">Tipología</label>
-          <select id="edc-tipologia" name="tipologia">
-            <option value="">Seleccionar…</option>
-            <option value="Administración">Administración</option>
-            <option value="Producción">Producción</option>
-          </select>
-          <label for="edc-hincadoras">Nº hincadoras</label>
-          <input type="text" id="edc-hincadoras" name="num_hincadoras" />
-          <label for="edc-ayudantes">Nº ayudantes</label>
-          <input type="text" id="edc-ayudantes" name="num_ayudantes" />
-          <label for="edc-pricing-servicio">Pricing servicio</label>
-          <input type="text" id="edc-pricing-servicio" name="pricing_servicio" />
-          <label for="edc-pricing-transporte">Pricing transporte</label>
-          <input type="text" id="edc-pricing-transporte" name="pricing_transporte" />
+          <div class="form-row">
+            <div class="form-group"><label for="edc-pais">País</label><input type="text" id="edc-pais" name="pais" /></div>
+            <div class="form-group"><label for="edc-localidad">Localidad</label><input type="text" id="edc-localidad" name="localidad" /></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label for="edc-proyecto">Proyecto</label><input type="text" id="edc-proyecto" name="proyecto" /></div>
+            <div class="form-group">
+              <label for="edc-tipologia">Tipología</label>
+              <select id="edc-tipologia" name="tipologia"><option value="">Seleccionar…</option><option value="Administración">Administración</option><option value="Producción">Producción</option></select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label for="edc-hincadoras">Hincadoras</label><input type="text" id="edc-hincadoras" name="num_hincadoras" /></div>
+            <div class="form-group"><label for="edc-ayudantes">Ayudantes</label><input type="text" id="edc-ayudantes" name="num_ayudantes" /></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label for="edc-pricing-servicio">P. Servicio</label><input type="text" id="edc-pricing-servicio" name="pricing_servicio" /></div>
+            <div class="form-group"><label for="edc-pricing-transporte">P. Transporte</label><input type="text" id="edc-pricing-transporte" name="pricing_transporte" /></div>
+          </div>
           <label for="edc-num-factura">Nº factura</label>
           <input type="text" id="edc-num-factura" name="numero_factura" />
-          <label for="edc-iva">IVA</label>
-          <input type="text" id="edc-iva" name="iva" />
-          <label for="edc-total">Total a cobrar</label>
-          <input type="text" id="edc-total" name="total_a_pagar" />
-          <div id="edc-conciliacion-wrap" class="ed-conciliacion-wrap" style="display:none;margin:1rem 0;padding:0.75rem;background:#f1f5f9;border-radius:6px;">
-            <h3 style="font-size:0.95rem;margin:0 0 0.5rem 0;">Conciliación bancaria (cobros)</h3>
-            <p id="edc-conciliacion-resumen" style="margin:0 0 0.25rem 0;font-size:0.9rem;"></p>
-            <p id="edc-conciliacion-pendiente" style="margin:0;font-size:0.9rem;font-weight:600;"></p>
+          <div class="form-row">
+            <div class="form-group"><label for="edc-iva">IVA</label><input type="text" id="edc-iva" name="iva" /></div>
+            <div class="form-group"><label for="edc-total">Total a cobrar</label><input type="text" id="edc-total" name="total_a_pagar" /></div>
+          </div>
+          <div id="edc-conciliacion-wrap" class="ed-conciliacion-wrap conciliacion-box" style="display:none;">
+            <h3 class="conciliacion-title">Conciliación bancaria (cobros)</h3>
+            <p id="edc-conciliacion-resumen" class="conciliacion-text"></p>
+            <p id="edc-conciliacion-pendiente" class="conciliacion-highlight"></p>
           </div>
           <div class="modal-actions">
             <button type="button" class="secondary" id="btn-cerrar-editar-cli">Cancelar</button>
@@ -1251,11 +1546,11 @@
           <input type="text" id="tarjeta-ultimos4" name="ultimos4" maxlength="4" placeholder="1234" />
           <label for="tarjeta-alias">Alias (opcional)</label>
           <input type="text" id="tarjeta-alias" name="alias" placeholder="Ej. Tarjeta marketing" />
-          <label style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+          <label class="label-checkbox">
             <input type="checkbox" id="tarjeta-activa" name="activa" checked />
             <span>Activa</span>
           </label>
-          <div id="tarjetas-status" class="status" style="margin-top:6px;min-height:1em;font-size:0.85rem;"></div>
+          <div id="tarjetas-status" class="status status-compact"></div>
           <div class="modal-actions">
             <button type="button" class="secondary" id="btn-cerrar-modal-tarjeta">Cancelar</button>
             <button type="submit" class="primary" id="btn-tarjeta-guardar">Guardar tarjeta</button>
@@ -1264,20 +1559,129 @@
       </div>
     </div>
 
+    <div id="modal-transportista-overlay" class="modal-overlay" aria-hidden="true" aria-labelledby="modal-transportista-titulo">
+      <div class="modal-editar modal-md" role="dialog">
+        <h2 id="modal-transportista-titulo">Incorporar transportista</h2>
+        <form id="form-transportista" novalidate>
+          <label for="transportista-nombre">Nombre de empresa <span class="required">*</span></label>
+          <input type="text" id="transportista-nombre" name="nombre" placeholder="Ej. Transportes García SL" required />
+          <div class="form-row">
+            <div class="form-group"><label for="transportista-direccion">Dirección</label><input type="text" id="transportista-direccion" name="direccion" placeholder="Calle y número" /></div>
+            <div class="form-group"><label for="transportista-codigo-postal">Código postal</label><input type="text" id="transportista-codigo-postal" name="codigo_postal" placeholder="28001" /></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label for="transportista-localidad">Localidad</label><input type="text" id="transportista-localidad" name="localidad" placeholder="Ej. Madrid" /></div>
+            <div class="form-group"><label for="transportista-provincia">Provincia</label><input type="text" id="transportista-provincia" name="provincia" placeholder="Ej. Madrid" /></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label for="transportista-telefono-fijo">Teléfono fijo</label><input type="text" id="transportista-telefono-fijo" name="telefono_fijo" placeholder="912 345 678" /></div>
+            <div class="form-group"><label for="transportista-telefono-movil">Teléfono móvil</label><input type="text" id="transportista-telefono-movil" name="telefono_movil" placeholder="600 123 456" /></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label for="transportista-email">Email</label><input type="email" id="transportista-email" name="email" placeholder="contacto@empresa.com" /></div>
+            <div class="form-group"><label for="transportista-web">Web</label><input type="url" id="transportista-web" name="web" placeholder="https://..." /></div>
+          </div>
+          <div id="transportista-status" class="status status-compact"></div>
+          <div class="modal-actions">
+            <button type="button" class="secondary" id="btn-cerrar-modal-transportista">Cancelar</button>
+            <button type="submit" class="primary" id="btn-transportista-guardar">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="modal-listado-transportistas-overlay" class="modal-overlay modal-listado-transportistas" aria-hidden="true" aria-labelledby="modal-listado-transportistas-titulo">
+      <div class="modal-editar modal-listado-transportistas-content modal-xl" role="dialog" style="position:relative;">
+        <button type="button" id="transporte-listado-cerrar" class="modal-close-x" title="Cerrar">&times;</button>
+        <h2 id="modal-listado-transportistas-titulo">Proveedores de transporte</h2>
+        <div class="transporte-listado-modal-toolbar">
+          <label for="transporte-filtro-provincia" class="label-inline">Provincia
+            <select id="transporte-filtro-provincia" class="transporte-select-provincia" style="width:300px;">
+              <option value="">Todas</option>
+            </select>
+          </label>
+          <span class="contador" id="transporte-listado-contador"></span>
+        </div>
+        <div class="transporte-listado-modal-table-wrap">
+          <table class="tabla-transportistas-admin" id="tabla-transportistas-admin">
+            <thead>
+              <tr>
+                <th data-col="nombre" class="sortable">Nombre</th>
+                <th data-col="provincia" class="sortable">Provincia</th>
+                <th data-col="codigo_postal" class="sortable">C.P.</th>
+                <th data-col="telefono" class="sortable">Teléfono</th>
+                <th data-col="email" class="sortable">Email</th>
+                <th data-col="web" class="sortable">Web</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-transportistas-admin-body">
+            </tbody>
+          </table>
+        </div>
+        <div class="transporte-listado-modal-carga">
+          <h3 class="transporte-listado-carga-titulo">Carga masiva desde Excel</h3>
+          <p class="subtitle subtitle-sm">Sube un archivo .xlsx con columnas (Nombre/Empresa, Provincia, Localidad, CP, Dirección, Fijo, Móvil, Email, Web, Lat, Lon).</p>
+          <form id="form-carga-masiva-transportistas" class="transporte-carga-masiva-form">
+            <div class="file-upload-wrapper">
+              <input type="file" id="transporte-carga-masiva-archivo" name="archivo" accept=".xlsx,.xls" />
+              <label for="transporte-carga-masiva-archivo" class="btn-file-upload">Seleccionar archivo</label>
+              <span class="file-upload-name" id="transporte-carga-masiva-nombre">Ningún archivo</span>
+            </div>
+            <button type="submit" class="primary" id="btn-carga-masiva-transportistas">Subir Excel</button>
+          </form>
+          <div id="transporte-carga-masiva-status" class="status status-compact"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="modal-editar-transportista-overlay" class="modal-overlay" aria-hidden="true" aria-labelledby="modal-editar-transportista-titulo">
+      <div class="modal-editar modal-md" role="dialog">
+        <h2 id="modal-editar-transportista-titulo">Editar transportista</h2>
+        <form id="form-editar-transportista" novalidate>
+          <input type="hidden" id="editar-transportista-id" name="id" />
+          <label for="editar-transportista-nombre">Nombre de empresa <span class="required">*</span></label>
+          <input type="text" id="editar-transportista-nombre" name="nombre" required />
+          <div class="form-row">
+            <div class="form-group"><label for="editar-transportista-direccion">Dirección</label><input type="text" id="editar-transportista-direccion" name="direccion" /></div>
+            <div class="form-group"><label for="editar-transportista-codigo-postal">Código postal</label><input type="text" id="editar-transportista-codigo-postal" name="codigo_postal" /></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label for="editar-transportista-localidad">Localidad</label><input type="text" id="editar-transportista-localidad" name="localidad" /></div>
+            <div class="form-group"><label for="editar-transportista-provincia">Provincia</label><input type="text" id="editar-transportista-provincia" name="provincia" /></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label for="editar-transportista-telefono-fijo">Teléfono fijo</label><input type="text" id="editar-transportista-telefono-fijo" name="telefono_fijo" /></div>
+            <div class="form-group"><label for="editar-transportista-telefono-movil">Teléfono móvil</label><input type="text" id="editar-transportista-telefono-movil" name="telefono_movil" /></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label for="editar-transportista-email">Email</label><input type="email" id="editar-transportista-email" name="email" /></div>
+            <div class="form-group"><label for="editar-transportista-web">Web</label><input type="url" id="editar-transportista-web" name="web" /></div>
+          </div>
+          <div id="editar-transportista-status" class="status status-compact"></div>
+          <div class="modal-actions">
+            <button type="button" class="secondary" id="btn-cerrar-editar-transportista">Cancelar</button>
+            <button type="submit" class="primary" id="btn-editar-transportista-guardar">Guardar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div id="modal-vincular-extracto-overlay" class="modal-overlay" aria-hidden="true" aria-labelledby="modal-vincular-extracto-titulo">
       <div class="modal-editar" role="dialog">
         <h2 id="modal-vincular-extracto-titulo">Vincular movimiento a extracto de tarjeta</h2>
-        <p class="subtitle" style="font-size:0.9rem;color:#64748b;margin-bottom:1rem;">Elige la tarjeta y el periodo (liquidación) con el que conciliar este movimiento.</p>
+        <p class="subtitle mb-2">Este movimiento corresponde a un cargo de tarjeta en tu cuenta bancaria. Vinculalo con la tarjeta y el mes de liquidación para conciliar el extracto.</p>
+        <div id="vincular-extracto-mov-info" class="info-box"></div>
         <form id="form-vincular-extracto" novalidate>
           <input type="hidden" id="vincular-extracto-movimiento-id" name="movimiento_id" />
           <input type="hidden" id="vincular-extracto-empresa-id" name="empresa_id" />
-          <label for="vincular-extracto-tarjeta">Tarjeta</label>
+          <label for="vincular-extracto-tarjeta" class="label-inline">Tarjeta <span class="label-hint" title="Se muestran solo las tarjetas activas de la empresa seleccionada">(?)</span></label>
           <select id="vincular-extracto-tarjeta" name="tarjeta_id" required>
             <option value="">Selecciona tarjeta…</option>
           </select>
-          <label for="vincular-extracto-periodo">Periodo (YYYY-MM)</label>
+          <label for="vincular-extracto-periodo" class="label-inline">Periodo de liquidación <span class="label-hint" title="Mes en que el banco cargó el extracto de la tarjeta (normalmente el mes del movimiento o el anterior)">(?)</span></label>
           <input type="month" id="vincular-extracto-periodo" name="periodo" required />
-          <div id="vincular-extracto-status" class="status" style="margin-top:6px;min-height:1em;font-size:0.85rem;"></div>
+          <div id="vincular-extracto-status" class="status status-compact"></div>
           <div class="modal-actions">
             <button type="button" class="secondary" id="btn-cerrar-modal-vincular-extracto">Cancelar</button>
             <button type="submit" class="primary" id="btn-vincular-extracto-confirmar">Vincular</button>
@@ -1287,13 +1691,13 @@
     </div>
 
     <div id="modal-conciliar-factura-overlay" class="modal-overlay" aria-hidden="true" aria-labelledby="modal-conciliar-factura-titulo">
-      <div class="modal-editar modal-conciliar-factura" role="dialog" style="max-width: 720px;">
+      <div class="modal-editar modal-conciliar-factura modal-lg" role="dialog">
         <h2 id="modal-conciliar-factura-titulo">Conciliar factura</h2>
-        <p class="subtitle" style="font-size:0.9rem;color:#64748b;margin-bottom:0.5rem;">Vincular este movimiento a una factura pendiente o parcial de pago.</p>
-        <div id="conciliar-factura-mov-info" class="bancos-conciliar-mov-info" style="margin-bottom:1rem;padding:0.5rem;background:#f1f5f9;border-radius:4px;font-size:0.9rem;"></div>
+        <p class="subtitle mb-2">Vincular este movimiento a una factura pendiente o parcial de pago.</p>
+        <div id="conciliar-factura-mov-info" class="bancos-conciliar-mov-info info-box-muted"></div>
         <label for="conciliar-factura-buscar">Buscar facturas (proveedor, concepto, número)</label>
-        <input type="text" id="conciliar-factura-buscar" placeholder="Escriba para filtrar…" style="width:100%;margin-bottom:0.75rem;padding:6px 8px;" />
-        <div class="tabla-wrapper" style="max-height:280px;overflow:auto;">
+        <input type="text" id="conciliar-factura-buscar" class="conciliar-factura-buscar" placeholder="Escriba para filtrar…" />
+        <div class="tabla-wrapper tabla-wrapper-scroll">
           <table id="tabla-conciliar-facturas">
             <thead>
               <tr>
@@ -1309,14 +1713,15 @@
             <tbody id="tbody-conciliar-facturas"></tbody>
           </table>
         </div>
-        <p id="conciliar-factura-sin-datos" class="sin-datos" style="display:none;margin-top:0.5rem;">No hay facturas pendientes o parciales para esta empresa.</p>
-        <div class="modal-actions" style="margin-top:1rem;">
+        <p id="conciliar-factura-sin-datos" class="sin-datos mt-2" style="display:none;">No hay facturas pendientes o parciales para esta empresa.</p>
+        <div class="modal-actions mt-4">
           <button type="button" class="secondary" id="btn-cerrar-modal-conciliar-factura">Cancelar</button>
         </div>
       </div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/static/js/app.js"></script>
   </body>
 </html>

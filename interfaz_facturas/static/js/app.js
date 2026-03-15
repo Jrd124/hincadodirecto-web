@@ -1,3 +1,49 @@
+// ===== TOAST NOTIFICATIONS =====
+(function () {
+  var container = document.createElement("div");
+  container.className = "toast-container";
+  document.body.appendChild(container);
+  window.mostrarToast = function (mensaje, tipo) {
+    tipo = tipo || "info";
+    var toast = document.createElement("div");
+    toast.className = "toast toast-" + tipo;
+    toast.textContent = mensaje;
+    container.appendChild(toast);
+    // Force layout to ensure the initial transform is applied before transitioning
+    toast.offsetHeight;
+    toast.classList.add("toast-visible");
+    setTimeout(function () {
+      toast.classList.add("toast-hiding");
+      toast.classList.remove("toast-visible");
+      setTimeout(function () {
+        if (toast.parentNode) toast.parentNode.removeChild(toast);
+      }, 300);
+    }, 3000);
+  };
+})();
+
+// ===== VALIDACIÓN INLINE =====
+function marcarCampoError(inputEl, mensaje) {
+  if (!inputEl) return;
+  inputEl.classList.add("input-error");
+  var existente = inputEl.parentNode.querySelector(".form-error-msg");
+  if (!existente) {
+    var msg = document.createElement("span");
+    msg.className = "form-error-msg";
+    msg.textContent = mensaje || "Este campo es obligatorio";
+    inputEl.parentNode.insertBefore(msg, inputEl.nextSibling);
+  }
+  function limpiar() {
+    inputEl.classList.remove("input-error");
+    var m = inputEl.parentNode.querySelector(".form-error-msg");
+    if (m) m.remove();
+    inputEl.removeEventListener("input", limpiar);
+    inputEl.removeEventListener("change", limpiar);
+  }
+  inputEl.addEventListener("input", limpiar);
+  inputEl.addEventListener("change", limpiar);
+}
+
 // Rellenar todos los selects de empresa desde la API (una sola fuente de verdad)
 (function rellenarSelectsEmpresa() {
   fetch("/api/empresas?t=" + Date.now())
@@ -59,12 +105,19 @@ function actualizarContextosEmpresa() {
 var btnAbrirModalTarjeta;
 var btnCerrarModalTarjeta;
 const MODULOS = {
+  inicio: {
+    linkId: "nav-inicio-modulo",
+    submenuId: "submenu-inicio",
+    paneles: { inicio: "seccion-inicio" },
+    subNavLinks: {},
+    defecto: "inicio",
+  },
   finanzas: {
     linkId: "nav-finanzas-modulo",
     submenuId: "submenu-finanzas",
-    paneles: {}, // se gestionan por hijo
+    paneles: { inicio: "panel-finanzas-inicio" },
     subNavLinks: { proveedores: "nav-finanzas-proveedores", clientes: "nav-finanzas-clientes", control_calidad: "nav-finanzas-control-calidad", bancos: "nav-finanzas-bancos" },
-    defecto: "proveedores",
+    defecto: "inicio",
   },
   proveedores: {
     linkId: null,
@@ -83,9 +136,9 @@ const MODULOS = {
   proyectos: {
     linkId: "nav-proyectos-modulo",
     submenuId: "submenu-proyectos",
-    paneles: { cotizados: "panel-proyectos-cotizados", vivos: "panel-proyectos-vivos", terminados: "panel-proyectos-terminados", transporte: "panel-proyectos-transporte", onboarding: "panel-onboarding-inicio" },
+    paneles: { inicio: "panel-proyectos-inicio", cotizados: "panel-proyectos-cotizados", vivos: "panel-proyectos-vivos", terminados: "panel-proyectos-terminados", transporte: "panel-proyectos-transporte", onboarding: "panel-onboarding-inicio" },
     subNavLinks: { cotizados: "nav-proyectos-cotizados", vivos: "nav-proyectos-vivos", terminados: "nav-proyectos-terminados", transporte: "nav-proyectos-transporte", onboarding: "nav-proyectos-onboarding" },
-    defecto: "cotizados",
+    defecto: "inicio",
   },
   bancos: {
     linkId: null,
@@ -97,9 +150,9 @@ const MODULOS = {
   rrhh: {
     linkId: "nav-rrhh-modulo",
     submenuId: "submenu-rrhh",
-    paneles: { equipo: "panel-rrhh-equipo", reserva: "panel-rrhh-reserva", alumni: "panel-rrhh-alumni", nominas: "panel-rrhh-nominas", adelantos: "panel-rrhh-adelantos" },
+    paneles: { inicio: "panel-rrhh-inicio", equipo: "panel-rrhh-equipo", reserva: "panel-rrhh-reserva", alumni: "panel-rrhh-alumni", nominas: "panel-rrhh-nominas", adelantos: "panel-rrhh-adelantos" },
     subNavLinks: { equipo: "nav-rrhh-equipo", reserva: "nav-rrhh-reserva", alumni: "nav-rrhh-alumni", nominas: "nav-rrhh-nominas", adelantos: "nav-rrhh-adelantos" },
-    defecto: "equipo",
+    defecto: "inicio",
   },
   onboarding: {
     linkId: "nav-onboarding-modulo",
@@ -124,7 +177,7 @@ const MODULOS = {
   },
 };
 
-let moduloActivo = "finanzas";
+let moduloActivo = "inicio";
 let finanzasChild = "proveedores";
 let proveedoresSubpanel = "facturas";
 let clientesSubpanel = "clientes_facturas";
@@ -132,34 +185,257 @@ let proyectosSubpanel = "cotizados";
 let rrhhSubpanel = "equipo";
 let crmSubpanel = "inicio";
 
+var _hashUpdateInProgress = false;
 function actualizarHash() {
+  if (_hashUpdateInProgress) return;
   var partes = [moduloActivo];
-  if (moduloActivo === "finanzas") {
+  if (moduloActivo === "finanzas" && finanzasChild !== "inicio") {
     partes.push(finanzasChild);
     if (finanzasChild === "proveedores") partes.push(proveedoresSubpanel);
     else if (finanzasChild === "clientes") partes.push(clientesSubpanel);
-  } else if (moduloActivo === "proyectos") {
+  } else if (moduloActivo === "proyectos" && proyectosSubpanel !== "inicio") {
     partes.push(proyectosSubpanel);
-  } else if (moduloActivo === "rrhh") {
+  } else if (moduloActivo === "rrhh" && rrhhSubpanel !== "inicio") {
     partes.push(rrhhSubpanel);
   } else if (moduloActivo === "crm") {
     partes.push(crmSubpanel);
   }
   var h = partes.join("/");
-  if (location.hash.slice(1) !== h) location.hash = h;
+  if (location.hash.slice(1) !== h) {
+    _hashUpdateInProgress = true;
+    location.hash = h;
+    _hashUpdateInProgress = false;
+  }
 }
 
+function cargarDashboard() {
+  var elFecha = document.getElementById("dashboard-fecha");
+  if (elFecha) {
+    var hoy = new Date();
+    var opciones = { weekday: "long", year: "numeric", month: "long", day: "numeric" };
+    var fechaStr = hoy.toLocaleDateString("es-ES", opciones);
+    elFecha.textContent = fechaStr.charAt(0).toUpperCase() + fechaStr.slice(1);
+  }
+  fetch("/api/dashboard?t=" + Date.now())
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var hora = new Date().getHours();
+      var saludo = hora < 14 ? "Buenos días" : hora < 20 ? "Buenas tardes" : "Buenas noches";
+      if (data.usuario) {
+        var nombre = data.usuario.charAt(0).toUpperCase() + data.usuario.slice(1);
+        saludo += ", " + nombre;
+      }
+      var elSaludo = document.getElementById("dashboard-saludo");
+      if (elSaludo) elSaludo.textContent = saludo;
+      var elPend = document.getElementById("dash-pendientes-count");
+      if (elPend) elPend.textContent = data.facturas_pendientes_count != null ? data.facturas_pendientes_count : "—";
+      var elImporte = document.getElementById("dash-importe-pendiente");
+      if (elImporte) elImporte.textContent = data.importe_pendiente_total != null ? formatearNumeroES(data.importe_pendiente_total) + " €" : "—";
+      var elMes = document.getElementById("dash-mes-count");
+      if (elMes) elMes.textContent = data.facturas_mes_count != null ? data.facturas_mes_count : "—";
+      var elMesLabel = document.getElementById("dash-mes-label");
+      if (elMesLabel) {
+        var meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+        elMesLabel.textContent = meses[new Date().getMonth()] + " " + new Date().getFullYear();
+      }
+      var elEmpresas = document.getElementById("dash-empresas-count");
+      if (elEmpresas) elEmpresas.textContent = data.empresas_activas != null ? data.empresas_activas : "—";
+
+      var tablaUltimas = document.getElementById("tabla-dash-ultimas");
+      if (tablaUltimas && data.ultimas_facturas) {
+        var tbody = tablaUltimas.querySelector("tbody");
+        if (!tbody) { tbody = document.createElement("tbody"); tablaUltimas.appendChild(tbody); }
+        tbody.innerHTML = "";
+        if (data.ultimas_facturas.length === 0) {
+          tbody.innerHTML = "<tr><td colspan=\"4\" style=\"text-align:center;color:#94A3B8;padding:24px;\">Sin facturas recientes</td></tr>";
+        } else {
+          data.ultimas_facturas.forEach(function (f) {
+            var tr = document.createElement("tr");
+            tr.innerHTML = "<td>" + (f.fecha || "—") + "</td><td>" + (f.proveedor || "—") + "</td><td class=\"numero\">" + formatearNumeroES(f.total) + " €</td><td>" + (f.empresa || "—") + "</td>";
+            tbody.appendChild(tr);
+          });
+        }
+      }
+
+      var tablaPend = document.getElementById("tabla-dash-pendientes");
+      if (tablaPend && data.pendientes_por_empresa) {
+        var tbody2 = tablaPend.querySelector("tbody");
+        if (!tbody2) { tbody2 = document.createElement("tbody"); tablaPend.appendChild(tbody2); }
+        tbody2.innerHTML = "";
+        if (data.pendientes_por_empresa.length === 0) {
+          tbody2.innerHTML = "<tr><td colspan=\"3\" style=\"text-align:center;color:#94A3B8;padding:24px;\">Sin facturas pendientes</td></tr>";
+        } else {
+          data.pendientes_por_empresa.forEach(function (e) {
+            var tr = document.createElement("tr");
+            tr.innerHTML = "<td>" + (e.empresa || "—") + "</td><td class=\"numero\">" + (e.count || 0) + "</td><td class=\"numero\">" + formatearNumeroES(e.importe) + " €</td>";
+            tbody2.appendChild(tr);
+          });
+        }
+      }
+
+      // --- Gráficos del dashboard ---
+      renderizarGraficosDashboard(data);
+    })
+    .catch(function (err) { console.error("Error cargando dashboard:", err); });
+}
+
+var _chartInstances = {};
+function _destroyChart(key) {
+  if (_chartInstances[key]) { _chartInstances[key].destroy(); _chartInstances[key] = null; }
+}
+
+function renderizarGraficosDashboard(data) {
+  if (typeof Chart === "undefined") return;
+
+  // Defaults globales
+  Chart.defaults.font.family = "'Inter', sans-serif";
+  Chart.defaults.font.size = 12;
+  Chart.defaults.color = "#64748B";
+  Chart.defaults.elements.bar.borderWidth = 0;
+  Chart.defaults.elements.arc.borderWidth = 0;
+  Chart.defaults.responsive = true;
+  Chart.defaults.maintainAspectRatio = false;
+
+  // 1) Facturación mensual (bar + line)
+  if (data.facturas_por_mes && data.facturas_por_mes.length) {
+    _destroyChart("facturasMes");
+    var ctx1 = document.getElementById("chart-facturas-mes");
+    if (ctx1) {
+      _chartInstances["facturasMes"] = new Chart(ctx1, {
+        type: "bar",
+        data: {
+          labels: data.facturas_por_mes.map(function(d) { return d.mes; }),
+          datasets: [
+            {
+              label: "Importe (€)",
+              data: data.facturas_por_mes.map(function(d) { return d.importe; }),
+              backgroundColor: "rgba(37,99,235,0.8)",
+              borderRadius: 6,
+              yAxisID: "y",
+              order: 2
+            },
+            {
+              label: "Nº facturas",
+              data: data.facturas_por_mes.map(function(d) { return d.count; }),
+              type: "line",
+              borderColor: "#F59E0B",
+              backgroundColor: "#F59E0B",
+              pointRadius: 4,
+              pointBackgroundColor: "#F59E0B",
+              tension: 0.3,
+              yAxisID: "y1",
+              order: 1
+            }
+          ]
+        },
+        options: {
+          plugins: { legend: { display: false }, tooltip: { enabled: true } },
+          scales: {
+            x: { grid: { display: false } },
+            y: { grid: { color: "#E2E8F0" }, beginAtZero: true, ticks: { callback: function(v) { return v.toLocaleString("es-ES") + " €"; } } },
+            y1: { position: "right", grid: { drawOnChartArea: false }, beginAtZero: true, ticks: { stepSize: 1, precision: 0 } }
+          }
+        }
+      });
+    }
+  }
+
+  // 2) Estado de facturas (doughnut)
+  if (data.facturas_por_estado) {
+    _destroyChart("estadoFacturas");
+    var ctx2 = document.getElementById("chart-estado-facturas");
+    if (ctx2) {
+      var est = data.facturas_por_estado;
+      var totalFacturas = (est.pendiente || 0) + (est.pagada || 0) + (est.parcial || 0);
+      _chartInstances["estadoFacturas"] = new Chart(ctx2, {
+        type: "doughnut",
+        data: {
+          labels: ["Pendiente", "Pagada", "Parcial"],
+          datasets: [{
+            data: [est.pendiente || 0, est.pagada || 0, est.parcial || 0],
+            backgroundColor: ["#F59E0B", "#10B981", "#3B82F6"],
+            hoverOffset: 6
+          }]
+        },
+        options: {
+          cutout: "70%",
+          plugins: {
+            legend: { position: "bottom", labels: { padding: 16 } },
+            tooltip: { enabled: true }
+          }
+        },
+        plugins: [{
+          id: "centerText",
+          afterDraw: function(chart) {
+            var ctx = chart.ctx;
+            var w = chart.width, h = chart.chartArea.bottom - chart.chartArea.top;
+            var cy = chart.chartArea.top + h / 2;
+            ctx.save();
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.font = "600 28px 'Inter', sans-serif";
+            ctx.fillStyle = "#1E293B";
+            ctx.fillText(totalFacturas, w / 2, cy - 8);
+            ctx.font = "12px 'Inter', sans-serif";
+            ctx.fillStyle = "#64748B";
+            ctx.fillText("facturas", w / 2, cy + 16);
+            ctx.restore();
+          }
+        }]
+      });
+    }
+  }
+
+  // 3) Top 5 proveedores (horizontal bar)
+  if (data.top_proveedores && data.top_proveedores.length) {
+    _destroyChart("topProveedores");
+    var ctx3 = document.getElementById("chart-top-proveedores");
+    if (ctx3) {
+      var gradient = ctx3.getContext("2d").createLinearGradient(0, 0, ctx3.parentElement.offsetWidth, 0);
+      gradient.addColorStop(0, "#2563EB");
+      gradient.addColorStop(1, "#60A5FA");
+      _chartInstances["topProveedores"] = new Chart(ctx3, {
+        type: "bar",
+        data: {
+          labels: data.top_proveedores.map(function(d) { return d.nombre; }),
+          datasets: [{
+            data: data.top_proveedores.map(function(d) { return d.importe; }),
+            backgroundColor: gradient,
+            borderRadius: 6
+          }]
+        },
+        options: {
+          indexAxis: "y",
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: function(ctx) { return ctx.parsed.x.toLocaleString("es-ES", { minimumFractionDigits: 2 }) + " €"; } } }
+          },
+          scales: {
+            x: { grid: { color: "#E2E8F0" }, beginAtZero: true, ticks: { callback: function(v) { return v.toLocaleString("es-ES") + " €"; } } },
+            y: { grid: { display: false } }
+          }
+        }
+      });
+    }
+  }
+}
+
+var _restaurandoHash = false;
 function restaurarDesdeHash() {
+  if (_restaurandoHash) return;
+  _restaurandoHash = true;
+  try {
   var h = (location.hash || "").replace(/^#/, "").trim();
   if (!h) return;
   var partes = h.split("/").filter(Boolean);
   if (partes.length === 0) return;
   var mod = partes[0];
   if (mod === "finanzas") {
-    activarModulo("finanzas");
     if (partes.length >= 2) {
       var child = partes[1];
       if (child === "bancos" || child === "control_calidad" || child === "proveedores" || child === "clientes") {
+        finanzasChild = child;
+        activarModulo("finanzas");
         activarFinanzasChild(child);
         if (child === "proveedores" && partes.length >= 3) {
           var sp = partes[2];
@@ -168,16 +444,46 @@ function restaurarDesdeHash() {
           var sp = partes[2];
           if (sp === "clientes_facturas" || sp === "clientes_listado") activarSubpanel("clientes", sp);
         }
+      } else {
+        finanzasChild = "inicio";
+        activarModulo("finanzas");
       }
+    } else {
+      finanzasChild = "inicio";
+      activarModulo("finanzas");
     }
-  } else if (mod === "proyectos" && partes.length >= 2) {
-    var sp = partes[1];
-    activarModulo("proyectos");
-    if (["cotizados", "vivos", "terminados", "transporte", "onboarding"].indexOf(sp) >= 0) activarSubpanel("proyectos", sp);
-  } else if (mod === "rrhh" && partes.length >= 2) {
-    var sp = partes[1];
-    activarModulo("rrhh");
-    if (["equipo", "reserva", "alumni", "nominas", "adelantos"].indexOf(sp) >= 0) activarSubpanel("rrhh", sp);
+  } else if (mod === "proyectos") {
+    if (partes.length >= 2) {
+      var sp = partes[1];
+      if (["cotizados", "vivos", "terminados", "transporte", "onboarding"].indexOf(sp) >= 0) {
+        proyectosSubpanel = sp;
+        activarModulo("proyectos");
+        activarSubpanel("proyectos", sp);
+      } else {
+        proyectosSubpanel = "inicio";
+        activarModulo("proyectos");
+      }
+    } else {
+      proyectosSubpanel = "inicio";
+      activarModulo("proyectos");
+    }
+  } else if (mod === "rrhh") {
+    if (partes.length >= 2) {
+      var sp = partes[1];
+      if (["equipo", "reserva", "alumni", "nominas", "adelantos"].indexOf(sp) >= 0) {
+        rrhhSubpanel = sp;
+        activarModulo("rrhh");
+        activarSubpanel("rrhh", sp);
+      } else {
+        rrhhSubpanel = "inicio";
+        activarModulo("rrhh");
+      }
+    } else {
+      rrhhSubpanel = "inicio";
+      activarModulo("rrhh");
+    }
+  } else if (mod === "inicio") {
+    activarModulo("inicio");
   } else if (mod === "onboarding") {
     activarModulo("onboarding");
   } else if (mod === "crm") {
@@ -188,6 +494,7 @@ function restaurarDesdeHash() {
     }
   }
   actualizarHash();
+  } finally { _restaurandoHash = false; }
 }
 
 function activarModulo(nombre) {
@@ -223,7 +530,8 @@ function activarModulo(nombre) {
   }
   if (nombre === "finanzas") {
     document.getElementById("submenu-finanzas").classList.add("visible");
-    activarFinanzasChild(finanzasChild);
+    // Don't auto-navigate to child — show finanzas dashboard
+    // activarFinanzasChild is called separately when clicking a child item
   } else {
     document.getElementById("submenu-proveedores").classList.remove("visible");
     document.getElementById("submenu-clientes").classList.remove("visible");
@@ -231,11 +539,19 @@ function activarModulo(nombre) {
   if (nombre !== "finanzas") {
     document.getElementById("submenu-finanzas").classList.remove("visible");
   }
+  if (nombre === "inicio") {
+    cargarDashboard();
+  } else if (nombre === "finanzas") {
+    cargarFinanzasInicio();
+  }
   actualizarHash();
 }
 
 function activarFinanzasChild(child) {
   finanzasChild = child;
+  // Hide finanzas dashboard
+  var finInicio = document.getElementById("panel-finanzas-inicio");
+  if (finInicio) finInicio.classList.remove("visible");
   var prov = document.getElementById("submenu-proveedores");
   var cli = document.getElementById("submenu-clientes");
   if (prov) prov.classList.toggle("visible", child === "proveedores");
@@ -288,16 +604,23 @@ function activarSubpanel(modulo, subpanel) {
   actualizarHash();
 }
 
+document.getElementById("nav-inicio-modulo").addEventListener("click", (e) => {
+  e.preventDefault();
+  activarModulo("inicio");
+});
 document.getElementById("nav-finanzas-modulo").addEventListener("click", (e) => {
   e.preventDefault();
+  finanzasChild = "inicio";
   activarModulo("finanzas");
 });
 document.getElementById("nav-proyectos-modulo").addEventListener("click", (e) => {
   e.preventDefault();
+  proyectosSubpanel = "inicio";
   activarModulo("proyectos");
 });
 document.getElementById("nav-rrhh-modulo").addEventListener("click", (e) => {
   e.preventDefault();
+  rrhhSubpanel = "inicio";
   activarModulo("rrhh");
 });
 if (document.getElementById("nav-onboarding-modulo")) {
@@ -323,12 +646,26 @@ document.getElementById("nav-finanzas-bancos").addEventListener("click", (e) => 
   activarFinanzasChild("bancos");
 });
 
+// Apply container margin-left EARLY — before any navigation that might loop
+(function earlyContainerMargin() {
+  var sb = document.querySelector(".sidebar");
+  var ct = document.querySelector(".container");
+  if (!sb || !ct) return;
+  var collapsed = false;
+  try { collapsed = localStorage.getItem("sidebar-collapsed") === "1"; } catch (e) {}
+  if (collapsed) sb.classList.add("collapsed");
+  if (window.innerWidth > 1024) {
+    ct.style.setProperty("margin-left", collapsed ? "64px" : "240px", "important");
+  } else {
+    ct.style.setProperty("margin-left", "0", "important");
+  }
+})();
+
 (function setEstadoInicialFinanzas() {
   if (location.hash && location.hash.length > 1) {
     restaurarDesdeHash();
   } else {
-    if (document.getElementById("nav-finanzas-modulo")) activarModulo("finanzas");
-    actualizarHash();
+    activarModulo("inicio");
   }
   window.addEventListener("hashchange", function () {
     if (location.hash && location.hash.length > 1) restaurarDesdeHash();
@@ -337,22 +674,27 @@ document.getElementById("nav-finanzas-bancos").addEventListener("click", (e) => 
 
 document.getElementById("nav-facturas").addEventListener("click", (e) => {
   e.preventDefault();
+  e.stopPropagation();
   activarSubpanel("proveedores", "facturas");
 });
 document.getElementById("nav-proveedores").addEventListener("click", (e) => {
   e.preventDefault();
+  e.stopPropagation();
   activarSubpanel("proveedores", "proveedores");
 });
 document.getElementById("nav-cecos").addEventListener("click", (e) => {
   e.preventDefault();
+  e.stopPropagation();
   activarSubpanel("proveedores", "cecos");
 });
 document.getElementById("nav-clientes-facturas").addEventListener("click", (e) => {
   e.preventDefault();
+  e.stopPropagation();
   activarSubpanel("clientes", "clientes_facturas");
 });
 document.getElementById("nav-clientes-listado").addEventListener("click", (e) => {
   e.preventDefault();
+  e.stopPropagation();
   activarSubpanel("clientes", "clientes_listado");
 });
 
@@ -413,6 +755,376 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
   });
 });
 
+
+// ===== MODULE DASHBOARD NAV CARDS =====
+function cargarFinanzasInicio() {
+  fetch("/api/finanzas/resumen?t=" + Date.now())
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var elProv = document.getElementById("fin-met-prov");
+      var elCli = document.getElementById("fin-met-cli");
+      var elSinConc = document.getElementById("fin-met-sinconc");
+      if (elProv) elProv.textContent = formatearNumeroES(data.total_prov) + " €";
+      if (elCli) elCli.textContent = formatearNumeroES(data.total_cli) + " €";
+      if (elSinConc) elSinConc.textContent = data.sin_conciliar != null ? String(data.sin_conciliar) : "—";
+    })
+    .catch(function () {});
+}
+
+(function initModuloNavCards() {
+  document.querySelectorAll(".modulo-nav-card[data-nav]").forEach(function (card) {
+    card.addEventListener("click", function () {
+      var nav = card.getAttribute("data-nav");
+      if (!nav) return;
+      var parts = nav.split(":");
+      var modulo = parts[0];
+      var child = parts[1];
+      if (modulo === "finanzas") {
+        activarModulo("finanzas");
+        activarFinanzasChild(child);
+      } else if (modulo === "proyectos") {
+        activarModulo("proyectos");
+        activarSubpanel("proyectos", child);
+      } else if (modulo === "rrhh") {
+        activarModulo("rrhh");
+        activarSubpanel("rrhh", child);
+      }
+    });
+  });
+})();
+
+// ===== SIDEBAR INTERACTION =====
+(function initSidebar() {
+  var sidebar = document.getElementById("sidebar");
+  var overlay = document.getElementById("sidebar-overlay");
+  var hamburger = document.getElementById("sidebar-hamburger");
+  if (!sidebar) return;
+
+  // Mobile toggle
+  function closeSidebar() {
+    sidebar.classList.remove("open");
+    overlay.classList.remove("open");
+  }
+  if (hamburger) hamburger.addEventListener("click", function () {
+    sidebar.classList.toggle("open");
+    overlay.classList.toggle("open");
+  });
+  if (overlay) overlay.addEventListener("click", closeSidebar);
+
+  // Desktop collapse/expand toggle
+  var toggleBtn = document.getElementById("sidebar-toggle");
+  var _tooltipMap = {
+    "nav-inicio-modulo": "Inicio",
+    "nav-finanzas-modulo": "Finanzas",
+    "nav-proyectos-modulo": "Proyectos",
+    "nav-rrhh-modulo": "RRHH",
+    "nav-crm-modulo": "CRM"
+  };
+
+  function applyCollapsed(collapsed) {
+    sidebar.classList.toggle("collapsed", collapsed);
+    // Force container margin-left with !important via setProperty
+    var containerEl = document.querySelector(".container");
+    if (containerEl) {
+      if (window.innerWidth > 1024) {
+        containerEl.style.setProperty("margin-left", collapsed ? "64px" : "240px", "important");
+      } else {
+        containerEl.style.setProperty("margin-left", "0", "important");
+      }
+    }
+    document.documentElement.style.setProperty("--sidebar-width", collapsed ? "64px" : "240px");
+    if (toggleBtn) {
+      toggleBtn.innerHTML = collapsed ? "&raquo;" : "&laquo;";
+      toggleBtn.title = collapsed ? "Expandir menú" : "Colapsar menú";
+    }
+    // Set/remove title tooltips on top-level items
+    Object.keys(_tooltipMap).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.title = collapsed ? _tooltipMap[id] : "";
+    });
+    try { localStorage.setItem("sidebar-collapsed", collapsed ? "1" : "0"); } catch (e) {}
+  }
+
+  // Restore from localStorage
+  var savedCollapsed = false;
+  try { savedCollapsed = localStorage.getItem("sidebar-collapsed") === "1"; } catch (e) {}
+  if (savedCollapsed) applyCollapsed(true);
+
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      applyCollapsed(!sidebar.classList.contains("collapsed"));
+    });
+  }
+
+  // Expand/collapse groups (accordion: collapse others at top level)
+  var topLevelGroups = ["finanzas", "proyectos", "rrhh", "crm"];
+
+  function toggleGroup(el) {
+    var group = el.getAttribute("data-group");
+    var children = document.getElementById("sidebar-children-" + group);
+    if (!children) return;
+    var isOpen = children.classList.contains("open");
+    if (topLevelGroups.indexOf(group) >= 0 && !isOpen) {
+      topLevelGroups.forEach(function (g) {
+        if (g !== group) {
+          var otherChildren = document.getElementById("sidebar-children-" + g);
+          var otherParent = sidebar.querySelector("[data-group='" + g + "']");
+          if (otherChildren) otherChildren.classList.remove("open");
+          if (otherParent) otherParent.classList.remove("expanded");
+        }
+      });
+    }
+    children.classList.toggle("open", !isOpen);
+    el.classList.toggle("expanded", !isOpen);
+  }
+
+  // Chevron-only click: just toggle, don't navigate
+  sidebar.querySelectorAll(".sidebar-parent[data-group] > .sidebar-chevron").forEach(function (chev) {
+    chev.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var parentItem = chev.closest(".sidebar-parent[data-group]");
+      if (parentItem) toggleGroup(parentItem);
+    });
+  });
+
+  // Full item click: navigation is handled by the dedicated handlers (lines nav-*-modulo).
+  // syncSidebar() called from patched activarModulo handles sidebar state.
+  // No toggleGroup here — avoids double-toggle conflict with syncSidebar.
+
+  // Sync sidebar highlights after navigation
+  function syncSidebar() {
+    // Clear all active states
+    sidebar.querySelectorAll(".activo").forEach(function (el) {
+      el.classList.remove("activo");
+    });
+    // Accordion: collapse all top-level groups, then open only the active one
+    topLevelGroups.forEach(function (g) {
+      var ch = document.getElementById("sidebar-children-" + g);
+      var pa = sidebar.querySelector("[data-group='" + g + "']");
+      if (ch) ch.classList.remove("open");
+      if (pa) pa.classList.remove("expanded");
+    });
+    // Collapse level-3 groups too
+    ["proveedores", "clientes"].forEach(function (g) {
+      var ch = document.getElementById("sidebar-children-" + g);
+      var pa = sidebar.querySelector("[data-group='" + g + "']");
+      if (ch) ch.classList.remove("open");
+      if (pa) pa.classList.remove("expanded");
+    });
+
+    if (moduloActivo === "inicio") {
+      var el = document.getElementById("nav-inicio-modulo");
+      if (el) el.classList.add("activo");
+    } else if (moduloActivo === "finanzas") {
+      var fm = document.getElementById("nav-finanzas-modulo");
+      if (fm) { fm.classList.add("activo"); fm.classList.add("expanded"); }
+      var fc = document.getElementById("sidebar-children-finanzas");
+      if (fc) fc.classList.add("open");
+
+      var childLink = document.getElementById("nav-finanzas-" + finanzasChild.replace("_", "-"));
+      if (childLink) childLink.classList.add("activo");
+
+      if (finanzasChild === "proveedores") {
+        var pc = document.getElementById("sidebar-children-proveedores");
+        if (pc) pc.classList.add("open");
+        if (childLink) childLink.classList.add("expanded");
+        var leafId = { facturas: "nav-facturas", proveedores: "nav-proveedores", cecos: "nav-cecos" }[proveedoresSubpanel];
+        if (leafId) { var lf = document.getElementById(leafId); if (lf) lf.classList.add("activo"); }
+      } else if (finanzasChild === "clientes") {
+        var cc = document.getElementById("sidebar-children-clientes");
+        if (cc) cc.classList.add("open");
+        if (childLink) childLink.classList.add("expanded");
+        var leafId2 = { clientes_facturas: "nav-clientes-facturas", clientes_listado: "nav-clientes-listado" }[clientesSubpanel];
+        if (leafId2) { var lf2 = document.getElementById(leafId2); if (lf2) lf2.classList.add("activo"); }
+      }
+    } else if (moduloActivo === "proyectos") {
+      var pm = document.getElementById("nav-proyectos-modulo");
+      if (pm) { pm.classList.add("activo"); pm.classList.add("expanded"); }
+      var pchildren = document.getElementById("sidebar-children-proyectos");
+      if (pchildren) pchildren.classList.add("open");
+      var pLeafId = "nav-proyectos-" + proyectosSubpanel;
+      var pLeaf = document.getElementById(pLeafId);
+      if (pLeaf) pLeaf.classList.add("activo");
+    } else if (moduloActivo === "rrhh") {
+      var rm = document.getElementById("nav-rrhh-modulo");
+      if (rm) { rm.classList.add("activo"); rm.classList.add("expanded"); }
+      var rc = document.getElementById("sidebar-children-rrhh");
+      if (rc) rc.classList.add("open");
+      var rLeafId = "nav-rrhh-" + rrhhSubpanel;
+      var rLeaf = document.getElementById(rLeafId);
+      if (rLeaf) rLeaf.classList.add("activo");
+    } else if (moduloActivo === "crm") {
+      var cm = document.getElementById("nav-crm-modulo");
+      if (cm) { cm.classList.add("activo"); cm.classList.add("expanded"); }
+      var crmC = document.getElementById("sidebar-children-crm");
+      if (crmC) crmC.classList.add("open");
+      var crmSubpanel = typeof crmSubpanelActivo !== "undefined" ? crmSubpanelActivo : "inicio";
+      var crmLeafId = "nav-crm-" + crmSubpanel;
+      var crmLeaf = document.getElementById(crmLeafId);
+      if (crmLeaf) crmLeaf.classList.add("activo");
+    }
+
+    // Close sidebar on mobile after nav
+    if (window.innerWidth <= 1024) closeSidebar();
+  }
+
+  // Patch activarModulo, activarFinanzasChild, activarSubpanel to sync sidebar
+  var _origActivarModulo = activarModulo;
+  activarModulo = function (nombre) {
+    _origActivarModulo(nombre);
+    syncSidebar();
+  };
+  var _origActivarFinanzasChild = activarFinanzasChild;
+  activarFinanzasChild = function (child) {
+    _origActivarFinanzasChild(child);
+    syncSidebar();
+  };
+  var _origActivarSubpanel = activarSubpanel;
+  activarSubpanel = function (modulo, subpanel) {
+    _origActivarSubpanel(modulo, subpanel);
+    syncSidebar();
+  };
+
+  // Load user info from dashboard API
+  fetch("/api/dashboard?t=" + Date.now())
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.usuario) {
+        var name = data.usuario;
+        var displayName = name.charAt(0).toUpperCase() + name.slice(1);
+        var usernameEl = document.getElementById("sidebar-username");
+        if (usernameEl) usernameEl.textContent = displayName;
+        var avatarEl = document.getElementById("sidebar-avatar");
+        if (avatarEl) {
+          var parts = name.split(/[\s._-]+/);
+          var initials = parts.length >= 2
+            ? (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase()
+            : name.slice(0, 2).toUpperCase();
+          avatarEl.textContent = initials;
+        }
+      }
+    })
+    .catch(function () {});
+
+  // On resize, update container margin-left for the current collapsed state
+  window.addEventListener("resize", function () {
+    var containerEl = document.querySelector(".container");
+    if (containerEl) {
+      if (window.innerWidth > 1024) {
+        containerEl.style.setProperty("margin-left", sidebar.classList.contains("collapsed") ? "64px" : "240px", "important");
+      } else {
+        containerEl.style.setProperty("margin-left", "0", "important");
+      }
+    }
+  });
+
+  // Initial sync
+  syncSidebar();
+  // Set initial container margin-left with !important
+  var _initContainer = document.querySelector(".container");
+  if (_initContainer) {
+    var _isCollapsed = sidebar.classList.contains("collapsed");
+    if (window.innerWidth > 1024) {
+      _initContainer.style.setProperty("margin-left", _isCollapsed ? "64px" : "240px", "important");
+    } else {
+      _initContainer.style.setProperty("margin-left", "0", "important");
+    }
+  }
+})();
+
+// Bancos: paginación mejorada
+function renderPaginacionBancos(container, actual, total) {
+  container.innerHTML = "";
+  function addBtn(label, page, disabled, active) {
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = label;
+    if (disabled) btn.disabled = true;
+    if (active) btn.classList.add("pag-activa");
+    if (!disabled && !active) {
+      btn.addEventListener("click", function () {
+        // Access paginaActual from the parent scope via the IIFE
+        if (typeof window._bancosIrAPagina === "function") window._bancosIrAPagina(page);
+      });
+    }
+    container.appendChild(btn);
+  }
+  function addEllipsis() {
+    var sp = document.createElement("span");
+    sp.className = "pag-ellipsis";
+    sp.textContent = "…";
+    container.appendChild(sp);
+  }
+  addBtn("«", 1, actual <= 1);
+  addBtn("‹", actual - 1, actual <= 1);
+  // Show max 5 page numbers with ellipsis
+  var start = Math.max(1, actual - 2);
+  var end = Math.min(total, start + 4);
+  if (end - start < 4) start = Math.max(1, end - 4);
+  if (start > 1) { addBtn("1", 1, false, actual === 1); if (start > 2) addEllipsis(); }
+  for (var i = start; i <= end; i++) {
+    if (i === 1 && start > 1) continue; // already added
+    addBtn(String(i), i, false, i === actual);
+  }
+  if (end < total) { if (end < total - 1) addEllipsis(); addBtn(String(total), total, false, actual === total); }
+  addBtn("›", actual + 1, actual >= total);
+  addBtn("»", total, actual >= total);
+}
+
+// Bancos: modal importar extracto
+(function () {
+  var btnAbrir = document.getElementById("btn-abrir-modal-importar");
+  var btnCerrar = document.getElementById("btn-cerrar-modal-importar");
+  var overlay = document.getElementById("modal-importar-extracto-overlay");
+  if (btnAbrir && overlay) {
+    btnAbrir.addEventListener("click", function () {
+      overlay.classList.add("visible");
+      overlay.setAttribute("aria-hidden", "false");
+    });
+  }
+  if (btnCerrar && overlay) {
+    btnCerrar.addEventListener("click", function () {
+      overlay.classList.remove("visible");
+      overlay.setAttribute("aria-hidden", "true");
+    });
+  }
+  if (overlay) {
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) { overlay.classList.remove("visible"); overlay.setAttribute("aria-hidden", "true"); }
+    });
+  }
+})();
+
+// Bancos: conciliación panel toggle
+(function () {
+  var toggle = document.getElementById("bancos-conciliacion-toggle");
+  var body = document.getElementById("bancos-conciliacion-body");
+  var panel = document.getElementById("bancos-conciliacion-block");
+  if (toggle && body && panel) {
+    toggle.addEventListener("click", function () {
+      var open = body.style.display !== "none";
+      body.style.display = open ? "none" : "block";
+      panel.classList.toggle("open", !open);
+    });
+  }
+})();
+
+// Bancos: tarjetas config panel toggle
+(function () {
+  var toggle = document.getElementById("tarjetas-config-toggle");
+  var body = document.getElementById("tarjetas-config-body");
+  var panel = document.getElementById("tarjetas-config-panel");
+  if (toggle && body && panel) {
+    toggle.addEventListener("click", function () {
+      var open = body.style.display !== "none";
+      body.style.display = open ? "none" : "block";
+      panel.classList.toggle("open", !open);
+    });
+  }
+})();
+
 // Bancos: importar extracto (Santander)
 (function () {
   var form = document.getElementById("form-bancos-importar");
@@ -420,6 +1132,13 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
   var resultadoEl = document.getElementById("bancos-resultado");
   var listaEl = document.getElementById("bancos-resultado-lista");
   if (!form || !statusEl) return;
+  var fileInputInit = document.getElementById("bancos-archivo");
+  var fileNameEl = document.getElementById("bancos-archivo-nombre");
+  if (fileInputInit && fileNameEl) {
+    fileInputInit.addEventListener("change", function () {
+      fileNameEl.textContent = fileInputInit.files && fileInputInit.files[0] ? fileInputInit.files[0].name : "Ningún archivo";
+    });
+  }
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     var fileInput = document.getElementById("bancos-archivo");
@@ -458,13 +1177,15 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
         resultadoEl.style.display = "block";
         listaEl.innerHTML = "";
         var items = [];
-        if (data.leidos != null) items.push("Leídos en el Excel: " + data.leidos);
-        if (data.insertados != null) items.push("Insertados: " + data.insertados);
-        if (data.duplicados_omitidos != null) items.push("Duplicados omitidos: " + data.duplicados_omitidos);
-        if (data.errores && data.errores.length) items.push("Errores: " + data.errores.length);
-        items.forEach(function (t) {
+        if (data.leidos != null) items.push({ icon: "ok", text: "Leídos en el Excel: " + data.leidos });
+        if (data.insertados != null) items.push({ icon: data.insertados > 0 ? "ok" : "warn", text: "Insertados: " + data.insertados });
+        if (data.duplicados_omitidos != null) items.push({ icon: data.duplicados_omitidos > 0 ? "warn" : "ok", text: "Duplicados omitidos: " + data.duplicados_omitidos });
+        if (data.errores && data.errores.length) items.push({ icon: "err", text: "Errores: " + data.errores.length });
+        items.forEach(function (item) {
           var li = document.createElement("li");
-          li.textContent = t;
+          var iconClass = item.icon === "ok" ? "ok" : item.icon === "warn" ? "warn" : "err";
+          var iconChar = item.icon === "ok" ? "\u2713" : item.icon === "warn" ? "!" : "\u2717";
+          li.innerHTML = "<span class=\"bancos-resultado-icono " + iconClass + "\">" + iconChar + "</span>" + item.text;
           listaEl.appendChild(li);
         });
         if (data.errores && data.errores.length) {
@@ -501,6 +1222,17 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
   var filtroConcepto = document.getElementById("bancos-filtro-concepto");
   var filtroEmpresa = document.getElementById("bancos-filtro-empresa");
   var btnRefrescar = document.getElementById("bancos-btn-refrescar");
+  var resumenEl = document.getElementById("bancos-resumen-periodo");
+  var toggleTipo = document.getElementById("bancos-toggle-tipo");
+  var paginacionEl = document.getElementById("bancos-paginacion");
+  var pagPrevBtn = document.getElementById("bancos-pag-prev");
+  var pagNextBtn = document.getElementById("bancos-pag-next");
+  var pagInfoEl = document.getElementById("bancos-pag-info");
+  var filtroTipoActual = "";
+  var movimientosCache = [];
+  var paginaActual = 1;
+  var movsPorPagina = 100;
+  window._bancosIrAPagina = function (p) { paginaActual = p; renderMovimientosFiltrados(); };
 
   function formatNumero(n) {
     if (n == null || n === "") return "—";
@@ -573,25 +1305,176 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
     return esTraspaso;
   }
 
+  function actualizarResumenPeriodo(movs) {
+    if (!resumenEl) return;
+    if (!movs || movs.length === 0) { resumenEl.style.display = "none"; return; }
+    var totalEntradas = 0, totalSalidas = 0, count = movs.length;
+    movs.forEach(function (m) {
+      var imp = m.importe != null ? Number(m.importe) : 0;
+      if (imp > 0) totalEntradas += imp;
+      else totalSalidas += imp;
+    });
+    var primerSaldo = movs[movs.length - 1] && movs[movs.length - 1].saldo != null ? Number(movs[movs.length - 1].saldo) : null;
+    var ultimoSaldo = movs[0] && movs[0].saldo != null ? Number(movs[0].saldo) : null;
+    var html = "";
+    if (primerSaldo !== null) html += "<span class=\"resumen-item\"><span class=\"resumen-label\">Saldo inicial:</span><span class=\"resumen-valor\">" + formatNumero(primerSaldo) + "</span></span>";
+    if (ultimoSaldo !== null) html += "<span class=\"resumen-item\"><span class=\"resumen-label\">Saldo final:</span><span class=\"resumen-valor\">" + formatNumero(ultimoSaldo) + "</span></span>";
+    html += "<span class=\"resumen-item\"><span class=\"resumen-label\">Entradas:</span><span class=\"resumen-valor positivo\">" + formatNumero(totalEntradas) + "</span></span>";
+    html += "<span class=\"resumen-item\"><span class=\"resumen-label\">Salidas:</span><span class=\"resumen-valor negativo\">" + formatNumero(totalSalidas) + "</span></span>";
+    html += "<span class=\"resumen-item\"><span class=\"resumen-label\">Movimientos:</span><span class=\"resumen-valor\">" + count + "</span></span>";
+    resumenEl.innerHTML = html;
+    resumenEl.style.display = "flex";
+  }
+
+  var MESES_ES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+  function mesAnioDeMovimiento(m) {
+    var f = (m.fecha_operacion || "").trim().slice(0, 7);
+    return f || "sin-fecha";
+  }
+  function labelMes(clave) {
+    if (clave === "sin-fecha") return "Sin fecha";
+    var partes = clave.split("-");
+    var anio = partes[0];
+    var mes = parseInt(partes[1], 10);
+    return (mes >= 1 && mes <= 12 ? MESES_ES[mes - 1] : "?") + " " + anio;
+  }
+
+  function renderMovimientosFiltrados() {
+    if (!tbody) return;
+    var movsFiltrados = movimientosCache;
+    if (filtroTipoActual === "cargos") {
+      movsFiltrados = movsFiltrados.filter(function (m) { return Number(m.importe) < 0; });
+    } else if (filtroTipoActual === "abonos") {
+      movsFiltrados = movsFiltrados.filter(function (m) { return Number(m.importe) > 0; });
+    }
+    actualizarResumenPeriodo(movsFiltrados);
+    var totalPaginas = Math.max(1, Math.ceil(movsFiltrados.length / movsPorPagina));
+    if (paginaActual > totalPaginas) paginaActual = totalPaginas;
+    var inicio = (paginaActual - 1) * movsPorPagina;
+    var pagina = movsFiltrados.slice(inicio, inicio + movsPorPagina);
+    if (contadorEl) contadorEl.textContent = movsFiltrados.length + " movimiento" + (movsFiltrados.length !== 1 ? "s" : "") + (movsFiltrados.length > movsPorPagina ? " · pág. " + paginaActual + "/" + totalPaginas : "");
+    if (paginacionEl) {
+      if (movsFiltrados.length > movsPorPagina) {
+        paginacionEl.style.display = "flex";
+        renderPaginacionBancos(paginacionEl, paginaActual, totalPaginas);
+      } else {
+        paginacionEl.style.display = "none";
+      }
+    }
+    if (pagina.length === 0) {
+      tbody.innerHTML = "<tr><td colspan=\"8\" class=\"sin-datos\">No hay movimientos con los filtros seleccionados.</td></tr>";
+      return;
+    }
+    var mapaTraspasos = detectarTraspasos(pagina);
+    tbody.innerHTML = "";
+    var mesActual = null;
+    pagina.forEach(function (m, idx) {
+      var mesKey = mesAnioDeMovimiento(m);
+      if (mesKey !== mesActual) {
+        mesActual = mesKey;
+        var trSep = document.createElement("tr");
+        trSep.className = "separador-mes";
+        trSep.innerHTML = "<td colspan=\"8\">" + labelMes(mesKey) + "</td>";
+        tbody.appendChild(trSep);
+      }
+      var tr = document.createElement("tr");
+      var fecha = (m.fecha_operacion || "").trim() || "—";
+      var concepto = (m.concepto || "").trim() || "—";
+      var importe = m.importe != null ? m.importe : "";
+      var saldo = m.saldo != null ? m.saldo : "";
+      var saldoAcum = m.saldo_acumulado != null ? m.saldo_acumulado : "";
+      var bancoLabel = (m.banco || "").trim() || "—";
+      if (bancoLabel.toLowerCase() === "santander") bancoLabel = "Santander";
+      if (bancoLabel.toLowerCase() === "bbva") bancoLabel = "BBVA";
+      var esTraspaso = !!mapaTraspasos[idx];
+      if (esTraspaso) tr.classList.add("mov-traspaso");
+      var esIngreso = Number(importe) > 0 && !esTraspaso;
+      if (esIngreso) tr.classList.add("mov-ingreso");
+      var conciliadoAt = (m.conciliado_at || "").trim();
+      var facturaRuta = (m.factura_ruta || "").trim();
+      // Build unified vinculación cell
+      var vincParts = [];
+      // Factura conciliation
+      if (conciliadoAt) {
+        var fLine = "<span class=\"cel-flex\">";
+        fLine += "<span class=\"badge-conciliado\">Factura</span>";
+        if (facturaRuta) {
+          var rutaEsc = encodeURIComponent(facturaRuta);
+          fLine += "<a href=\"/api/archivo?ruta=" + rutaEsc + "\" target=\"_blank\" class=\"btn-small\" title=\"Abrir factura\">Ver</a>";
+        }
+        fLine += "<button type=\"button\" class=\"btn-small bancos-btn-desvincular\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Quitar vinculación\">Desvincular</button>";
+        fLine += "</span>";
+        vincParts.push(fLine);
+      }
+      // Tarjeta agrupación
+      var tarjetaId = m.tarjeta_id != null ? m.tarjeta_id : "";
+      var liquidacionPeriodo = (m.liquidacion_periodo || "").trim();
+      var tarjetaAlias = (m.tarjeta_alias || "").trim();
+      var conceptoMov = ((m.concepto || "") + "").toLowerCase();
+      var esTarjetaAgrupacion = conceptoMov.indexOf("adeudo mensual de tarjeta") >= 0 || conceptoMov.indexOf("liquidacion de las tarjetas") >= 0;
+      if (esTarjetaAgrupacion) {
+        if (tarjetaId && liquidacionPeriodo) {
+          // Compact: "Alias MM/YY"
+          var aliasCorto = tarjetaAlias || "Tarjeta";
+          var periodoCorto = liquidacionPeriodo;
+          var ppMatch = liquidacionPeriodo.match(/^(\d{4})-(\d{2})$/);
+          if (ppMatch) periodoCorto = ppMatch[2] + "/" + ppMatch[1].slice(2);
+          vincParts.push("<span class=\"cel-flex\"><span class=\"badge-tarjeta\">Tarjeta</span><span class=\"cel-meta\">" + aliasCorto + " " + periodoCorto + "</span><button type=\"button\" class=\"btn-small bancos-btn-desvincular-extracto\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Quitar vinculación\">Desvincular</button></span>");
+        } else {
+          vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-vincular-extracto\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Vincular a extracto\">Vincular</button>");
+        }
+      }
+      // Conciliar button if no links at all
+      if (vincParts.length === 0 && !conciliadoAt) {
+        var conceptoLower = ((m.concepto || "") + "").toLowerCase();
+        var excluidoSugerencia = conceptoLower.indexOf("nomina") >= 0 || conceptoLower.indexOf("nómina") >= 0 || conceptoLower.indexOf("adelanto") >= 0 || conceptoLower.indexOf("liquidacion de las tarjetas de credito") >= 0 || conceptoLower.indexOf("adeudo mensual de tarjeta") >= 0;
+        var esTraspasoExcluido = conceptoLower.indexOf("traspaso") >= 0;
+        if (!excluidoSugerencia && !esTraspasoExcluido) {
+          vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-conciliar-factura\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" data-empresa-id=\"" + ((m.empresa_id || "") + "").replace(/\"/g, "&quot;") + "\" data-concepto=\"" + ((m.concepto || "") + "").replace(/\"/g, "&quot;") + "\" data-fecha=\"" + ((m.fecha_operacion || "") + "").replace(/\"/g, "&quot;") + "\" data-importe=\"" + (m.importe != null ? String(m.importe) : "").replace(/\"/g, "&quot;") + "\" title=\"Vincular a factura\">Conciliar</button>");
+        }
+      }
+      var vincCel = vincParts.length > 0 ? vincParts.join("") : "<span style=\"color:#94A3B8\">—</span>";
+      tr.innerHTML =
+        "<td class=\"col-check\"><input type=\"checkbox\" class=\"bancos-check-mov\" value=\"" + (m.id != null ? m.id : "") + "\" title=\"Seleccionar\" /></td>" +
+        "<td class=\"col-fecha\">" + (fecha === "—" ? "—" : fecha) + "</td>" +
+        "<td class=\"col-banco\">" + bancoLabel + "</td>" +
+        "<td class=\"col-concepto\" title=\"" + (m.concepto || "").replace(/\"/g, "&quot;") + "\">" + concepto + "</td>" +
+        "<td class=\"numero\" style=\"color:" + (Number(importe) < 0 ? "#EF4444" : Number(importe) > 0 ? "#10B981" : "") + "\">" + formatNumero(importe) + "</td>" +
+        "<td class=\"numero\">" + formatNumero(saldo) + "</td>" +
+        "<td class=\"numero\">" + formatNumero(saldoAcum) + "</td>" +
+        "<td class=\"col-vinculacion\">" + vincCel + "</td>";
+      try {
+        if (Number(importe) > 0 && tr.children.length >= 5) {
+          tr.children[4].classList.add("positivo");
+          tr.children[1].classList.add("ingreso-texto");
+          tr.children[2].classList.add("ingreso-texto");
+          tr.children[3].classList.add("ingreso-texto");
+        }
+      } catch (e) {}
+      tbody.appendChild(tr);
+    });
+  }
+
   function cargarMovimientosBancos() {
     if (!tbody || !contadorEl) return;
     var empresaId = (filtroEmpresa && filtroEmpresa.value) || "";
     if (!empresaId) {
-      tbody.innerHTML = "<tr><td colspan=\"9\" class=\"sin-datos\">Selecciona una empresa para ver los movimientos.</td></tr>";
+      tbody.innerHTML = "<tr><td colspan=\"8\" class=\"sin-datos\">Selecciona una empresa para ver los movimientos.</td></tr>";
       contadorEl.textContent = "Selecciona empresa.";
+      if (resumenEl) resumenEl.style.display = "none";
+      if (paginacionEl) paginacionEl.style.display = "none";
       var concBlock = document.getElementById("bancos-conciliacion-block");
       if (concBlock) concBlock.style.display = "none";
       return;
     }
     var concBlock = document.getElementById("bancos-conciliacion-block");
     if (concBlock) concBlock.style.display = "block";
-    tbody.innerHTML = "<tr><td colspan=\"9\" class=\"sin-datos\">Cargando…</td></tr>";
+    tbody.innerHTML = "<tr><td colspan=\"8\" class=\"sin-datos\">Cargando…</td></tr>";
     var params = new URLSearchParams();
-    params.set("limit", "500");
+    params.set("limit", "5000");
     var banco = (filtroBanco && filtroBanco.value) || "";
     var fechaDesde = (filtroFechaDesde && filtroFechaDesde.value) || "";
     var fechaHasta = (filtroFechaHasta && filtroFechaHasta.value) || "";
-    var empresaId = (filtroEmpresa && filtroEmpresa.value) || "";
     if (banco) params.set("banco", banco);
     if (fechaDesde) params.set("fecha_desde", fechaDesde);
     if (fechaHasta) params.set("fecha_hasta", fechaHasta);
@@ -601,97 +1484,35 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
     fetch("/api/bancos/movimientos?" + params.toString())
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        var movs = data.movimientos || [];
-        var mapaTraspasos = detectarTraspasos(movs);
-        var total = data.total != null ? data.total : movs.length;
-        contadorEl.textContent = total + " movimiento" + (total !== 1 ? "s" : "");
-        if (movs.length === 0) {
-          tbody.innerHTML = "<tr><td colspan=\"9\" class=\"sin-datos\">No hay movimientos con los filtros seleccionados.</td></tr>";
-          return;
-        }
-        tbody.innerHTML = "";
-        movs.forEach(function (m, idx) {
-          var tr = document.createElement("tr");
-          var fecha = (m.fecha_operacion || "").trim() || "—";
-          var concepto = (m.concepto || "").trim() || "—";
-          var importe = m.importe != null ? m.importe : "";
-          var saldo = m.saldo != null ? m.saldo : "";
-          var saldoAcum = m.saldo_acumulado != null ? m.saldo_acumulado : "";
-          var bancoLabel = (m.banco || "").trim() || "—";
-          if (bancoLabel.toLowerCase() === "santander") bancoLabel = "Santander";
-          if (bancoLabel.toLowerCase() === "bbva") bancoLabel = "BBVA";
-          var esTraspaso = !!mapaTraspasos[idx];
-          if (esTraspaso) {
-            tr.classList.add("mov-traspaso");
-          }
-          var esIngreso = Number(importe) > 0 && !esTraspaso;
-          if (esIngreso) {
-            tr.classList.add("mov-ingreso");
-          }
-          var conciliadoAt = (m.conciliado_at || "").trim();
-          var facturaRuta = (m.factura_ruta || "").trim();
-          var conciliaCel = "—";
-          if (conciliadoAt) {
-            var d = conciliadoAt.slice(0, 10);
-            conciliaCel = "<span class=\"bancos-conciliacion-fecha\" title=\"" + (conciliadoAt.replace(/"/g, "&quot;")) + "\">" + d + "</span>";
-            conciliaCel += " <span class=\"bancos-conciliacion-btns\">";
-            if (facturaRuta) {
-              var rutaEsc = encodeURIComponent(facturaRuta);
-              conciliaCel += "<a href=\"/api/archivo?ruta=" + rutaEsc + "\" target=\"_blank\" class=\"btn-link-small\" title=\"Abrir factura\">Ver factura</a> ";
-            }
-            conciliaCel += "<button type=\"button\" class=\"btn-small bancos-btn-desvincular\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Quitar vinculación con factura\">Desvincular</button>";
-            conciliaCel += "</span>";
-          } else {
-            conciliaCel = "<span class=\"sin-conciliar\">—</span>";
-            var conceptoLower = ((m.concepto || "") + "").toLowerCase();
-            var excluidoSugerencia = conceptoLower.indexOf("nomina") >= 0 || conceptoLower.indexOf("nómina") >= 0 || conceptoLower.indexOf("adelanto") >= 0 || conceptoLower.indexOf("liquidacion de las tarjetas de credito") >= 0 || conceptoLower.indexOf("adeudo mensual de tarjeta") >= 0;
-            var esTraspasoExcluido = conceptoLower.indexOf("traspaso") >= 0;
-            if (!excluidoSugerencia && !esTraspasoExcluido) {
-              conciliaCel = "<span class=\"bancos-conciliacion-btns\"><button type=\"button\" class=\"btn-small bancos-btn-conciliar-factura\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" data-empresa-id=\"" + ((m.empresa_id || "") + "").replace(/\"/g, "&quot;") + "\" data-concepto=\"" + ((m.concepto || "") + "").replace(/\"/g, "&quot;") + "\" data-fecha=\"" + ((m.fecha_operacion || "") + "").replace(/\"/g, "&quot;") + "\" data-importe=\"" + (m.importe != null ? String(m.importe) : "").replace(/\"/g, "&quot;") + "\" title=\"Vincular este movimiento a una factura pendiente de pago\">Conciliar factura</button></span>";
-            }
-          }
-          var tarjetaId = m.tarjeta_id != null ? m.tarjeta_id : "";
-          var liquidacionPeriodo = (m.liquidacion_periodo || "").trim();
-          var tarjetaAlias = (m.tarjeta_alias || "").trim();
-          var conceptoMov = ((m.concepto || "") + "").toLowerCase();
-          var esTarjetaAgrupacion = conceptoMov.indexOf("adeudo mensual de tarjeta") >= 0 || conceptoMov.indexOf("liquidacion de las tarjetas") >= 0;
-          var extractoCel = "—";
-          if (esTarjetaAgrupacion) {
-            if (tarjetaId && liquidacionPeriodo) {
-              extractoCel = "<span class=\"bancos-conciliacion-fecha\" title=\"Vinculado a extracto de tarjeta\">" + (tarjetaAlias || "Tarjeta") + " – " + liquidacionPeriodo + "</span>";
-              extractoCel += " <span class=\"bancos-conciliacion-btns\"><button type=\"button\" class=\"btn-small bancos-btn-desvincular-extracto\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Quitar vinculación con extracto de tarjeta\">Desvincular</button></span>";
-            } else {
-              extractoCel = "<button type=\"button\" class=\"btn-small bancos-btn-vincular-extracto\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Vincular este movimiento a un extracto de tarjeta\">Vincular a extracto</button>";
-            }
-          }
-          tr.innerHTML =
-            "<td class=\"col-check\"><input type=\"checkbox\" class=\"bancos-check-mov\" value=\"" + (m.id != null ? m.id : "") + "\" title=\"Seleccionar\" /></td>" +
-            "<td class=\"col-fecha\">" + (fecha === "—" ? "—" : fecha) + "</td>" +
-            "<td class=\"col-banco\">" + bancoLabel + "</td>" +
-            "<td class=\"col-concepto\" title=\"" + (m.concepto || "").replace(/\"/g, "&quot;") + "\">" + concepto + "</td>" +
-            "<td class=\"numero\">" + formatNumero(importe) + "</td>" +
-            "<td class=\"numero\">" + formatNumero(saldo) + "</td>" +
-            "<td class=\"numero\">" + formatNumero(saldoAcum) + "</td>" +
-            "<td class=\"col-conciliacion\">" + conciliaCel + "</td>" +
-            "<td class=\"col-conciliacion col-agrupacion\">" + extractoCel + "</td>";
-          try {
-            if (Number(importe) > 0 && tr.children.length >= 5) {
-              tr.children[4].classList.add("positivo");      // Importe
-              tr.children[1].classList.add("ingreso-texto"); // Fecha
-              tr.children[2].classList.add("ingreso-texto"); // Banco
-              tr.children[3].classList.add("ingreso-texto"); // Concepto
-            }
-          } catch (e) {}
-          tbody.appendChild(tr);
-        });
+        movimientosCache = data.movimientos || [];
+        paginaActual = 1;
+        renderMovimientosFiltrados();
       })
       .catch(function () {
-        tbody.innerHTML = "<tr><td colspan=\"9\" class=\"sin-datos\">Error al cargar movimientos.</td></tr>";
+        tbody.innerHTML = "<tr><td colspan=\"8\" class=\"sin-datos\">Error al cargar movimientos.</td></tr>";
         if (contadorEl) contadorEl.textContent = "0 movimientos";
+        if (resumenEl) resumenEl.style.display = "none";
+        if (paginacionEl) paginacionEl.style.display = "none";
       });
   }
 
   window.cargarMovimientosBancos = cargarMovimientosBancos;
+
+  // UX-B.1: Toggle Todos/Cargos/Abonos
+  if (toggleTipo) {
+    toggleTipo.addEventListener("click", function (e) {
+      var btn = e.target.closest("button[data-tipo]");
+      if (!btn) return;
+      filtroTipoActual = btn.getAttribute("data-tipo") || "";
+      toggleTipo.querySelectorAll("button").forEach(function (b) { b.classList.remove("activo"); });
+      btn.classList.add("activo");
+      paginaActual = 1;
+      renderMovimientosFiltrados();
+    });
+  }
+
+  // UX-B.7: Paginación
+  // Pagination is now rendered dynamically by renderPaginacionBancos
 
   if (btnRefrescar) btnRefrescar.addEventListener("click", cargarMovimientosBancos);
   var checkAll = document.getElementById("bancos-check-all");
@@ -710,7 +1531,7 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
         if (v !== "" && v != null) ids.push(parseInt(v, 10));
       });
       if (ids.length === 0) {
-        alert("Selecciona al menos un movimiento para borrar.");
+        mostrarToast("Selecciona al menos un movimiento para borrar.", "error");
         return;
       }
       if (!confirm("¿Eliminar " + ids.length + " movimiento(s) seleccionado(s)? Esta acción no se puede deshacer.")) return;
@@ -723,10 +1544,10 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
         .then(function (r) { return r.json(); })
         .then(function (data) {
           var n = data.eliminados != null ? data.eliminados : 0;
-          alert(n ? "Eliminados " + n + " movimiento(s)." : (data.mensaje || "Hecho."));
+          mostrarToast(n ? "Eliminados " + n + " movimiento(s)." : (data.mensaje || "Hecho."), "success");
           cargarMovimientosBancos();
         })
-        .catch(function () { alert("Error al eliminar."); })
+        .catch(function () { mostrarToast("Error al eliminar.", "error"); })
         .finally(function () { btnBorrarSel.disabled = false; });
     });
   }
@@ -747,12 +1568,12 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
       })
         .then(function (r) { return r.json(); })
         .then(function (data) {
-          if (data.error) { alert(data.error); return; }
+          if (data.error) { mostrarToast(data.error, "error"); return; }
           cargarMovimientosBancos();
           var listEl = document.getElementById("bancos-sugerencias-list");
           if (listEl && listEl.innerHTML) document.getElementById("bancos-btn-cargar-sugerencias").click();
         })
-        .catch(function () { alert("Error al desvincular."); })
+        .catch(function () { mostrarToast("Error al desvincular.", "error"); })
         .finally(function () { btn.disabled = false; });
     });
   }
@@ -767,19 +1588,29 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
   var vincularStatus = document.getElementById("vincular-extracto-status");
   var btnCerrarVincularExtracto = document.getElementById("btn-cerrar-modal-vincular-extracto");
 
-  function abrirModalVincularExtracto(movId, empresaId) {
+  function abrirModalVincularExtracto(movId, empresaId, movFecha, movImporte) {
     if (!modalVincularExtracto || !vincularMovId || !vincularEmpresaId) return;
     vincularMovId.value = movId;
     vincularEmpresaId.value = empresaId || "";
     if (vincularStatus) { vincularStatus.textContent = ""; vincularStatus.style.color = ""; }
+    // UX-B.4: mostrar info del movimiento en el modal
+    var infoEl = document.getElementById("vincular-extracto-mov-info");
+    if (infoEl) {
+      infoEl.innerHTML = "<strong>Movimiento:</strong> " + (movFecha || "—") + " &middot; Importe: " + (movImporte != null ? formatNumero(movImporte) : "—") + " &euro;";
+    }
     if (vincularTarjetaSel) {
       vincularTarjetaSel.innerHTML = "<option value=\"\">Cargando…</option>";
       vincularTarjetaSel.disabled = true;
     }
-    var now = new Date();
-    var y = now.getFullYear();
-    var m = String(now.getMonth() + 1).padStart(2, "0");
-    if (vincularPeriodoInp) vincularPeriodoInp.value = y + "-" + m;
+    // UX-B.4: preseleccionar periodo basado en la fecha del movimiento
+    var periodoDefault;
+    if (movFecha && typeof movFecha === "string" && movFecha.length >= 7) {
+      periodoDefault = movFecha.slice(0, 7);
+    } else {
+      var now = new Date();
+      periodoDefault = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
+    }
+    if (vincularPeriodoInp) vincularPeriodoInp.value = periodoDefault;
     modalVincularExtracto.classList.add("visible");
     modalVincularExtracto.setAttribute("aria-hidden", "false");
     if (!empresaId || !vincularTarjetaSel) {
@@ -790,14 +1621,19 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!vincularTarjetaSel) return;
+        var tarjetas = data.tarjetas || [];
         vincularTarjetaSel.innerHTML = "<option value=\"\">Selecciona tarjeta…</option>";
-        (data.tarjetas || []).forEach(function (t) {
+        tarjetas.forEach(function (t) {
           var opt = document.createElement("option");
           opt.value = t.id != null ? t.id : "";
           opt.textContent = (t.alias || "").trim() || (t.banco || "") + " " + (t.persona || "") || "Tarjeta " + t.id;
           vincularTarjetaSel.appendChild(opt);
         });
         vincularTarjetaSel.disabled = false;
+        // UX-B.4: si solo hay una tarjeta, preseleccionarla
+        if (tarjetas.length === 1) {
+          vincularTarjetaSel.value = String(tarjetas[0].id);
+        }
       })
       .catch(function () {
         if (vincularTarjetaSel) {
@@ -856,7 +1692,9 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
         var numEsc = (numero + "").replace(/"/g, "&quot;");
         var fechaEsc = (fecha + "").replace(/"/g, "&quot;");
         var clienteEsc = (cliente + "").replace(/"/g, "&quot;");
-        tr.innerHTML = "<td class=\"col-fecha\">" + fecha + "</td><td>" + cliente.replace(/</g, "&lt;") + "</td><td title=\"" + (concepto.replace(/"/g, "&quot;")) + "\">" + (concepto.length > 40 ? concepto.slice(0, 40) + "…" : concepto).replace(/</g, "&lt;") + "</td><td>" + numero.replace(/</g, "&lt;") + "</td><td class=\"numero\">" + formatNumeroConciliar(total) + "</td><td>—</td><td class=\"col-acciones\"><button type=\"button\" class=\"btn-small bancos-btn-vincular-factura-conciliar\" data-numero-factura=\"" + numEsc + "\" data-fecha-factura=\"" + fechaEsc + "\" data-cliente=\"" + clienteEsc + "\">Vincular</button></td>";
+        var estadoCobro = (f.estado_cobro || "pendiente").toString().trim().toLowerCase();
+        var estadoCel = estadoCobro === "cobrada" ? "Cobrada" : estadoCobro === "parcial" ? "Parcial" : "Pendiente";
+        tr.innerHTML = "<td class=\"col-fecha\">" + fecha + "</td><td>" + cliente.replace(/</g, "&lt;") + "</td><td title=\"" + (concepto.replace(/"/g, "&quot;")) + "\">" + (concepto.length > 40 ? concepto.slice(0, 40) + "…" : concepto).replace(/</g, "&lt;") + "</td><td>" + numero.replace(/</g, "&lt;") + "</td><td class=\"numero\">" + formatNumeroConciliar(total) + "</td><td>" + estadoCel + "</td><td class=\"col-acciones\"><button type=\"button\" class=\"btn-small bancos-btn-vincular-factura-conciliar\" data-factura-cliente-id=\"" + (f.id != null ? f.id : "") + "\" data-numero-factura=\"" + numEsc + "\" data-fecha-factura=\"" + fechaEsc + "\" data-cliente=\"" + clienteEsc + "\">Vincular</button></td>";
       } else {
         var proveedor = (f.proveedor || "").toString().trim() || "—";
         var concepto = (f.resumen_concepto || "").toString().trim() || "—";
@@ -901,7 +1739,7 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
     var thead = document.querySelector("#tabla-conciliar-facturas thead tr");
     if (thead && thead.children.length >= 6) {
       thead.children[1].textContent = conciliarFacturaEsEntrada ? "Cliente" : "Proveedor";
-      thead.children[5].textContent = conciliarFacturaEsEntrada ? "" : "Estado";
+      thead.children[5].textContent = conciliarFacturaEsEntrada ? "Cobro" : "Estado";
     }
     var subtitulo = document.querySelector(".modal-conciliar-factura .subtitle");
     if (subtitulo) subtitulo.textContent = conciliarFacturaEsEntrada ? "Vincular esta entrada de caja a una factura emitida a cliente." : "Vincular este movimiento a una factura pendiente o parcial de pago.";
@@ -949,41 +1787,44 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
       var cliente = btn.getAttribute("data-cliente");
       var facId = btn.getAttribute("data-factura-id");
       if (esEntrada) {
-        if (!numeroFactura && !fechaFactura && !cliente) return;
+        var facturaClienteId = btn.getAttribute("data-factura-cliente-id");
+        if (!facturaClienteId && !numeroFactura && !fechaFactura && !cliente) return;
         btn.disabled = true;
+        var bodyData = {
+          movimiento_id: parseInt(conciliarFacturaMovId, 10),
+          empresa_id: conciliarFacturaEmpresaId,
+          numero_factura: numeroFactura || "",
+          fecha_factura: fechaFactura || "",
+          cliente: cliente || "",
+        };
+        if (facturaClienteId) bodyData.factura_cliente_id = parseInt(facturaClienteId, 10);
         fetch("/api/bancos/conciliacion/confirmar-cliente", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            movimiento_id: parseInt(conciliarFacturaMovId, 10),
-            empresa_id: conciliarFacturaEmpresaId,
-            numero_factura: numeroFactura || "",
-            fecha_factura: fechaFactura || "",
-            cliente: cliente || "",
-          }),
+          body: JSON.stringify(bodyData),
         })
           .then(function (r) { return r.json(); })
           .then(function (data) {
-            if (data.error) { alert(data.error); btn.disabled = false; return; }
+            if (data.error) { mostrarToast(data.error, "error"); btn.disabled = false; return; }
             cerrarModalConciliarFactura();
             cargarMovimientosBancos();
-            alert(data.mensaje || "Entrada vinculada a factura de cliente.");
+            mostrarToast(data.mensaje || "Entrada vinculada a factura de cliente.", "success");
           })
-          .catch(function () { alert("Error al vincular."); btn.disabled = false; });
+          .catch(function () { mostrarToast("Error al vincular.", "error"); btn.disabled = false; });
       } else {
         if (!facId) return;
         btn.disabled = true;
         fetch("/api/bancos/conciliacion/confirmar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ movimiento_id: parseInt(conciliarFacturaMovId, 10), factura_proveedor_id: parseInt(facId, 10) }) })
           .then(function (r) { return r.json(); })
           .then(function (data) {
-            if (data.error) { alert(data.error); btn.disabled = false; return; }
+            if (data.error) { mostrarToast(data.error, "error"); btn.disabled = false; return; }
             cerrarModalConciliarFactura();
             cargarMovimientosBancos();
             var listEl = document.getElementById("bancos-sugerencias-list");
             if (listEl && listEl.innerHTML) document.getElementById("bancos-btn-cargar-sugerencias").click();
-            alert(data.mensaje || "Conciliación registrada.");
+            mostrarToast(data.mensaje || "Conciliación registrada.", "success");
           })
-          .catch(function () { alert("Error al vincular."); btn.disabled = false; });
+          .catch(function () { mostrarToast("Error al vincular.", "error"); btn.disabled = false; });
       }
     });
   }
@@ -996,10 +1837,19 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
         var empresaId = (filtroEmpresa && filtroEmpresa.value) || "";
         if (!movId) return;
         if (!empresaId) {
-          alert("Selecciona una empresa en el filtro de movimientos.");
+          mostrarToast("Selecciona una empresa en el filtro de movimientos.", "error");
           return;
         }
-        abrirModalVincularExtracto(movId, empresaId);
+        // UX-B.4: buscar fecha e importe del movimiento en cache para preselección
+        var movData = null;
+        if (typeof movimientosCache !== "undefined") {
+          for (var mi = 0; mi < movimientosCache.length; mi++) {
+            if (String(movimientosCache[mi].id) === String(movId)) { movData = movimientosCache[mi]; break; }
+          }
+        }
+        var mFecha = movData ? (movData.fecha_operacion || "") : "";
+        var mImporte = movData ? movData.importe : null;
+        abrirModalVincularExtracto(movId, empresaId, mFecha, mImporte);
         return;
       }
       var btnConciliarFactura = e.target && e.target.closest && e.target.closest(".bancos-btn-conciliar-factura");
@@ -1010,7 +1860,7 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
         var fecha = btnConciliarFactura.getAttribute("data-fecha") || "";
         var importe = btnConciliarFactura.getAttribute("data-importe") || "";
         if (!movId || !empresaId) {
-          alert("Faltan datos del movimiento o empresa.");
+          mostrarToast("Faltan datos del movimiento o empresa.", "error");
           return;
         }
         if (typeof window.abrirModalConciliarFactura === "function") {
@@ -1032,11 +1882,11 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
         })
           .then(function (r) { return r.json(); })
           .then(function (data) {
-            if (data.error) { alert(data.error); return; }
+            if (data.error) { mostrarToast(data.error, "error"); return; }
             cargarMovimientosBancos();
             if (typeof window.cargarLiquidacionesTarjetas === "function") window.cargarLiquidacionesTarjetas();
           })
-          .catch(function () { alert("Error al desvincular."); })
+          .catch(function () { mostrarToast("Error al desvincular.", "error"); })
           .finally(function () { btnDesvincularExt.disabled = false; });
         return;
       }
@@ -1076,6 +1926,7 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
           cerrarModalVincularExtracto();
           cargarMovimientosBancos();
           if (typeof window.cargarLiquidacionesTarjetas === "function") window.cargarLiquidacionesTarjetas();
+          mostrarToast("Movimiento vinculado correctamente.", "success");
         })
         .catch(function () {
           if (vincularStatus) { vincularStatus.textContent = "Error de conexión."; vincularStatus.style.color = "#b91c1c"; }
@@ -1110,13 +1961,15 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
     function cargarSugerenciasPagina(pagina) {
       var empresaId = (filtroEmpresa && filtroEmpresa.value) || "";
       if (!empresaId) {
-        alert("Selecciona una empresa.");
+        mostrarToast("Selecciona una empresa.", "error");
         return;
       }
       var params = new URLSearchParams();
       params.set("empresa_id", empresaId);
       params.set("page", String(pagina));
       params.set("per_page", "10");
+      var umbralInput = document.getElementById("bancos-umbral-sugerencias");
+      if (umbralInput && umbralInput.value) params.set("umbral", umbralInput.value);
       if (filtroFechaDesde && filtroFechaDesde.value) params.set("fecha_desde", filtroFechaDesde.value);
       if (filtroFechaHasta && filtroFechaHasta.value) params.set("fecha_hasta", filtroFechaHasta.value);
       btnCargarSug.disabled = true;
@@ -1181,11 +2034,11 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
               })
                 .then(function (r) { return r.json(); })
                 .then(function (data) {
-                  if (data.error) { alert(data.error); return; }
+                  if (data.error) { mostrarToast(data.error, "error"); return; }
                   cargarMovimientosBancos();
                   cargarSugerenciasPagina(paginaSugerenciasActual);
                 })
-                .catch(function () { alert("Error al conciliar."); })
+                .catch(function () { mostrarToast("Error al conciliar.", "error"); })
                 .finally(function () { btn.disabled = false; });
             });
           });
@@ -1211,7 +2064,7 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
     btnExportar.addEventListener("click", function () {
       var empresaId = (filtroEmpresa && filtroEmpresa.value) || "";
       if (!empresaId) {
-        alert("Elige una empresa para exportar los movimientos.");
+        mostrarToast("Elige una empresa para exportar los movimientos.", "error");
         return;
       }
       var params = new URLSearchParams();
@@ -1240,10 +2093,10 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
         .then(function (r) { return r.json(); })
         .then(function (data) {
           var n = data.eliminados != null ? data.eliminados : 0;
-          alert(n ? "Eliminados " + n + " movimiento(s) que solo tenían fecha." : (data.mensaje || "No había movimientos que eliminar."));
+          mostrarToast(n ? "Eliminados " + n + " movimiento(s) que solo tenían fecha." : (data.mensaje || "No había movimientos que eliminar."), "success");
           cargarMovimientosBancos();
         })
-        .catch(function () { alert("Error al eliminar."); })
+        .catch(function () { mostrarToast("Error al eliminar.", "error"); })
         .finally(function () { btnEliminarSoloFecha.disabled = false; });
     });
   }
@@ -1263,6 +2116,8 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
     if (tabTar) tabTar.classList.toggle("activo", !esMov);
     if (secMov) secMov.style.display = esMov ? "" : "none";
     if (secTar) secTar.style.display = esMov ? "none" : "";
+    var bc = document.getElementById("bancos-breadcrumb");
+    if (bc) bc.innerHTML = "Finanzas &rsaquo; Bancos &rsaquo; " + (esMov ? "Movimientos" : "Tarjetas");
     // Al cambiar de pestaña, asegúrate de que el usuario ve el bloque desde arriba
     var panelBancos = document.getElementById("panel-bancos-inicio");
     if (panelBancos && panelBancos.scrollIntoView) {
@@ -1287,7 +2142,8 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
   var statusTarjeta = document.getElementById("tarjetas-status");
   var tbodyLiquidaciones = document.getElementById("tbody-tarjetas-liquidaciones");
   var filtroExtractosTarjeta = document.getElementById("extractos-filtro-tarjeta");
-  var filtroExtractosPeriodo = document.getElementById("extractos-filtro-periodo");
+  var filtroExtractosMes = document.getElementById("extractos-filtro-mes");
+  var filtroExtractosAnio = document.getElementById("extractos-filtro-anio");
   var liquidacionesCache = [];
   var modalTarjetaOverlay = document.getElementById("modal-tarjeta-overlay");
   btnAbrirModalTarjeta = document.getElementById("btn-abrir-modal-tarjeta");
@@ -1301,8 +2157,11 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
 
   function renderTarjetas(tarjetas) {
     if (!tbodyTarjetas) return;
+    var countBadge = document.getElementById("tarjetas-config-count");
+    if (countBadge) countBadge.textContent = tarjetas ? String(tarjetas.length) : "";
     if (!tarjetas || tarjetas.length === 0) {
       tbodyTarjetas.innerHTML = "<tr><td colspan=\"6\" class=\"sin-datos\">No hay tarjetas para esta empresa.</td></tr>";
+      if (countBadge) countBadge.textContent = "";
       return;
     }
     var html = "";
@@ -1328,7 +2187,7 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
         if (!id) return;
         var empresaId = (tarjetasEmpresaSel && tarjetasEmpresaSel.value) || "";
         if (!empresaId) {
-          alert("Selecciona una empresa.");
+          mostrarToast("Selecciona una empresa.", "error");
           return;
         }
         var activaActual = btn.getAttribute("data-activa") === "1";
@@ -1341,10 +2200,10 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
         })
           .then(function (r) { return r.json(); })
           .then(function (data) {
-            if (data.error) { alert(data.error); return; }
+            if (data.error) { mostrarToast(data.error, "error"); return; }
             cargarTarjetasBancos();
           })
-          .catch(function () { alert("Error al actualizar la tarjeta."); })
+          .catch(function () { mostrarToast("Error al actualizar la tarjeta.", "error"); })
           .finally(function () { btn.disabled = false; });
       });
     });
@@ -1359,10 +2218,13 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
       return;
     }
     var filtroTarjeta = (filtroExtractosTarjeta && filtroExtractosTarjeta.value) || "";
-    var filtroPeriodo = (filtroExtractosPeriodo && filtroExtractosPeriodo.value) || "";
+    var filtroMes = (filtroExtractosMes && filtroExtractosMes.value) || "";
+    var filtroAnio = (filtroExtractosAnio && filtroExtractosAnio.value) || "";
     var filtradas = liqs.filter(function (l) {
       if (filtroTarjeta && String(l.tarjeta_id) !== filtroTarjeta) return false;
-      if (filtroPeriodo && (l.periodo || "") !== filtroPeriodo) return false;
+      var per = (l.periodo || "");
+      if (filtroAnio && !per.startsWith(filtroAnio)) return false;
+      if (filtroMes && per.length >= 7 && per.slice(5, 7) !== filtroMes) return false;
       return true;
     });
     if (filtradas.length === 0) {
@@ -1393,17 +2255,17 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
     }
     var html = "";
     filtradas.forEach(function (l) {
-      var tarjetaLabel = (l.tarjeta_banco || "Banco") + " – " + (l.tarjeta_persona || "Titular");
-      var ult4 = (l.tarjeta_alias || "").trim();
-      if (ult4) tarjetaLabel += " (" + ult4 + ")";
+      // Compact tarjeta label: show alias if available, else "Banco – Persona"
+      var tarjetaAlias = (l.tarjeta_alias || "").trim();
+      var tarjetaLabel = tarjetaAlias || ((l.tarjeta_banco || "Banco") + " – " + (l.tarjeta_persona || "Titular"));
       var estado = (l.estado || "pendiente");
       var totalMov = l.total_movimiento != null ? l.total_movimiento : 0;
       var pendiente = l.pendiente_facturas != null ? l.pendiente_facturas : (l.total_facturas || 0) + totalMov;
       var tid = l.tarjeta_id != null ? l.tarjeta_id : "";
       var per = (l.periodo || "").trim();
       var baseUrl = "/api/empresas/" + encodeURIComponent(empresaId) + "/tarjetas/extracto-export?tarjeta_id=" + encodeURIComponent(tid) + "&periodo=" + encodeURIComponent(per);
-      var btnExcel = "<a href=\"" + baseUrl + "&tipo=excel\" target=\"_blank\" class=\"btn-small\" title=\"Descargar conciliación (facturas + movimiento bancario)\">Excel</a>";
-      var btnFacturas = "<a href=\"" + baseUrl + "&tipo=facturas\" target=\"_blank\" class=\"btn-small\" title=\"Descargar facturas del extracto\">Facturas</a>";
+      var btnExcel = "<a href=\"" + baseUrl + "&tipo=excel\" target=\"_blank\" class=\"btn-icon-descarga btn-icon-sm\" title=\"Descargar conciliación\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\"><rect x=\"2\" y=\"2\" width=\"20\" height=\"20\" rx=\"3\" fill=\"#107C41\"/><text x=\"12\" y=\"15.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"7\" font-weight=\"700\" font-family=\"Inter,sans-serif\">XLS</text></svg></a>";
+      var btnFacturas = "<a href=\"" + baseUrl + "&tipo=facturas\" target=\"_blank\" class=\"btn-icon-descarga btn-icon-sm\" title=\"Descargar facturas\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\"><rect x=\"2\" y=\"2\" width=\"20\" height=\"20\" rx=\"3\" fill=\"#DC2626\"/><text x=\"12\" y=\"15.5\" text-anchor=\"middle\" fill=\"#fff\" font-size=\"7\" font-weight=\"700\" font-family=\"Inter,sans-serif\">PDF</text></svg></a>";
       html += "<tr>";
       html += "<td>" + tarjetaLabel + "</td>";
       html += "<td>" + (l.periodo || "—") + "</td>";
@@ -1411,11 +2273,71 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
       html += "<td class=\"numero\">" + formatearNumeroES(l.total_facturas != null ? String(l.total_facturas) : null) + "</td>";
       html += "<td class=\"numero\">" + formatearNumeroES(totalMov) + "</td>";
       html += "<td class=\"numero\">" + formatearNumeroES(pendiente) + "</td>";
-      html += "<td>" + estado.charAt(0).toUpperCase() + estado.slice(1) + "</td>";
+      var badgeClass = estado === "conciliado" ? "conciliado" : estado === "cargo recibido" ? "cargo-recibido" : "pendiente";
+      var estadoLabel = estado.charAt(0).toUpperCase() + estado.slice(1);
+      var totalFact = l.total_facturas != null ? Math.abs(Number(l.total_facturas)) : 0;
+      var totalMovAbs = l.total_movimiento != null ? Math.abs(Number(l.total_movimiento)) : 0;
+      var pctVinculado = totalFact > 0 && totalMovAbs > 0 ? Math.min(100, Math.round((totalMovAbs / totalFact) * 100)) : (estado === "conciliado" ? 100 : 0);
+      html += "<td><span class=\"badge-estado " + badgeClass + "\">" + estadoLabel + "</span>";
+      var fillClass = pctVinculado >= 100 ? "fill-100" : pctVinculado === 0 ? "fill-0" : "";
+      html += " <span class=\"barra-progreso-extracto\"><span class=\"barra-bg\"><span class=\"barra-fill " + fillClass + "\" style=\"width:" + pctVinculado + "%\"></span></span><span class=\"barra-pct\">" + pctVinculado + "%</span></span>";
+      html += "</td>";
       html += "<td class=\"bancos-conciliacion-btns\">" + btnExcel + " " + btnFacturas + "</td>";
       html += "</tr>";
     });
     tbodyLiquidaciones.innerHTML = html;
+    // UX-B.5: generar avisos tras renderizar liquidaciones
+    renderAvisosTarjetas(filtradas);
+  }
+
+  // UX-B.5: Bloque colapsable de avisos
+  function renderAvisosTarjetas(liqs) {
+    var container = document.getElementById("bancos-avisos-container");
+    if (!container) return;
+    var avisos = [];
+    (liqs || []).forEach(function (l) {
+      var estado = (l.estado || "pendiente");
+      var numFact = l.num_facturas != null ? Number(l.num_facturas) : 0;
+      var totalMov = l.total_movimiento != null ? Number(l.total_movimiento) : 0;
+      var tarjetaLabel = (l.tarjeta_banco || "Banco") + " " + (l.tarjeta_persona || "");
+      var ult4 = (l.tarjeta_alias || "").trim();
+      if (ult4) tarjetaLabel += " (" + ult4 + ")";
+      var per = l.periodo || "?";
+      if (numFact > 0 && totalMov === 0 && estado === "pendiente") {
+        avisos.push(tarjetaLabel + " – " + per + ": tiene " + numFact + (numFact === 1 ? " factura vinculada" : " facturas vinculadas") + " pero no hay movimiento bancario conciliado.");
+      }
+      if (estado === "cargo recibido") {
+        var pendiente = l.pendiente_facturas != null ? Math.abs(Number(l.pendiente_facturas)) : 0;
+        if (pendiente > 0.01) {
+          avisos.push(tarjetaLabel + " – " + per + ": cargo recibido pero quedan " + pendiente.toFixed(2) + " \u20ac pendientes de vincular a facturas.");
+        }
+      }
+    });
+    if (avisos.length === 0) {
+      container.innerHTML = "";
+      return;
+    }
+    var html = "<div class=\"bancos-avisos-bloque\">";
+    html += "<div class=\"bancos-avisos-header\" id=\"bancos-avisos-toggle\"><span class=\"avisos-flecha\" id=\"bancos-avisos-flecha\">\u25B6</span> " + avisos.length + " aviso" + (avisos.length > 1 ? "s" : "") + "</div>";
+    html += "<div class=\"bancos-avisos-body oculto\" id=\"bancos-avisos-body\"><ul>";
+    avisos.forEach(function (a) { html += "<li>" + a + "</li>"; });
+    html += "</ul></div></div>";
+    container.innerHTML = html;
+    var toggleBtn = document.getElementById("bancos-avisos-toggle");
+    var body = document.getElementById("bancos-avisos-body");
+    var flecha = document.getElementById("bancos-avisos-flecha");
+    if (toggleBtn && body) {
+      toggleBtn.addEventListener("click", function () {
+        var abierto = !body.classList.contains("oculto");
+        if (abierto) {
+          body.classList.add("oculto");
+          if (flecha) flecha.classList.remove("abierto");
+        } else {
+          body.classList.remove("oculto");
+          if (flecha) flecha.classList.add("abierto");
+        }
+      });
+    }
   }
 
   function cargarLiquidacionesTarjetas() {
@@ -1480,8 +2402,13 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
       renderLiquidaciones(liquidacionesCache);
     });
   }
-  if (filtroExtractosPeriodo) {
-    filtroExtractosPeriodo.addEventListener("change", function () {
+  if (filtroExtractosMes) {
+    filtroExtractosMes.addEventListener("change", function () {
+      renderLiquidaciones(liquidacionesCache);
+    });
+  }
+  if (filtroExtractosAnio) {
+    filtroExtractosAnio.addEventListener("change", function () {
       renderLiquidaciones(liquidacionesCache);
     });
   }
@@ -1505,7 +2432,7 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
   if (btnAbrirModalTarjeta) {
     btnAbrirModalTarjeta.addEventListener("click", function () {
       if (!tarjetasEmpresaSel || !tarjetasEmpresaSel.value) {
-        alert("Selecciona primero una empresa para la tarjeta.");
+        mostrarToast("Selecciona primero una empresa para la tarjeta.", "error");
         return;
       }
       abrirModalTarjeta();
@@ -1524,7 +2451,7 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
     formTarjeta.addEventListener("submit", function (e) {
       e.preventDefault();
       if (!tarjetasEmpresaSel || !tarjetasEmpresaSel.value) {
-        alert("Selecciona una empresa antes de crear una tarjeta.");
+        mostrarToast("Selecciona una empresa antes de crear una tarjeta.", "error");
         return;
       }
       var empresaId = tarjetasEmpresaSel.value;
@@ -1576,6 +2503,7 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
             statusTarjeta.textContent = "Tarjeta guardada correctamente.";
             statusTarjeta.style.color = "#15803d";
           }
+          mostrarToast("Tarjeta guardada correctamente.", "success");
           cargarTarjetasBancos();
           cargarLiquidacionesTarjetas();
           if (modalTarjetaOverlay) {
@@ -1639,16 +2567,18 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
     var prov = (f.proveedor || f.cliente || "").trim() || "—";
     var num = (f.numero_factura || "").trim() || "—";
     var fecha = (f.fecha_factura || "").trim() || "—";
-    var ruta = (item.ruta_archivo || "").trim() || "—";
+    var ruta = (item.ruta_archivo || "").trim() || "";
+    var esProv = tipoValue === "proveedores";
     var div = document.createElement("div");
     div.className = "control-calidad-item";
-    div.style.cssText = "border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px;margin-bottom:8px;background:#f8fafc;";
     var erroresHtml = (item.errores || []).map(function (e) { return "<li>" + escapeHtml(e) + "</li>"; }).join("");
+    var rutaHtml = ruta ? " <span class=\"cc-ruta-info\" title=\"" + escapeHtml(ruta) + "\">\u2139</span>" : "";
     div.innerHTML =
-      "<strong>" + tipoLabel + "</strong> · Proveedor/Cliente: " + escapeHtml(prov) + " · Nº: " + escapeHtml(num) + " · Fecha: " + escapeHtml(fecha) + " · Ruta: " + escapeHtml(ruta) +
-      "<ul class=\"control-calidad-errores\" style=\"margin:8px 0 0 18px;color:#b91c1c;\">" + erroresHtml + "</ul>" +
-      "<p style=\"margin:10px 0 4px 0;\"><button type=\"button\" class=\"secondary btn-obtener-sugerencia\">Obtener sugerencia</button></p>" +
-      "<div class=\"control-calidad-sugerencia-block\" style=\"display:none;margin-top:8px;padding:8px;background:#f1f5f9;border-radius:4px;\"></div>";
+      "<div class=\"cc-card-header\"><span class=\"cc-badge-tipo " + (esProv ? "prov" : "cli") + "\">" + tipoLabel + "</span><span class=\"cc-card-nombre\">" + escapeHtml(prov) + "</span></div>" +
+      "<div class=\"cc-card-meta\">Nº " + escapeHtml(num) + " · " + escapeHtml(fecha) + rutaHtml + "</div>" +
+      "<ul class=\"control-calidad-errores\">" + erroresHtml + "</ul>" +
+      "<div><button type=\"button\" class=\"secondary btn-obtener-sugerencia\">\u2728 Sugerencia</button></div>" +
+      "<div class=\"control-calidad-sugerencia-block\" style=\"display:none;\"></div>";
     var btnSugerencia = div.querySelector(".btn-obtener-sugerencia");
     var bloqueSugerencia = div.querySelector(".control-calidad-sugerencia-block");
 
@@ -1679,14 +2609,14 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
           btnSugerencia.textContent = "Obtener sugerencia";
           var sug = data.sugerencias || [];
           if (sug.length === 0) {
-            bloqueSugerencia.innerHTML = "<p style=\"color:#64748b;\">No hay sugerencias automáticas para estos errores.</p><button type=\"button\" class=\"secondary\">Cerrar</button>";
+            bloqueSugerencia.innerHTML = "<p class=\"control-calidad-msg-info\">No hay sugerencias automáticas para estos errores.</p><button type=\"button\" class=\"secondary\">Cerrar</button>";
             bloqueSugerencia.querySelector("button").addEventListener("click", function () { bloqueSugerencia.style.display = "none"; bloqueSugerencia.innerHTML = ""; });
           } else {
             var lineas = sug.map(function (s) {
               return "<strong>" + escapeHtml(s.campo) + "</strong>: " + escapeHtml(s.valor_actual) + " → " + escapeHtml(s.valor_sugerido) + ". " + escapeHtml(s.motivo || "");
             }).join("<br/>");
             bloqueSugerencia.innerHTML =
-              "<p style=\"margin:0 0 8px 0;\"><strong>Sugerencia:</strong></p><p style=\"margin:0 0 8px 0;font-size:0.95em;\">" + lineas + "</p>" +
+              "<p class=\"mb-2\"><strong>Sugerencia:</strong></p><p class=\"mb-2\" style=\"font-size:0.95em;\">" + lineas + "</p>" +
               "<div class=\"control-calidad-acciones\">" +
               "<button type=\"button\" class=\"secondary btn-aceptar-sugerencia\">Aceptar sugerencia</button> " +
               "<button type=\"button\" class=\"secondary btn-rechazar-sugerencia\">Rechazar</button> " +
@@ -1724,7 +2654,7 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
                   if (form.requestSubmit) form.requestSubmit(); else form.dispatchEvent(new Event("submit", { cancelable: true }));
                 })
                 .catch(function (err) {
-                  alert(err.message || "No se pudo aplicar la sugerencia.");
+                  mostrarToast(err.message || "No se pudo aplicar la sugerencia.", "error");
                 });
             });
             bloqueSugerencia.querySelector(".btn-editar-mano").addEventListener("click", function () {
@@ -1744,7 +2674,7 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
         .catch(function (err) {
           btnSugerencia.disabled = false;
           btnSugerencia.textContent = "Obtener sugerencia";
-          bloqueSugerencia.innerHTML = "<p style=\"color:#b91c1c;\">Error al obtener sugerencia.</p>";
+          bloqueSugerencia.innerHTML = "<p class=\"control-calidad-msg-error\">Error al obtener sugerencia.</p>";
           bloqueSugerencia.style.display = "block";
         });
     });
@@ -1765,19 +2695,22 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
     var cliF = filtrarPorTipoError(cli, filtroTipoError);
     if (provF.length === 0 && cliF.length === 0) {
       if (prov.length === 0 && cli.length === 0) {
-        listaEl.innerHTML = "<p style=\"color:#15803d;\">No hay facturas con problemas.</p>";
+        listaEl.innerHTML = "<p class=\"control-calidad-msg-ok\">No hay facturas con problemas.</p>";
       } else {
-        listaEl.innerHTML = "<p style=\"color:#64748b;\">Ninguna factura coincide con el filtro \"" + (filtroTipoError || "Todos") + "\".</p>";
+        listaEl.innerHTML = "<p class=\"control-calidad-msg-info\">Ninguna factura coincide con el filtro \"" + (filtroTipoError || "Todos") + "\".</p>";
       }
       return;
     }
-    provF.forEach(function (item) { listaEl.appendChild(renderizarFacturaConErrores(item, "Proveedores", "proveedores")); });
-    cliF.forEach(function (item) { listaEl.appendChild(renderizarFacturaConErrores(item, "Clientes", "clientes")); });
+    var grid = document.createElement("div");
+    grid.className = "control-calidad-grid";
+    provF.forEach(function (item) { grid.appendChild(renderizarFacturaConErrores(item, "Proveedores", "proveedores")); });
+    cliF.forEach(function (item) { grid.appendChild(renderizarFacturaConErrores(item, "Clientes", "clientes")); });
+    listaEl.appendChild(grid);
   }
 
   if (filtroEl) filtroEl.addEventListener("change", function () { renderListaControlCalidad(lastProv, lastCli, filtroEl.value); });
   if (exportarBtn) exportarBtn.addEventListener("click", function () {
-    if (lastProv.length === 0 && lastCli.length === 0) { alert("No hay datos para exportar. Ejecuta antes un análisis."); return; }
+    if (lastProv.length === 0 && lastCli.length === 0) { mostrarToast("No hay datos para exportar. Ejecuta antes un análisis.", "error"); return; }
     var csv = "tipo;proveedor_o_cliente;numero_factura;fecha;ruta_archivo;errores\n";
     lastProv.forEach(function (item) {
       var f = item.fila || {};
@@ -1849,9 +2782,17 @@ document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
         var cli = data.facturas_clientes || [];
         lastProv = prov;
         lastCli = cli;
-        var numFacturas = prov.length + cli.length;
+        var numConProblemas = prov.length + cli.length;
         var numErrores = prov.reduce(function (s, i) { return s + (i.errores || []).length; }, 0) + cli.reduce(function (s, i) { return s + (i.errores || []).length; }, 0);
-        if (resumenEl) resumenEl.textContent = numFacturas + " factura(s) con problemas · " + numErrores + " error(es)";
+        var totalAnalizadas = data.total_analizadas || numConProblemas;
+        var barEl = document.getElementById("control-calidad-resumen-bar");
+        if (barEl) {
+          barEl.style.display = "flex";
+          barEl.innerHTML =
+            "<span class=\"resumen-item\"><span class=\"resumen-label\">Analizadas</span><span class=\"resumen-valor\">" + totalAnalizadas + "</span></span>" +
+            "<span class=\"resumen-item\"><span class=\"resumen-label\">Con problemas</span><span class=\"resumen-valor" + (numConProblemas > 0 ? " rojo" : "") + "\">" + numConProblemas + "</span></span>" +
+            "<span class=\"resumen-item\"><span class=\"resumen-label\">Errores</span><span class=\"resumen-valor" + (numErrores > 0 ? " rojo" : "") + "\">" + numErrores + "</span></span>";
+        }
         renderListaControlCalidad(prov, cli, filtroEl ? filtroEl.value : "");
       })
       .catch(function (err) {
@@ -1951,6 +2892,12 @@ form.addEventListener("submit", async (event) => {
 
     const json = await resp.json();
     statusEl.textContent = json.mensaje || "Procesamiento lanzado correctamente.";
+    // Recargar listado si hay empresa seleccionada
+    const empListado = document.getElementById("empresa-listado");
+    if (empListado && empListado.value) {
+      if (typeof window.cargarListadoProveedores === "function") window.cargarListadoProveedores(empListado.value);
+      else if (document.getElementById("btn-cargar-listado")) document.getElementById("btn-cargar-listado").click();
+    }
   } catch (err) {
     console.error(err);
     statusEl.textContent =
@@ -1959,6 +2906,48 @@ form.addEventListener("submit", async (event) => {
     form.querySelector("button[type=submit]").disabled = false;
   }
 });
+
+// Modal procesar facturas proveedores
+(function () {
+  var overlay = document.getElementById("modal-procesar-prov-overlay");
+  var btnAbrir = document.getElementById("btn-abrir-modal-procesar-prov");
+  var btnCerrar = document.getElementById("btn-cerrar-modal-procesar-prov");
+  if (!overlay || !btnAbrir) return;
+  btnAbrir.addEventListener("click", function () {
+    // Sincronizar empresa del listado al modal
+    var empListado = document.getElementById("empresa-listado");
+    var empModal = document.getElementById("empresa");
+    if (empListado && empModal && empListado.value && !empModal.value) {
+      empModal.value = empListado.value;
+      empModal.dispatchEvent(new Event("change"));
+    }
+    overlay.classList.add("visible");
+    overlay.setAttribute("aria-hidden", "false");
+  });
+  function cerrar() { overlay.classList.remove("visible"); overlay.setAttribute("aria-hidden", "true"); }
+  if (btnCerrar) btnCerrar.addEventListener("click", cerrar);
+  overlay.addEventListener("click", function (e) { if (e.target === overlay) cerrar(); });
+})();
+
+// Modal procesar facturas clientes
+(function () {
+  var overlay = document.getElementById("modal-procesar-cli-overlay");
+  var btnAbrir = document.getElementById("btn-abrir-modal-procesar-cli");
+  var btnCerrar = document.getElementById("btn-cerrar-modal-procesar-cli");
+  if (!overlay || !btnAbrir) return;
+  btnAbrir.addEventListener("click", function () {
+    var empListado = document.getElementById("cli-empresa-listado");
+    var empModal = document.getElementById("cli-empresa-proc");
+    if (empListado && empModal && empListado.value && !empModal.value) {
+      empModal.value = empListado.value;
+    }
+    overlay.classList.add("visible");
+    overlay.setAttribute("aria-hidden", "false");
+  });
+  function cerrar() { overlay.classList.remove("visible"); overlay.setAttribute("aria-hidden", "true"); }
+  if (btnCerrar) btnCerrar.addEventListener("click", cerrar);
+  overlay.addEventListener("click", function (e) { if (e.target === overlay) cerrar(); });
+})();
 
 // Formato numérico: miles con punto, decimales con coma. Parsea bien 52.15 → 52,15 y 1234.56 → 1.234,56
 function formatearNumeroES(val) {
@@ -1993,7 +2982,7 @@ const COLUMNAS = [
   { key: "numero_factura", label: "Nº factura" },
   { key: "base_imponible", label: "Base" },
   { key: "iva", label: "IVA" },
-  { key: "retenciones_total", label: "Retenciones" },
+  { key: "retenciones_total", label: "Ret." },
   { key: "total_a_pagar", label: "Total a pagar" },
   { key: "estado_pago", label: "Estado pago" },
 ];
@@ -2081,6 +3070,7 @@ function renderTablaFacturas(opts) {
     const th = document.createElement("th");
     th.textContent = col.label;
     th.className = "sortable";
+    th.title = "Ordenar por " + col.label;
     if (columnasNumericas.has(col.key)) th.classList.add("numero");
     if (opts.sortState.key === col.key) {
       th.classList.add(opts.sortState.dir === "asc" ? "sort-asc" : "sort-desc");
@@ -2102,6 +3092,21 @@ function renderTablaFacturas(opts) {
 
   // Tbody
   tbody.innerHTML = "";
+  // Estado vacío
+  var tablaParent = tbody.closest("table");
+  if (tablaParent) {
+    var vacioExistente = tablaParent.parentNode.querySelector(".tabla-estado-vacio");
+    if (vacioExistente) vacioExistente.remove();
+  }
+  if (!facturas.length) {
+    if (tablaParent) {
+      var divVacio = document.createElement("div");
+      divVacio.className = "tabla-estado-vacio";
+      divVacio.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg><p class="estado-vacio-titulo">No hay facturas para mostrar</p><p class="estado-vacio-subtitulo">Selecciona una empresa y pulsa Cargar listado</p>';
+      tablaParent.parentNode.insertBefore(divVacio, tablaParent.nextSibling);
+    }
+    return;
+  }
   facturas.forEach((f) => {
     const tr = document.createElement("tr");
     const tieneError = opts.tieneError ? opts.tieneError(f) : false;
@@ -2126,9 +3131,30 @@ function renderTablaFacturas(opts) {
     columnas.forEach((col) => {
       const td = document.createElement("td");
       const raw = (f[col.key] ?? "").toString().trim();
-      td.textContent = columnasNumericas.has(col.key) ? formatearNumeroES(raw || null) : (raw || "—");
-      td.title = td.textContent;
+      if (col.key === "estado_pago" || col.key === "estado_cobro") {
+        const val = raw.toLowerCase();
+        if (val) {
+          const badge = document.createElement("span");
+          badge.className = "badge-pago badge-pago-" + val;
+          badge.textContent = raw;
+          td.appendChild(badge);
+        } else {
+          td.textContent = "—";
+        }
+      } else if (col.key === "fecha_factura" && raw.length >= 10) {
+        // Formato compacto dd/mm/yy
+        var partes = raw.slice(0, 10).split("-");
+        td.textContent = partes.length === 3 ? partes[2] + "/" + partes[1] + "/" + partes[0].slice(2) : raw;
+      } else {
+        td.textContent = columnasNumericas.has(col.key) ? formatearNumeroES(raw || null) : (raw || "—");
+      }
+      td.title = raw || "—";
       if (columnasNumericas.has(col.key)) td.classList.add("numero");
+      if (col.key === "pais_proveedor" || col.key === "pais") td.classList.add("col-pais");
+      if (col.key === "cliente" || col.key === "proveedor") td.classList.add("col-cliente");
+      if (col.key === "localidad") td.classList.add("col-localidad");
+      if (col.key === "proyecto") td.classList.add("col-proyecto");
+      if (col.key === "concepto") td.classList.add("col-concepto-narrow");
       tr.appendChild(td);
     });
     const tdAccion = document.createElement("td");
@@ -2138,7 +3164,7 @@ function renderTablaFacturas(opts) {
       a.href = "/api/archivo?ruta=" + encodeURIComponent(ruta);
       a.target = "_blank";
       a.rel = "noopener noreferrer";
-      a.textContent = "Ver factura";
+      a.textContent = "Ver";
       a.className = "link-ver-factura";
       tdAccion.appendChild(a);
     }
@@ -2314,7 +3340,9 @@ function aplicarFiltrosYRender() {
     );
   }
   const tarjetaId = (document.getElementById("filtro-tarjeta") || {}).value || "";
-  if (tarjetaId) {
+  if (tarjetaId === "__banco__") {
+    filtradas = filtradas.filter((f) => !f.tarjeta_id || String(f.tarjeta_id).trim() === "" || String(f.tarjeta_id).trim() === "0");
+  } else if (tarjetaId) {
     filtradas = filtradas.filter((f) => String(f.tarjeta_id || "") === tarjetaId);
   }
 
@@ -2326,7 +3354,7 @@ function aplicarFiltrosYRender() {
     sinDatos.style.display = "block";
     sinDatos.textContent = filtroAlertasActivo
       ? "No hay facturas con alertas para los filtros seleccionados."
-      : "No hay facturas cargadas para esta empresa. Sube facturas con el formulario de la izquierda.";
+      : "No hay facturas cargadas para esta empresa. Usa el bot\u00f3n \u00ab+ Procesar\u00bb para subir nuevas.";
     return;
   }
 
@@ -2344,7 +3372,7 @@ function aplicarFiltrosYRender() {
   }
 
   contador.textContent =
-    total + " factura(s)" + (total > LIMITE_FILAS_TABLA ? " (mostrando primeras " + LIMITE_FILAS_TABLA + ")" : "");
+    total + (total === 1 ? " factura" : " facturas") + (total > LIMITE_FILAS_TABLA ? " (mostrando primeras " + LIMITE_FILAS_TABLA + ")" : "");
   renderFacturasEnTbody(tbody, visibles, true);
   actualizarBotonEliminar();
 
@@ -2353,12 +3381,10 @@ function aplicarFiltrosYRender() {
   if (totalConAlerta > 0) {
     btnAlertas.style.display = "";
     if (filtroAlertasActivo) {
-      btnAlertas.style.background = "#b91c1c";
-      btnAlertas.style.color = "#fff";
+      btnAlertas.classList.add("btn-alerta-activo");
       btnAlertas.textContent = "⚠ Alertas (" + filtradas.length + ") ✕";
     } else {
-      btnAlertas.style.background = "#fef2f2";
-      btnAlertas.style.color = "#b91c1c";
+      btnAlertas.classList.remove("btn-alerta-activo");
       btnAlertas.textContent = "⚠ Alertas (" + totalConAlerta + ")";
     }
   } else {
@@ -2368,6 +3394,7 @@ function aplicarFiltrosYRender() {
 
 async function cargarListado(empresaId) {
   const sinDatos = document.getElementById("sin-datos");
+  const btnCargar = document.getElementById("btn-cargar-listado");
   FACTURAS_ACTUALES = [];
   // Orden por defecto: fecha más reciente primero
   sortStateFacturas.key = "fecha_factura";
@@ -2377,6 +3404,7 @@ async function cargarListado(empresaId) {
   document.getElementById("tbody-facturas").innerHTML = "";
   document.getElementById("contador").textContent = "";
   sinDatos.style.display = "none";
+  if (btnCargar) { btnCargar.classList.add("btn-loading"); }
 
   try {
     const resp = await fetch("/api/facturas?empresa_id=" + encodeURIComponent(empresaId));
@@ -2392,7 +3420,7 @@ async function cargarListado(empresaId) {
     if (filtroEstadoPago) filtroEstadoPago.value = "";
     const selTarjeta = document.getElementById("filtro-tarjeta");
     if (selTarjeta) {
-      selTarjeta.innerHTML = "<option value=\"\">Todas las tarjetas</option>";
+      selTarjeta.innerHTML = "<option value=\"\">Pagado v\u00eda</option><option value=\"__banco__\">Banco (sin tarjeta)</option>";
       try {
         const r = await fetch("/api/empresas/" + encodeURIComponent(empresaId) + "/tarjetas?solo_activas=true");
         const data = await r.json();
@@ -2409,13 +3437,15 @@ async function cargarListado(empresaId) {
     console.error("Error cargando listado de facturas:", err);
     sinDatos.textContent = "No se pudo cargar el listado. Comprueba que el backend está en marcha.";
     sinDatos.style.display = "block";
+  } finally {
+    if (btnCargar) { btnCargar.classList.remove("btn-loading"); }
   }
 }
 
 document.getElementById("btn-cargar-listado").addEventListener("click", () => {
   const emp = document.getElementById("empresa-listado").value;
   if (!emp) {
-    alert("Elige primero una empresa.");
+    mostrarToast("Elige primero una empresa.", "error");
     return;
   }
   cargarListado(emp);
@@ -2443,14 +3473,14 @@ document.getElementById("btn-eliminar-seleccionadas").addEventListener("click", 
   if (!checks.length) return;
   const emp = document.getElementById("empresa-listado").value;
   if (!emp) {
-    alert("No hay empresa seleccionada.");
+    mostrarToast("No hay empresa seleccionada.", "error");
     return;
   }
   const n = checks.length;
-  if (!confirm("¿Seguro que quieres eliminar " + n + " factura(s)? Esta acción no se puede deshacer.")) return;
+  if (!confirm("¿Seguro que quieres eliminar " + n + (n === 1 ? " factura" : " facturas") + "? Esta acción no se puede deshacer.")) return;
   const rutas = Array.from(checks).map((cb) => cb.dataset.ruta).filter(Boolean);
   if (!rutas.length) {
-    alert("Las facturas seleccionadas no tienen ruta identificable.");
+    mostrarToast("Las facturas seleccionadas no tienen ruta identificable.", "error");
     return;
   }
   try {
@@ -2464,17 +3494,17 @@ document.getElementById("btn-eliminar-seleccionadas").addEventListener("click", 
       throw new Error(err.error || "Error al eliminar");
     }
     const json = await resp.json();
-    alert(json.mensaje || "Facturas eliminadas.");
+    mostrarToast(json.mensaje || "Facturas eliminadas.", "success");
     cargarListado(emp);
   } catch (err) {
-    alert(err.message || "No se pudieron eliminar las facturas.");
+    mostrarToast(err.message || "No se pudieron eliminar las facturas.", "error");
   }
 });
 
 document.getElementById("btn-exportar").addEventListener("click", () => {
   const emp = document.getElementById("empresa-listado").value;
   if (!emp) {
-    alert("Elige primero una empresa para exportar.");
+    mostrarToast("Elige primero una empresa para exportar.", "error");
     return;
   }
   const anio = document.getElementById("filtro-anio").value || "";
@@ -2498,7 +3528,7 @@ document.getElementById("btn-exportar").addEventListener("click", () => {
 document.getElementById("btn-descargar-facturas").addEventListener("click", () => {
   const emp = document.getElementById("empresa-listado").value;
   if (!emp) {
-    alert("Elige primero una empresa para descargar las facturas.");
+    mostrarToast("Elige primero una empresa para descargar las facturas.", "error");
     return;
   }
   const anio = document.getElementById("filtro-anio").value || "";
@@ -2588,8 +3618,9 @@ function renderTablaCecos(filtro) {
         }
         cecosMensaje.textContent = `Centro de coste guardado para ${nombre}.`;
         empresaCecosEl.dispatchEvent(new Event("change"));
+        mostrarToast("Centro de coste guardado correctamente.", "success");
       } catch (e) {
-        alert(e.message || "Error al guardar el centro de coste.");
+        mostrarToast(e.message || "Error al guardar el centro de coste.", "error");
       }
     });
     tdAccion.appendChild(btn);
@@ -2735,9 +3766,11 @@ empresaProveedoresEl.addEventListener("change", async () => {
   FACTURAS_PROVEEDOR_ACTUALES = [];
   proveedorSeleccionadoNombre = "";
   if (!emp) return;
+  listaProveedoresEl.innerHTML = "<div class=\"lista-loading\"><div class=\"spinner\"></div>Cargando…</div>";
   try {
-    const resp = await fetch("/api/proveedores?empresa_id=" + encodeURIComponent(emp));
+    const resp = await fetch("/api/proveedores?empresa_id=" + encodeURIComponent(emp) + "&solo_con_facturas=1");
     const json = await resp.json();
+    listaProveedoresEl.innerHTML = "";
     const proveedores = (json.proveedores || []).slice().sort((a, b) => {
       const na = ((a.nombre_canonico || "").trim() || "Sin nombre").toLowerCase();
       const nb = ((b.nombre_canonico || "").trim() || "Sin nombre").toLowerCase();
@@ -2781,7 +3814,7 @@ var btnEliminarProveedorEl = document.getElementById("btn-eliminar-proveedor");
 
 function abrirModalNuevoProveedor(empresaId) {
   if (!empresaId) {
-    alert("Selecciona primero una empresa.");
+    mostrarToast("Selecciona primero una empresa.", "error");
     return;
   }
   modalProveedorModo = "nuevo";
@@ -2834,7 +3867,7 @@ async function refrescarListaProveedores() {
   const emp = empresaProveedoresEl.value;
   if (!emp) return;
   try {
-    const resp = await fetch("/api/proveedores?empresa_id=" + encodeURIComponent(emp));
+    const resp = await fetch("/api/proveedores?empresa_id=" + encodeURIComponent(emp) + "&solo_con_facturas=1");
     const json = await resp.json();
     const proveedores = (json.proveedores || []).slice().sort((a, b) => {
       const na = ((a.nombre_canonico || "").trim() || "Sin nombre").toLowerCase();
@@ -2875,6 +3908,36 @@ document.getElementById("btn-nuevo-proveedor").addEventListener("click", () => {
   abrirModalNuevoProveedor(empresaProveedoresEl.value);
 });
 
+const btnSincronizarFacturasProveedores = document.getElementById("btn-sincronizar-facturas-proveedores");
+if (btnSincronizarFacturasProveedores) {
+  btnSincronizarFacturasProveedores.addEventListener("click", async () => {
+    const empresaId = empresaProveedoresEl.value.trim();
+    const body = empresaId ? { empresa_id: empresaId } : {};
+    btnSincronizarFacturasProveedores.disabled = true;
+    try {
+      const resp = await fetch("/api/proveedores/sincronizar-facturas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        mostrarToast(data.error || "Error al sincronizar.", "error");
+        return;
+      }
+      mostrarToast(data.mensaje || "Sincronización completada.", "success");
+      await refrescarListaProveedores();
+      if (empresaId && proveedorSeleccionadoNombre) {
+        await cargarFacturasProveedor(empresaId, proveedorSeleccionadoNombre);
+      }
+    } catch (err) {
+      mostrarToast("Error de conexión al sincronizar.", "error");
+    } finally {
+      btnSincronizarFacturasProveedores.disabled = false;
+    }
+  });
+}
+
 document.getElementById("btn-cancelar-proveedor").addEventListener("click", cerrarModalProveedor);
 
 if (btnEliminarProveedorEl) {
@@ -2892,14 +3955,14 @@ if (btnEliminarProveedorEl) {
       });
       const data = await resp.json();
       if (!resp.ok) {
-        alert(data.error || "Error al eliminar.");
+        mostrarToast(data.error || "Error al eliminar.", "error");
         return;
       }
       cerrarModalProveedor();
       await refrescarListaProveedores();
-      alert(data.mensaje || "Proveedor eliminado del maestro.");
+      mostrarToast(data.mensaje || "Proveedor eliminado del maestro.", "success");
     } catch (err) {
-      alert("Error de conexión al eliminar.");
+      mostrarToast("Error de conexión al eliminar.", "error");
     }
   });
 }
@@ -2910,17 +3973,21 @@ formProveedorEl.addEventListener("submit", async (e) => {
   const nombre = document.getElementById("proveedor-nombre").value.trim();
   const nif = document.getElementById("proveedor-nif").value.trim();
   if (!empresaId && modalProveedorModo === "nuevo") {
-    alert("La empresa es obligatoria.");
+    mostrarToast("La empresa es obligatoria.", "error");
     return;
   }
   if (!nombre) {
-    alert("El nombre del proveedor es obligatorio.");
-    document.getElementById("proveedor-nombre").focus();
+    var _pn = document.getElementById("proveedor-nombre");
+    marcarCampoError(_pn, "El nombre del proveedor es obligatorio");
+    mostrarToast("El nombre del proveedor es obligatorio.", "error");
+    _pn.focus();
     return;
   }
   if (!nif) {
-    alert("El NIF/CIF del proveedor es obligatorio.");
-    document.getElementById("proveedor-nif").focus();
+    var _pnif = document.getElementById("proveedor-nif");
+    marcarCampoError(_pnif, "El NIF/CIF es obligatorio");
+    mostrarToast("El NIF/CIF del proveedor es obligatorio.", "error");
+    _pnif.focus();
     return;
   }
   const body = {
@@ -2948,7 +4015,7 @@ formProveedorEl.addEventListener("submit", async (e) => {
     });
     const data = await resp.json();
     if (!resp.ok) {
-      alert(data.error || "Error al guardar el proveedor.");
+      mostrarToast(data.error || "Error al guardar el proveedor.", "error");
       return;
     }
     if (typeof window.AL_CERRAR_PROVEEDOR_DESDE_FACTURA === "function") {
@@ -2956,8 +4023,9 @@ formProveedorEl.addEventListener("submit", async (e) => {
     }
     cerrarModalProveedor();
     await refrescarListaProveedores();
+    mostrarToast("Proveedor guardado correctamente.", "success");
   } catch (err) {
-    alert("Error de conexión al guardar el proveedor.");
+    mostrarToast("Error de conexión al guardar el proveedor.", "error");
   }
 });
 
@@ -3012,7 +4080,7 @@ function aplicarFiltrosProveedorYRender() {
   const theadTr = document.querySelector("#tabla-facturas-proveedor thead tr");
   renderTheadSortable(theadTr, false, sortStateProveedores, aplicarFiltrosProveedorYRender);
   renderFacturasEnTbody(tbodyFacturasProveedor, filtradas, false, sortStateProveedores, aplicarFiltrosProveedorYRender);
-  contadorFacturasProveedor.textContent = filtradas.length + " factura(s)";
+  contadorFacturasProveedor.textContent = filtradas.length + (filtradas.length === 1 ? " factura" : " facturas");
 }
 
 async function cargarFacturasProveedor(empresaId, nombreProveedor) {
@@ -3064,7 +4132,7 @@ if (filtroTarjetaProveedor) filtroTarjetaProveedor.addEventListener("change", ap
 document.getElementById("btn-exportar-proveedor").addEventListener("click", () => {
   const emp = empresaProveedoresEl.value;
   if (!emp || !proveedorSeleccionadoNombre) {
-    alert("Elige empresa y un proveedor.");
+    mostrarToast("Elige empresa y un proveedor.", "error");
     return;
   }
   const anio = filtroAnioProveedor.value || "";
@@ -3082,7 +4150,7 @@ document.getElementById("btn-exportar-proveedor").addEventListener("click", () =
 document.getElementById("btn-descargar-facturas-proveedor").addEventListener("click", () => {
   const emp = empresaProveedoresEl.value;
   if (!emp || !proveedorSeleccionadoNombre) {
-    alert("Elige empresa y un proveedor.");
+    mostrarToast("Elige empresa y un proveedor.", "error");
     return;
   }
   const anio = filtroAnioProveedor.value || "";
@@ -3311,7 +4379,7 @@ document.getElementById("ed-btn-nuevo-proveedor").addEventListener("click", abri
 function abrirModalNuevoProveedorDesdeFactura() {
   const emp = document.getElementById("empresa-listado").value;
   if (!emp) {
-    alert("Selecciona primero una empresa en el listado de facturas.");
+    mostrarToast("Selecciona primero una empresa en el listado de facturas.", "error");
     return;
   }
   const nombre = document.getElementById("ed-proveedor").value.trim();
@@ -3376,7 +4444,7 @@ document.getElementById("form-editar-factura").addEventListener("submit", async 
     emp = (empProv && empProv.value) ? empProv.value : "";
   }
   if (!emp) {
-    alert("No hay empresa seleccionada.");
+    mostrarToast("No hay empresa seleccionada.", "error");
     return;
   }
   const factura = { ...facturaEdicion };
@@ -3408,8 +4476,9 @@ document.getElementById("form-editar-factura").addEventListener("submit", async 
     }
     cerrarModalEdicion();
     cargarListado(emp);
+    mostrarToast("Factura guardada correctamente.", "success");
   } catch (err) {
-    alert(err.message || "No se pudo guardar la factura.");
+    mostrarToast(err.message || "No se pudo guardar la factura.", "error");
   }
 });
 
@@ -3423,12 +4492,13 @@ const COLUMNAS_CLI = [
   { key: "numero_factura", label: "Nº factura" },
   { key: "proyecto", label: "Proyecto" },
   { key: "tipologia", label: "Tipología" },
-  { key: "num_hincadoras", label: "Hincadoras" },
-  { key: "num_ayudantes", label: "Ayudantes" },
-  { key: "pricing_servicio", label: "P. Servicio" },
-  { key: "pricing_transporte", label: "P. Transporte" },
+  { key: "num_hincadoras", label: "Hinc." },
+  { key: "num_ayudantes", label: "Ayud." },
+  { key: "pricing_servicio", label: "P.Serv." },
+  { key: "pricing_transporte", label: "P.Trans." },
   { key: "iva", label: "IVA" },
   { key: "total_a_pagar", label: "Total a pagar" },
+  { key: "estado_cobro", label: "Cobro" },
 ];
 const COLUMNAS_NUM_CLI = new Set(["pricing_servicio", "pricing_transporte", "iva", "total_a_pagar"]);
 
@@ -3459,6 +4529,8 @@ function renderTablaClientesFacturas() {
   let filtradas = CLI_FACTURAS.map((f, i) => ({ ...f, _idx: i }));
   if (anio) filtradas = filtradas.filter((f) => (f.fecha_factura || "").startsWith(anio));
   if (mes) filtradas = filtradas.filter((f) => { const d = f.fecha_factura || ""; return d.length >= 7 && d.slice(5, 7) === mes; });
+  const filtroCobro = (document.getElementById("cli-filtro-cobro") || {}).value || "";
+  if (filtroCobro) filtradas = filtradas.filter((f) => (f.estado_cobro || "pendiente").toLowerCase() === filtroCobro);
   if (sortStateCli.key) {
     const esNum = COLUMNAS_NUM_CLI.has(sortStateCli.key);
     const mult = sortStateCli.dir === "desc" ? -1 : 1;
@@ -3496,7 +4568,7 @@ function renderTablaClientesFacturas() {
     onEditar: abrirModalEdicionCli,
   });
   contador.textContent =
-    total + " factura(s)" + (total > LIMITE_FILAS_TABLA ? " (mostrando primeras " + LIMITE_FILAS_TABLA + ")" : "");
+    total + (total === 1 ? " factura" : " facturas") + (total > LIMITE_FILAS_TABLA ? " (mostrando primeras " + LIMITE_FILAS_TABLA + ")" : "");
 }
 
 function poblarFiltroAnioCli() {
@@ -3508,6 +4580,7 @@ function poblarFiltroAnioCli() {
 }
 
 async function cargarListadoCli(empresaId) {
+  var btnCargarCli = document.getElementById("cli-btn-cargar");
   CLI_FACTURAS = [];
   // Orden por defecto: fecha más reciente primero
   sortStateCli.key = "fecha_factura";
@@ -3516,6 +4589,7 @@ async function cargarListadoCli(empresaId) {
   document.getElementById("cli-contador").textContent = "";
   document.getElementById("cli-sin-datos").style.display = "none";
   document.getElementById("cli-btn-eliminar").classList.remove("visible");
+  if (btnCargarCli) { btnCargarCli.classList.add("btn-loading"); }
   try {
     const resp = await fetch("/api/facturas_clientes?empresa_id=" + encodeURIComponent(empresaId));
     const json = await resp.json();
@@ -3525,12 +4599,14 @@ async function cargarListadoCli(empresaId) {
   } catch (e) {
     document.getElementById("cli-sin-datos").textContent = "Error al cargar las facturas de clientes.";
     document.getElementById("cli-sin-datos").style.display = "block";
+  } finally {
+    if (btnCargarCli) { btnCargarCli.classList.remove("btn-loading"); }
   }
 }
 
 document.getElementById("cli-btn-cargar").addEventListener("click", () => {
   const emp = document.getElementById("cli-empresa-listado").value;
-  if (!emp) { alert("Elige primero una empresa."); return; }
+  if (!emp) { mostrarToast("Elige primero una empresa.", "error"); return; }
   cargarListadoCli(emp);
 });
 document.getElementById("cli-empresa-listado").addEventListener("change", () => {
@@ -3539,10 +4615,11 @@ document.getElementById("cli-empresa-listado").addEventListener("change", () => 
 });
 document.getElementById("cli-filtro-anio").addEventListener("change", renderTablaClientesFacturas);
 document.getElementById("cli-filtro-mes").addEventListener("change", renderTablaClientesFacturas);
+if (document.getElementById("cli-filtro-cobro")) document.getElementById("cli-filtro-cobro").addEventListener("change", renderTablaClientesFacturas);
 
 document.getElementById("cli-btn-exportar").addEventListener("click", () => {
   const emp = document.getElementById("cli-empresa-listado").value;
-  if (!emp) { alert("Elige primero una empresa para exportar."); return; }
+  if (!emp) { mostrarToast("Elige primero una empresa para exportar.", "error"); return; }
   const anio = document.getElementById("cli-filtro-anio").value || "";
   const mes = document.getElementById("cli-filtro-mes").value || "";
   window.open("/api/facturas_clientes_export?empresa_id=" + encodeURIComponent(emp) + "&year=" + encodeURIComponent(anio) + "&month=" + encodeURIComponent(mes), "_blank");
@@ -3550,7 +4627,7 @@ document.getElementById("cli-btn-exportar").addEventListener("click", () => {
 
 document.getElementById("cli-btn-descargar-facturas").addEventListener("click", () => {
   const emp = document.getElementById("cli-empresa-listado").value;
-  if (!emp) { alert("Elige primero una empresa para descargar."); return; }
+  if (!emp) { mostrarToast("Elige primero una empresa para descargar.", "error"); return; }
   const anio = document.getElementById("cli-filtro-anio").value || "";
   const mes = document.getElementById("cli-filtro-mes").value || "";
   window.location.href = "/api/facturas_clientes_zip?empresa_id=" + encodeURIComponent(emp) + "&year=" + encodeURIComponent(anio) + "&month=" + encodeURIComponent(mes);
@@ -3603,7 +4680,7 @@ document.getElementById("cli-procesar-form").addEventListener("submit", async (e
     const resumen = json.resumen_proceso || {};
     let msg = json.mensaje || "Procesamiento completado.";
     if (resumen.procesado) {
-      msg += ` ${resumen.facturas_procesadas} factura(s) procesada(s).`;
+      msg += ` ${resumen.facturas_procesadas} ${resumen.facturas_procesadas === 1 ? "factura procesada" : "facturas procesadas"}.`;
       if (resumen.facturas_con_vision) msg += ` (${resumen.facturas_con_vision} con visión)`;
     }
     procStatus.textContent = msg;
@@ -3629,8 +4706,8 @@ document.getElementById("cli-btn-eliminar").addEventListener("click", async () =
   const checks = document.querySelectorAll("#tbody-clientes-facturas .cli-check:checked");
   if (!checks.length) return;
   const emp = document.getElementById("cli-empresa-listado").value;
-  if (!emp) { alert("No hay empresa seleccionada."); return; }
-  if (!confirm("¿Seguro que quieres eliminar " + checks.length + " factura(s) de cliente? Esta acción no se puede deshacer.")) return;
+  if (!emp) { mostrarToast("No hay empresa seleccionada.", "error"); return; }
+  if (!confirm("¿Seguro que quieres eliminar " + checks.length + (checks.length === 1 ? " factura" : " facturas") + " de cliente? Esta acción no se puede deshacer.")) return;
   const indices = Array.from(checks).map((c) => parseInt(c.dataset.idx, 10));
   try {
     const resp = await fetch("/api/facturas_clientes", {
@@ -3640,10 +4717,10 @@ document.getElementById("cli-btn-eliminar").addEventListener("click", async () =
     });
     if (!resp.ok) { const err = await resp.json().catch(() => ({})); throw new Error(err.error || "Error"); }
     const json = await resp.json();
-    alert(json.mensaje || "Eliminadas.");
+    mostrarToast(json.mensaje || "Eliminadas.", "success");
     cargarListadoCli(emp);
   } catch (err) {
-    alert(err.message || "No se pudieron eliminar.");
+    mostrarToast(err.message || "No se pudieron eliminar.", "error");
   }
 });
 
@@ -3755,7 +4832,7 @@ document.getElementById("edc-btn-nuevo-cliente").addEventListener("click", abrir
 function abrirModalNuevoClienteDesdeFactura() {
   const emp = document.getElementById("cli-empresa-listado").value;
   if (!emp) {
-    alert("Selecciona primero una empresa en el listado de facturas.");
+    mostrarToast("Selecciona primero una empresa en el listado de facturas.", "error");
     return;
   }
   const nombre = document.getElementById("edc-cliente").value.trim();
@@ -3814,7 +4891,7 @@ document.getElementById("form-editar-factura-cli").addEventListener("submit", as
   e.preventDefault();
   if (!cliFacturaEdicion) return;
   const emp = document.getElementById("cli-empresa-listado").value;
-  if (!emp) { alert("No hay empresa seleccionada."); return; }
+  if (!emp) { mostrarToast("No hay empresa seleccionada.", "error"); return; }
   const clave_original = {
     numero_factura: (cliFacturaEdicion.numero_factura || "").trim(),
     fecha_factura: (cliFacturaEdicion.fecha_factura || "").trim(),
@@ -3840,6 +4917,7 @@ document.getElementById("form-editar-factura-cli").addEventListener("submit", as
     if (!resp.ok) { const err = await resp.json().catch(() => ({})); throw new Error(err.error || "Error"); }
     cerrarModalEdicionCli();
     cargarListadoCli(emp);
+    mostrarToast("Factura guardada correctamente.", "success");
     try {
       if (typeof clienteSeleccionadoNombre !== "undefined" && clienteSeleccionadoNombre) {
         const empCli = document.getElementById("empresa-clientes-listado");
@@ -3847,7 +4925,7 @@ document.getElementById("form-editar-factura-cli").addEventListener("submit", as
       }
     } catch (_) {}
   } catch (err) {
-    alert(err.message || "No se pudo guardar.");
+    mostrarToast(err.message || "No se pudo guardar.", "error");
   }
 });
 
@@ -3879,9 +4957,11 @@ empresaClientesListadoEl.addEventListener("change", async () => {
   FACTURAS_CLIENTE_LISTADO = [];
   clienteSeleccionadoNombre = "";
   if (!emp) return;
+  listaClientesUnicosEl.innerHTML = "<div class=\"lista-loading\"><div class=\"spinner\"></div>Cargando…</div>";
   try {
     const resp = await fetch("/api/empresas/" + encodeURIComponent(emp) + "/clientes");
     const json = await resp.json();
+    listaClientesUnicosEl.innerHTML = "";
     const clientes = (json.clientes || []).slice().sort((a, b) => {
       const na = ((a.cliente || "").trim() || "").toLowerCase();
       const nb = ((b.cliente || "").trim() || "").toLowerCase();
@@ -3931,7 +5011,7 @@ let modalClienteModo = "nuevo";
 
 function abrirModalNuevoCliente(empresaId) {
   if (!empresaId) {
-    alert("Selecciona primero una empresa.");
+    mostrarToast("Selecciona primero una empresa.", "error");
     return;
   }
   modalClienteModo = "nuevo";
@@ -4046,14 +5126,14 @@ if (btnEliminarClienteEl) {
       });
       const data = await resp.json();
       if (!resp.ok) {
-        alert(data.error || "Error al eliminar.");
+        mostrarToast(data.error || "Error al eliminar.", "error");
         return;
       }
       cerrarModalCliente();
       await refrescarListaClientes();
-      alert(data.mensaje || "Cliente eliminado del maestro.");
+      mostrarToast(data.mensaje || "Cliente eliminado del maestro.", "success");
     } catch (err) {
-      alert("Error de conexión al eliminar.");
+      mostrarToast("Error de conexión al eliminar.", "error");
     }
   });
 }
@@ -4064,17 +5144,21 @@ formClienteEl.addEventListener("submit", async (e) => {
   const nombre = document.getElementById("cliente-nombre").value.trim();
   const cif = document.getElementById("cliente-cif").value.trim();
   if (!empresaId && modalClienteModo === "nuevo") {
-    alert("La empresa es obligatoria.");
+    mostrarToast("La empresa es obligatoria.", "error");
     return;
   }
   if (!nombre) {
-    alert("El nombre del cliente es obligatorio.");
-    document.getElementById("cliente-nombre").focus();
+    var _cn = document.getElementById("cliente-nombre");
+    marcarCampoError(_cn, "El nombre del cliente es obligatorio");
+    mostrarToast("El nombre del cliente es obligatorio.", "error");
+    _cn.focus();
     return;
   }
   if (!cif) {
-    alert("El CIF/NIF del cliente es obligatorio.");
-    document.getElementById("cliente-cif").focus();
+    var _ccif = document.getElementById("cliente-cif");
+    marcarCampoError(_ccif, "El CIF/NIF es obligatorio");
+    mostrarToast("El CIF/NIF del cliente es obligatorio.", "error");
+    _ccif.focus();
     return;
   }
   const body = {
@@ -4102,7 +5186,7 @@ formClienteEl.addEventListener("submit", async (e) => {
     });
     const data = await resp.json();
     if (!resp.ok) {
-      alert(data.error || "Error al guardar el cliente.");
+      mostrarToast(data.error || "Error al guardar el cliente.", "error");
       return;
     }
     if (typeof window.AL_CERRAR_CLIENTE_DESDE_FACTURA === "function") {
@@ -4110,8 +5194,9 @@ formClienteEl.addEventListener("submit", async (e) => {
     }
     cerrarModalCliente();
     await refrescarListaClientes();
+    mostrarToast("Cliente guardado correctamente.", "success");
   } catch (err) {
-    alert("Error de conexión al guardar el cliente.");
+    mostrarToast("Error de conexión al guardar el cliente.", "error");
   }
 });
 
@@ -4155,7 +5240,7 @@ function aplicarFiltrosClienteListadoYRender() {
   }
   renderFacturasClienteListado(visibles);
   contadorFacturasClienteListado.textContent =
-    total + " factura(s)" + (total > LIMITE_FILAS_TABLA ? " (mostrando primeras " + LIMITE_FILAS_TABLA + ")" : "");
+    total + (total === 1 ? " factura" : " facturas") + (total > LIMITE_FILAS_TABLA ? " (mostrando primeras " + LIMITE_FILAS_TABLA + ")" : "");
 }
 
 const CLI_LISTADO_COLS = [
@@ -4167,12 +5252,13 @@ const CLI_LISTADO_COLS = [
   { key: "numero_factura", label: "Nº factura" },
   { key: "proyecto", label: "Proyecto" },
   { key: "tipologia", label: "Tipología" },
-  { key: "num_hincadoras", label: "Nº hincadoras" },
-  { key: "num_ayudantes", label: "Nº ayudantes" },
-  { key: "pricing_servicio", label: "P. servicio", numeric: true },
-  { key: "pricing_transporte", label: "P. transporte", numeric: true },
+  { key: "num_hincadoras", label: "Hinc." },
+  { key: "num_ayudantes", label: "Ayud." },
+  { key: "pricing_servicio", label: "P.Serv.", numeric: true },
+  { key: "pricing_transporte", label: "P.Trans.", numeric: true },
   { key: "iva", label: "IVA", numeric: true },
   { key: "total_a_pagar", label: "Total a pagar", numeric: true },
+  { key: "estado_cobro", label: "Cobro" },
 ];
 
 const CLI_LISTADO_NUM = new Set(CLI_LISTADO_COLS.filter((c) => c.numeric).map((c) => c.key));
@@ -4183,6 +5269,7 @@ function renderClienteListadoThead() {
   CLI_LISTADO_COLS.forEach((col) => {
     const th = document.createElement("th");
     th.textContent = col.label;
+    th.title = "Ordenar por " + col.label;
     th.className = "sortable";
     if (col.numeric) th.classList.add("numero");
     if (sortStateClienteListado.key === col.key) {
@@ -4207,31 +5294,67 @@ function renderClienteListadoThead() {
 function renderFacturasClienteListado(facturas) {
   renderClienteListadoThead();
   tbodyFacturasClienteListado.innerHTML = "";
+  // Estado vacío
+  var tablaParentCli = tbodyFacturasClienteListado.closest("table");
+  if (tablaParentCli) {
+    var vacioExistenteCli = tablaParentCli.parentNode.querySelector(".tabla-estado-vacio");
+    if (vacioExistenteCli) vacioExistenteCli.remove();
+  }
+  if (!facturas || !facturas.length) {
+    if (tablaParentCli) {
+      var divVacioCli = document.createElement("div");
+      divVacioCli.className = "tabla-estado-vacio";
+      divVacioCli.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg><p class="estado-vacio-titulo">No hay facturas para mostrar</p><p class="estado-vacio-subtitulo">Selecciona una empresa y pulsa Cargar listado</p>';
+      tablaParentCli.parentNode.insertBefore(divVacioCli, tablaParentCli.nextSibling);
+    }
+    return;
+  }
   facturas.forEach((f) => {
     const tr = document.createElement("tr");
     CLI_LISTADO_COLS.forEach((col) => {
       const td = document.createElement("td");
       const raw = (f[col.key] ?? "").toString().trim();
-      td.textContent = CLI_LISTADO_NUM.has(col.key) ? formatearNumeroES(raw || null) : (raw || "—");
-      td.title = td.textContent;
+      if (col.key === "estado_cobro") {
+        const val = raw.toLowerCase();
+        if (val) {
+          const badge = document.createElement("span");
+          badge.className = "badge-pago badge-pago-" + val;
+          badge.textContent = raw;
+          td.appendChild(badge);
+        } else {
+          td.textContent = "—";
+        }
+      } else if (col.key === "fecha_factura" && raw.length >= 10) {
+        var partesFCli = raw.slice(0, 10).split("-");
+        td.textContent = partesFCli.length === 3 ? partesFCli[2] + "/" + partesFCli[1] + "/" + partesFCli[0].slice(2) : raw;
+      } else {
+        td.textContent = CLI_LISTADO_NUM.has(col.key) ? formatearNumeroES(raw || null) : (raw || "—");
+      }
+      td.title = raw || "—";
       if (CLI_LISTADO_NUM.has(col.key)) td.classList.add("numero");
+      if (col.key === "pais" || col.key === "pais_proveedor") td.classList.add("col-pais");
+      if (col.key === "cliente") td.classList.add("col-cliente");
+      if (col.key === "localidad") td.classList.add("col-localidad");
+      if (col.key === "proyecto") td.classList.add("col-proyecto");
       tr.appendChild(td);
     });
     const tdAcc = document.createElement("td");
+    tdAcc.style.minWidth = "130px";
+    tdAcc.style.whiteSpace = "nowrap";
     const ruta = (f.ruta_archivo || "").trim();
     if (ruta) {
       const a = document.createElement("a");
       a.href = "/api/archivo?ruta=" + encodeURIComponent(ruta);
       a.target = "_blank";
       a.rel = "noopener noreferrer";
-      a.textContent = "Ver factura";
+      a.textContent = "Ver";
       a.className = "link-ver-factura";
       tdAcc.appendChild(a);
     }
     const btnEd = document.createElement("button");
     btnEd.type = "button";
     btnEd.className = "btn-editar-factura";
-    btnEd.title = "Editar";
+    btnEd.title = "Editar factura";
     btnEd.innerHTML = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"/><path d=\"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z\"/></svg>";
     btnEd.addEventListener("click", () => abrirModalEdicionCli(f));
     tdAcc.appendChild(btnEd);
@@ -4270,7 +5393,7 @@ filtroMesClienteListado.addEventListener("change", aplicarFiltrosClienteListadoY
 
 document.getElementById("cli-listado-btn-exportar").addEventListener("click", () => {
   const emp = empresaClientesListadoEl.value;
-  if (!emp || !clienteSeleccionadoNombre) { alert("Selecciona una empresa y un cliente."); return; }
+  if (!emp || !clienteSeleccionadoNombre) { mostrarToast("Selecciona una empresa y un cliente.", "error"); return; }
   const anio = filtroAnioClienteListado.value || "";
   const mes = filtroMesClienteListado.value || "";
   window.open("/api/facturas_clientes_export?empresa_id=" + encodeURIComponent(emp) + "&year=" + encodeURIComponent(anio) + "&month=" + encodeURIComponent(mes) + "&cliente=" + encodeURIComponent(clienteSeleccionadoNombre), "_blank");
@@ -4278,7 +5401,7 @@ document.getElementById("cli-listado-btn-exportar").addEventListener("click", ()
 
 document.getElementById("cli-listado-btn-descargar").addEventListener("click", () => {
   const emp = empresaClientesListadoEl.value;
-  if (!emp || !clienteSeleccionadoNombre) { alert("Selecciona una empresa y un cliente."); return; }
+  if (!emp || !clienteSeleccionadoNombre) { mostrarToast("Selecciona una empresa y un cliente.", "error"); return; }
   const anio = filtroAnioClienteListado.value || "";
   const mes = filtroMesClienteListado.value || "";
   window.location.href = "/api/facturas_clientes_zip?empresa_id=" + encodeURIComponent(emp) + "&year=" + encodeURIComponent(anio) + "&month=" + encodeURIComponent(mes) + "&cliente=" + encodeURIComponent(clienteSeleccionadoNombre);
@@ -4300,6 +5423,7 @@ document.getElementById("cli-listado-btn-descargar").addEventListener("click", (
   var filtroWebBtn = document.getElementById("transporte-filtro-web");
   var mensajeWhatsappEl = document.getElementById("transporte-whatsapp-mensaje");
   var btnEnviarWhatsapp = document.getElementById("transporte-btn-enviar-whatsapp");
+  var btnDescargarExcel = document.getElementById("transporte-btn-descargar-excel");
 
   if (!form || !statusEl || !mapContainer) return;
 
@@ -4314,6 +5438,7 @@ document.getElementById("cli-listado-btn-descargar").addEventListener("click", (
   var proveedorItems = [];
   var proveedoresDatos = [];
   var ultimoContextoWhatsapp = null;
+  var ultimaBusquedaRuta = null;
 
   var paradasListEl = document.getElementById("transporte-paradas-list");
   var btnAnadirParada = document.getElementById("transporte-anadir-parada");
@@ -4333,9 +5458,354 @@ document.getElementById("cli-listado-btn-descargar").addEventListener("click", (
     });
   }
 
+  var modalTransportistaOverlay = document.getElementById("modal-transportista-overlay");
+  var btnCerrarModalTransportista = document.getElementById("btn-cerrar-modal-transportista");
+  var formTransportista = document.getElementById("form-transportista");
+  var transportistaStatusEl = document.getElementById("transportista-status");
+
+  function abrirModalTransportista() {
+    if (formTransportista) formTransportista.reset();
+    if (transportistaStatusEl) transportistaStatusEl.textContent = "";
+    if (modalTransportistaOverlay) {
+      modalTransportistaOverlay.classList.add("visible");
+      modalTransportistaOverlay.setAttribute("aria-hidden", "false");
+    }
+  }
+  function cerrarModalTransportista() {
+    if (modalTransportistaOverlay) {
+      modalTransportistaOverlay.classList.remove("visible");
+      modalTransportistaOverlay.setAttribute("aria-hidden", "true");
+    }
+  }
+
   if (btnNuevoProveedor) {
-    btnNuevoProveedor.addEventListener("click", function () {
-      alert("Funcionalidad para incorporar un nuevo transportista pendiente de definir (v1).");
+    btnNuevoProveedor.addEventListener("click", abrirModalTransportista);
+  }
+  if (btnCerrarModalTransportista) {
+    btnCerrarModalTransportista.addEventListener("click", cerrarModalTransportista);
+  }
+  if (modalTransportistaOverlay) {
+    modalTransportistaOverlay.addEventListener("click", function (e) {
+      if (e.target === modalTransportistaOverlay) cerrarModalTransportista();
+    });
+  }
+  if (formTransportista) {
+    formTransportista.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var nombre = (document.getElementById("transportista-nombre") && document.getElementById("transportista-nombre").value || "").trim();
+      if (!nombre) {
+        if (transportistaStatusEl) transportistaStatusEl.textContent = "El nombre es obligatorio.";
+        return;
+      }
+      if (transportistaStatusEl) transportistaStatusEl.textContent = "Guardando…";
+      var payload = {
+        nombre: nombre,
+        direccion: (document.getElementById("transportista-direccion") && document.getElementById("transportista-direccion").value || "").trim(),
+        codigo_postal: (document.getElementById("transportista-codigo-postal") && document.getElementById("transportista-codigo-postal").value || "").trim(),
+        localidad: (document.getElementById("transportista-localidad") && document.getElementById("transportista-localidad").value || "").trim(),
+        provincia: (document.getElementById("transportista-provincia") && document.getElementById("transportista-provincia").value || "").trim(),
+        telefono_fijo: (document.getElementById("transportista-telefono-fijo") && document.getElementById("transportista-telefono-fijo").value || "").trim(),
+        telefono_movil: (document.getElementById("transportista-telefono-movil") && document.getElementById("transportista-telefono-movil").value || "").trim(),
+        email: (document.getElementById("transportista-email") && document.getElementById("transportista-email").value || "").trim(),
+        web: (document.getElementById("transportista-web") && document.getElementById("transportista-web").value || "").trim(),
+      };
+      fetch("/api/proyectos/transporte/proveedores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+        .then(function (r) {
+          return r.json().then(function (data) {
+            if (!r.ok) throw new Error(data.error || r.statusText);
+            return data;
+          });
+        })
+        .then(function (data) {
+          if (transportistaStatusEl) transportistaStatusEl.textContent = "Transportista guardado correctamente.";
+          mostrarToast("Transportista guardado correctamente.", "success");
+          setTimeout(cerrarModalTransportista, 1200);
+        })
+        .catch(function (err) {
+          if (transportistaStatusEl) transportistaStatusEl.textContent = "Error: " + (err.message || "no se pudo guardar");
+        });
+    });
+  }
+
+  var listadoTransportistasOverlay = document.getElementById("modal-listado-transportistas-overlay");
+  var btnVerListado = document.getElementById("transporte-btn-ver-listado");
+  var listadoCerrarBtn = document.getElementById("transporte-listado-cerrar");
+  var filtroProvinciaSelect = document.getElementById("transporte-filtro-provincia");
+  var tablaTransportistasBody = document.getElementById("tabla-transportistas-admin-body");
+  var tablaTransportistas = document.getElementById("tabla-transportistas-admin");
+  var formCargaMasiva = document.getElementById("form-carga-masiva-transportistas");
+  var cargaMasivaStatus = document.getElementById("transporte-carga-masiva-status");
+  var listadoTransportistasData = [];
+  var listadoSortCol = "nombre";
+  var listadoSortDir = 1;
+
+  var modalEditarTransportistaOverlay = document.getElementById("modal-editar-transportista-overlay");
+  var formEditarTransportista = document.getElementById("form-editar-transportista");
+  var editarTransportistaStatusEl = document.getElementById("editar-transportista-status");
+  var btnCerrarEditarTransportista = document.getElementById("btn-cerrar-editar-transportista");
+
+  function escapeHtmlAdmin(s) {
+    if (s == null || s === undefined) return "";
+    var t = String(s);
+    var div = document.createElement("div");
+    div.textContent = t;
+    return div.innerHTML;
+  }
+
+  function renderListadoTable() {
+    if (!tablaTransportistasBody) return;
+    var provincia = (filtroProvinciaSelect && filtroProvinciaSelect.value) || "";
+    var filtered = provincia ? listadoTransportistasData.filter(function (p) { return (p.provincia || "").trim() === provincia; }) : listadoTransportistasData.slice();
+    var col = listadoSortCol;
+    var sortKey = col === "telefono" ? "telefono_movil" : col;
+    var dir = listadoSortDir;
+    filtered.sort(function (a, b) {
+      var va = a[sortKey] != null ? String(a[sortKey]).trim().toLowerCase() : "";
+      var vb = b[sortKey] != null ? String(b[sortKey]).trim().toLowerCase() : "";
+      if (va < vb) return -dir;
+      if (va > vb) return dir;
+      return 0;
+    });
+    tablaTransportistasBody.innerHTML = "";
+    var contadorEl = document.getElementById("transporte-listado-contador");
+    if (contadorEl) contadorEl.textContent = filtered.length + " transportista" + (filtered.length !== 1 ? "s" : "");
+    filtered.forEach(function (p) {
+      var tr = document.createElement("tr");
+      tr.setAttribute("data-id", p.id);
+      // Merged phone column: móvil preferred, fijo as secondary
+      var movil = (p.telefono_movil || "").trim();
+      var fijo = (p.telefono_fijo || "").trim();
+      var telHtml = "";
+      if (movil && fijo) {
+        telHtml = escapeHtmlAdmin(movil) + "<br><span style=\"font-size:11px;color:#94A3B8\">" + escapeHtmlAdmin(fijo) + "</span>";
+      } else if (movil) {
+        telHtml = escapeHtmlAdmin(movil);
+      } else if (fijo) {
+        telHtml = escapeHtmlAdmin(fijo);
+      } else {
+        telHtml = "—";
+      }
+      var emailVal = (p.email || "").trim();
+      var webVal = (p.web || "").trim();
+      tr.innerHTML =
+        "<td>" + escapeHtmlAdmin(p.nombre) + "</td>" +
+        "<td>" + escapeHtmlAdmin(p.provincia) + "</td>" +
+        "<td>" + escapeHtmlAdmin(p.codigo_postal) + "</td>" +
+        "<td>" + telHtml + "</td>" +
+        "<td class=\"col-ellipsis\" title=\"" + escapeHtmlAdmin(emailVal) + "\">" + (emailVal ? escapeHtmlAdmin(emailVal) : "—") + "</td>" +
+        "<td class=\"col-ellipsis\" title=\"" + escapeHtmlAdmin(webVal) + "\">" + (webVal ? escapeHtmlAdmin(webVal) : "—") + "</td>" +
+        "<td><button type=\"button\" class=\"btn-small transporte-btn-editar-fila\" data-id=\"" + p.id + "\">Editar</button></td>";
+      var btnEdit = tr.querySelector(".transporte-btn-editar-fila");
+      if (btnEdit) {
+        btnEdit.addEventListener("click", function () {
+          var id = parseInt(btnEdit.getAttribute("data-id"), 10);
+          if (isNaN(id)) return;
+          fetch("/api/proyectos/transporte/proveedores/" + id)
+            .then(function (r) { return r.json(); })
+            .then(function (prov) {
+              if (!prov || !prov.id) return;
+              document.getElementById("editar-transportista-id").value = prov.id;
+              document.getElementById("editar-transportista-nombre").value = prov.nombre || "";
+              document.getElementById("editar-transportista-direccion").value = prov.direccion || "";
+              document.getElementById("editar-transportista-codigo-postal").value = prov.codigo_postal || "";
+              document.getElementById("editar-transportista-localidad").value = prov.localidad || "";
+              document.getElementById("editar-transportista-provincia").value = prov.provincia || "";
+              document.getElementById("editar-transportista-telefono-fijo").value = prov.telefono_fijo || "";
+              document.getElementById("editar-transportista-telefono-movil").value = prov.telefono_movil || "";
+              document.getElementById("editar-transportista-email").value = prov.email || "";
+              document.getElementById("editar-transportista-web").value = prov.web || "";
+              if (editarTransportistaStatusEl) editarTransportistaStatusEl.textContent = "";
+              modalEditarTransportistaOverlay.classList.add("visible");
+              modalEditarTransportistaOverlay.setAttribute("aria-hidden", "false");
+            })
+            .catch(function () { mostrarToast("Error al cargar el proveedor", "error"); });
+        });
+      }
+      tablaTransportistasBody.appendChild(tr);
+    });
+    if (tablaTransportistas && tablaTransportistas.querySelector("th.sortable")) {
+      tablaTransportistas.querySelectorAll("th.sortable").forEach(function (th) {
+        th.classList.remove("sort-asc", "sort-desc");
+        if (th.getAttribute("data-col") === listadoSortCol) {
+          th.classList.add(listadoSortDir === 1 ? "sort-asc" : "sort-desc");
+        }
+      });
+    }
+  }
+
+  function abrirModalListadoTransportistas() {
+    if (!listadoTransportistasOverlay) return;
+    listadoTransportistasOverlay.classList.add("visible");
+    listadoTransportistasOverlay.setAttribute("aria-hidden", "false");
+    if (tablaTransportistasBody) tablaTransportistasBody.innerHTML = "<tr><td colspan=\"7\">Cargando…</td></tr>";
+    fetch("/api/proyectos/transporte/proveedores")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        listadoTransportistasData = data.proveedores || [];
+        var provincias = [];
+        listadoTransportistasData.forEach(function (p) {
+          var pr = (p.provincia || "").trim();
+          if (pr && provincias.indexOf(pr) === -1) provincias.push(pr);
+        });
+        provincias.sort();
+        if (filtroProvinciaSelect) {
+          var sel = filtroProvinciaSelect;
+          var current = sel.value;
+          sel.innerHTML = "<option value=\"\">Todas</option>";
+          provincias.forEach(function (pr) {
+            var opt = document.createElement("option");
+            opt.value = pr;
+            opt.textContent = pr;
+            sel.appendChild(opt);
+          });
+          sel.value = current || "";
+        }
+        renderListadoTable();
+      })
+      .catch(function () {
+        if (tablaTransportistasBody) tablaTransportistasBody.innerHTML = "<tr><td colspan=\"7\">Error al cargar el listado.</td></tr>";
+      });
+  }
+
+  function cerrarModalListadoTransportistas() {
+    if (listadoTransportistasOverlay) {
+      listadoTransportistasOverlay.classList.remove("visible");
+      listadoTransportistasOverlay.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  function cerrarModalEditarTransportista() {
+    if (modalEditarTransportistaOverlay) {
+      modalEditarTransportistaOverlay.classList.remove("visible");
+      modalEditarTransportistaOverlay.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  if (btnVerListado) btnVerListado.addEventListener("click", abrirModalListadoTransportistas);
+  if (listadoCerrarBtn) listadoCerrarBtn.addEventListener("click", cerrarModalListadoTransportistas);
+  if (listadoTransportistasOverlay) {
+    listadoTransportistasOverlay.addEventListener("click", function (e) {
+      if (e.target === listadoTransportistasOverlay) cerrarModalListadoTransportistas();
+    });
+  }
+  if (filtroProvinciaSelect) {
+    filtroProvinciaSelect.addEventListener("change", renderListadoTable);
+  }
+  if (tablaTransportistas) {
+    tablaTransportistas.addEventListener("click", function (e) {
+      var th = e.target.closest("th.sortable");
+      if (!th) return;
+      var col = th.getAttribute("data-col");
+      if (!col) return;
+      if (listadoSortCol === col) listadoSortDir = -listadoSortDir; else { listadoSortCol = col; listadoSortDir = 1; }
+      renderListadoTable();
+    });
+  }
+  var _cargaMasivaInput = document.getElementById("transporte-carga-masiva-archivo");
+  var _cargaMasivaNombre = document.getElementById("transporte-carga-masiva-nombre");
+  if (_cargaMasivaInput && _cargaMasivaNombre) {
+    _cargaMasivaInput.addEventListener("change", function () {
+      _cargaMasivaNombre.textContent = _cargaMasivaInput.files && _cargaMasivaInput.files[0] ? _cargaMasivaInput.files[0].name : "Ningún archivo";
+    });
+  }
+  if (formCargaMasiva) {
+    formCargaMasiva.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var inputFile = document.getElementById("transporte-carga-masiva-archivo");
+      if (!inputFile || !inputFile.files || !inputFile.files[0]) {
+        if (cargaMasivaStatus) cargaMasivaStatus.textContent = "Selecciona un archivo Excel.";
+        return;
+      }
+      if (cargaMasivaStatus) cargaMasivaStatus.textContent = "Subiendo…";
+      var fd = new FormData();
+      fd.append("archivo", inputFile.files[0]);
+      fetch("/api/proyectos/transporte/proveedores/carga-masiva", { method: "POST", body: fd })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+          if (res.ok) {
+            cargaMasivaStatus.textContent = "Carga correcta: " + (res.data.insertados || 0) + " proveedor(es) insertado(s).";
+            inputFile.value = "";
+            fetch("/api/proyectos/transporte/proveedores").then(function (r) { return r.json(); }).then(function (data) {
+              listadoTransportistasData = data.proveedores || [];
+              renderListadoTable();
+            });
+          } else {
+            cargaMasivaStatus.textContent = "Error: " + (res.data.error || "no se pudo subir");
+          }
+        })
+        .catch(function () {
+          if (cargaMasivaStatus) cargaMasivaStatus.textContent = "Error de conexión.";
+        });
+    });
+  }
+  if (formEditarTransportista) {
+    formEditarTransportista.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var id = parseInt(document.getElementById("editar-transportista-id").value, 10);
+      if (isNaN(id)) return;
+      var payload = {
+        nombre: ((document.getElementById("editar-transportista-nombre") && document.getElementById("editar-transportista-nombre").value) || "").trim(),
+        direccion: (document.getElementById("editar-transportista-direccion") && document.getElementById("editar-transportista-direccion").value || "").trim(),
+        codigo_postal: (document.getElementById("editar-transportista-codigo-postal") && document.getElementById("editar-transportista-codigo-postal").value || "").trim(),
+        localidad: (document.getElementById("editar-transportista-localidad") && document.getElementById("editar-transportista-localidad").value || "").trim(),
+        provincia: (document.getElementById("editar-transportista-provincia") && document.getElementById("editar-transportista-provincia").value || "").trim(),
+        telefono_fijo: (document.getElementById("editar-transportista-telefono-fijo") && document.getElementById("editar-transportista-telefono-fijo").value || "").trim(),
+        telefono_movil: (document.getElementById("editar-transportista-telefono-movil") && document.getElementById("editar-transportista-telefono-movil").value || "").trim(),
+        email: (document.getElementById("editar-transportista-email") && document.getElementById("editar-transportista-email").value || "").trim(),
+        web: (document.getElementById("editar-transportista-web") && document.getElementById("editar-transportista-web").value || "").trim(),
+      };
+      if (!payload.nombre) {
+        if (editarTransportistaStatusEl) editarTransportistaStatusEl.textContent = "El nombre es obligatorio.";
+        return;
+      }
+      if (editarTransportistaStatusEl) editarTransportistaStatusEl.textContent = "Guardando…";
+      fetch("/api/proyectos/transporte/proveedores/" + id, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+          if (res.ok) {
+            var idx = listadoTransportistasData.findIndex(function (p) { return p.id === id; });
+            if (idx >= 0) {
+              listadoTransportistasData[idx] = Object.assign({}, listadoTransportistasData[idx], payload);
+            }
+            cerrarModalEditarTransportista();
+            renderListadoTable();
+            mostrarToast("Transportista actualizado correctamente.", "success");
+            if (ultimaBusquedaRuta) {
+              fetch("/api/proyectos/transporte/buscar", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ origen: ultimaBusquedaRuta.origen, destino: ultimaBusquedaRuta.destino, paradas: ultimaBusquedaRuta.paradas }),
+              })
+                .then(function (r) {
+                  if (!r.ok) return r.json().then(function (j) { throw new Error(j.error || r.statusText); });
+                  return r.json();
+                })
+                .then(function (data) {
+                  aplicarResultadoRuta(data, ultimaBusquedaRuta.origen, ultimaBusquedaRuta.destino, ultimaBusquedaRuta.paradas);
+                })
+                .catch(function () {});
+            }
+          } else {
+            if (editarTransportistaStatusEl) editarTransportistaStatusEl.textContent = "Error: " + (res.data.error || "no se pudo guardar");
+          }
+        })
+        .catch(function () {
+          if (editarTransportistaStatusEl) editarTransportistaStatusEl.textContent = "Error de conexión.";
+        });
+    });
+  }
+  if (btnCerrarEditarTransportista) btnCerrarEditarTransportista.addEventListener("click", cerrarModalEditarTransportista);
+  if (modalEditarTransportistaOverlay) {
+    modalEditarTransportistaOverlay.addEventListener("click", function (e) {
+      if (e.target === modalEditarTransportistaOverlay) cerrarModalEditarTransportista();
     });
   }
 
@@ -4351,12 +5821,52 @@ document.getElementById("cli-listado-btn-descargar").addEventListener("click", (
   bindFiltro(filtroEmailBtn);
   bindFiltro(filtroWebBtn);
 
+  if (btnDescargarExcel) {
+    btnDescargarExcel.addEventListener("click", function () {
+      if (!proveedoresDatos || proveedoresDatos.length === 0) {
+        mostrarToast("No hay proveedores en la ruta para descargar. Busca una ruta primero.", "info");
+        return;
+      }
+      var payload = {
+        proveedores: proveedoresDatos,
+        ruta: ultimoContextoWhatsapp ? {
+          texto: ultimoContextoWhatsapp.rutaTexto,
+          distancia_km: ultimoContextoWhatsapp.distancia_km,
+          duracion_min: ultimoContextoWhatsapp.duracion_min,
+        } : {},
+      };
+      fetch("/api/proyectos/transporte/proveedores/exportar-excel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+        .then(function (r) {
+          if (!r.ok) return r.json().then(function (j) { throw new Error(j.error || r.statusText); });
+          return r.blob();
+        })
+        .then(function (blob) {
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement("a");
+          a.href = url;
+          a.download = "proveedores_ruta.xlsx";
+          a.style.display = "none";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        })
+        .catch(function (err) {
+          mostrarToast("Error al descargar: " + (err.message || "no se pudo generar el Excel"), "error");
+        });
+    });
+  }
+
   if (btnEnviarWhatsapp) {
     btnEnviarWhatsapp.addEventListener("click", function () {
       if (!listaContainer) return;
       var checks = listaContainer.querySelectorAll(".transporte-list-select:checked");
       if (!checks.length) {
-        alert("Selecciona al menos un proveedor para enviarles un WhatsApp.");
+        mostrarToast("Selecciona al menos un proveedor para enviarles un WhatsApp.", "error");
         return;
       }
       var msg = encodeURIComponent(obtenerMensajeWhatsappParaEnvio());
@@ -4569,6 +6079,116 @@ document.getElementById("cli-listado-btn-descargar").addEventListener("click", (
     return div.innerHTML;
   }
 
+  function aplicarResultadoRuta(data, origen, destino, paradas) {
+    statusEl.style.display = "none";
+    var ruta = data.ruta || {};
+    var proveedores = data.proveedores || [];
+    var coords = ruta.coordenadas_ruta || [];
+    var distKm = ruta.distancia_km != null ? ruta.distancia_km : 0;
+    var durMin = ruta.duracion_min != null ? ruta.duracion_min : 0;
+    var rutaTexto = escapeHtml(origen);
+    if (paradas.length > 0) {
+      paradas.forEach(function (p) { rutaTexto += " → " + escapeHtml(p); });
+    }
+    rutaTexto += " → " + escapeHtml(destino);
+    rutaResumenEl.innerHTML =
+      "<p><strong>Ruta:</strong> " + rutaTexto + "</p>" +
+      "<p><strong>Distancia:</strong> " + distKm.toFixed(1) + " km · <strong>Duración:</strong> " + Math.round(durMin) + " min</p>" +
+      (proveedores.length === 0 ? "<p class=\"transporte-sin-proveedores\">No hay proveedores a menos de 50 km de la ruta.</p>" : "");
+    rutaResumenEl.style.display = "block";
+    ultimoContextoWhatsapp = { rutaTexto: rutaTexto, distancia_km: distKm, duracion_min: durMin };
+    if (mensajeWhatsappEl) mensajeWhatsappEl.value = obtenerMensajeWhatsappPorDefecto();
+    if (listaResumenEl) {
+      listaResumenEl.textContent = proveedores.length
+        ? proveedores.length + " proveedor(es) en la ruta (ordenados por cercanía)."
+        : "No hay proveedores en la ruta para los criterios actuales.";
+    }
+    if (listaContainer && proveedores.length === 0) {
+      var vacio = document.createElement("div");
+      vacio.className = "transporte-list-empty";
+      vacio.textContent = "Sin proveedores para esta ruta.";
+      listaContainer.appendChild(vacio);
+    }
+    if (typeof L === "undefined") {
+      mostrarEstado("Error: no se pudo cargar el mapa (Leaflet). Recarga la página.", true);
+      if (placeholderEl) { placeholderEl.classList.remove("oculto"); placeholderEl.style.display = ""; }
+      return;
+    }
+    if (placeholderEl) { placeholderEl.classList.add("oculto"); placeholderEl.style.display = "none"; }
+    clearMapLayers();
+    if (mapContainer) { mapContainer.style.minHeight = "450px"; mapContainer.style.height = "100%"; }
+    setTimeout(function () {
+      try { initMap(); } catch (err) {
+        console.error("Leaflet initMap error:", err);
+        mostrarEstado("Error al crear el mapa: " + (err.message || String(err)), true);
+        if (placeholderEl) { placeholderEl.classList.remove("oculto"); placeholderEl.style.display = ""; }
+        return;
+      }
+      if (!mapInstance) return;
+      if (coords.length >= 2) {
+        var latlngs = coords.map(function (c) { return [c[0], c[1]]; });
+        routeLayer = L.polyline(latlngs, { color: "#1e40af", weight: 5, opacity: 0.8 }).addTo(mapInstance);
+        var iconOrigen = L.divIcon({ className: "transporte-marker-origen", html: "<span class=\"transporte-marker-pin\" title=\"Origen\">O</span>", iconSize: [28, 28], iconAnchor: [14, 14] });
+        var iconDestino = L.divIcon({ className: "transporte-marker-destino", html: "<span class=\"transporte-marker-pin\" title=\"Destino\">D</span>", iconSize: [28, 28], iconAnchor: [14, 14] });
+        originMarker = L.marker(latlngs[0], { icon: iconOrigen }).addTo(mapInstance);
+        originMarker.bindTooltip("Origen: " + escapeHtml(origen), { permanent: true, direction: "top", className: "transporte-tooltip-origen", offset: [0, -14] });
+        destMarker = L.marker(latlngs[latlngs.length - 1], { icon: iconDestino }).addTo(mapInstance);
+        destMarker.bindTooltip("Destino: " + escapeHtml(destino), { permanent: true, direction: "top", className: "transporte-tooltip-destino", offset: [0, -14] });
+        var paradasCoords = (ruta.paradas_coords || []);
+        if (paradasCoords.length > 0) {
+          waypointsLayer = L.layerGroup().addTo(mapInstance);
+          paradasCoords.forEach(function (pa) {
+            var lat = pa.lat, lon = pa.lon;
+            if (lat == null || lon == null) return;
+            var num = pa.numero != null ? pa.numero : 0;
+            var nombreParada = (pa.nombre || "").trim() || ("Parada " + num);
+            var iconParada = L.divIcon({ className: "transporte-marker-parada", html: "<span class=\"transporte-marker-pin\" title=\"Parada " + num + "\">P" + num + "</span>", iconSize: [24, 24], iconAnchor: [12, 12] });
+            var m = L.marker([lat, lon], { icon: iconParada }).addTo(waypointsLayer);
+            m.bindTooltip("Parada " + num + ": " + escapeHtml(nombreParada), { permanent: true, direction: "top", className: "transporte-tooltip-parada", offset: [0, -12] });
+          });
+        }
+        if (routeInfoControl && mapInstance) mapInstance.removeControl(routeInfoControl);
+        routeInfoControl = L.control({ position: "topright" });
+        routeInfoControl.onAdd = function () {
+          var div = L.DomUtil.create("div", "transporte-map-info");
+          div.innerHTML = "<strong>" + distKm.toFixed(1) + " km</strong> · <strong>" + Math.round(durMin) + " min</strong>";
+          return div;
+        };
+        routeInfoControl.addTo(mapInstance);
+        mapInstance.fitBounds(routeLayer.getBounds(), { padding: [40, 40], maxZoom: 10 });
+      } else {
+        mapInstance.setView([40.4, -3.7], 6);
+      }
+      setTimeout(function () { if (mapInstance && mapInstance.invalidateSize) mapInstance.invalidateSize(); }, 300);
+      markersLayer = L.layerGroup().addTo(mapInstance);
+      proveedoresDatos = proveedores.slice();
+      var iconProveedor = L.divIcon({ className: "transporte-marker-proveedor", html: "<span class=\"transporte-marker-pin transporte-marker-pin-proveedor\" title=\"Proveedor\">🚚</span>", iconSize: [28, 28], iconAnchor: [14, 14] });
+      proveedores.forEach(function (p, idx) {
+        var lat = p.lat, lon = p.lon;
+        if (lat == null || lon == null) return;
+        var nombre = (p.nombre || "").trim() || "—";
+        var localidad = (p.localidad || "").trim() || "—";
+        var telefono = (p.telefono || "").trim() || "";
+        var email = (p.email || "").trim() || "";
+        var web = (p.web || "").trim() || "";
+        var dist = p.distancia_km != null ? p.distancia_km.toFixed(1) + " km" : "";
+        var popupContent = "<div class=\"transporte-popup\">" +
+          "<strong>" + escapeHtml(nombre) + "</strong><br/>" +
+          (localidad !== "—" ? escapeHtml(localidad) + "<br/>" : "") +
+          (telefono ? "Tel: <a href=\"tel:" + telefono.replace(/\s/g, "") + "\">" + escapeHtml(telefono) + "</a><br/>" : "") +
+          (email ? "Email: <a href=\"mailto:" + escapeHtml(email) + "\">" + escapeHtml(email) + "</a><br/>" : "") +
+          (web ? "Web: <a href=\"" + escapeHtml(web) + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + escapeHtml(web.replace(/^https?:\/\//, "")) + "</a><br/>" : "") +
+          (dist ? "A " + dist + " de la ruta" : "") + "</div>";
+        var marker = L.marker([lat, lon], { icon: iconProveedor }).addTo(markersLayer);
+        marker.bindPopup(popupContent, { maxWidth: 320 });
+        var fila = crearFilaProveedor(p, idx);
+        proveedorMarkers[idx] = marker;
+        proveedorItems[idx] = fila;
+        marker.on("click", function () { marcarProveedorActivo(idx, false); });
+      });
+    }, 50);
+  }
+
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     var origen = (document.getElementById("transporte-origen").value || "").trim();
@@ -4584,16 +6204,11 @@ document.getElementById("cli-listado-btn-descargar").addEventListener("click", (
       mostrarEstado("Introduce origen y destino.", true);
       return;
     }
-
-    if (placeholderEl) {
-      placeholderEl.classList.add("oculto");
-      placeholderEl.style.display = "none";
-    }
+    if (placeholderEl) { placeholderEl.classList.add("oculto"); placeholderEl.style.display = "none"; }
     mostrarEstado("Buscando ruta y proveedores…", false);
     rutaResumenEl.style.display = "none";
     rutaResumenEl.innerHTML = "";
     limpiarListadoProveedores();
-
     fetch("/api/proyectos/transporte/buscar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -4604,177 +6219,8 @@ document.getElementById("cli-listado-btn-descargar").addEventListener("click", (
         return r.json();
       })
       .then(function (data) {
-        statusEl.style.display = "none";
-
-        var ruta = data.ruta || {};
-        var proveedores = data.proveedores || [];
-        var coords = ruta.coordenadas_ruta || [];
-        var distKm = ruta.distancia_km != null ? ruta.distancia_km : 0;
-        var durMin = ruta.duracion_min != null ? ruta.duracion_min : 0;
-        var rutaTexto = escapeHtml(origen);
-        if (paradas.length > 0) {
-          paradas.forEach(function (p) { rutaTexto += " → " + escapeHtml(p); });
-        }
-        rutaTexto += " → " + escapeHtml(destino);
-        rutaResumenEl.innerHTML =
-          "<p><strong>Ruta:</strong> " + rutaTexto + "</p>" +
-          "<p><strong>Distancia:</strong> " + distKm.toFixed(1) + " km · <strong>Duración:</strong> " + Math.round(durMin) + " min</p>" +
-          (proveedores.length === 0 ? "<p class=\"transporte-sin-proveedores\">No hay proveedores a menos de 50 km de la ruta.</p>" : "");
-        rutaResumenEl.style.display = "block";
-
-        ultimoContextoWhatsapp = {
-          rutaTexto: rutaTexto,
-          distancia_km: distKm,
-          duracion_min: durMin,
-        };
-
-        if (mensajeWhatsappEl && !mensajeWhatsappEl.value.trim()) {
-          mensajeWhatsappEl.value = obtenerMensajeWhatsappPorDefecto();
-        }
-
-        if (listaResumenEl) {
-          if (proveedores.length) {
-            listaResumenEl.textContent = proveedores.length + " proveedor(es) en la ruta (ordenados por cercanía).";
-          } else {
-            listaResumenEl.textContent = "No hay proveedores en la ruta para los criterios actuales.";
-          }
-        }
-        if (listaContainer && proveedores.length === 0) {
-          var vacio = document.createElement("div");
-          vacio.className = "transporte-list-empty";
-          vacio.textContent = "Sin proveedores para esta ruta.";
-          listaContainer.appendChild(vacio);
-        }
-
-        if (typeof L === "undefined") {
-          mostrarEstado("Error: no se pudo cargar el mapa (Leaflet). Recarga la página.", true);
-          if (placeholderEl) {
-            placeholderEl.classList.remove("oculto");
-            placeholderEl.style.display = "";
-          }
-          return;
-        }
-
-        if (placeholderEl) {
-          placeholderEl.classList.add("oculto");
-          placeholderEl.style.display = "none";
-        }
-
-        clearMapLayers();
-        if (mapContainer) {
-          mapContainer.style.minHeight = "450px";
-          mapContainer.style.height = "100%";
-        }
-        setTimeout(function () {
-          try {
-            initMap();
-          } catch (err) {
-            console.error("Leaflet initMap error:", err);
-            mostrarEstado("Error al crear el mapa: " + (err.message || String(err)), true);
-            if (placeholderEl) {
-              placeholderEl.classList.remove("oculto");
-              placeholderEl.style.display = "";
-            }
-            return;
-          }
-          if (!mapInstance) return;
-
-          if (coords.length >= 2) {
-            var latlngs = coords.map(function (c) { return [c[0], c[1]]; });
-            routeLayer = L.polyline(latlngs, { color: "#1e40af", weight: 5, opacity: 0.8 }).addTo(mapInstance);
-
-            var iconOrigen = L.divIcon({
-              className: "transporte-marker-origen",
-              html: "<span class=\"transporte-marker-pin\" title=\"Origen\">O</span>",
-              iconSize: [28, 28],
-              iconAnchor: [14, 14],
-            });
-            var iconDestino = L.divIcon({
-              className: "transporte-marker-destino",
-              html: "<span class=\"transporte-marker-pin\" title=\"Destino\">D</span>",
-              iconSize: [28, 28],
-              iconAnchor: [14, 14],
-            });
-            originMarker = L.marker(latlngs[0], { icon: iconOrigen }).addTo(mapInstance);
-            originMarker.bindTooltip("Origen: " + escapeHtml(origen), { permanent: true, direction: "top", className: "transporte-tooltip-origen", offset: [0, -14] });
-            destMarker = L.marker(latlngs[latlngs.length - 1], { icon: iconDestino }).addTo(mapInstance);
-            destMarker.bindTooltip("Destino: " + escapeHtml(destino), { permanent: true, direction: "top", className: "transporte-tooltip-destino", offset: [0, -14] });
-
-            var paradasCoords = (ruta.paradas_coords || []);
-            if (paradasCoords.length > 0) {
-              waypointsLayer = L.layerGroup().addTo(mapInstance);
-              paradasCoords.forEach(function (pa) {
-                var lat = pa.lat;
-                var lon = pa.lon;
-                if (lat == null || lon == null) return;
-                var num = pa.numero != null ? pa.numero : 0;
-                var nombreParada = (pa.nombre || "").trim() || ("Parada " + num);
-                var iconParada = L.divIcon({
-                  className: "transporte-marker-parada",
-                  html: "<span class=\"transporte-marker-pin\" title=\"Parada " + num + "\">P" + num + "</span>",
-                  iconSize: [24, 24],
-                  iconAnchor: [12, 12],
-                });
-                var m = L.marker([lat, lon], { icon: iconParada }).addTo(waypointsLayer);
-                m.bindTooltip("Parada " + num + ": " + escapeHtml(nombreParada), { permanent: true, direction: "top", className: "transporte-tooltip-parada", offset: [0, -12] });
-              });
-            }
-
-            if (routeInfoControl && mapInstance) mapInstance.removeControl(routeInfoControl);
-            routeInfoControl = L.control({ position: "topright" });
-            routeInfoControl.onAdd = function () {
-              var div = L.DomUtil.create("div", "transporte-map-info");
-              div.innerHTML = "<strong>" + distKm.toFixed(1) + " km</strong> · <strong>" + Math.round(durMin) + " min</strong>";
-              return div;
-            };
-            routeInfoControl.addTo(mapInstance);
-
-            mapInstance.fitBounds(routeLayer.getBounds(), { padding: [40, 40], maxZoom: 10 });
-          } else {
-            mapInstance.setView([40.4, -3.7], 6);
-          }
-          setTimeout(function () {
-            if (mapInstance && mapInstance.invalidateSize) mapInstance.invalidateSize();
-          }, 300);
-
-          markersLayer = L.layerGroup().addTo(mapInstance);
-          proveedoresDatos = proveedores.slice();
-          var iconProveedor = L.divIcon({
-            className: "transporte-marker-proveedor",
-            html: "<span class=\"transporte-marker-pin transporte-marker-pin-proveedor\" title=\"Proveedor\">🚚</span>",
-            iconSize: [28, 28],
-            iconAnchor: [14, 14],
-          });
-          proveedores.forEach(function (p, idx) {
-            var lat = p.lat;
-            var lon = p.lon;
-            if (lat == null || lon == null) return;
-            var nombre = (p.nombre || "").trim() || "—";
-            var localidad = (p.localidad || "").trim() || "—";
-            var telefono = (p.telefono || "").trim() || "";
-            var email = (p.email || "").trim() || "";
-            var web = (p.web || "").trim() || "";
-            var dist = p.distancia_km != null ? p.distancia_km.toFixed(1) + " km" : "";
-
-            var popupContent = "<div class=\"transporte-popup\">" +
-              "<strong>" + escapeHtml(nombre) + "</strong><br/>" +
-              (localidad !== "—" ? escapeHtml(localidad) + "<br/>" : "") +
-              (telefono ? "Tel: <a href=\"tel:" + telefono.replace(/\s/g, "") + "\">" + escapeHtml(telefono) + "</a><br/>" : "") +
-              (email ? "Email: <a href=\"mailto:" + escapeHtml(email) + "\">" + escapeHtml(email) + "</a><br/>" : "") +
-              (web ? "Web: <a href=\"" + escapeHtml(web) + "\" target=\"_blank\" rel=\"noopener noreferrer\">" + escapeHtml(web.replace(/^https?:\/\//, "")) + "</a><br/>" : "") +
-              (dist ? "A " + dist + " de la ruta" : "") + "</div>";
-
-            var marker = L.marker([lat, lon], { icon: iconProveedor }).addTo(markersLayer);
-            marker.bindPopup(popupContent, { maxWidth: 320 });
-
-            var fila = crearFilaProveedor(p, idx);
-            proveedorMarkers[idx] = marker;
-            proveedorItems[idx] = fila;
-            marker.on("click", function () {
-              marcarProveedorActivo(idx, false);
-            });
-          });
-        }, 50);
+        ultimaBusquedaRuta = { origen: origen, destino: destino, paradas: paradas.slice() };
+        aplicarResultadoRuta(data, origen, destino, paradas);
       })
       .catch(function (err) {
         mostrarEstado(err.message || "Error al buscar ruta o proveedores.", true);

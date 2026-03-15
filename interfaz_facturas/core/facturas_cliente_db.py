@@ -39,6 +39,7 @@ CAMPOS_FACTURAS_CLIENTE = [
   "numero_factura",
   "ruta_archivo",
   "hash_archivo",
+  "estado_cobro",
 ]
 
 
@@ -80,6 +81,11 @@ def init_facturas_cliente_db() -> None:
     conn.execute(
       "CREATE INDEX IF NOT EXISTS ix_facturas_cliente_empresa_ruta ON facturas_cliente(empresa_id, ruta_archivo)"
     )
+    # G.11: migración – añadir estado_cobro si no existe
+    cur_info = conn.execute("PRAGMA table_info(facturas_cliente)")
+    cols_existentes = {row[1] for row in cur_info.fetchall()}
+    if "estado_cobro" not in cols_existentes:
+      conn.execute("ALTER TABLE facturas_cliente ADD COLUMN estado_cobro TEXT DEFAULT 'pendiente'")
   _initialized = True
 
 
@@ -256,6 +262,28 @@ def update_factura_cliente(empresa_id: str, factura: dict, clave_original: dict)
       valores + [vid],
     )
     return True
+
+
+def update_estado_cobro(factura_id: int, estado: str) -> bool:
+  """Actualiza el estado_cobro de una factura de cliente. Devuelve True si se actualizó."""
+  init_facturas_cliente_db()
+  with _conectar() as conn:
+    cur = conn.execute(
+      "UPDATE facturas_cliente SET estado_cobro = ? WHERE id = ?",
+      (estado, factura_id),
+    )
+    return cur.rowcount > 0
+
+
+def get_factura_cliente_por_id(factura_id: int) -> dict | None:
+  """Devuelve una factura de cliente por su id, o None."""
+  init_facturas_cliente_db()
+  with _conectar() as conn:
+    cur = conn.execute("SELECT * FROM facturas_cliente WHERE id = ?", (factura_id,))
+    row = cur.fetchone()
+    if not row:
+      return None
+    return _row_to_dict(row)
 
 
 def delete_facturas_cliente_por_indices(empresa_id: str, indices: list[int]) -> int:

@@ -1,7 +1,7 @@
 """
 Servicio de búsqueda de ruta y proveedores de transporte de maquinaria.
 Usa OpenRouteService para geocoding y direcciones; filtra proveedores cercanos a la ruta.
-Acepta datos desde proveedores_transporte.xlsx (prioridad) o proveedores_transporte.csv.
+Datos: SQLite (gestion.db, tabla proveedores_transporte) si tiene datos; si no, Excel/CSV.
 """
 from __future__ import annotations
 
@@ -210,11 +210,11 @@ def directions_ors_multi(puntos: list[tuple[float, float]], api_key: str) -> dic
 
 
 def cargar_proveedores_transporte(base_dir: Path) -> list[dict[str, Any]]:
-  """Carga proveedores desde .xlsx (si existe) o desde .csv. Devuelve lista con nombre, telefono, email, localidad, lat, lon."""
-  xlsx_path = _ruta_proveedores_xlsx(base_dir)
-  if xlsx_path.exists():
-    return _cargar_proveedores_desde_xlsx(base_dir)
-  return _cargar_proveedores_desde_csv(base_dir)
+  """Carga proveedores desde SQLite (gestion.db, tabla proveedores_transporte). Fuente única de datos."""
+  from core.proveedores_transporte_db import init_proveedores_transporte_db, listar_proveedores
+
+  init_proveedores_transporte_db()
+  return listar_proveedores()
 
 
 def _cargar_proveedores_desde_xlsx(base_dir: Path) -> list[dict[str, Any]]:
@@ -334,6 +334,111 @@ def _cargar_proveedores_desde_xlsx(base_dir: Path) -> list[dict[str, Any]]:
     if p["nombre"] or p["localidad"]:
       proveedores.append(p)
 
+  wb.close()
+  return proveedores
+
+
+def parsear_xlsx_proveedores_desde_stream(stream: Any) -> list[dict[str, Any]]:
+  """Lee la primera hoja de un Excel desde un file-like (BytesIO) y devuelve lista de proveedores (mismo formato interno)."""
+  try:
+    import openpyxl
+  except ImportError:
+    return []
+  try:
+    wb = openpyxl.load_workbook(stream, read_only=True, data_only=True)
+  except Exception:
+    return []
+  ws = wb.active
+  if not ws:
+    wb.close()
+    return []
+  headers: list[str] = []
+  for cell in ws[1]:
+    headers.append(_normalizar_header(_valor_celda(cell.value)))
+
+  def col_index(aliases: list[str]) -> int | None:
+    for a in aliases:
+      for i, h in enumerate(headers):
+        if a in h or h in a or (a.replace(" ", "") in h.replace(" ", "")):
+          return i
+    return None
+
+  idx_nombre = col_index(["nombre de empresa", "nombre", "empresa"])
+  idx_localidad = col_index(["localidad"])
+  idx_provincia = col_index(["provincia"])
+  idx_cp = col_index(["codigo postal", "cp", "c postal"])
+  idx_direccion = col_index(["direccion"])
+  idx_email = col_index(["email", "correo", "e-mail"])
+  idx_web = col_index(["web", "pagina web", "url"])
+  idx_lat = col_index(["lat", "latitud"])
+  idx_lon = col_index(["lon", "longitud", "lng"])
+  idx_fijo = col_index(["fijo"])
+  idx_movil = col_index(["movil", "móvil"])
+  idx_telefonos: list[int] = []
+  for i, h in enumerate(headers):
+    if not h:
+      continue
+    if "telefono" in h or "tel " in h or "tlf" in h or "telef" in h or h == "tel" or h == "fijo" or h == "movil":
+      idx_telefonos.append(i)
+
+  def get(row: tuple, idx: int | None) -> str:
+    if idx is None or idx >= len(row):
+      return ""
+    return _valor_celda(row[idx])
+
+  proveedores: list[dict[str, Any]] = []
+  for row in ws.iter_rows(min_row=2, values_only=True):
+    if not row:
+      continue
+    row = tuple(row) if not isinstance(row, tuple) else row
+    nombre = get(row, idx_nombre) if idx_nombre is not None else ""
+    localidad = get(row, idx_localidad)
+    provincia = get(row, idx_provincia)
+    cp = get(row, idx_cp)
+    direccion = get(row, idx_direccion)
+    telefonos = []
+    for i in idx_telefonos:
+      t = get(row, i)
+      if t:
+        telefonos.append(t)
+    telefono = " / ".join(telefonos) if telefonos else ""
+    tel_fijo = get(row, idx_fijo)
+    tel_movil = get(row, idx_movil)
+    email = get(row, idx_email)
+    web = get(row, idx_web)
+    lat_s = get(row, idx_lat).replace(",", ".")
+    lon_s = get(row, idx_lon).replace(",", ".")
+    lat, lon = None, None
+    if lat_s and lon_s:
+      try:
+        lat = float(lat_s)
+        lon = float(lon_s)
+      except ValueError:
+        pass
+    texto_geocode = localidad or ""
+    if direccion or cp or provincia:
+      partes = [p for p in [direccion, cp, localidad, provincia] if p]
+      texto_geocode = ", ".join(partes) if partes else texto_geocode
+    p: dict[str, Any] = {
+      "nombre": nombre,
+      "telefono": telefono,
+      "telefono_fijo": tel_fijo,
+      "telefono_movil": tel_movil,
+      "email": email,
+      "localidad": texto_geocode or localidad,
+      "lat": lat,
+      "lon": lon,
+    }
+    if web:
+      p["web"] = web
+    if provincia:
+      p["provincia"] = provincia
+    if direccion:
+      p["direccion"] = direccion
+    if cp:
+      p["codigo_postal"] = cp
+    if p["nombre"] or p["localidad"]:
+      proveedores.append(p)
   wb.close()
   return proveedores
 

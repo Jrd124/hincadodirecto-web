@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git config:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(grep:*)",
+      "Bash(python3:*)",
+      "Bash(curl:*)",
+      "Bash(chcp 65001:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python3:*)",
+      "Bash(pip freeze:*)",
+      "Bash(grep -n \"print\\(\" /c/Users/javie/Desktop/cursor_test/interfaz_facturas/*.py)",
+      "Bash(ls /c/Users/javie/Desktop/cursor_test/interfaz_facturas/core/*.py | wc -l)",
+      "Bash(grep -n \"print\\(\" /c/Users/javie/Desktop/cursor_test/interfaz_facturas/core/*.py | wc -l)",
+      "Bash(ls -d /c/Users/javie/Desktop/cursor_test/*/ 2>/dev/null)",
+      "Bash(node -c interfaz_facturas/static/js/app.js 2>&1)",
+      "Bash(find /c/Users/javie/Desktop/cursor_test -type f -not -path '*/.git/*' -not -path '*/__pycache__/*' -not -path '*/.pytest*' | sed 's/.*\\\\.//' | sort | uniq -c | sort -rn)",
+      "Bash(__NEW_LINE_fc9b440a66a0ac3a__ echo:*)",
+      "Bash(echo \"=== FINAL VERIFICATION SUMMARY ===\"\necho \"\"\necho \"Checked all document.getElementById\\(\\).addEventListener\\(\\) calls in app.js \\(lines 490-3741\\)\"\necho \"\"\necho \"Element IDs referenced \\(18 total\\):\"\necho \"───────────────────────────────────\"\ncat /tmp/app_ids.txt | nl\necho \"\"\necho \"Result: ALL 18 ELEMENT IDs EXIST IN index.html\"\necho \"\"\necho \"No missing elements found - script will not crash due to missing getElementById\\(\\) targets.\")",
+      "Bash(node:*)",
+      "Bash(head:*)"
+    ]
+  }
+}

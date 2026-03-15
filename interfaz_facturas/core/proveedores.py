@@ -111,6 +111,52 @@ def listar_proveedores_para_selector(empresa_id: str) -> list[dict]:
   return lista
 
 
+def listar_proveedores_con_facturas(empresa_id: str) -> list[dict]:
+  """
+  Listado de proveedores que tienen al menos una factura asociada.
+  Útil para el listado único: no muestra entradas del maestro que ya no tienen
+  facturas (p. ej. un duplicado con NIF erróneo tras corregir las facturas).
+  Cada ítem se enriquece con datos del maestro si existe (email, teléfono, centro_coste).
+  """
+  try:
+    facturas = facturas_db.get_facturas_empresa(empresa_id)
+  except Exception as e:
+    logger.warning("Error leyendo facturas para listar proveedores con facturas: %s", e)
+    return []
+  maestro = cargar_proveedores_maestros(empresa_id)
+  maestro_por_key: dict[tuple[str, str], dict] = {}
+  for p in maestro:
+    nom = normalizar_texto_proveedor(p.get("nombre_canonico") or "")
+    nif = normalizar_nif(p.get("nif") or "")
+    maestro_por_key[(nom, nif)] = p
+  vistos: set[tuple[str, str]] = set()
+  resultado: list[dict] = []
+  for f in facturas:
+    prov = (f.get("proveedor") or "").strip()
+    nif_prov = (f.get("nif_proveedor") or "").strip()
+    if not prov and not nif_prov:
+      continue
+    key = (normalizar_texto_proveedor(prov), normalizar_nif(nif_prov))
+    if key in vistos:
+      continue
+    vistos.add(key)
+    p_master = maestro_por_key.get(key)
+    if p_master:
+      resultado.append(dict(p_master))
+    else:
+      resultado.append({
+        "nombre_canonico": prov,
+        "nif": nif_prov,
+        "direccion": "",
+        "localidad": (f.get("localidad_proveedor") or "").strip(),
+        "pais": (f.get("pais_proveedor") or "").strip(),
+        "email": "",
+        "telefono": "",
+        "centro_coste": "",
+      })
+  return resultado
+
+
 def guardar_proveedores_maestros(empresa_id: str, lista: list[dict]) -> None:
   """Guarda el listado maestro de proveedores. Si hay datos en SQLite, escribe en BD; si no, en CSV."""
   try:

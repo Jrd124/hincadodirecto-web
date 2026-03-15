@@ -182,6 +182,51 @@ def update_facturas_proveedor_nombre_nif(
     return cur.rowcount
 
 
+def update_facturas_datos_proveedor(
+  empresa_id: str,
+  old_proveedor: str,
+  old_nif: str,
+  new_proveedor: str,
+  new_nif: str,
+  new_pais: str | None = None,
+  new_localidad: str | None = None,
+) -> int:
+  """
+  Actualiza en todas las facturas de la empresa que tengan (proveedor, nif_proveedor) = (old_proveedor, old_nif)
+  los campos proveedor, nif_proveedor y opcionalmente pais_proveedor, localidad_proveedor.
+  Devuelve el número de filas actualizadas.
+  """
+  if not (old_proveedor or old_nif):
+    return 0
+  init_facturas_db()
+  new_proveedor = new_proveedor.strip()
+  new_nif = new_nif.strip()
+  new_pais = (new_pais or "").strip() or None
+  new_localidad = (new_localidad or "").strip() or None
+  with _conectar() as conn:
+    if new_pais is not None or new_localidad is not None:
+      cur = conn.execute(
+        """UPDATE facturas_proveedor SET proveedor = ?, nif_proveedor = ?, pais_proveedor = ?, localidad_proveedor = ?
+           WHERE empresa_id = ? AND TRIM(COALESCE(proveedor, '')) = ? AND TRIM(COALESCE(nif_proveedor, '')) = ?""",
+        (
+          new_proveedor,
+          new_nif,
+          new_pais or "",
+          new_localidad or "",
+          empresa_id,
+          old_proveedor.strip(),
+          old_nif.strip(),
+        ),
+      )
+    else:
+      cur = conn.execute(
+        """UPDATE facturas_proveedor SET proveedor = ?, nif_proveedor = ?
+           WHERE empresa_id = ? AND TRIM(COALESCE(proveedor, '')) = ? AND TRIM(COALESCE(nif_proveedor, '')) = ?""",
+        (new_proveedor, new_nif, empresa_id, old_proveedor.strip(), old_nif.strip()),
+      )
+    return cur.rowcount
+
+
 def delete_facturas(empresa_id: str, rutas: list[str]) -> int:
   """
   Elimina las facturas cuya ruta_destino o ruta_archivo está en rutas.

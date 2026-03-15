@@ -2,7 +2,7 @@
 
 **Documento único de control del proyecto.** Contiene el plan maestro, los puntos de acción 1 y 2, el checklist de ejecución paso a paso, el inventario actual, el modelo de terceros, la definición de flujos, el diseño de bancos y conciliación, los checklists de QA y el resumen del módulo Transporte. Todo en un solo archivo para evitar referencias externas y facilitar el control.
 
-**Resumen ejecutivo.** Objetivo: evolucionar la interfaz de facturas a plataforma multiempresa (terceros, empresa siempre visible, bases para bancos). **Estado:** Punto 1 y Punto 2 completados; Parte G (bancos y conciliación, G.1–G.9) completada; Parte J (migración facturas de clientes a SQLite) completada. **Próximos pasos:** Bloque 10 – QA y validación; **mejoras de UX en bancos y tarjetas** (Parte G §9); **ampliación de conciliación** (Parte G §10: diferencias de céntimos, cobro de facturas de cliente); automatización de pruebas (Parte H).
+**Resumen ejecutivo.** Objetivo: evolucionar la interfaz de facturas a plataforma multiempresa (terceros, empresa siempre visible, bases para bancos). **Estado:** Punto 1 y Punto 2 completados; Parte G (bancos y conciliación, G.1–G.9) completada; Parte J (migración facturas de clientes a SQLite) completada. **Próximos pasos:** Bloque 10 – QA y validación; automatización de pruebas (Parte H). *(Parte G §9 – Mejoras UX y Parte G §10 – Ampliación conciliación completadas.)*
 
 ---
 
@@ -391,23 +391,24 @@ Objetivo: control centralizado de tarjetas de empresa (banco, titular, extractos
 
 Objetivo: mejorar la usabilidad y claridad del módulo Bancos y de la pestaña Tarjetas bancos, sin cambiar la lógica de negocio ya implementada.
 
-**Checklist de mejora UX (pendiente)**
+**Checklist de mejora UX**
 
-- [ ] **UX-B.1** Bancos – Listado de movimientos: mejorar legibilidad (agrupación por mes, resumen de saldo visible, filtros rápidos por tipo o concepto).
-- [ ] **UX-B.2** Bancos – Importación: mensajes de éxito/error más claros; indicar número de movimientos importados y duplicados omitidos.
-- [ ] **UX-B.3** Tarjetas bancos – Extractos por tarjeta y periodo: vista más clara del estado (pendiente / cargo recibido / conciliado); indicador visual cuando un extracto está al 100% asociado a facturas.
-- [ ] **UX-B.4** Tarjetas bancos – Flujo “Vincular a extracto”: guiar al usuario (texto de ayuda o tooltip); confirmación explícita antes de vincular.
-- [ ] **UX-B.5** (Opcional) Alertas o avisos: extractos con facturas pero sin movimiento bancario conciliado; facturas con tarjeta asignada y periodo sin cerrar.
-- [ ] **UX-B.6** (Opcional) Export de extractos por tarjeta (Excel/PDF) para archivo o auditoría.
+- [x] **UX-B.1** Bancos – Listado de movimientos: ✅ barra de resumen del periodo filtrado (saldo inicial, saldo final, total entradas, total salidas); separadores visuales por mes; toggle rápido Todos / Cargos / Abonos.
+- [x] **UX-B.2** Bancos – Importación: ✅ mensajes de éxito/error claros con iconos visuales de estado (check verde / warning amarillo / error rojo), número de leídos, insertados y duplicados omitidos.
+- [x] **UX-B.3** Tarjetas bancos – Extractos por tarjeta y periodo: ✅ badges de color para estado (rojo pendiente / amarillo cargo recibido / verde conciliado); barra de progreso con porcentaje cuando el extracto está vinculado a facturas.
+- [x] **UX-B.4** Tarjetas bancos – Flujo “Vincular a extracto”: ✅ modal mejorado con info del movimiento, tooltips explicativos, preselección inteligente de tarjeta (si solo hay una) y periodo (basado en fecha del movimiento).
+- [x] **UX-B.5** Bloque colapsable de avisos en la vista Tarjetas: ✅ avisos para extractos con facturas pero sin movimiento bancario conciliado y cargos recibidos con pendiente por vincular. Solo visible cuando hay avisos reales.
+- [x] **UX-B.6** Export de extractos por tarjeta: ✅ Excel ya implementado (endpoint `extracto-export`, dos modos). PDF aparcado como nice-to-have futuro (solo si hay requisito real de archivo formal).
+- [x] **UX-B.7** Paginación del listado de movimientos: ✅ paginación a 100 movimientos por página con controles prev/next, carga hasta 5000 movimientos del backend con filtrado en cliente.
 
-### 10. Ampliación de conciliación (pendiente)
+### 10. Ampliación de conciliación
 
 Objetivo: cubrir los casos de uso 2 y 3 de conciliación definidos en el apartado 3 de esta Parte G (diferencias de céntimos y cobro de facturas de cliente). El historial detallado de conciliaciones (tabla aparte) sigue aparcado.
 
-**Checklist de ampliación conciliación (pendiente)**
+**Checklist de ampliación conciliación**
 
-- [ ] **G.10** Diferencias de céntimos: definir umbral (p. ej. 0,50 €) para considerar un movimiento y una factura como coincidentes aunque difieran en céntimos; permitir registrar la conciliación con una nota o ajuste (campo opcional en movimientos o en lógica de sugerencias). UI: en la confirmación de conciliación, si la diferencia está dentro del umbral, mostrar aviso y campo opcional “Nota de ajuste”.
-- [ ] **G.11** Cobro de facturas de cliente: vincular un ingreso bancario (movimiento con importe positivo) a una o varias facturas de cliente (emitidas). Añadir en facturas de cliente campo `estado_cobro` (pendiente | cobrada | parcial) y opcionalmente referencia al movimiento; endpoint o flujo para “conciliar cobro” (elegir movimiento de ingreso y factura(s) de cliente); actualizar estado_cobro y vínculo movimiento–factura. Incluir en listado de facturas de cliente la columna estado de cobro y, si aplica, filtro por pendiente de cobro.
+- [x] **G.10** Diferencias de céntimos: ✅ el backend ya soportaba umbral configurable (default 0,50 €, rango 0–100 €) en el endpoint de sugerencias. Se ha añadido un selector de umbral en la UI junto al botón “Cargar sugerencias” para que el usuario pueda ajustarlo. Campo “nota de ajuste” descartado: la tolerancia de 0,02 € en la confirmación ya gestiona las diferencias menores sin necesidad de justificación manual.
+- [x] **G.11** Cobro de facturas de cliente: ✅ implementado. Añadido campo `estado_cobro` (pendiente | cobrada | parcial) en `facturas_cliente` con migración automática. El endpoint `confirmar-cliente` ahora acepta `factura_cliente_id` (FK numérica, preferente) además de la terna compuesta (retrocompatible), y recalcula `estado_cobro` sumando todos los movimientos vinculados (soporte multi-movimiento y cobros parciales). El endpoint `desvincular` recalcula `estado_cobro` al desvincular. Listado de facturas de cliente incluye columna “Cobro” y filtro por estado de cobro. Sugerencias automáticas de cobro descartadas: el modal manual existente es suficiente.
 
 ---
 
@@ -502,9 +503,9 @@ Objetivo: dejar de usar `data/empresas/{empresa_id}/facturas_clientes.csv` como 
 | 4 | Punto 1 – Empresa y validaciones | ✅ Completado |
 | 5–9 | Punto 2 – Modelo de terceros en backend e interfaz | ✅ Completado |
 | 10 | QA y validación | Pendiente |
-| 11 | Migración facturas de clientes a SQLite (Parte J) | Pendiente |
+| 11 | Migración facturas de clientes a SQLite (Parte J) | ✅ Completado |
 | G.1–G.9 | Bancos y conciliación (estado_pago, migración SQLite, tarjetas, extractos, vincular movimiento a extracto) | ✅ Completado |
-| Parte G §9 | Mejoras UX en Bancos y Tarjetas (UX-B.1–UX-B.6) | Pendiente |
-| Parte G §10 | Ampliación conciliación (G.10 diferencias céntimos, G.11 cobro facturas cliente) | Pendiente |
+| Parte G §9 | Mejoras UX en Bancos y Tarjetas (UX-B.1–UX-B.7) | ✅ Completado |
+| Parte G §10 | Ampliación conciliación (G.10 diferencias céntimos, G.11 cobro facturas cliente) | ✅ Completado |
 
-Al terminar el **Bloque 10** (QA) se considerará cerrada la validación del Punto 2 y de la Parte G implementada. El **Bloque 11** (Parte J) unifica el almacenamiento de facturas de clientes en SQLite. **Próximos pasos posibles:** Bloque 10 (QA), automatización de pruebas (Parte H), **mejoras de UX en bancos y tarjetas** (Parte G §9, ítems UX-B.1–UX-B.6), **ampliación de conciliación** (Parte G §10: G.10 diferencias de céntimos y nota de ajuste, G.11 cobro de facturas de cliente con estado_cobro e ingreso ↔ factura). Historial detallado de conciliaciones (tabla aparte) sigue aparcado.
+Al terminar el **Bloque 10** (QA) se considerará cerrada la validación del Punto 2 y de la Parte G implementada. El **Bloque 11** (Parte J) está completado: el almacenamiento de facturas de clientes usa SQLite. **Próximo paso recomendado:** Bloque 10 (QA y validación). **Otras prioridades:** automatización de pruebas (Parte H), **mejoras de UX en bancos y tarjetas** (Parte G §9, ítems UX-B.1–UX-B.6), **ampliación de conciliación** (Parte G §10: G.10 diferencias de céntimos y nota de ajuste, G.11 cobro de facturas de cliente con estado_cobro e ingreso ↔ factura). Historial detallado de conciliaciones (tabla aparte) sigue aparcado.
