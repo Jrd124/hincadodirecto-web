@@ -115,6 +115,13 @@ const MODULOS = {
     subNavLinks: {},
     defecto: "inicio",
   },
+  crm: {
+    linkId: "nav-crm-modulo",
+    submenuId: "submenu-crm",
+    paneles: { inicio: "panel-crm-inicio", empresas: "panel-crm-empresas", contactos: "panel-crm-contactos", oportunidades: "panel-crm-oportunidades", interacciones: "panel-crm-interacciones" },
+    subNavLinks: { inicio: "nav-crm-inicio", empresas: "nav-crm-empresas", contactos: "nav-crm-contactos", oportunidades: "nav-crm-oportunidades", interacciones: "nav-crm-interacciones" },
+    defecto: "inicio",
+  },
 };
 
 let moduloActivo = "finanzas";
@@ -123,6 +130,7 @@ let proveedoresSubpanel = "facturas";
 let clientesSubpanel = "clientes_facturas";
 let proyectosSubpanel = "cotizados";
 let rrhhSubpanel = "equipo";
+let crmSubpanel = "inicio";
 
 function actualizarHash() {
   var partes = [moduloActivo];
@@ -134,6 +142,8 @@ function actualizarHash() {
     partes.push(proyectosSubpanel);
   } else if (moduloActivo === "rrhh") {
     partes.push(rrhhSubpanel);
+  } else if (moduloActivo === "crm") {
+    partes.push(crmSubpanel);
   }
   var h = partes.join("/");
   if (location.hash.slice(1) !== h) location.hash = h;
@@ -170,6 +180,12 @@ function restaurarDesdeHash() {
     if (["equipo", "reserva", "alumni", "nominas", "adelantos"].indexOf(sp) >= 0) activarSubpanel("rrhh", sp);
   } else if (mod === "onboarding") {
     activarModulo("onboarding");
+  } else if (mod === "crm") {
+    activarModulo("crm");
+    if (partes.length >= 2) {
+      var sp = partes[1];
+      if (["inicio", "empresas", "contactos", "oportunidades", "interacciones"].indexOf(sp) >= 0) activarSubpanel("crm", sp);
+    }
   }
   actualizarHash();
 }
@@ -262,6 +278,7 @@ function activarSubpanel(modulo, subpanel) {
   else if (modulo === "clientes") clientesSubpanel = subpanel;
   else if (modulo === "proyectos") proyectosSubpanel = subpanel;
   else if (modulo === "rrhh") rrhhSubpanel = subpanel;
+  else if (modulo === "crm") crmSubpanel = subpanel;
   Object.keys(mod.paneles).forEach((k) => {
     document.getElementById(mod.paneles[k]).classList.toggle("visible", k === subpanel);
     if (mod.subNavLinks[k]) {
@@ -379,6 +396,21 @@ document.getElementById("nav-rrhh-nominas").addEventListener("click", (e) => {
 document.getElementById("nav-rrhh-adelantos").addEventListener("click", (e) => {
   e.preventDefault();
   activarSubpanel("rrhh", "adelantos");
+});
+
+// CRM nav handlers
+document.getElementById("nav-crm-modulo").addEventListener("click", (e) => {
+  e.preventDefault();
+  activarModulo("crm");
+});
+["inicio", "empresas", "contactos", "oportunidades", "interacciones"].forEach((sp) => {
+  var el = document.getElementById("nav-crm-" + sp);
+  if (el) el.addEventListener("click", (e) => {
+    e.preventDefault();
+    activarSubpanel("crm", sp);
+    if (sp === "inicio") _crmCargarStats();
+    if (sp === "empresas") _crmCargarEmpresas();
+  });
 });
 
 // Bancos: importar extracto (Santander)
@@ -4751,5 +4783,271 @@ document.getElementById("cli-listado-btn-descargar").addEventListener("click", (
           placeholderEl.style.display = "";
         }
       });
+  });
+})();
+
+// ═══ CRM ═══════════════════════════════════════════════════════════════════════
+(function () {
+  var _crmEmpresaSeleccionada = null;
+  var _crmOffset = 0;
+  var _crmLimit = 50;
+  var _crmTotal = 0;
+  var _crmBuscarTimer = null;
+
+  var listaEl = document.getElementById("crm-empresas-lista");
+  var buscarEl = document.getElementById("crm-empresas-buscar");
+  var filtroTipoEl = document.getElementById("crm-empresas-filtro-tipo");
+  var detalleEl = document.getElementById("crm-empresa-detalle");
+  var sinSelEl = document.getElementById("crm-empresas-sin-seleccion");
+  var paginacionEl = document.getElementById("crm-empresas-paginacion");
+  var modalEl = document.getElementById("modal-crm-empresa");
+  var formEl = document.getElementById("form-crm-empresa");
+
+  if (!listaEl) return;
+
+  // Stats
+  window._crmCargarStats = function () {
+    fetch("/api/crm/stats")
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var el = function (id) { return document.getElementById(id); };
+        el("crm-stat-empresas").textContent = d.total_empresas || 0;
+        el("crm-stat-contactos").textContent = d.total_contactos || 0;
+        el("crm-stat-oportunidades").textContent = d.oportunidades_abiertas || 0;
+        var imp = d.importe_pipeline || 0;
+        el("crm-stat-pipeline").textContent = imp > 0 ? imp.toLocaleString("es-ES", { style: "currency", currency: "EUR" }) : "0";
+        el("crm-stat-interacciones-mes").textContent = d.interacciones_mes || 0;
+      })
+      .catch(function () {});
+  };
+
+  // Dashboard cards navigation
+  document.querySelectorAll(".crm-dash-card[data-crm-nav]").forEach(function (card) {
+    card.addEventListener("click", function () {
+      var target = card.getAttribute("data-crm-nav");
+      activarSubpanel("crm", target);
+      if (target === "empresas") _crmCargarEmpresas();
+    });
+  });
+
+  // Empresas list
+  window._crmCargarEmpresas = function () {
+    var q = (buscarEl.value || "").trim();
+    var tipo = filtroTipoEl.value;
+    var params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (tipo) params.set("tipo", tipo);
+    params.set("activo", "1");
+    params.set("limit", String(_crmLimit));
+    params.set("offset", String(_crmOffset));
+
+    fetch("/api/crm/empresas?" + params.toString())
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        _crmTotal = data.total || 0;
+        listaEl.innerHTML = "";
+        if (!data.empresas || data.empresas.length === 0) {
+          listaEl.innerHTML = '<li style="cursor:default;color:#94a3b8;justify-content:center;">Sin resultados</li>';
+          _crmRenderPaginacion();
+          return;
+        }
+        data.empresas.forEach(function (emp) {
+          var li = document.createElement("li");
+          if (_crmEmpresaSeleccionada && _crmEmpresaSeleccionada === emp.id) li.classList.add("seleccionado");
+          li.innerHTML =
+            '<div class="crm-empresa-li-info">' +
+              '<span class="crm-empresa-li-nombre">' + _esc(emp.nombre) + '</span>' +
+              '<div class="crm-empresa-li-meta">' +
+                '<span class="crm-badge crm-badge-' + _esc(emp.tipo) + '">' + _esc(emp.tipo) + '</span>' +
+                '<span class="crm-empresa-li-contactos">' + (emp.num_contactos || 0) + ' contactos</span>' +
+              '</div>' +
+            '</div>';
+          li.addEventListener("click", function () {
+            _crmSeleccionarEmpresa(emp.id);
+            listaEl.querySelectorAll("li").forEach(function (el) { el.classList.remove("seleccionado"); });
+            li.classList.add("seleccionado");
+          });
+          listaEl.appendChild(li);
+        });
+        _crmRenderPaginacion();
+      })
+      .catch(function () {
+        listaEl.innerHTML = '<li style="cursor:default;color:#b91c1c;">Error al cargar</li>';
+      });
+  };
+
+  function _crmRenderPaginacion() {
+    var totalPags = Math.ceil(_crmTotal / _crmLimit);
+    var pagActual = Math.floor(_crmOffset / _crmLimit) + 1;
+    if (totalPags <= 1) { paginacionEl.innerHTML = ""; return; }
+    paginacionEl.innerHTML =
+      '<button id="crm-pag-prev"' + (pagActual <= 1 ? ' disabled' : '') + '>&laquo; Ant</button>' +
+      '<span>' + pagActual + ' / ' + totalPags + '</span>' +
+      '<button id="crm-pag-next"' + (pagActual >= totalPags ? ' disabled' : '') + '>Sig &raquo;</button>';
+    document.getElementById("crm-pag-prev").addEventListener("click", function () {
+      _crmOffset = Math.max(0, _crmOffset - _crmLimit);
+      _crmCargarEmpresas();
+    });
+    document.getElementById("crm-pag-next").addEventListener("click", function () {
+      _crmOffset += _crmLimit;
+      _crmCargarEmpresas();
+    });
+  }
+
+  // Buscar con debounce
+  buscarEl.addEventListener("input", function () {
+    clearTimeout(_crmBuscarTimer);
+    _crmBuscarTimer = setTimeout(function () { _crmOffset = 0; _crmCargarEmpresas(); }, 300);
+  });
+  filtroTipoEl.addEventListener("change", function () { _crmOffset = 0; _crmCargarEmpresas(); });
+
+  // Seleccionar empresa (detalle)
+  function _crmSeleccionarEmpresa(id) {
+    _crmEmpresaSeleccionada = id;
+    fetch("/api/crm/empresas/" + id)
+      .then(function (r) { return r.json(); })
+      .then(function (emp) {
+        if (emp.error) { sinSelEl.style.display = "block"; detalleEl.style.display = "none"; return; }
+        sinSelEl.style.display = "none";
+        detalleEl.style.display = "block";
+        document.getElementById("crm-empresa-nombre").textContent = emp.nombre || "";
+        document.getElementById("crm-empresa-cif").textContent = emp.cif ? "CIF: " + emp.cif : "";
+        var badge = document.getElementById("crm-empresa-tipo-badge");
+        badge.textContent = emp.tipo || "";
+        badge.className = "crm-badge crm-badge-" + (emp.tipo || "lead");
+        document.getElementById("crm-empresa-sector").textContent = emp.sector ? emp.sector : "";
+        document.getElementById("crm-empresa-direccion").textContent = [emp.direccion, emp.localidad, emp.provincia, emp.pais].filter(Boolean).join(", ") || "Sin direccion";
+        document.getElementById("crm-empresa-telefono").textContent = emp.telefono ? "Tel: " + emp.telefono : "";
+        document.getElementById("crm-empresa-email").textContent = emp.email || "";
+        document.getElementById("crm-empresa-web").textContent = emp.web || "";
+        document.getElementById("crm-empresa-notas").textContent = emp.notas || "Sin notas";
+
+        // Contactos
+        var contEl = document.getElementById("crm-empresa-contactos-lista");
+        if (emp.contactos && emp.contactos.length > 0) {
+          contEl.innerHTML = emp.contactos.map(function (c) {
+            return '<div class="crm-contacto-mini-item"><strong>' + _esc(c.nombre) + ' ' + _esc(c.apellidos || '') + '</strong>' +
+              (c.cargo ? '<span>' + _esc(c.cargo) + '</span>' : '') +
+              (c.email ? '<span>' + _esc(c.email) + '</span>' : '') + '</div>';
+          }).join("");
+        } else {
+          contEl.innerHTML = '<p class="crm-sin-datos">Sin contactos</p>';
+        }
+
+        // Interacciones
+        var intEl = document.getElementById("crm-empresa-interacciones-lista");
+        if (emp.interacciones && emp.interacciones.length > 0) {
+          intEl.innerHTML = emp.interacciones.map(function (i) {
+            return '<div class="crm-timeline-item">' +
+              '<span class="crm-timeline-fecha">' + _esc((i.fecha || "").substring(0, 10)) + '</span>' +
+              '<span class="crm-timeline-tipo">' + _esc(i.tipo) + '</span>' +
+              '<span class="crm-timeline-asunto">' + _esc(i.asunto || i.descripcion || "") + '</span></div>';
+          }).join("");
+        } else {
+          intEl.innerHTML = '<p class="crm-sin-datos">Sin interacciones</p>';
+        }
+
+        // Oportunidades
+        var opEl = document.getElementById("crm-empresa-oportunidades-lista");
+        if (emp.oportunidades && emp.oportunidades.length > 0) {
+          opEl.innerHTML = emp.oportunidades.map(function (o) {
+            var imp = o.importe_estimado ? Number(o.importe_estimado).toLocaleString("es-ES", { style: "currency", currency: "EUR" }) : "";
+            return '<div class="crm-contacto-mini-item"><strong>' + _esc(o.nombre) + '</strong>' +
+              '<span class="crm-badge crm-badge-lead">' + _esc(o.estado) + '</span>' +
+              (imp ? '<span>' + imp + '</span>' : '') + '</div>';
+          }).join("");
+        } else {
+          opEl.innerHTML = '<p class="crm-sin-datos">Sin oportunidades</p>';
+        }
+      })
+      .catch(function () { sinSelEl.textContent = "Error al cargar empresa."; });
+  }
+
+  // Modal crear/editar empresa
+  function _crmAbrirModal(emp) {
+    document.getElementById("modal-crm-empresa-titulo").textContent = emp ? "Editar empresa" : "Nueva empresa";
+    document.getElementById("crm-empresa-edit-id").value = emp ? emp.id : "";
+    document.getElementById("crm-emp-nombre").value = emp ? emp.nombre || "" : "";
+    document.getElementById("crm-emp-cif").value = emp ? emp.cif || "" : "";
+    document.getElementById("crm-emp-tipo").value = emp ? emp.tipo || "lead" : "lead";
+    document.getElementById("crm-emp-direccion").value = emp ? emp.direccion || "" : "";
+    document.getElementById("crm-emp-localidad").value = emp ? emp.localidad || "" : "";
+    document.getElementById("crm-emp-provincia").value = emp ? emp.provincia || "" : "";
+    document.getElementById("crm-emp-pais").value = emp ? emp.pais || "" : "";
+    document.getElementById("crm-emp-telefono").value = emp ? emp.telefono || "" : "";
+    document.getElementById("crm-emp-email").value = emp ? emp.email || "" : "";
+    document.getElementById("crm-emp-web").value = emp ? emp.web || "" : "";
+    document.getElementById("crm-emp-sector").value = emp ? emp.sector || "" : "";
+    document.getElementById("crm-emp-notas").value = emp ? emp.notas || "" : "";
+    modalEl.classList.add("visible");
+    modalEl.setAttribute("aria-hidden", "false");
+    document.getElementById("crm-emp-nombre").focus();
+  }
+
+  function _crmCerrarModal() {
+    modalEl.classList.remove("visible");
+    modalEl.setAttribute("aria-hidden", "true");
+  }
+
+  document.getElementById("btn-nueva-empresa-crm").addEventListener("click", function () { _crmAbrirModal(null); });
+  document.getElementById("btn-cancelar-crm-empresa").addEventListener("click", _crmCerrarModal);
+  modalEl.addEventListener("click", function (e) { if (e.target === modalEl) _crmCerrarModal(); });
+
+  document.getElementById("btn-editar-empresa-crm").addEventListener("click", function () {
+    if (!_crmEmpresaSeleccionada) return;
+    fetch("/api/crm/empresas/" + _crmEmpresaSeleccionada)
+      .then(function (r) { return r.json(); })
+      .then(function (emp) { if (!emp.error) _crmAbrirModal(emp); });
+  });
+
+  // Submit form
+  formEl.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var id = document.getElementById("crm-empresa-edit-id").value;
+    var body = {
+      nombre: document.getElementById("crm-emp-nombre").value,
+      cif: document.getElementById("crm-emp-cif").value,
+      tipo: document.getElementById("crm-emp-tipo").value,
+      direccion: document.getElementById("crm-emp-direccion").value,
+      localidad: document.getElementById("crm-emp-localidad").value,
+      provincia: document.getElementById("crm-emp-provincia").value,
+      pais: document.getElementById("crm-emp-pais").value,
+      telefono: document.getElementById("crm-emp-telefono").value,
+      email: document.getElementById("crm-emp-email").value,
+      web: document.getElementById("crm-emp-web").value,
+      sector: document.getElementById("crm-emp-sector").value,
+      notas: document.getElementById("crm-emp-notas").value,
+    };
+    var url = id ? "/api/crm/empresas/" + id : "/api/crm/empresas";
+    var method = id ? "PUT" : "POST";
+    fetch(url, { method: method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok) { alert(res.data.error || "Error"); return; }
+        _crmCerrarModal();
+        _crmCargarEmpresas();
+        if (res.data.id) _crmSeleccionarEmpresa(res.data.id);
+      })
+      .catch(function (err) { alert("Error: " + err.message); });
+  });
+
+  // Helper escape HTML
+  function _esc(s) {
+    if (!s) return "";
+    var d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // Load CRM data when navigating to it via MutationObserver
+  var _crmObserver = new MutationObserver(function () {
+    var panelInicio = document.getElementById("panel-crm-inicio");
+    var panelEmpresas = document.getElementById("panel-crm-empresas");
+    if (panelInicio && panelInicio.classList.contains("visible")) _crmCargarStats();
+    if (panelEmpresas && panelEmpresas.classList.contains("visible")) _crmCargarEmpresas();
+  });
+  ["panel-crm-inicio", "panel-crm-empresas"].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) _crmObserver.observe(el, { attributes: true, attributeFilter: ["class"] });
   });
 })();

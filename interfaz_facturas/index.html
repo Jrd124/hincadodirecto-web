@@ -12,6 +12,7 @@
       <nav class="menu-principal" aria-label="Navegación principal">
         <ul>
           <li><a href="#" id="nav-finanzas-modulo" class="activo">Finanzas</a></li>
+          <li><a href="#" id="nav-crm-modulo">CRM</a></li>
           <li><a href="#" id="nav-proyectos-modulo">Proyectos</a></li>
           <li><a href="#" id="nav-rrhh-modulo">RRHH</a></li>
         </ul>
@@ -58,6 +59,15 @@
         </ul>
       </nav>
       <nav class="submenu" id="submenu-onboarding" aria-label="Submenú Onboarding"><ul></ul></nav>
+      <nav class="submenu" id="submenu-crm" aria-label="Submenú CRM">
+        <ul>
+          <li><a href="#" id="nav-crm-inicio" class="activo">Inicio</a></li>
+          <li><a href="#" id="nav-crm-empresas">Empresas</a></li>
+          <li><a href="#" id="nav-crm-contactos">Contactos</a></li>
+          <li><a href="#" id="nav-crm-oportunidades">Oportunidades</a></li>
+          <li><a href="#" id="nav-crm-interacciones">Interacciones</a></li>
+        </ul>
+      </nav>
     </div>
     <div class="container">
       <div id="panel-facturas" class="panel-facturas visible">
@@ -842,6 +852,219 @@
         <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
           <h1>Onboarding</h1>
           <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Próximamente</p>
+        </div>
+      </div>
+
+      <!-- ═══ CRM ═══════════════════════════════════════════════════════════ -->
+      <div id="panel-crm-inicio" class="panel-crm">
+        <div style="max-width:1100px;margin:0 auto;padding:24px 20px;">
+          <h1 style="font-size:1.6rem;margin-bottom:2px;">CRM</h1>
+          <p class="subtitle" style="font-size:1rem;color:#64748b;margin-bottom:24px;">Gestion de relaciones comerciales</p>
+          <div class="crm-stats-bar" id="crm-stats-bar">
+            <div class="crm-stat-item"><span class="crm-stat-num" id="crm-stat-empresas">--</span><span class="crm-stat-label">Empresas</span></div>
+            <div class="crm-stat-item"><span class="crm-stat-num" id="crm-stat-contactos">--</span><span class="crm-stat-label">Contactos</span></div>
+            <div class="crm-stat-item"><span class="crm-stat-num" id="crm-stat-oportunidades">--</span><span class="crm-stat-label">Oportunidades</span></div>
+            <div class="crm-stat-item"><span class="crm-stat-num" id="crm-stat-pipeline">--</span><span class="crm-stat-label">Pipeline</span></div>
+            <div class="crm-stat-item"><span class="crm-stat-num" id="crm-stat-interacciones-mes">--</span><span class="crm-stat-label">Interacciones (mes)</span></div>
+          </div>
+          <div class="crm-dashboard-cards">
+            <div class="card crm-dash-card" data-crm-nav="empresas">
+              <div class="crm-dash-card-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="1.5"><path d="M3 21h18M3 7v14m6-14v14m6-14v14m6-14v14M3 7l9-4 9 4"/></svg>
+              </div>
+              <h3>Empresas</h3>
+              <p>Clientes, proveedores y leads</p>
+            </div>
+            <div class="card crm-dash-card" data-crm-nav="contactos">
+              <div class="crm-dash-card-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="1.5"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </div>
+              <h3>Contactos</h3>
+              <p>Personas de contacto</p>
+            </div>
+            <div class="card crm-dash-card crm-dash-card-disabled">
+              <div class="crm-dash-card-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+              </div>
+              <h3>Oportunidades</h3>
+              <p class="subtitle">Proximamente</p>
+            </div>
+            <div class="card crm-dash-card crm-dash-card-disabled">
+              <div class="crm-dash-card-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              </div>
+              <h3>Interacciones</h3>
+              <p class="subtitle">Proximamente</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="panel-crm-empresas" class="panel-crm">
+        <section style="max-width:1400px;margin:0 auto;padding:24px 20px;">
+          <div class="crm-empresas-header">
+            <h1>Empresas CRM</h1>
+            <button type="button" class="primary" id="btn-nueva-empresa-crm" style="font-size:0.85rem;padding:6px 16px;">+ Nueva empresa</button>
+          </div>
+          <div class="crm-empresas-layout">
+            <div class="crm-empresas-lista-panel">
+              <div class="crm-empresas-filtros">
+                <input type="text" id="crm-empresas-buscar" placeholder="Buscar por nombre o CIF..." />
+                <select id="crm-empresas-filtro-tipo">
+                  <option value="">Todos</option>
+                  <option value="cliente">Clientes</option>
+                  <option value="proveedor">Proveedores</option>
+                  <option value="ambos">Ambos</option>
+                  <option value="lead">Leads</option>
+                </select>
+              </div>
+              <ul id="crm-empresas-lista" aria-label="Empresas CRM"></ul>
+              <div id="crm-empresas-paginacion" class="crm-paginacion"></div>
+            </div>
+            <div class="crm-empresas-detalle-panel">
+              <div id="crm-empresas-sin-seleccion" class="crm-placeholder">
+                Selecciona una empresa de la lista para ver su ficha.
+              </div>
+              <div id="crm-empresa-detalle" style="display:none;">
+                <div class="crm-empresa-cabecera">
+                  <div>
+                    <h2 id="crm-empresa-nombre"></h2>
+                    <span id="crm-empresa-cif" class="crm-empresa-cif-label"></span>
+                    <span id="crm-empresa-tipo-badge" class="crm-badge"></span>
+                    <span id="crm-empresa-sector" class="crm-empresa-sector-label"></span>
+                  </div>
+                  <button type="button" class="secondary" id="btn-editar-empresa-crm" style="font-size:0.8rem;padding:4px 12px;">Editar</button>
+                </div>
+                <div class="crm-empresa-datos">
+                  <div class="crm-empresa-datos-col">
+                    <h4>Datos de contacto</h4>
+                    <p id="crm-empresa-direccion"></p>
+                    <p id="crm-empresa-telefono"></p>
+                    <p id="crm-empresa-email"></p>
+                    <p id="crm-empresa-web"></p>
+                  </div>
+                  <div class="crm-empresa-datos-col">
+                    <h4>Notas</h4>
+                    <p id="crm-empresa-notas" class="crm-notas-text"></p>
+                  </div>
+                </div>
+                <div class="crm-empresa-secciones">
+                  <div class="crm-seccion">
+                    <h4>Contactos vinculados</h4>
+                    <div id="crm-empresa-contactos-lista" class="crm-contactos-mini">
+                      <p class="crm-sin-datos">Sin contactos</p>
+                    </div>
+                  </div>
+                  <div class="crm-seccion">
+                    <h4>Ultimas interacciones</h4>
+                    <div id="crm-empresa-interacciones-lista" class="crm-timeline">
+                      <p class="crm-sin-datos">Sin interacciones</p>
+                    </div>
+                  </div>
+                  <div class="crm-seccion">
+                    <h4>Oportunidades abiertas</h4>
+                    <div id="crm-empresa-oportunidades-lista">
+                      <p class="crm-sin-datos">Sin oportunidades</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div id="panel-crm-contactos" class="panel-crm">
+        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+          <h1>Contactos</h1>
+          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Proximamente</p>
+        </div>
+      </div>
+      <div id="panel-crm-oportunidades" class="panel-crm">
+        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+          <h1>Oportunidades</h1>
+          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Proximamente</p>
+        </div>
+      </div>
+      <div id="panel-crm-interacciones" class="panel-crm">
+        <div class="card" style="max-width:600px;margin:40px auto;text-align:center;">
+          <h1>Interacciones</h1>
+          <p class="subtitle" style="font-size:1.1rem;color:#64748b;">Proximamente</p>
+        </div>
+      </div>
+
+      <!-- Modal crear/editar empresa CRM -->
+      <div id="modal-crm-empresa" class="modal-overlay" role="dialog" aria-labelledby="modal-crm-empresa-titulo" aria-modal="true" aria-hidden="true">
+        <div class="modal-content" style="max-width:600px;">
+          <h2 id="modal-crm-empresa-titulo">Nueva empresa</h2>
+          <form id="form-crm-empresa" novalidate>
+            <input type="hidden" id="crm-empresa-edit-id" />
+            <div class="form-group">
+              <label for="crm-emp-nombre">Nombre <span class="required">*</span></label>
+              <input type="text" id="crm-emp-nombre" name="nombre" required />
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="crm-emp-cif">CIF/NIF</label>
+                <input type="text" id="crm-emp-cif" name="cif" />
+              </div>
+              <div class="form-group">
+                <label for="crm-emp-tipo">Tipo <span class="required">*</span></label>
+                <select id="crm-emp-tipo" name="tipo" required>
+                  <option value="lead">Lead</option>
+                  <option value="cliente">Cliente</option>
+                  <option value="proveedor">Proveedor</option>
+                  <option value="ambos">Ambos</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="crm-emp-direccion">Direccion</label>
+              <input type="text" id="crm-emp-direccion" name="direccion" />
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="crm-emp-localidad">Localidad</label>
+                <input type="text" id="crm-emp-localidad" name="localidad" />
+              </div>
+              <div class="form-group">
+                <label for="crm-emp-provincia">Provincia</label>
+                <input type="text" id="crm-emp-provincia" name="provincia" />
+              </div>
+              <div class="form-group">
+                <label for="crm-emp-pais">Pais</label>
+                <input type="text" id="crm-emp-pais" name="pais" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="crm-emp-telefono">Telefono</label>
+                <input type="text" id="crm-emp-telefono" name="telefono" />
+              </div>
+              <div class="form-group">
+                <label for="crm-emp-email">Email</label>
+                <input type="email" id="crm-emp-email" name="email" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="crm-emp-web">Web</label>
+                <input type="text" id="crm-emp-web" name="web" />
+              </div>
+              <div class="form-group">
+                <label for="crm-emp-sector">Sector</label>
+                <input type="text" id="crm-emp-sector" name="sector" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="crm-emp-notas">Notas</label>
+              <textarea id="crm-emp-notas" name="notas" rows="3"></textarea>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="primary">Guardar</button>
+              <button type="button" class="secondary" id="btn-cancelar-crm-empresa">Cancelar</button>
+            </div>
+          </form>
         </div>
       </div>
 

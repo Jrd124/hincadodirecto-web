@@ -40,7 +40,7 @@ from config import (
 )
 from core.facturas_servicios import filtrar_filas_csv as _filtrar_filas_csv
 from core.transporte_servicios import buscar_ruta_y_proveedores as _buscar_ruta_y_proveedores
-from core import terceros_db, facturas_db, tarjetas_db, facturas_cliente_db
+from core import terceros_db, facturas_db, tarjetas_db, facturas_cliente_db, crm_db
 from core.facturas_db import CAMPOS_FACTURAS_PROVEEDOR
 from core.facturas_cliente_db import CAMPOS_FACTURAS_CLIENTE
 from core.ocr import leer_texto_factura as _leer_texto_factura
@@ -120,6 +120,7 @@ archivo_bp = Blueprint("archivo", __name__)
 control_calidad_bp = Blueprint("control_calidad", __name__)
 bancos_bp = Blueprint("bancos", __name__)
 transporte_bp = Blueprint("transporte", __name__)
+crm_bp = Blueprint("crm", __name__)
 
 # Workers para procesamiento en paralelo del pipeline de facturas (OpenAI/vision)
 _MAX_WORKERS_EXTRACTOR_LLM = 4
@@ -138,6 +139,7 @@ def ensure_dirs() -> None:
   facturas_cliente_db.init_facturas_cliente_db()
   terceros_db.init_terceros_db()
   tarjetas_db.init_tarjetas_db()
+  crm_db.init_crm_db()
   _init_movimientos_db()
 
 
@@ -4022,6 +4024,58 @@ def transporte_buscar():
   return jsonify(resultado)
 
 
+# ─── CRM (Gestión de relaciones comerciales) ─────────────────────────────────
+
+@crm_bp.get("/api/crm/empresas")
+def crm_listar_empresas():
+  tipo = (request.args.get("tipo") or "").strip() or None
+  q = (request.args.get("q") or "").strip() or None
+  activo_raw = request.args.get("activo")
+  activo = int(activo_raw) if activo_raw is not None and activo_raw.strip() != "" else None
+  limit = min(int(request.args.get("limit") or 50), 200)
+  offset = int(request.args.get("offset") or 0)
+  resultado = crm_db.listar_empresas(tipo=tipo, q=q, activo=activo, limit=limit, offset=offset)
+  return jsonify(resultado)
+
+
+@crm_bp.get("/api/crm/empresas/<int:empresa_id>")
+def crm_obtener_empresa(empresa_id: int):
+  empresa = crm_db.obtener_empresa(empresa_id)
+  if not empresa:
+    return jsonify({"error": "Empresa CRM no encontrada"}), 404
+  return jsonify(empresa)
+
+
+@crm_bp.post("/api/crm/empresas")
+def crm_crear_empresa():
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre de la empresa es obligatorio")
+  tipo = (data.get("tipo") or "lead").strip()
+  if tipo not in ("cliente", "proveedor", "ambos", "lead"):
+    return _bad_request("Tipo debe ser cliente, proveedor, ambos o lead")
+  empresa = crm_db.crear_empresa(data)
+  return jsonify(empresa), 201
+
+
+@crm_bp.put("/api/crm/empresas/<int:empresa_id>")
+def crm_actualizar_empresa(empresa_id: int):
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre de la empresa es obligatorio")
+  empresa = crm_db.actualizar_empresa(empresa_id, data)
+  if not empresa:
+    return jsonify({"error": "Empresa CRM no encontrada"}), 404
+  return jsonify(empresa)
+
+
+@crm_bp.get("/api/crm/stats")
+def crm_stats():
+  return jsonify(crm_db.estadisticas_crm())
+
+
 # Registrar blueprints
 app.register_blueprint(facturas_proveedores_bp)
 app.register_blueprint(proveedores_bp)
@@ -4030,6 +4084,7 @@ app.register_blueprint(archivo_bp)
 app.register_blueprint(control_calidad_bp)
 app.register_blueprint(bancos_bp)
 app.register_blueprint(transporte_bp)
+app.register_blueprint(crm_bp)
 
 
 if __name__ == "__main__":

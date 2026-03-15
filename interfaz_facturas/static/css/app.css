@@ -116,7 +116,8 @@
       .panel-bancos,
       .panel-rrhh,
       .panel-onboarding,
-      .panel-control-calidad {
+      .panel-control-calidad,
+      .panel-crm {
         display: none;
       }
       .panel-facturas.visible,
@@ -127,7 +128,8 @@
       .panel-bancos.visible,
       .panel-rrhh.visible,
       .panel-onboarding.visible,
-      .panel-control-calidad.visible {
+      .panel-control-calidad.visible,
+      .panel-crm.visible {
         display: block;
       }
       /* Alinear paneles Proyectos con el resto del contenido */
@@ -1654,4 +1656,326 @@
         color: #334155;
         box-shadow: 0 1px 6px rgba(0,0,0,0.2);
         border: 1px solid #e2e8f0;
+      }
+
+      /* ═══ CRM ═══════════════════════════════════════════════════════════════ */
+      .crm-stats-bar {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 28px;
+        flex-wrap: wrap;
+      }
+      .crm-stat-item {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 14px 20px;
+        min-width: 140px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      }
+      .crm-stat-num {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: #1e293b;
+        line-height: 1.2;
+      }
+      .crm-stat-label {
+        font-size: 0.78rem;
+        color: #64748b;
+        margin-top: 2px;
+      }
+      .crm-dashboard-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 16px;
+      }
+      .crm-dash-card {
+        cursor: pointer;
+        transition: box-shadow 0.15s, transform 0.15s;
+        text-align: center;
+        padding: 24px 16px;
+      }
+      .crm-dash-card:hover {
+        box-shadow: 0 4px 16px rgba(79,70,229,0.13);
+        transform: translateY(-2px);
+      }
+      .crm-dash-card-disabled {
+        opacity: 0.55;
+        cursor: default;
+        pointer-events: none;
+      }
+      .crm-dash-card h3 {
+        margin: 10px 0 4px;
+        font-size: 1rem;
+        color: #1e293b;
+      }
+      .crm-dash-card p {
+        font-size: 0.85rem;
+        color: #64748b;
+        margin: 0;
+      }
+      .crm-dash-card-icon {
+        margin-bottom: 4px;
+      }
+
+      /* Empresas CRM */
+      .crm-empresas-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+      .crm-empresas-header h1 {
+        font-size: 1.3rem;
+        margin: 0;
+      }
+      .crm-empresas-layout {
+        display: flex;
+        gap: 24px;
+        min-height: 500px;
+      }
+      .crm-empresas-lista-panel {
+        flex: 0 0 340px;
+        display: flex;
+        flex-direction: column;
+      }
+      .crm-empresas-filtros {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .crm-empresas-filtros input {
+        flex: 1;
+        padding: 6px 10px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 0.85rem;
+      }
+      .crm-empresas-filtros select {
+        padding: 6px 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        background: #fff;
+      }
+      #crm-empresas-lista {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        overflow-y: auto;
+        max-height: 520px;
+        background: #fff;
+        flex: 1;
+      }
+      #crm-empresas-lista li {
+        padding: 10px 14px;
+        cursor: pointer;
+        border-bottom: 1px solid #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        transition: background 0.1s;
+      }
+      #crm-empresas-lista li:last-child { border-bottom: none; }
+      #crm-empresas-lista li:hover { background: #f8fafc; }
+      #crm-empresas-lista li.seleccionado {
+        background: #dbeafe;
+        font-weight: 500;
+      }
+      .crm-empresa-li-info {
+        flex: 1;
+        min-width: 0;
+      }
+      .crm-empresa-li-nombre {
+        display: block;
+        font-size: 0.9rem;
+        color: #1e293b;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .crm-empresa-li-meta {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 2px;
+      }
+      .crm-badge {
+        display: inline-block;
+        font-size: 0.7rem;
+        font-weight: 600;
+        padding: 1px 8px;
+        border-radius: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+      }
+      .crm-badge-cliente { background: #dcfce7; color: #166534; }
+      .crm-badge-proveedor { background: #dbeafe; color: #1e40af; }
+      .crm-badge-ambos { background: #f3e8ff; color: #6b21a8; }
+      .crm-badge-lead { background: #fef9c3; color: #854d0e; }
+      .crm-empresa-li-contactos {
+        font-size: 0.75rem;
+        color: #94a3b8;
+      }
+      .crm-empresas-detalle-panel {
+        flex: 1;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 24px;
+        min-width: 0;
+      }
+      .crm-placeholder {
+        color: #94a3b8;
+        text-align: center;
+        padding: 60px 20px;
+        font-size: 0.95rem;
+      }
+      .crm-empresa-cabecera {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 20px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #f1f5f9;
+      }
+      .crm-empresa-cabecera h2 {
+        font-size: 1.3rem;
+        margin: 0 0 4px;
+        color: #1e293b;
+      }
+      .crm-empresa-cif-label {
+        font-size: 0.82rem;
+        color: #64748b;
+        margin-right: 8px;
+      }
+      .crm-empresa-sector-label {
+        font-size: 0.78rem;
+        color: #94a3b8;
+        margin-left: 8px;
+      }
+      .crm-empresa-datos {
+        display: flex;
+        gap: 32px;
+        margin-bottom: 24px;
+      }
+      .crm-empresa-datos-col {
+        flex: 1;
+      }
+      .crm-empresa-datos-col h4 {
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        color: #94a3b8;
+        letter-spacing: 0.5px;
+        margin: 0 0 8px;
+      }
+      .crm-empresa-datos-col p {
+        font-size: 0.88rem;
+        color: #334155;
+        margin: 4px 0;
+        line-height: 1.4;
+      }
+      .crm-notas-text {
+        font-size: 0.85rem;
+        color: #64748b;
+        white-space: pre-wrap;
+      }
+      .crm-empresa-secciones {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+      .crm-seccion h4 {
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        color: #94a3b8;
+        letter-spacing: 0.5px;
+        margin: 0 0 8px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid #f1f5f9;
+      }
+      .crm-sin-datos {
+        font-size: 0.85rem;
+        color: #cbd5e1;
+        font-style: italic;
+        margin: 0;
+      }
+      .crm-contactos-mini {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .crm-contacto-mini-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 10px;
+        background: #f8fafc;
+        border-radius: 6px;
+        font-size: 0.85rem;
+      }
+      .crm-contacto-mini-item strong {
+        color: #1e293b;
+      }
+      .crm-contacto-mini-item span {
+        color: #64748b;
+        font-size: 0.8rem;
+      }
+      .crm-timeline {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .crm-timeline-item {
+        display: flex;
+        gap: 10px;
+        padding: 8px 10px;
+        background: #f8fafc;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        border-left: 3px solid #4f46e5;
+      }
+      .crm-timeline-fecha {
+        color: #94a3b8;
+        font-size: 0.78rem;
+        white-space: nowrap;
+        min-width: 70px;
+      }
+      .crm-timeline-tipo {
+        font-weight: 600;
+        color: #4f46e5;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+      }
+      .crm-timeline-asunto {
+        color: #334155;
+        flex: 1;
+      }
+      .crm-paginacion {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 8px;
+        font-size: 0.82rem;
+        color: #64748b;
+      }
+      .crm-paginacion button {
+        padding: 3px 10px;
+        font-size: 0.8rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        background: #fff;
+        cursor: pointer;
+      }
+      .crm-paginacion button:disabled {
+        opacity: 0.4;
+        cursor: default;
       }
