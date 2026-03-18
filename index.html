@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Hincado Directo — Especialistas en hincado y perforado para parques fotovoltaicos. Más de 1 GW instalado en España, Francia, Portugal e Italia. Máxima calidad en cualquier terreno.">
+<meta name="description" content="Hincado Directo — Especialistas en hincado y perforado para parques fotovoltaicos. Más de 2 GW instalado en España, Francia, Portugal e Italia. Máxima calidad en cualquier terreno.">
 <meta name="keywords" content="hincado fotovoltaico, perforado fotovoltaico, hincadoras, ensayos POT, pull out test, alquiler hincadoras, Orteco 1000, parques solares, EPC solar">
 <meta name="author" content="Hincado Directo">
 <meta name="robots" content="index, follow">
 
 <!-- Open Graph (para compartir en redes sociales y WhatsApp) -->
 <meta property="og:title" content="Hincado Directo | Especialistas en Hincado y Perforado Fotovoltaico">
-<meta property="og:description" content="Equipo profesional con más de 20 años de experiencia. Más de 1 GW instalado en 4 países. Máxima calidad en cualquier terreno.">
+<meta property="og:description" content="Equipo profesional con más de 20 años de experiencia. Más de 2 GW instalado en 4 países. Máxima calidad en cualquier terreno.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://www.hincadodirecto.com">
 <meta property="og:locale" content="es_ES">
@@ -21,6 +21,103 @@
 <title>Hincado Directo | Especialistas en Hincado y Perforado Fotovoltaico</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+<!-- ========== SCHEMA MARKUP — EMPRESA LOCAL ========== -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Hincado Directo",
+  "legalName": "Hincado Directo SL",
+  "url": "https://www.hincadodirecto.com",
+  "logo": "https://www.hincadodirecto.com/img/logo-hincado-directo.png",
+  "description": "Especialistas en hincado y perforado para parques fotovoltaicos. Más de 2 GW instalado en España, Francia, Portugal e Italia.",
+  "foundingDate": "2019",
+  "email": "direccion@hincadodirecto.com",
+  "telephone": "+34637705433",
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "Calle Francisco Luján, 2, Esc. Izq., Piso 6D",
+    "addressLocality": "Badajoz",
+    "postalCode": "06004",
+    "addressRegion": "Extremadura",
+    "addressCountry": "ES"
+  },
+  "geo": {
+    "@type": "GeoCoordinates",
+    "latitude": 38.8794,
+    "longitude": -6.9707
+  },
+  "areaServed": [
+    { "@type": "Country", "name": "España" },
+    { "@type": "Country", "name": "Francia" },
+    { "@type": "Country", "name": "Portugal" },
+    { "@type": "Country", "name": "Italia" }
+  ],
+  "serviceType": [
+    "Hincado de perfiles para parques fotovoltaicos",
+    "Perforado y pretaladro para estructuras solares",
+    "Ensayos Pull Out Test (POT)",
+    "Alquiler de hincadoras con operador"
+  ],
+  "numberOfEmployees": {
+    "@type": "QuantitativeValue",
+    "minValue": 10,
+    "maxValue": 50
+  },
+  "sameAs": [
+    "https://es.linkedin.com/company/hincado-directo"
+  ]
+}
+</script>
+
+<!-- ========== SCHEMA MARKUP — SERVICIO PRINCIPAL ========== -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Service",
+  "serviceType": "Hincado y perforado para parques fotovoltaicos",
+  "provider": {
+    "@type": "Organization",
+    "name": "Hincado Directo",
+    "url": "https://www.hincadodirecto.com"
+  },
+  "areaServed": [
+    { "@type": "Country", "name": "España" },
+    { "@type": "Country", "name": "Francia" },
+    { "@type": "Country", "name": "Portugal" },
+    { "@type": "Country", "name": "Italia" }
+  ],
+  "description": "Hincado directo de perfiles, pretaladro, perforación y ensayos Pull Out Test para parques solares utility-scale. Flota propia de 9 máquinas. Más de 2 GW instalados.",
+  "offers": {
+    "@type": "Offer",
+    "availability": "https://schema.org/InStock",
+    "areaServed": {
+      "@type": "Country",
+      "name": "España"
+    }
+  }
+}
+</script>
+
+<!-- ========== GOOGLE ANALYTICS ========== 
+     INSTRUCCIONES: 
+     1. Ve a https://analytics.google.com
+     2. Crea una propiedad para hincadodirecto.com
+     3. Google te dará un ID tipo "G-XXXXXXXXXX"
+     4. Sustituye G-XXXXXXXXXX por tu ID real en las dos líneas de abajo
+     5. Descomenta el bloque (quita las líneas de comentario HTML)
+-->
+<!--
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-XXXXXXXXXX');
+</script>
+-->
+
 <style>
 :root {
   --color-bg: #0A0C10;
@@ -577,6 +674,26 @@ nav .container {
   border: 1px solid rgba(232,162,48,0.08);
 }
 
+/* ============ PHOTO CAROUSEL (fade) ============ */
+.photo-carousel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.photo-carousel img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 1s ease;
+}
+.photo-carousel img.active {
+  opacity: 1;
+}
+
 /* ============ ABOUT / DIFERENCIAL ============ */
 .about-grid {
   display: grid;
@@ -727,8 +844,8 @@ nav .container {
   background: var(--color-bg-elevated);
 }
 .client-cell img {
-  max-height: 36px;
-  max-width: 140px;
+  max-height: 52px;
+  max-width: 180px;
   object-fit: contain;
   filter: brightness(0) invert(1);
   opacity: 0.4;
@@ -740,7 +857,7 @@ nav .container {
 }
 .client-cell span {
   font-family: var(--font-display);
-  font-size: 0.78rem;
+  font-size: 0.92rem;
   color: var(--color-text-muted);
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -1006,7 +1123,7 @@ footer .container {
         <div class="hero-image-overlay"></div>
       </div>
       <div class="hero-stat-badge">
-        <div class="stat-number">+1 GW</div>
+        <div class="stat-number">+2 GW</div>
         <div class="stat-label">Potencia instalada</div>
       </div>
     </div>
@@ -1018,7 +1135,7 @@ footer .container {
   <div class="container">
     <div class="stats-grid">
       <div class="stat-item animate-on-scroll">
-        <div class="stat-number">+1<span> GW</span></div>
+        <div class="stat-number">+2<span> GW</span></div>
         <div class="stat-label">Potencia instalada</div>
       </div>
       <div class="stat-item animate-on-scroll">
@@ -1070,7 +1187,7 @@ footer .container {
       <div class="service-card animate-on-scroll">
         <div class="service-number">03</div>
         <h3 class="service-title">Alquiler de Hincadoras</h3>
-        <p class="service-desc">Flota propia de 9 máquinas: 7 Orteco 1000 HD y 2 Faga MHPH 1000 hincadoras-perforadoras. Alquiler siempre con operador profesional, con opción de incluir ayudante. Rendimiento garantizado.</p>
+        <p class="service-desc">Flota propia de 9 máquinas: 7 Orteco 1000 HD y 2 Faga MHPH 1000 perforadoras-hincadoras. Alquiler siempre con operador profesional, con opción de incluir ayudante. Rendimiento garantizado.</p>
         <div class="service-tags">
           <span>Orteco 1000 HD</span>
           <span>Faga MHPH 1000</span>
@@ -1087,9 +1204,16 @@ footer .container {
     <div class="about-grid">
       <div class="about-visual animate-on-scroll">
         <div class="about-image">
-          <div class="hero-image-placeholder" style="height:100%">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="width:48px;height:48px;opacity:0.15"><rect x="2" y="2" width="20" height="20" rx="2"/><circle cx="8" cy="8" r="2"/><path d="M2 15l5-5 4 4 3-3 8 8"/></svg>
-            <span style="font-size:0.7rem;color:var(--color-text-dim);letter-spacing:0.1em;text-transform:uppercase">Foto del equipo en campo</span>
+          <!-- 
+            CARRUSEL EQUIPO — Añade tantas fotos como quieras.
+            La primera se muestra por defecto. Se van alternando cada 3 segundos.
+            Sube las fotos a img/equipo/ y añade una línea <img> por cada una.
+          -->
+          <div class="photo-carousel" data-interval="3000">
+            <img src="img/equipo/equipo-01.jpg" alt="Equipo Hincado Directo en campo" class="active">
+            <img src="img/equipo/equipo-02.jpg" alt="Trabajos de hincado en planta solar">
+            <img src="img/equipo/equipo-03.jpg" alt="Cuadrilla de hincadores profesionales">
+            <!-- Añade más fotos aquí: <img src="img/equipo/equipo-04.jpg" alt="Descripción"> -->
           </div>
         </div>
         <div class="about-accent-block">
@@ -1119,7 +1243,7 @@ footer .container {
             </div>
             <div class="about-feature-text">
               <h4>Experiencia contrastada</h4>
-              <p>Más de 1 GW instalado en cuatro países. Profesionales que llevan +20 años en hincado y perforado</p>
+              <p>Más de 2 GW instalado en cuatro países. Profesionales que llevan +20 años en hincado y perforado</p>
             </div>
           </div>
           <div class="about-feature">
@@ -1160,7 +1284,7 @@ footer .container {
             <span class="fleet-spec-value">7× Orteco 1000 HD</span>
           </div>
           <div class="fleet-spec">
-            <span class="fleet-spec-label">Hincadoras-Perforadoras</span>
+            <span class="fleet-spec-label">Perforadoras-Hincadoras</span>
             <span class="fleet-spec-value">2× Faga MHPH 1000</span>
           </div>
           <div class="fleet-spec">
@@ -1179,9 +1303,18 @@ footer .container {
       </div>
       <div class="fleet-visual animate-on-scroll">
         <div class="fleet-image">
-          <div class="hero-image-placeholder" style="height:100%">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="width:48px;height:48px;opacity:0.15"><rect x="2" y="2" width="20" height="20" rx="2"/><circle cx="8" cy="8" r="2"/><path d="M2 15l5-5 4 4 3-3 8 8"/></svg>
-            <span style="font-size:0.7rem;color:var(--color-text-dim);letter-spacing:0.1em;text-transform:uppercase">Foto Orteco 1000 HD</span>
+          <!-- 
+            CARRUSEL MAQUINARIA — Mismo sistema. Añade fotos a img/maquinaria/.
+          -->
+          <div class="photo-carousel" data-interval="3000">
+            <img src="img/maquinaria/maquina-01.jpg" alt="Orteco 1000 HD en operación" class="active">
+            <img src="img/maquinaria/maquina-02.jpg" alt="Faga MHPH 1000 perforadora-hincadora">
+            <img src="img/maquinaria/maquina-03.jpg" alt="Flota de hincadoras Hincado Directo">
+            <img src="img/maquinaria/maquina-04.jpg" alt="Orteco 1000 HD entre margaritas">
+            <img src="img/maquinaria/maquina-05.jpg" alt="Orteco al atardecer en planta solar">
+            <img src="img/maquinaria/maquina-06.jpg" alt="Orteco HD en campo verde">
+            <img src="img/maquinaria/maquina-07.jpg" alt="Hincadora Orteco en terreno de trabajo">
+            <!-- Añade más fotos aquí: <img src="img/maquinaria/maquina-08.jpg" alt="Descripción"> -->
           </div>
         </div>
       </div>
@@ -1197,41 +1330,46 @@ footer .container {
       <h2 class="section-title" style="margin:0 auto">Empresas que ya trabajan con Hincado Directo</h2>
     </div>
     <!-- 
-      LOGO URLs para descargar e implementar en Wix:
-      - Grupo Cobra: https://www.grupocobra.com/wp-content/uploads/logo_grupocobra_white.png
-      - Axial: https://www.axialstructural.com/wp-content/uploads/Logos-Axial-04-e1718263293432.png
-      - Suncraft: https://www.suncraft.es/wp-content/uploads/2024/11/Logo-Suncraft-W.png
-      - Aresol: (logo en SVG inline en su web, buscar en aresol.com)
-      - Grupo Ortiz: https://www.grupoortiz.com/ (extraer del header)
-      - AJ Brand: https://ajbrand.energy/wp-content/uploads/2023/05/aj-brand-logo-web-color.svg
-      - Zelestra: https://zelestra.energy/ (extraer del header)
-      - OSMOS: https://www.osmos.es/wp-content/uploads/2022/04/cropped-LOGO-COLOR-OSMOS.png
-      - TCI Gecomp: https://tci-gecomp.com/wp-content/uploads/2021/06/logo_tci.png
-      - CRC: https://www.crcos.com/wp-content/uploads/2020/09/logo_93x50.jpg
+      LOGOS LOCALES — Instrucciones:
+      =================================
+      1. Crea la carpeta img/logos/ en tu repositorio
+      2. Descarga cada logo desde las URLs indicadas abajo
+      3. Guárdalos con los nombres exactos que aparecen en los src=""
+      4. Sube la carpeta img/logos/ a GitHub
+      
+      URLs de descarga:
+      - grupo-cobra.png    → https://www.grupocobra.com/wp-content/uploads/logo_grupocobra_white.png
+      - axial.png          → https://www.axialstructural.com/wp-content/uploads/Logos-Axial-04-e1718263293432.png
+      - suncraft.png       → https://www.suncraft.es/wp-content/uploads/2024/11/Logo-Suncraft-W.png
+      - aresol.svg         → https://aresol.com/wp-content/uploads/aresol-renovables-logotipo.svg
+      - aj-brand.svg       → https://ajbrand.energy/wp-content/uploads/2023/05/aj-brand-logo-web-color.svg
+      - osmos.png          → https://www.osmos.es/wp-content/uploads/2022/04/cropped-LOGO-COLOR-OSMOS.png
+      - tci-gecomp.png     → https://tci-gecomp.com/wp-content/uploads/2021/06/logo_tci.png
+      - crc.jpg            → https://www.crcos.com/wp-content/uploads/2020/09/logo_93x50.jpg
     -->
     <div class="clients-marquee animate-on-scroll">
       <div class="clients-track">
-        <div class="client-cell"><img src="https://www.grupocobra.com/wp-content/uploads/logo_grupocobra_white.png" alt="Grupo Cobra" onerror="this.outerHTML='<span>GRUPO COBRA</span>'"></div>
-        <div class="client-cell"><img src="https://www.axialstructural.com/wp-content/uploads/Logos-Axial-04-e1718263293432.png" alt="Axial" onerror="this.outerHTML='<span>AXIAL</span>'"></div>
-        <div class="client-cell"><img src="https://www.suncraft.es/wp-content/uploads/2024/11/Logo-Suncraft-W.png" alt="Suncraft" onerror="this.outerHTML='<span>SUNCRAFT</span>'"></div>
-        <div class="client-cell"><img src="https://aresol.com/wp-content/uploads/aresol-renovables-logotipo.svg" alt="Aresol" onerror="this.outerHTML='<span>ARESOL</span>'"></div>
+        <div class="client-cell"><img src="img/logos/grupo-cobra.png" alt="Grupo Cobra" onerror="this.outerHTML='<span>GRUPO COBRA</span>'"></div>
+        <div class="client-cell"><img src="img/logos/axial.png" alt="Axial Structural" onerror="this.outerHTML='<span>AXIAL</span>'"></div>
+        <div class="client-cell"><img src="img/logos/suncraft.png" alt="Suncraft" onerror="this.outerHTML='<span>SUNCRAFT</span>'"></div>
+        <div class="client-cell"><img src="img/logos/aresol.svg" alt="Aresol Renovables" onerror="this.outerHTML='<span>ARESOL</span>'"></div>
         <div class="client-cell"><span>GRUPO ORTIZ</span></div>
-        <div class="client-cell"><img src="https://ajbrand.energy/wp-content/uploads/2023/05/aj-brand-logo-web-color.svg" alt="AJ Brand" onerror="this.outerHTML='<span>AJ BRAND</span>'"></div>
+        <div class="client-cell"><img src="img/logos/aj-brand.svg" alt="AJ Brand Energy" onerror="this.outerHTML='<span>AJ BRAND</span>'"></div>
         <div class="client-cell"><span>ZELESTRA</span></div>
-        <div class="client-cell"><img src="https://www.osmos.es/wp-content/uploads/2022/04/cropped-LOGO-COLOR-OSMOS.png" alt="OSMOS" onerror="this.outerHTML='<span>OSMOS</span>'"></div>
-        <div class="client-cell"><img src="https://tci-gecomp.com/wp-content/uploads/2021/06/logo_tci.png" alt="TCI Gecomp" onerror="this.outerHTML='<span>TCI GECOMP</span>'"></div>
-        <div class="client-cell"><img src="https://www.crcos.com/wp-content/uploads/2020/09/logo_93x50.jpg" alt="CRC" onerror="this.outerHTML='<span>CRC</span>'"></div>
-        <!-- Duplicate for seamless loop -->
-        <div class="client-cell"><img src="https://www.grupocobra.com/wp-content/uploads/logo_grupocobra_white.png" alt="Grupo Cobra" onerror="this.outerHTML='<span>GRUPO COBRA</span>'"></div>
-        <div class="client-cell"><img src="https://www.axialstructural.com/wp-content/uploads/Logos-Axial-04-e1718263293432.png" alt="Axial" onerror="this.outerHTML='<span>AXIAL</span>'"></div>
-        <div class="client-cell"><img src="https://www.suncraft.es/wp-content/uploads/2024/11/Logo-Suncraft-W.png" alt="Suncraft" onerror="this.outerHTML='<span>SUNCRAFT</span>'"></div>
-        <div class="client-cell"><img src="https://aresol.com/wp-content/uploads/aresol-renovables-logotipo.svg" alt="Aresol" onerror="this.outerHTML='<span>ARESOL</span>'"></div>
+        <div class="client-cell"><img src="img/logos/osmos.png" alt="OSMOS" onerror="this.outerHTML='<span>OSMOS</span>'"></div>
+        <div class="client-cell"><img src="img/logos/tci-gecomp.png" alt="TCI Gecomp" onerror="this.outerHTML='<span>TCI GECOMP</span>'"></div>
+        <div class="client-cell"><img src="img/logos/crc.jpg" alt="CRC" onerror="this.outerHTML='<span>CRC</span>'"></div>
+        <!-- Duplicado para loop continuo del marquee -->
+        <div class="client-cell"><img src="img/logos/grupo-cobra.png" alt="Grupo Cobra" onerror="this.outerHTML='<span>GRUPO COBRA</span>'"></div>
+        <div class="client-cell"><img src="img/logos/axial.png" alt="Axial Structural" onerror="this.outerHTML='<span>AXIAL</span>'"></div>
+        <div class="client-cell"><img src="img/logos/suncraft.png" alt="Suncraft" onerror="this.outerHTML='<span>SUNCRAFT</span>'"></div>
+        <div class="client-cell"><img src="img/logos/aresol.svg" alt="Aresol Renovables" onerror="this.outerHTML='<span>ARESOL</span>'"></div>
         <div class="client-cell"><span>GRUPO ORTIZ</span></div>
-        <div class="client-cell"><img src="https://ajbrand.energy/wp-content/uploads/2023/05/aj-brand-logo-web-color.svg" alt="AJ Brand" onerror="this.outerHTML='<span>AJ BRAND</span>'"></div>
+        <div class="client-cell"><img src="img/logos/aj-brand.svg" alt="AJ Brand Energy" onerror="this.outerHTML='<span>AJ BRAND</span>'"></div>
         <div class="client-cell"><span>ZELESTRA</span></div>
-        <div class="client-cell"><img src="https://www.osmos.es/wp-content/uploads/2022/04/cropped-LOGO-COLOR-OSMOS.png" alt="OSMOS" onerror="this.outerHTML='<span>OSMOS</span>'"></div>
-        <div class="client-cell"><img src="https://tci-gecomp.com/wp-content/uploads/2021/06/logo_tci.png" alt="TCI Gecomp" onerror="this.outerHTML='<span>TCI GECOMP</span>'"></div>
-        <div class="client-cell"><img src="https://www.crcos.com/wp-content/uploads/2020/09/logo_93x50.jpg" alt="CRC" onerror="this.outerHTML='<span>CRC</span>'"></div>
+        <div class="client-cell"><img src="img/logos/osmos.png" alt="OSMOS" onerror="this.outerHTML='<span>OSMOS</span>'"></div>
+        <div class="client-cell"><img src="img/logos/tci-gecomp.png" alt="TCI Gecomp" onerror="this.outerHTML='<span>TCI GECOMP</span>'"></div>
+        <div class="client-cell"><img src="img/logos/crc.jpg" alt="CRC" onerror="this.outerHTML='<span>CRC</span>'"></div>
       </div>
     </div>
   </div>
@@ -1252,7 +1390,7 @@ footer .container {
         </a>
         <a href="tel:+34637705433" class="btn-secondary">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
-          Llamar ahora
+          +34 637 705 433
         </a>
       </div>
       <div class="cta-contact-info">
@@ -1263,10 +1401,6 @@ footer .container {
         <div class="cta-contact-item">
           <div class="cta-contact-label">Teléfono</div>
           <div class="cta-contact-value"><a href="tel:+34637705433">+34 637 705 433</a></div>
-        </div>
-        <div class="cta-contact-item">
-          <div class="cta-contact-label">Ubicación</div>
-          <div class="cta-contact-value">Badajoz, España</div>
         </div>
       </div>
     </div>
@@ -1324,6 +1458,19 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
       window.scrollTo({ top: y, behavior: 'smooth' });
     }
   });
+});
+
+// Photo carousels (fade every X seconds)
+document.querySelectorAll('.photo-carousel').forEach(carousel => {
+  const images = carousel.querySelectorAll('img');
+  if (images.length <= 1) return; // No rotar si solo hay 1 foto
+  const interval = parseInt(carousel.dataset.interval) || 3000;
+  let current = 0;
+  setInterval(() => {
+    images[current].classList.remove('active');
+    current = (current + 1) % images.length;
+    images[current].classList.add('active');
+  }, interval);
 });
 </script>
 </body>
