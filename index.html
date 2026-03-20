@@ -20,7 +20,7 @@
 
 <title>Hincado Directo | Especialistas en Hincado y Perforado Fotovoltaico</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 
 <!-- ========== SCHEMA MARKUP — EMPRESA LOCAL ========== -->
 <script type="application/ld+json">
@@ -120,20 +120,21 @@
 
 <style>
 :root {
-  --color-bg: #0A0C10;
-  --color-bg-elevated: #12151C;
-  --color-bg-card: #181C25;
-  --color-text: #E8E9ED;
-  --color-text-muted: #8A8F9E;
-  --color-text-dim: #5A5F6E;
-  --color-accent: #E8A230;
-  --color-accent-light: #F0C060;
-  --color-accent-dim: rgba(232,162,48,0.12);
+  --color-bg: #2C2C2A;
+  --color-bg-elevated: #1E1E1C;
+  --color-bg-card: #232321;
+  --color-text: #F1EFE8;
+  --color-text-muted: #A8A69E;
+  --color-text-dim: #6E6D68;
+  --color-accent: #E8B931;
+  --color-accent-light: #F0CC5A;
+  --color-accent-dim: rgba(232,185,49,0.12);
+  --color-green: #1D9E75;
   --color-white: #FFFFFF;
   --color-border: rgba(255,255,255,0.06);
   --color-border-light: rgba(255,255,255,0.10);
-  --font-display: 'Space Mono', monospace;
-  --font-body: 'DM Sans', sans-serif;
+  --font-display: 'Barlow Semi Condensed', sans-serif;
+  --font-body: 'Barlow', sans-serif;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --max-width: 1200px;
 }
@@ -221,7 +222,7 @@ nav {
   background: transparent;
 }
 nav.scrolled {
-  background: rgba(10,12,16,0.92);
+  background: rgba(44,44,42,0.92);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--color-border);
@@ -233,7 +234,7 @@ nav .container {
   align-items: center;
 }
 .nav-logo {
-  font-family: var(--font-display);
+  font-family: 'Space Mono', monospace;
   font-size: 1.05rem;
   font-weight: 700;
   color: var(--color-white);
@@ -315,7 +316,7 @@ nav .container {
 .hero-bg {
   position: absolute;
   inset: 0;
-  background: linear-gradient(170deg, #0A0C10 0%, #111520 40%, #0D1018 100%);
+  background: linear-gradient(170deg, #2C2C2A 0%, #1E1E1C 40%, #2C2C2A 100%);
 }
 .hero-bg::before {
   content: '';
@@ -324,7 +325,7 @@ nav .container {
   right: -10%;
   width: 70%;
   height: 70%;
-  background: radial-gradient(ellipse, rgba(232,162,48,0.06) 0%, transparent 70%);
+  background: radial-gradient(ellipse, rgba(232,185,49,0.06) 0%, transparent 70%);
   pointer-events: none;
 }
 .hero-bg::after {
@@ -420,7 +421,7 @@ nav .container {
 .btn-primary:hover {
   background: var(--color-accent-light);
   transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(232,162,48,0.25);
+  box-shadow: 0 8px 30px rgba(232,185,49,0.25);
 }
 .btn-secondary {
   display: inline-flex;
@@ -672,7 +673,7 @@ nav .container {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   font-weight: 500;
-  border: 1px solid rgba(232,162,48,0.08);
+  border: 1px solid rgba(232,185,49,0.08);
 }
 
 /* ============ PHOTO CAROUSEL (fade) ============ */
@@ -767,7 +768,7 @@ nav .container {
   height: 40px;
   min-width: 40px;
   background: var(--color-accent-dim);
-  border: 1px solid rgba(232,162,48,0.15);
+  border: 1px solid rgba(232,185,49,0.15);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -930,7 +931,7 @@ nav .container {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, var(--color-bg) 0%, #111520 50%, var(--color-bg) 100%);
+  background: linear-gradient(135deg, var(--color-bg) 0%, #1E1E1C 50%, var(--color-bg) 100%);
 }
 .cta-glow {
   position: absolute;
@@ -939,7 +940,7 @@ nav .container {
   transform: translate(-50%, -50%);
   width: 600px;
   height: 600px;
-  background: radial-gradient(circle, rgba(232,162,48,0.05) 0%, transparent 60%);
+  background: radial-gradient(circle, rgba(232,185,49,0.05) 0%, transparent 60%);
   pointer-events: none;
 }
 .cta-content {
@@ -1058,7 +1059,7 @@ footer .container {
     top: 100%;
     left: 0;
     right: 0;
-    background: rgba(10,12,16,0.98);
+    background: rgba(44,44,42,0.98);
     backdrop-filter: blur(20px);
     padding: 2rem;
     gap: 1.5rem;
@@ -1099,7 +1100,7 @@ footer .container {
   </div>
   <div class="container">
     <div class="hero-content">
-      <div class="hero-tag">Especialistas en hincado y perforado fotovoltaico</div>
+      <div class="hero-tag">Precisión en cada hinca</div>
       <h1 class="hero-title">
         El trabajo se hace.<br>
         Y se hace <em>bien</em>.
@@ -1351,7 +1352,7 @@ footer .container {
         <div class="client-cell"><img src="img/logos/grupo-cobra.png" alt="Grupo Cobra" onerror="this.outerHTML='<span>GRUPO COBRA</span>'"></div>
         <div class="client-cell"><img src="img/logos/axial.png" alt="Axial Structural" onerror="this.outerHTML='<span>AXIAL</span>'"></div>
         <div class="client-cell"><img src="img/logos/suncraft.png" alt="Suncraft" onerror="this.outerHTML='<span>SUNCRAFT</span>'"></div>
-        <div class="client-cell"><img src="img/logos/aresol.png" alt="Aresol Renovables" onerror="this.outerHTML='<span>ARESOL</span>'"></div>
+        <div class="client-cell"><span>ARESOL</span></div>
         <div class="client-cell"><span>GRUPO ORTIZ</span></div>
         <div class="client-cell"><img src="img/logos/aj-brand.svg" alt="AJ Brand Energy" onerror="this.outerHTML='<span>AJ BRAND</span>'"></div>
         <div class="client-cell"><span>ZELESTRA</span></div>
@@ -1367,7 +1368,7 @@ footer .container {
         <div class="client-cell"><img src="img/logos/grupo-cobra.png" alt="Grupo Cobra" onerror="this.outerHTML='<span>GRUPO COBRA</span>'"></div>
         <div class="client-cell"><img src="img/logos/axial.png" alt="Axial Structural" onerror="this.outerHTML='<span>AXIAL</span>'"></div>
         <div class="client-cell"><img src="img/logos/suncraft.png" alt="Suncraft" onerror="this.outerHTML='<span>SUNCRAFT</span>'"></div>
-        <div class="client-cell"><img src="img/logos/aresol.png" alt="Aresol Renovables" onerror="this.outerHTML='<span>ARESOL</span>'"></div>
+        <div class="client-cell"><span>ARESOL</span></div>
         <div class="client-cell"><span>GRUPO ORTIZ</span></div>
         <div class="client-cell"><img src="img/logos/aj-brand.svg" alt="AJ Brand Energy" onerror="this.outerHTML='<span>AJ BRAND</span>'"></div>
         <div class="client-cell"><span>ZELESTRA</span></div>
@@ -1402,16 +1403,6 @@ footer .container {
           +34 637 705 433
         </a>
       </div>
-      <div class="cta-contact-info">
-        <div class="cta-contact-item">
-          <div class="cta-contact-label">Email</div>
-          <div class="cta-contact-value"><a href="mailto:direccion@hincadodirecto.com">direccion@hincadodirecto.com</a></div>
-        </div>
-        <div class="cta-contact-item">
-          <div class="cta-contact-label">Teléfono</div>
-          <div class="cta-contact-value"><a href="tel:+34637705433">+34 637 705 433</a></div>
-        </div>
-      </div>
     </div>
   </div>
 </section>
@@ -1420,7 +1411,7 @@ footer .container {
 <footer>
   <div class="container">
     <div class="footer-left">&copy; 2026 <a href="#">Hincado Directo</a>. Todos los derechos reservados.</div>
-    <div class="footer-right">Especialistas en hincado y perforado fotovoltaico</div>
+    <div class="footer-right">Precisión en cada hinca</div>
   </div>
 </footer>
 
