@@ -206,15 +206,16 @@ def insert_factura_cliente(empresa_id: str, factura: dict) -> int:
     return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
 
-def insert_facturas_clientes(empresa_id: str, filas: list[dict]) -> int:
-  """Inserta varias facturas de cliente. Cada dict debe tener claves de CAMPOS_FACTURAS_CLIENTE. Devuelve número de filas insertadas."""
+def insert_facturas_clientes(empresa_id: str, filas: list[dict]) -> dict:
+  """Inserta varias facturas de cliente. Cada dict debe tener claves de CAMPOS_FACTURAS_CLIENTE.
+  Devuelve dict con {"insertados": int, "ids": list[int]}."""
   if not filas:
-    return 0
+    return {"insertados": 0, "ids": []}
   init_facturas_cliente_db()
+  ids: list[int] = []
   with _conectar() as conn:
     cols = ["empresa_id"] + [c for c in CAMPOS_FACTURAS_CLIENTE if c != "empresa_id"]
     placeholders = ", ".join("?" * len(cols))
-    insertados = 0
     for fila in filas:
       valores = [empresa_id]
       for c in CAMPOS_FACTURAS_CLIENTE:
@@ -222,12 +223,12 @@ def insert_facturas_clientes(empresa_id: str, filas: list[dict]) -> int:
           continue
         v = fila.get(c)
         valores.append((v if isinstance(v, str) else str(v or "")).strip())
-      conn.execute(
+      cur = conn.execute(
         f"INSERT INTO facturas_cliente ({', '.join(cols)}) VALUES ({placeholders})",
         valores,
       )
-      insertados += 1
-    return insertados
+      ids.append(cur.lastrowid)
+    return {"insertados": len(ids), "ids": ids}
 
 
 def update_factura_cliente(empresa_id: str, factura: dict, clave_original: dict) -> bool:

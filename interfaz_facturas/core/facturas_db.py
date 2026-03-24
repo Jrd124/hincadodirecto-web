@@ -163,6 +163,21 @@ def update_factura(empresa_id: str, factura: dict) -> bool:
     return True
 
 
+def update_tercero_id(factura_id: int, tercero_id: int | None) -> bool:
+  """Actualiza el tercero_id de una factura de proveedor. Devuelve True si se actualizó."""
+  init_facturas_db()
+  with _conectar() as conn:
+    # Asegurar que la columna existe
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(facturas_proveedor)").fetchall()}
+    if "tercero_id" not in cols:
+      conn.execute("ALTER TABLE facturas_proveedor ADD COLUMN tercero_id INTEGER REFERENCES terceros(id)")
+    cur = conn.execute(
+      "UPDATE facturas_proveedor SET tercero_id = ? WHERE id = ?",
+      (tercero_id, factura_id),
+    )
+    return cur.rowcount > 0
+
+
 def update_facturas_proveedor_nombre_nif(
   empresa_id: str, old_proveedor: str, old_nif: str, new_proveedor: str, new_nif: str,
 ) -> int:
@@ -273,18 +288,18 @@ def get_claves_facturas_proveedor(empresa_id: str) -> list[tuple[str, str, str]]
     return [(str(r[0] or "").strip(), str(r[1] or "").strip(), str(r[2] or "").strip()) for r in cur.fetchall()]
 
 
-def insert_facturas(empresa_id: str, filas: list[dict]) -> int:
+def insert_facturas(empresa_id: str, filas: list[dict]) -> dict:
   """
   Inserta nuevas facturas para la empresa. Cada dict debe tener las claves de CAMPOS_FACTURAS_PROVEEDOR.
-  Devuelve el número de filas insertadas.
+  Devuelve dict con {"insertados": int, "ids": list[int]}.
   """
   if not filas:
-    return 0
+    return {"insertados": 0, "ids": []}
   init_facturas_db()
+  ids: list[int] = []
   with _conectar() as conn:
     cols = ["empresa_id"] + [c for c in CAMPOS_FACTURAS_PROVEEDOR if c != "empresa_id"]
     placeholders = ", ".join("?" * len(cols))
-    insertados = 0
     for fila in filas:
       valores = [empresa_id]
       for c in CAMPOS_FACTURAS_PROVEEDOR:
@@ -295,12 +310,12 @@ def insert_facturas(empresa_id: str, filas: list[dict]) -> int:
           valores.append(1 if v else 0)
         else:
           valores.append((v if isinstance(v, str) else str(v or "")).strip())
-      conn.execute(
+      cur = conn.execute(
         f"INSERT INTO facturas_proveedor ({', '.join(cols)}) VALUES ({placeholders})",
         valores,
       )
-      insertados += 1
-    return insertados
+      ids.append(cur.lastrowid)
+    return {"insertados": len(ids), "ids": ids}
 
 
 def migrar_desde_csv() -> dict[str, Any]:

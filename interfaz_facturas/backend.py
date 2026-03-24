@@ -132,6 +132,7 @@ control_calidad_bp = Blueprint("control_calidad", __name__)
 bancos_bp = Blueprint("bancos", __name__)
 transporte_bp = Blueprint("transporte", __name__)
 crm_bp = Blueprint("crm", __name__)
+tesoreria_bp = Blueprint("tesoreria", __name__)
 
 # Workers para procesamiento en paralelo del pipeline de facturas (OpenAI/vision)
 _MAX_WORKERS_EXTRACTOR_LLM = 4
@@ -546,11 +547,12 @@ def _base_maestra_csv(filas: list[dict], empresa_id: str) -> dict:
   Guarda las filas en la base maestra de facturas (SQLite).
   Las filas recibidas ya están filtradas (sin duplicados por hash).
   """
-  n = facturas_db.insert_facturas(empresa_id, filas)
+  resultado = facturas_db.insert_facturas(empresa_id, filas)
   ruta_csv = EMPRESAS_DIR / empresa_id / "base_maestra_facturas.csv"
   return {
     "ruta_base_maestra": str(ruta_csv),
-    "filas_añadidas": n,
+    "filas_añadidas": resultado["insertados"],
+    "ids_insertados": resultado["ids"],
   }
 
 
@@ -615,6 +617,13 @@ def procesar_lote(empresa_id: str, carpeta: Path, tarjeta_id: str | None = None)
       if not (fila.get("estado_pago") or "").strip():
         fila["estado_pago"] = "pagada"
   resumen_bd = _base_maestra_csv(tabla, empresa_id)
+
+  # Post-insert: vincular facturas recien insertadas a terceros (por CIF/nombre)
+  try:
+    crm_db.vincular_facturas_a_terceros()
+  except Exception as e:
+    logger.warning("Error al vincular facturas a terceros post-procesamiento: %s", e)
+
   facturas_con_vision = sum(1 for f in tabla if (str(f.get("extraccion_vision") or "").strip() == "1"))
   logger.info(
     "Lote completado: %d facturas procesadas, %d con visión, %d añadidas a BD",
@@ -630,6 +639,7 @@ def procesar_lote(empresa_id: str, carpeta: Path, tarjeta_id: str | None = None)
     "facturas_con_vision": facturas_con_vision,
     "ruta_base_maestra": resumen_bd["ruta_base_maestra"],
     "filas_añadidas": resumen_bd["filas_añadidas"],
+    "ids_insertados": resumen_bd.get("ids_insertados", []),
   }
 
 
@@ -1177,7 +1187,59 @@ def resumen_liquidaciones_tarjetas(empresa_id: str):
   # Enriquecer con importe de movimientos vinculados (tarjeta_id + liquidacion_periodo) en movimientos.db
   _init_movimientos_db()
   conn_bancos = _get_bancos_db()
+  conn_bancos.row_factory = sqlite3.Row
   try:
+    # Build a set of (tarjeta_id, periodo) already present from facturas
+    existing_keys = {(f["tarjeta_id"], f.get("periodo") or "") for f in filas}
+
+    # Find movimientos linked to tarjetas of this empresa that have no matching facturas row
+    mov_rows = conn_bancos.execute(
+      """
+      SELECT tarjeta_id, liquidacion_periodo,
+             COALESCE(SUM(CAST(importe AS REAL)), 0) AS total
+      FROM movimientos
+      WHERE tarjeta_id IS NOT NULL AND tarjeta_id != 0
+        AND liquidacion_periodo IS NOT NULL AND TRIM(liquidacion_periodo) != ''
+      GROUP BY tarjeta_id, liquidacion_periodo
+      """,
+    ).fetchall()
+
+    # Fetch tarjetas of this empresa for resolving names
+    tarjetas_map = {}
+    conn_gest2 = sqlite3.connect(str(GESTION_DB))
+    conn_gest2.row_factory = sqlite3.Row
+    try:
+      for t in conn_gest2.execute(
+        "SELECT id, banco, persona, alias FROM tarjetas WHERE empresa_id = ?",
+        (empresa_id,),
+      ):
+        tarjetas_map[t["id"]] = dict(t)
+    finally:
+      conn_gest2.close()
+
+    # Add missing (tarjeta, periodo) combinations from movimientos
+    for mr in mov_rows:
+      tid = mr["tarjeta_id"]
+      per = mr["liquidacion_periodo"]
+      if tid not in tarjetas_map:
+        continue  # tarjeta belongs to another empresa
+      if (tid, per) not in existing_keys:
+        t_info = tarjetas_map[tid]
+        filas.append(
+          {
+            "tarjeta_id": tid,
+            "tarjeta_banco": t_info.get("banco"),
+            "tarjeta_persona": t_info.get("persona"),
+            "tarjeta_alias": t_info.get("alias"),
+            "periodo": per,
+            "num_facturas": 0,
+            "total_facturas": 0.0,
+            "estado": "pendiente",
+            "porcentaje_facturas": 0.0,
+            "total_movimiento": None,
+          }
+        )
+
     for fila in filas:
       tid = fila["tarjeta_id"]
       per = fila.get("periodo") or ""
@@ -1204,6 +1266,9 @@ def resumen_liquidaciones_tarjetas(empresa_id: str):
         fila["estado"] = "conciliado"
       else:
         fila["estado"] = "cargo recibido"
+
+    # Sort: most recent period first, then by banco/persona
+    filas.sort(key=lambda f: (f.get("periodo") or "", f.get("tarjeta_banco") or "", f.get("tarjeta_persona") or ""), reverse=True)
   finally:
     conn_bancos.close()
 
@@ -1430,6 +1495,153 @@ def desvincular_movimiento_de_liquidacion_tarjeta():
   return jsonify({"ok": True, "mensaje": "Movimiento desvinculado del extracto de tarjeta.", "movimiento_id": mov_id})
 
 
+# Frases que identifican movimientos bancarios de liquidación/recibo de tarjeta.
+# Orden: frases largas primero para match más específico, genéricas al final.
+_KEYWORDS_TARJETA = [
+  "recibo mensual tarjeta", "adeudo mensual de tarjeta", "adeudo mensual tarjeta",
+  "recibo tarjeta", "liquidacion tarjeta", "liquidacion de las tarjetas",
+  "liquidacion contrato", "pago tarjeta", "cargo tarjeta",
+]
+
+
+def _es_movimiento_tarjeta(concepto: str) -> bool:
+  """Devuelve True si el concepto del movimiento bancario indica un cargo/liquidación de tarjeta."""
+  c = (concepto or "").lower()
+  return any(kw in c for kw in _KEYWORDS_TARJETA)
+
+
+def _extraer_ultimos4_de_concepto(concepto: str) -> str | None:
+  """Intenta extraer los últimos 4 dígitos de tarjeta del concepto (ej: '5478240009522305' → '2305')."""
+  import re
+  # Buscar secuencias de 16 dígitos (número de tarjeta completo)
+  m = re.search(r"\b(\d{16})\b", concepto or "")
+  if m:
+    return m.group(1)[-4:]
+  # Buscar secuencias de 4 dígitos precedidas de * o espacio (ej: *2305, XXXX2305)
+  m = re.search(r"[*xX]+(\d{4})\b", concepto or "")
+  if m:
+    return m.group(1)
+  return None
+
+
+@bancos_bp.get("/api/bancos/tarjetas/sugerencias-conciliacion")
+def sugerencias_conciliacion_tarjeta():
+  """
+  Devuelve sugerencias de conciliación: movimientos de tipo tarjeta sin conciliar vs tarjetas + periodos.
+
+  Detecta movimientos cuyo concepto contiene palabras clave de tarjeta (recibo, liquidación, etc.),
+  intenta extraer los últimos 4 dígitos del número de tarjeta del concepto, y sugiere la tarjeta
+  y periodo (YYYY-MM basado en fecha del movimiento) correspondientes.
+
+  Query: empresa_id (obligatorio).
+  """
+  empresa_id = (request.args.get("empresa_id") or "").strip()
+  if not empresa_id:
+    return _bad_request("Falta empresa_id")
+
+  _init_movimientos_db()
+  facturas_db.init_facturas_db()
+
+  # Obtener tarjetas de la empresa
+  conn_gest = sqlite3.connect(str(GESTION_DB))
+  conn_gest.row_factory = sqlite3.Row
+  try:
+    tarjetas = conn_gest.execute(
+      "SELECT id, banco, persona, ultimos4, alias FROM tarjetas WHERE empresa_id = ? AND activa = 1",
+      (empresa_id,),
+    ).fetchall()
+    tarjetas_list = [dict(t) for t in tarjetas]
+  finally:
+    conn_gest.close()
+
+  if not tarjetas_list:
+    return jsonify({"sugerencias": [], "mensaje": "No hay tarjetas activas para esta empresa"})
+
+  # Indexar tarjetas por últimos 4 dígitos
+  tarjetas_por_u4: dict[str, list[dict]] = {}
+  for t in tarjetas_list:
+    u4 = (t.get("ultimos4") or "").strip()
+    if u4:
+      tarjetas_por_u4.setdefault(u4, []).append(t)
+
+  # Obtener movimientos sin conciliar con tarjeta (tarjeta_id IS NULL, importe negativo)
+  conn_bancos = _get_bancos_db()
+  try:
+    movimientos = conn_bancos.execute(
+      """
+      SELECT id, fecha_operacion, concepto, importe
+      FROM movimientos
+      WHERE (empresa_id IS NULL OR empresa_id = ?)
+        AND (tarjeta_id IS NULL OR tarjeta_id = 0)
+        AND (factura_proveedor_id IS NULL)
+        AND (conciliado_at IS NULL OR conciliado_at = '')
+        AND importe < 0
+      ORDER BY fecha_operacion DESC
+      LIMIT 500
+      """,
+      (empresa_id,),
+    ).fetchall()
+  finally:
+    conn_bancos.close()
+
+  sugerencias = []
+  for m in movimientos:
+    mov_id, fecha_op, concepto, importe = m[0], m[1], m[2], m[3]
+    concepto_str = (concepto or "").strip()
+
+    if not _es_movimiento_tarjeta(concepto_str):
+      continue
+
+    # Extraer últimos 4 dígitos del concepto
+    u4 = _extraer_ultimos4_de_concepto(concepto_str)
+
+    # Calcular periodo sugerido (mes del movimiento)
+    periodo_sugerido = (fecha_op or "")[:7] if fecha_op and len(fecha_op) >= 7 else None
+
+    # Buscar tarjeta candidata por últimos 4 dígitos
+    tarjeta_match = None
+    confianza = "baja"
+    if u4 and u4 in tarjetas_por_u4:
+      candidatas = tarjetas_por_u4[u4]
+      if len(candidatas) == 1:
+        tarjeta_match = candidatas[0]
+        confianza = "alta"
+      else:
+        tarjeta_match = candidatas[0]
+        confianza = "media"
+    elif len(tarjetas_list) == 1:
+      # Solo hay una tarjeta, sugerir esa
+      tarjeta_match = tarjetas_list[0]
+      confianza = "media"
+
+    sugerencias.append({
+      "movimiento_id": mov_id,
+      "movimiento_fecha": fecha_op,
+      "movimiento_concepto": concepto_str,
+      "movimiento_importe": importe,
+      "ultimos4_detectados": u4,
+      "tarjeta_sugerida": {
+        "tarjeta_id": tarjeta_match["id"],
+        "banco": tarjeta_match.get("banco"),
+        "persona": tarjeta_match.get("persona"),
+        "ultimos4": tarjeta_match.get("ultimos4"),
+        "alias": tarjeta_match.get("alias"),
+      } if tarjeta_match else None,
+      "periodo_sugerido": periodo_sugerido,
+      "confianza": confianza,
+    })
+
+  return jsonify({
+    "sugerencias": sugerencias,
+    "total": len(sugerencias),
+    "tarjetas_disponibles": [
+      {"id": t["id"], "banco": t.get("banco"), "persona": t.get("persona"),
+       "ultimos4": t.get("ultimos4"), "alias": t.get("alias")}
+      for t in tarjetas_list
+    ],
+  })
+
+
 def _normalizar_proveedor_body(data: dict) -> dict:
   """Extrae y normaliza campos de proveedor desde el body (CAMPOS_PROVEEDORES_MAESTROS)."""
   return {
@@ -1449,7 +1661,9 @@ def crear_proveedor():
   """
   Alta de proveedor en el maestro de la empresa.
   JSON: empresa_id (obligatorio), nombre_canonico, nif (mínimos), direccion, localidad, pais, email, telefono, centro_coste.
+  Usa el gateway unificado crear_o_vincular_tercero para deduplicacion.
   """
+  from core.terceros_db import crear_o_vincular_tercero
   data = request.get_json(silent=True) or {}
   empresa_id, err = _validar_empresa_id_requerido(data.get("empresa_id"))
   if err:
@@ -1462,16 +1676,26 @@ def crear_proveedor():
   if not nif:
     return _bad_request("El NIF/CIF del proveedor es obligatorio")
 
+  # Verificar via gateway unificado si ya existe
+  resultado = crear_o_vincular_tercero(
+    nombre, nif,
+    datos_extra={k: p.get(k) for k in ("pais", "localidad", "direccion", "email", "telefono")},
+    rol="proveedor", origen="manual",
+  )
+  if resultado["accion"] != "creado":
+    warning = None
+    if resultado["accion"] == "vinculado_similar" and resultado.get("requiere_revision"):
+      warning = f"Vinculado a tercero similar: {resultado['nombre_match']} (similitud {resultado['similitud']:.0%})"
+    return jsonify({
+      "error": f"Ya existe un proveedor equivalente: {resultado['nombre_match']} (#{resultado['id']})",
+      "tercero_existente": resultado,
+      "warning": warning,
+    }), 409
+
   lista = _cargar_proveedores_maestros(empresa_id)
-  for existente in lista:
-    if (
-      (existente.get("nombre_canonico") or "").strip() == nombre
-      and (existente.get("nif") or "").strip() == nif
-    ):
-      return jsonify({"error": "Ya existe un proveedor con ese nombre y NIF en esta empresa"}), 409
   lista.append(p)
   _guardar_proveedores_maestros(empresa_id, lista)
-  return jsonify({"ok": True, "proveedores": lista, "empresa_id": empresa_id}), 201
+  return jsonify({"ok": True, "proveedores": lista, "empresa_id": empresa_id, "tercero_id": resultado["id"]}), 201
 
 
 @proveedores_bp.put("/api/proveedores")
@@ -1741,9 +1965,19 @@ def exportar_facturas():
     "Nombre del archivo",
   ]
 
+  ids_filtro = (request.args.get("ids") or "").strip()
+  ids_set: set[int] | None = None
+  if ids_filtro:
+    try:
+      ids_set = {int(x) for x in ids_filtro.split(",") if x.strip()}
+    except ValueError:
+      pass
+
   filas_export: list[dict] = []
   try:
     facturas_bd = facturas_db.get_facturas_empresa(empresa_id)
+    if ids_set:
+      facturas_bd = [f for f in facturas_bd if f.get("id") in ids_set]
     facturas_filtradas = _filtrar_facturas_en_memoria(facturas_bd, year, month, proveedor_filtro)
     facturas_filtradas = _aplicar_filtros_estado_tarjeta(facturas_filtradas, estado_pago_filtro, tarjeta_id_filtro)
     tarjeta_map: dict[int, str] = {}
@@ -1933,8 +2167,18 @@ def descargar_facturas_zip():
   if err:
     return err[0], err[1]
 
+  ids_filtro = (request.args.get("ids") or "").strip()
+  ids_set: set[int] | None = None
+  if ids_filtro:
+    try:
+      ids_set = {int(x) for x in ids_filtro.split(",") if x.strip()}
+    except ValueError:
+      pass
+
   filas = _facturas_filtradas_por_fecha(empresa_id, year, month, proveedor_filtro)
   filas = _aplicar_filtros_estado_tarjeta(filas, estado_pago_filtro, tarjeta_id_filtro)
+  if ids_set:
+    filas = [f for f in filas if f.get("id") in ids_set]
   if not filas:
     return jsonify({"error": "No hay facturas que cumplan el filtro para descargar"}), 404
 
@@ -2043,9 +2287,11 @@ def actualizar_factura():
 
   todas = facturas_db.get_facturas_empresa(empresa_id)
   actualizado = None
+  factura_id = None
   for f in todas:
     if ((f.get("ruta_destino") or f.get("ruta_archivo")) or "").strip() == ruta_identificar:
       actualizado = {c: (f.get(c) or "") for c in CAMPOS_FACTURAS_PROVEEDOR}
+      factura_id = f.get("id")
       break
   if not actualizado:
     return jsonify({"error": "No se encontró la factura con esa ruta"}), 404
@@ -2082,9 +2328,61 @@ def actualizar_factura():
   ok = facturas_db.update_factura(empresa_id, actualizado)
   if not ok:
     return jsonify({"error": "No se pudo actualizar la factura en la base de datos"}), 500
+
+  # FIX 2: Vincular factura a tercero automáticamente
+  tercero_id_resultado = None
+  if factura_id:
+    tercero_id_explicito = factura.get("tercero_id")
+    if tercero_id_explicito not in (None, "", "null"):
+      # El usuario seleccionó del maestro — usar directamente
+      try:
+        tercero_id_int = int(tercero_id_explicito)
+        facturas_db.update_tercero_id(factura_id, tercero_id_int)
+        tercero_id_resultado = tercero_id_int
+      except (ValueError, TypeError):
+        logger.warning("tercero_id no válido: %s", tercero_id_explicito)
+    else:
+      # El usuario editó nombre/NIF manualmente — vincular automáticamente
+      nombre_prov = (actualizado.get("proveedor") or "").strip()
+      nif_prov = (actualizado.get("nif_proveedor") or "").strip()
+      if nombre_prov or nif_prov:
+        try:
+          from core.terceros_db import crear_o_vincular_tercero
+          resultado_tercero = crear_o_vincular_tercero(
+            nombre=nombre_prov,
+            cif=nif_prov,
+            datos_extra={
+              "pais": (actualizado.get("pais_proveedor") or "").strip(),
+              "localidad": (actualizado.get("localidad_proveedor") or "").strip(),
+            },
+            rol="proveedor",
+            origen="edicion_factura",
+          )
+          if resultado_tercero and resultado_tercero.get("id"):
+            facturas_db.update_tercero_id(factura_id, resultado_tercero["id"])
+            tercero_id_resultado = resultado_tercero["id"]
+        except Exception as e:
+          logger.warning("Error al vincular tercero en edición de factura: %s", e)
+
+  # Vincular factura a proyecto si se especificó
+  if factura_id:
+    proyecto_id_val = factura.get("proyecto_id")
+    if proyecto_id_val is not None:
+      try:
+        from core.db import conectar as _fc_conectar
+        with _fc_conectar() as _fc_conn:
+          # Asegurar que la columna existe
+          _fc_cols = {r[1] for r in _fc_conn.execute("PRAGMA table_info(facturas_proveedor)").fetchall()}
+          if "proyecto_id" not in _fc_cols:
+            _fc_conn.execute("ALTER TABLE facturas_proveedor ADD COLUMN proyecto_id INTEGER REFERENCES proyectos(id)")
+          pid = int(proyecto_id_val) if proyecto_id_val not in ("", "null") else None
+          _fc_conn.execute("UPDATE facturas_proveedor SET proyecto_id = ? WHERE id = ?", (pid, factura_id))
+      except Exception as e:
+        logger.warning("Error al vincular proyecto en factura: %s", e)
+
   _sincronizar_proveedores_desde_facturas(empresa_id)
   _invalidar_cache_listado_proveedores(empresa_id)
-  return jsonify({"ok": True, "mensaje": "Factura actualizada en la base maestra."})
+  return jsonify({"ok": True, "mensaje": "Factura actualizada en la base maestra.", "tercero_id": tercero_id_resultado})
 
 
 @facturas_proveedores_bp.delete("/api/facturas")
@@ -2266,10 +2564,11 @@ def _get_hashes_csv_clientes(empresa_id: str) -> set[str]:
 
 def _base_maestra_csv_clientes(filas: list[dict], empresa_id: str) -> dict:
   """Guarda las facturas de clientes procesadas en la BD (tabla facturas_cliente)."""
-  filas_escritas = facturas_cliente_db.insert_facturas_clientes(empresa_id, filas)
+  resultado = facturas_cliente_db.insert_facturas_clientes(empresa_id, filas)
   return {
     "ruta_base_maestra": "BD (facturas_cliente)",
-    "filas_añadidas": filas_escritas,
+    "filas_añadidas": resultado["insertados"],
+    "ids_insertados": resultado["ids"],
   }
 
 
@@ -2308,7 +2607,31 @@ def procesar_lote_clientes(empresa_id: str, carpeta: Path) -> dict:
   ]
   duplicados_omitidos = len(tabla) - len(tabla_sin_duplicados)
   tabla = _archivar_por_fecha(tabla_sin_duplicados, FACTURAS_EMITIDAS_DIR, actualizar_ruta_archivo=True)
+
+  # Crear/vincular clientes a terceros via gateway unificado antes de insertar
+  from core.terceros_db import crear_o_vincular_tercero, init_terceros_db
+  init_terceros_db()
+  for fila in tabla:
+    cliente = (fila.get("cliente") or "").strip()
+    cif = (fila.get("cif_nif") or "").strip()
+    if not cliente:
+      continue
+    try:
+      crear_o_vincular_tercero(
+        cliente, cif,
+        datos_extra={"pais": fila.get("pais"), "localidad": fila.get("localidad")},
+        rol="cliente", origen="ocr",
+      )
+    except Exception as e:
+      logger.warning("Error vinculando cliente '%s' a tercero: %s", cliente, e)
+
   resumen_bd = _base_maestra_csv_clientes(tabla, empresa_id)
+
+  # Post-insert: vincular facturas recien insertadas a terceros (por CIF/nombre)
+  try:
+    crm_db.vincular_facturas_a_terceros()
+  except Exception as e:
+    logger.warning("Error al vincular facturas cliente a terceros: %s", e)
   facturas_con_vision = sum(1 for f in tabla if str(f.get("extraccion_vision") or "").strip() == "1")
 
   return {
@@ -2320,6 +2643,7 @@ def procesar_lote_clientes(empresa_id: str, carpeta: Path) -> dict:
     "facturas_con_vision": facturas_con_vision,
     "ruta_base_maestra": resumen_bd["ruta_base_maestra"],
     "filas_añadidas": resumen_bd["filas_añadidas"],
+    "ids_insertados": resumen_bd.get("ids_insertados", []),
   }
 
 
@@ -2476,7 +2800,9 @@ def crear_cliente():
   """
   Alta de cliente en el maestro de la empresa (terceros + empresa_tercero con es_cliente=1).
   JSON: empresa_id (obligatorio), cliente, cif_nif (mínimos), pais, localidad, proyecto, direccion, email, telefono.
+  Usa el gateway unificado crear_o_vincular_tercero para deduplicacion.
   """
+  from core.terceros_db import crear_o_vincular_tercero
   data = request.get_json(silent=True) or {}
   empresa_id, err = _validar_empresa_id_requerido(data.get("empresa_id"))
   if err:
@@ -2486,10 +2812,24 @@ def crear_cliente():
     return _bad_request("El nombre del cliente es obligatorio")
   if not c["cif_nif"]:
     return _bad_request("El CIF/NIF del cliente es obligatorio")
+
+  # Verificar via gateway unificado si ya existe
+  resultado = crear_o_vincular_tercero(
+    c["cliente"], c["cif_nif"],
+    datos_extra={k: c.get(k) for k in ("pais", "localidad", "direccion", "email", "telefono")},
+    rol="cliente", origen="manual",
+  )
+  if resultado["accion"] != "creado":
+    warning = None
+    if resultado["accion"] == "vinculado_similar" and resultado.get("requiere_revision"):
+      warning = f"Vinculado a tercero similar: {resultado['nombre_match']} (similitud {resultado['similitud']:.0%})"
+    return jsonify({
+      "error": f"Ya existe un cliente equivalente: {resultado['nombre_match']} (#{resultado['id']})",
+      "tercero_existente": resultado,
+      "warning": warning,
+    }), 409
+
   lista_bd = terceros_db.get_clientes_empresa(empresa_id) if terceros_db.hay_clientes_en_bd() else []
-  for existente in lista_bd:
-    if (existente.get("cliente") or "").strip() == c["cliente"] and (existente.get("cif_nif") or "").strip() == c["cif_nif"]:
-      return jsonify({"error": "Ya existe un cliente con ese nombre y CIF en esta empresa"}), 409
   lista_bd.append(c)
   terceros_db.init_terceros_db()
   terceros_db.guardar_clientes_empresa(empresa_id, lista_bd)
@@ -2568,7 +2908,16 @@ def exportar_facturas_clientes():
   year = (request.args.get("year") or "").strip()
   month = (request.args.get("month") or "").strip()
   cliente_filtro = (request.args.get("cliente") or "").strip()
+  ids_filtro = (request.args.get("ids") or "").strip()
+  ids_set: set[int] | None = None
+  if ids_filtro:
+    try:
+      ids_set = {int(x) for x in ids_filtro.split(",") if x.strip()}
+    except ValueError:
+      pass
   facturas = facturas_cliente_db.get_facturas_cliente_empresa(empresa_id)
+  if ids_set:
+    facturas = [f for f in facturas if f.get("id") in ids_set]
   if not facturas:
     return jsonify({"error": "No hay datos para exportar"}), 404
   CAMPOS_EXPORT_CLI = [
@@ -2617,7 +2966,16 @@ def descargar_facturas_clientes_zip():
   year = (request.args.get("year") or "").strip()
   month = (request.args.get("month") or "").strip()
   cliente_filtro = (request.args.get("cliente") or "").strip()
+  ids_filtro = (request.args.get("ids") or "").strip()
+  ids_set: set[int] | None = None
+  if ids_filtro:
+    try:
+      ids_set = {int(x) for x in ids_filtro.split(",") if x.strip()}
+    except ValueError:
+      pass
   facturas = facturas_cliente_db.get_facturas_cliente_empresa(empresa_id)
+  if ids_set:
+    facturas = [f for f in facturas if f.get("id") in ids_set]
   if not facturas:
     return jsonify({"error": "No hay facturas para descargar"}), 404
   CAMPOS_ZIP_CLI = [
@@ -3159,48 +3517,140 @@ def _parse_santander_excel(stream) -> list[dict]:
 
 def _parse_bbva_excel(stream) -> list[dict]:
   """
-  Lee un Excel de extracto BBVA (hoja 'Historico', cabecera fila 16, datos desde 17).
-  Columnas: F. CONTABLE, F. VALOR, CÓDIGO, CONCEPTO, BENEFICIARIO/ORDENANTE, OBSERVACIONES, IMPORTE, SALDO, DIVISA.
+  Lee un Excel de extracto BBVA. Compatible con ambos formatos:
+  - Formato antiguo (.xlsx): hoja 'Historico', cabecera fila 16, cols desde índice 2.
+    Columnas: F. CONTABLE, F. VALOR, CÓDIGO, CONCEPTO, BENEFICIARIO/ORDENANTE, OBSERVACIONES, IMPORTE, SALDO, DIVISA
+  - Formato nuevo (.xls): hoja 'HistoricoMovimientos', cabecera fila 15, cols desde índice 1.
+    Columnas: Fecha contable, Fecha valor, Código, Concepto, Observaciones, Importe, Saldo, Divisa, Oficina, Remesa
+  Detecta automáticamente el formato por nombre de hoja y cabeceras.
   Devuelve lista de dicts con keys del modelo unificado.
   """
+  # --- Leer filas brutas según formato de archivo (.xls vs .xlsx) ---
+  raw_bytes = stream.read()
+  sheet_names = []
+  filas_all = []
+
+  # Intentar xlrd (.xls) primero, luego openpyxl (.xlsx)
+  loaded = False
   try:
-    import openpyxl
-  except ImportError:
-    raise RuntimeError("openpyxl no instalado. Ejecuta: pip install openpyxl")
-  wb = openpyxl.load_workbook(stream, read_only=True, data_only=True)
-  sheet_name = "Historico" if "Historico" in wb.sheetnames else (wb.sheetnames[0] if wb.sheetnames else None)
-  if not sheet_name:
-    raise ValueError("No se encontró ninguna hoja en el Excel")
-  ws = wb[sheet_name]
-  filas = list(ws.iter_rows(min_row=16, max_row=50000, values_only=True))
-  wb.close()
-  if not filas:
+    import xlrd
+    from io import BytesIO
+    wb = xlrd.open_workbook(file_contents=raw_bytes)
+    sheet_names = wb.sheet_names()
+    # Elegir hoja
+    target = None
+    for candidate in ["HistoricoMovimientos", "Historico"]:
+      if candidate in sheet_names:
+        target = candidate
+        break
+    if not target:
+      target = sheet_names[0] if sheet_names else None
+    if not target:
+      raise ValueError("No se encontró ninguna hoja en el Excel")
+    ws = wb.sheet_by_name(target)
+    for r in range(ws.nrows):
+      filas_all.append(ws.row_values(r))
+    loaded = True
+  except Exception:
+    pass
+
+  if not loaded:
+    try:
+      import openpyxl
+      from io import BytesIO
+      wb = openpyxl.load_workbook(BytesIO(raw_bytes), read_only=True, data_only=True)
+      sheet_names = wb.sheetnames
+      target = None
+      for candidate in ["HistoricoMovimientos", "Historico"]:
+        if candidate in sheet_names:
+          target = candidate
+          break
+      if not target:
+        target = sheet_names[0] if sheet_names else None
+      if not target:
+        raise ValueError("No se encontró ninguna hoja en el Excel")
+      ws = wb[target]
+      filas_all = [list(row) for row in ws.iter_rows(values_only=True)]
+      wb.close()
+      loaded = True
+    except ImportError:
+      raise RuntimeError("Ni xlrd ni openpyxl están instalados. Ejecuta: pip install xlrd openpyxl")
+
+  if not loaded:
+    raise ValueError("No se pudo abrir el archivo Excel")
+
+  if not filas_all:
     return []
-  # Fila 0 = cabecera. Datos desde fila 1. Columnas: 2=f.contable, 3=f.valor, 4=codigo, 5=concepto, 6=beneficiario, 7=observaciones, 8=importe, 9=saldo, 10=divisa
+
+  # --- Detectar fila de cabecera y formato automáticamente ---
+  cabecera_idx = None
+  col_map = {}  # nombre_normalizado -> índice
+
+  BBVA_HEADERS = {
+    "fecha_contable": ["f._contable", "fecha_contable", "f.contable", "f_contable"],
+    "fecha_valor": ["f._valor", "fecha_valor", "f.valor", "f_valor"],
+    "codigo": ["codigo", "c_digo"],
+    "concepto": ["concepto"],
+    "beneficiario": ["beneficiario/ordenante", "beneficiario_ordenante", "beneficiario"],
+    "observaciones": ["observaciones"],
+    "importe": ["importe"],
+    "saldo": ["saldo"],
+    "divisa": ["divisa"],
+  }
+
+  for idx, fila in enumerate(filas_all[:30]):
+    nombres = [_normalizar_nombre_columna(str(c)) if c else "" for c in fila]
+    matches = 0
+    temp_map = {}
+    for campo, aliases in BBVA_HEADERS.items():
+      for col_i, nombre in enumerate(nombres):
+        if nombre in aliases:
+          temp_map[campo] = col_i
+          matches += 1
+          break
+    if matches >= 4:  # al menos fecha_contable, concepto, importe, saldo
+      cabecera_idx = idx
+      col_map = temp_map
+      break
+
+  if cabecera_idx is None:
+    raise ValueError("No se encontró la fila de cabecera BBVA en el Excel. Verifica que el archivo tiene las columnas esperadas.")
+
+  tiene_beneficiario = "beneficiario" in col_map
+
+  # --- Parsear datos ---
   resultado = []
-  for row in filas[1:]:
+  for row in filas_all[cabecera_idx + 1:]:
     if row is None or all(cell is None or str(cell).strip() == "" for cell in (row or [])):
       continue
     try:
       r = list(row) if row else []
-      fecha_op = _normalizar_fecha_dd_mm_yyyy(r[2] if len(r) > 2 else None)
-      fecha_valor = _normalizar_fecha_dd_mm_yyyy(r[3] if len(r) > 3 else None)
-      codigo = str(r[4]).strip() if len(r) > 4 and r[4] is not None else None
+
+      def _val(campo):
+        i = col_map.get(campo)
+        if i is None or i >= len(r):
+          return None
+        return r[i]
+
+      fecha_op = _normalizar_fecha_dd_mm_yyyy(_val("fecha_contable"))
+      fecha_valor = _normalizar_fecha_dd_mm_yyyy(_val("fecha_valor"))
+      codigo = str(_val("codigo")).strip() if _val("codigo") is not None else None
       codigo = codigo or None
-      concepto_raw = str(r[5]).strip() if len(r) > 5 and r[5] is not None else ""
-      beneficiario = str(r[6]).strip() if len(r) > 6 and r[6] else ""
-      observaciones = str(r[7]).strip() if len(r) > 7 and r[7] else ""
+      concepto_raw = str(_val("concepto")).strip() if _val("concepto") is not None else ""
+      beneficiario = str(_val("beneficiario")).strip() if tiene_beneficiario and _val("beneficiario") else ""
+      observaciones = str(_val("observaciones")).strip() if _val("observaciones") else ""
       partes = [p for p in [concepto_raw, beneficiario, observaciones] if p]
       concepto = " | ".join(partes) if partes else ""
       try:
-        importe = float(r[8]) if len(r) > 8 and r[8] is not None else 0.0
+        importe = float(_val("importe")) if _val("importe") is not None else 0.0
       except (TypeError, ValueError):
         importe = 0.0
       try:
-        saldo = float(r[9]) if len(r) > 9 and r[9] is not None else None
+        saldo = float(_val("saldo")) if _val("saldo") is not None else None
       except (TypeError, ValueError):
         saldo = None
-      divisa = str(r[10]).strip() if len(r) > 10 and r[10] else "EUR"
+      divisa_val = _val("divisa")
+      divisa = str(divisa_val).strip() if divisa_val else "EUR"
       if not divisa:
         divisa = "EUR"
       if not fecha_op:
@@ -3506,7 +3956,9 @@ def conciliacion_sugerencias():
   Cálculo:
   - Se toman movimientos sin factura, sin conciliado_at y sin tarjeta (límite 1000), opcionalmente
     filtrados por fecha_desde/fecha_hasta (si no se envían, se consideran todos).
-  - Se excluyen movimientos cuyo concepto contenga "Nomina"/"Nómina", "Adelanto" o "Liquidacion De Las Tarjetas De Credito".
+  - Se excluyen movimientos cuyo concepto contenga "Nomina"/"Nómina", "Adelanto", "Liquidacion De Las Tarjetas",
+    "liquidacion tarjeta", "liquidacion contrato", "recibo mensual tarjeta", "recibo tarjeta",
+    "adeudo mensual...tarjeta", "pago tarjeta", "cargo tarjeta".
   - Solo se consideran movimientos con importe negativo (pagos).
   - Para cada movimiento se busca una factura pendiente cuyo total coincida con |importe| ± umbral (default 0,50 €)
     y cuya fecha esté dentro de una ventana de días respecto a la fecha del movimiento (default 365 días).
@@ -3545,8 +3997,20 @@ def conciliacion_sugerencias():
     params_mov: list = []
     # Excluir movimientos ya vinculados a extracto de tarjeta (no son candidatos a conciliación con factura)
     cond_mov.append("(tarjeta_id IS NULL OR tarjeta_id = 0)")
-    # Excluir nóminas, adelantos y liquidaciones de tarjetas (concepto contiene "Nomina"/"Nómina", "Adelanto" o "Liquidacion De Las Tarjetas De Credito")
-    cond_mov.append("(LOWER(COALESCE(concepto, '')) NOT LIKE '%nomina%' AND LOWER(COALESCE(concepto, '')) NOT LIKE '%nómina%' AND LOWER(COALESCE(concepto, '')) NOT LIKE '%adelanto%' AND LOWER(COALESCE(concepto, '')) NOT LIKE '%liquidacion de las tarjetas de credito%')")
+    # Excluir nóminas, adelantos y movimientos de tarjeta (recibos, liquidaciones, adeudos, etc.)
+    cond_mov.append("""(
+      LOWER(COALESCE(concepto, '')) NOT LIKE '%nomina%'
+      AND LOWER(COALESCE(concepto, '')) NOT LIKE '%nómina%'
+      AND LOWER(COALESCE(concepto, '')) NOT LIKE '%adelanto%'
+      AND LOWER(COALESCE(concepto, '')) NOT LIKE '%liquidacion de las tarjetas%'
+      AND LOWER(COALESCE(concepto, '')) NOT LIKE '%liquidacion tarjeta%'
+      AND LOWER(COALESCE(concepto, '')) NOT LIKE '%liquidacion contrato%'
+      AND LOWER(COALESCE(concepto, '')) NOT LIKE '%recibo mensual tarjeta%'
+      AND LOWER(COALESCE(concepto, '')) NOT LIKE '%recibo tarjeta%'
+      AND LOWER(COALESCE(concepto, '')) NOT LIKE '%adeudo mensual%tarjeta%'
+      AND LOWER(COALESCE(concepto, '')) NOT LIKE '%pago tarjeta%'
+      AND LOWER(COALESCE(concepto, '')) NOT LIKE '%cargo tarjeta%'
+    )""")
     if fecha_desde:
       cond_mov.append("fecha_operacion >= ?")
       params_mov.append(fecha_desde)
@@ -4169,21 +4633,32 @@ def exportar_movimientos_bancos():
       "empresa_id",
       "created_at",
     ]
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(campos)
-    for r in rows:
-      writer.writerow(list(r))
-    output.seek(0)
+
+    try:
+      from openpyxl import Workbook
+    except ImportError:
+      return jsonify({"error": "openpyxl no instalado. pip install openpyxl"}), 500
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Movimientos"
+    for col, key in enumerate(campos, start=1):
+      ws.cell(row=1, column=col, value=key)
+    for row_idx, r in enumerate(rows, start=2):
+      for col, val in enumerate(r, start=1):
+        ws.cell(row=row_idx, column=col, value=val)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
 
     fecha_tag = datetime.utcnow().strftime("%Y%m%d")
     nombre = f"movimientos_bancos_{fecha_tag}.xlsx"
-    return Response(
-      output.getvalue().encode("utf-8-sig"),
-      mimetype="text/csv; charset=utf-8",
-      headers={
-        "Content-Disposition": f'attachment; filename="{nombre}"',
-      },
+    return send_file(
+      buf,
+      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      as_attachment=True,
+      download_name=nombre,
     )
   finally:
     conn.close()
@@ -4363,8 +4838,16 @@ def transporte_buscar():
 
 # ─── CRM (Gestión de relaciones comerciales) ─────────────────────────────────
 
+@crm_bp.post("/api/crm/sync-terceros")
+def crm_sync_terceros():
+  resultado = crm_db.sincronizar_desde_terceros()
+  return jsonify(resultado)
+
+
 @crm_bp.get("/api/crm/empresas")
 def crm_listar_empresas():
+  # Auto-sync terceros → crm_empresas on first access
+  crm_db.sincronizar_desde_terceros()
   tipo = (request.args.get("tipo") or "").strip() or None
   q = (request.args.get("q") or "").strip() or None
   activo_raw = request.args.get("activo")
@@ -4411,6 +4894,219 @@ def crm_actualizar_empresa(empresa_id: int):
 @crm_bp.get("/api/crm/stats")
 def crm_stats():
   return jsonify(crm_db.estadisticas_crm())
+
+
+@crm_bp.get("/api/crm/duplicados")
+def crm_detectar_duplicados():
+  grupos = crm_db.detectar_duplicados()
+  return jsonify({"grupos": grupos, "total_grupos": len(grupos)})
+
+
+@crm_bp.post("/api/crm/fusionar")
+def crm_fusionar():
+  data = request.get_json(silent=True) or {}
+  principal_id = data.get("principal_id")
+  absorbido_id = data.get("absorbido_id")
+  if not principal_id or not absorbido_id:
+    return _bad_request("Se requieren principal_id y absorbido_id")
+  if principal_id == absorbido_id:
+    return _bad_request("No se puede fusionar un tercero consigo mismo")
+  resultado = crm_db.fusionar_terceros(int(principal_id), int(absorbido_id))
+  return jsonify(resultado)
+
+
+@crm_bp.post("/api/crm/vincular-facturas")
+def crm_vincular_facturas():
+  stats = crm_db.vincular_facturas_a_terceros()
+  return jsonify(stats)
+
+
+# ─── CRM Contactos ──────────────────────────────────────────────────────────
+
+@crm_bp.get("/api/crm/contactos")
+def crm_listar_contactos():
+  empresa_id = request.args.get("empresa_id", type=int)
+  q = (request.args.get("q") or "").strip() or None
+  limit = min(int(request.args.get("limit") or 50), 200)
+  offset = int(request.args.get("offset") or 0)
+  return jsonify(crm_db.listar_contactos(empresa_id=empresa_id, q=q, limit=limit, offset=offset))
+
+
+@crm_bp.get("/api/crm/contactos/<int:contacto_id>")
+def crm_obtener_contacto(contacto_id: int):
+  contacto = crm_db.obtener_contacto(contacto_id)
+  if not contacto:
+    return jsonify({"error": "Contacto no encontrado"}), 404
+  return jsonify(contacto)
+
+
+@crm_bp.post("/api/crm/contactos")
+def crm_crear_contacto():
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre del contacto es obligatorio")
+  contacto = crm_db.crear_contacto(data)
+  return jsonify(contacto), 201
+
+
+@crm_bp.put("/api/crm/contactos/<int:contacto_id>")
+def crm_actualizar_contacto(contacto_id: int):
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre del contacto es obligatorio")
+  contacto = crm_db.actualizar_contacto(contacto_id, data)
+  if not contacto:
+    return jsonify({"error": "Contacto no encontrado"}), 404
+  return jsonify(contacto)
+
+
+@crm_bp.delete("/api/crm/contactos/<int:contacto_id>")
+def crm_eliminar_contacto(contacto_id: int):
+  ok = crm_db.eliminar_contacto(contacto_id)
+  if not ok:
+    return jsonify({"error": "Contacto no encontrado"}), 404
+  return jsonify({"ok": True})
+
+
+# ─── CRM Interacciones ──────────────────────────────────────────────────────
+
+@crm_bp.get("/api/crm/interacciones")
+def crm_listar_interacciones():
+  empresa_id = request.args.get("empresa_id", type=int)
+  contacto_id = request.args.get("contacto_id", type=int)
+  tipo = (request.args.get("tipo") or "").strip() or None
+  fecha_desde = (request.args.get("fecha_desde") or "").strip() or None
+  fecha_hasta = (request.args.get("fecha_hasta") or "").strip() or None
+  q = (request.args.get("q") or "").strip() or None
+  limit = min(int(request.args.get("limit") or 50), 200)
+  offset = int(request.args.get("offset") or 0)
+  return jsonify(crm_db.listar_interacciones(
+    empresa_id=empresa_id, contacto_id=contacto_id, tipo=tipo,
+    fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, q=q,
+    limit=limit, offset=offset,
+  ))
+
+
+@crm_bp.post("/api/crm/interacciones")
+def crm_crear_interaccion():
+  data = request.get_json(silent=True) or {}
+  tipo = (data.get("tipo") or "").strip()
+  if tipo not in ("llamada", "email", "reunion", "nota", "whatsapp", "visita"):
+    return _bad_request("Tipo debe ser llamada, email, reunion, nota, whatsapp o visita")
+  interaccion = crm_db.crear_interaccion(data)
+  return jsonify(interaccion), 201
+
+
+@crm_bp.get("/api/crm/interacciones/<int:interaccion_id>")
+def crm_obtener_interaccion(interaccion_id: int):
+  with __import__('core.db', fromlist=['conectar']).conectar() as conn:
+    row = conn.execute("""
+      SELECT i.*, c.nombre AS nombre_contacto, c.apellidos AS apellidos_contacto,
+             e.nombre AS nombre_empresa
+      FROM crm_interacciones i
+      LEFT JOIN crm_contactos c ON c.id = i.contacto_id
+      LEFT JOIN crm_empresas e ON e.id = i.empresa_id
+      WHERE i.id = ?
+    """, (interaccion_id,)).fetchone()
+  if not row:
+    return jsonify({"error": "Interaccion no encontrada"}), 404
+  return jsonify(dict(row))
+
+
+@crm_bp.put("/api/crm/interacciones/<int:interaccion_id>")
+def crm_actualizar_interaccion(interaccion_id: int):
+  data = request.get_json(silent=True) or {}
+  interaccion = crm_db.actualizar_interaccion(interaccion_id, data)
+  if not interaccion:
+    return jsonify({"error": "Interaccion no encontrada"}), 404
+  return jsonify(interaccion)
+
+
+@crm_bp.delete("/api/crm/interacciones/<int:interaccion_id>")
+def crm_eliminar_interaccion(interaccion_id: int):
+  ok = crm_db.eliminar_interaccion(interaccion_id)
+  if not ok:
+    return jsonify({"error": "Interaccion no encontrada"}), 404
+  return jsonify({"ok": True})
+
+
+@crm_bp.get("/api/crm/interacciones/pendientes")
+def crm_interacciones_pendientes():
+  return jsonify({"interacciones": crm_db.interacciones_pendientes()})
+
+
+# ─── CRM Oportunidades ──────────────────────────────────────────────────────
+
+@crm_bp.get("/api/crm/oportunidades")
+def crm_listar_oportunidades():
+  estado = (request.args.get("estado") or "").strip() or None
+  empresa_id = request.args.get("empresa_id", type=int)
+  contacto_id = request.args.get("contacto_id", type=int)
+  fuente = (request.args.get("fuente") or "").strip() or None
+  q = (request.args.get("q") or "").strip() or None
+  limit = min(int(request.args.get("limit") or 200), 500)
+  offset = int(request.args.get("offset") or 0)
+  return jsonify(crm_db.listar_oportunidades(
+    estado=estado, empresa_id=empresa_id, contacto_id=contacto_id,
+    fuente=fuente, q=q, limit=limit, offset=offset,
+  ))
+
+
+@crm_bp.get("/api/crm/oportunidades/<int:oportunidad_id>")
+def crm_obtener_oportunidad(oportunidad_id: int):
+  op = crm_db.obtener_oportunidad(oportunidad_id)
+  if not op:
+    return jsonify({"error": "Oportunidad no encontrada"}), 404
+  return jsonify(op)
+
+
+@crm_bp.post("/api/crm/oportunidades")
+def crm_crear_oportunidad():
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre de la oportunidad es obligatorio")
+  if not data.get("empresa_id"):
+    return _bad_request("La empresa es obligatoria")
+  op = crm_db.crear_oportunidad(data)
+  return jsonify(op), 201
+
+
+@crm_bp.put("/api/crm/oportunidades/<int:oportunidad_id>")
+def crm_actualizar_oportunidad(oportunidad_id: int):
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre de la oportunidad es obligatorio")
+  estado = (data.get("estado") or "").strip()
+  if estado == "perdida" and not (data.get("motivo_perdida") or "").strip():
+    return _bad_request("El motivo de perdida es obligatorio para estado 'perdida'")
+  op = crm_db.actualizar_oportunidad(oportunidad_id, data)
+  if not op:
+    return jsonify({"error": "Oportunidad no encontrada"}), 404
+  return jsonify(op)
+
+
+@crm_bp.patch("/api/crm/oportunidades/<int:oportunidad_id>/estado")
+def crm_cambiar_estado_oportunidad(oportunidad_id: int):
+  data = request.get_json(silent=True) or {}
+  estado = (data.get("estado") or "").strip()
+  if not estado:
+    return _bad_request("El estado es obligatorio")
+  if estado == "perdida" and not (data.get("motivo_perdida") or "").strip():
+    return _bad_request("El motivo de perdida es obligatorio")
+  motivo = (data.get("motivo_perdida") or "").strip() or None
+  op = crm_db.cambiar_estado_oportunidad(oportunidad_id, estado, motivo)
+  if not op:
+    return jsonify({"error": "Oportunidad no encontrada o estado invalido"}), 404
+  return jsonify(op)
+
+
+@crm_bp.get("/api/crm/oportunidades/pipeline")
+def crm_pipeline_oportunidades():
+  return jsonify({"pipeline": crm_db.pipeline_oportunidades()})
 
 
 @transporte_bp.route("/api/proyectos/transporte/proveedores", methods=["GET"])
@@ -4602,6 +5298,409 @@ def transporte_exportar_proveedores_excel():
   )
 
 
+# ─── Tesoreria ───────────────────────────────────────────────────────────────
+
+from core import tesoreria_db
+
+
+@tesoreria_bp.get("/api/tesoreria/resumen")
+def tesoreria_resumen():
+  empresa_id = (request.args.get("empresa_id") or "").strip() or None
+  return jsonify(tesoreria_db.resumen(empresa_id))
+
+
+@tesoreria_bp.get("/api/tesoreria/calendario")
+def tesoreria_calendario():
+  fecha_desde = (request.args.get("fecha_desde") or "").strip() or None
+  fecha_hasta = (request.args.get("fecha_hasta") or "").strip() or None
+  tipo = (request.args.get("tipo") or "").strip() or None
+  empresa_id = (request.args.get("empresa_id") or "").strip() or None
+  return jsonify({"eventos": tesoreria_db.calendario(fecha_desde, fecha_hasta, tipo, empresa_id)})
+
+
+@tesoreria_bp.get("/api/tesoreria/aging")
+def tesoreria_aging():
+  tipo = (request.args.get("tipo") or "proveedores").strip()
+  empresa_id = (request.args.get("empresa_id") or "").strip() or None
+  return jsonify({"aging": tesoreria_db.aging(tipo, empresa_id)})
+
+
+@tesoreria_bp.get("/api/tesoreria/flujo-caja")
+def tesoreria_flujo_caja():
+  empresa_id = (request.args.get("empresa_id") or "").strip() or None
+  return jsonify({"flujo": tesoreria_db.flujo_caja(empresa_id)})
+
+
+@tesoreria_bp.put("/api/tesoreria/condiciones/<int:tercero_id>")
+def tesoreria_set_condiciones(tercero_id: int):
+  data = request.get_json(silent=True) or {}
+  dias = data.get("dias_pago", 30)
+  notas = (data.get("notas") or "").strip() or None
+  result = tesoreria_db.set_condiciones(tercero_id, int(dias), notas)
+  return jsonify(result)
+
+
+@tesoreria_bp.get("/api/tesoreria/alertas")
+def tesoreria_alertas():
+  empresa_id = (request.args.get("empresa_id") or "").strip() or None
+  return jsonify(tesoreria_db.alertas_vencidas(empresa_id))
+
+
+# ─── Proyectos ───────────────────────────────────────────────────────────────
+
+from core import proyectos_db
+
+proyectos_crud_bp = Blueprint("proyectos_crud", __name__)
+
+
+@proyectos_crud_bp.get("/api/proyectos")
+def api_listar_proyectos():
+  proyectos_db.init_proyectos_db()
+  estado = (request.args.get("estado") or "").strip() or None
+  empresa_id = (request.args.get("empresa_id") or "").strip() or None
+  tipo_trabajo = (request.args.get("tipo_trabajo") or "").strip() or None
+  q = (request.args.get("q") or "").strip() or None
+  tercero_id = request.args.get("tercero_id", type=int) or None
+  return jsonify({"proyectos": proyectos_db.listar_proyectos(estado=estado, empresa_id=empresa_id, tipo_trabajo=tipo_trabajo, q=q, tercero_id=tercero_id)})
+
+
+@proyectos_crud_bp.get("/api/proyectos/<int:proyecto_id>")
+def api_obtener_proyecto(proyecto_id: int):
+  proyectos_db.init_proyectos_db()
+  p = proyectos_db.obtener_proyecto(proyecto_id)
+  if not p:
+    return jsonify({"error": "Proyecto no encontrado"}), 404
+  return jsonify(p)
+
+
+@proyectos_crud_bp.get("/api/proyectos/<int:pid>/dashboard")
+def api_proyecto_dashboard(pid):
+  proyectos_db.init_proyectos_db()
+  data = proyectos_db.obtener_dashboard_proyecto(pid)
+  if not data:
+    return jsonify({"error": "Proyecto no encontrado"}), 404
+  return jsonify(data)
+
+
+@proyectos_crud_bp.post("/api/proyectos")
+def api_crear_proyecto():
+  data = request.get_json(silent=True) or {}
+  if not (data.get("nombre") or "").strip():
+    return _bad_request("El nombre del proyecto es obligatorio")
+  if not data.get("empresa_id"):
+    return _bad_request("La empresa es obligatoria")
+  p = proyectos_db.crear_proyecto(data)
+  return jsonify(p), 201
+
+
+@proyectos_crud_bp.put("/api/proyectos/<int:proyecto_id>")
+def api_actualizar_proyecto(proyecto_id: int):
+  data = request.get_json(silent=True) or {}
+  if not (data.get("nombre") or "").strip():
+    return _bad_request("El nombre del proyecto es obligatorio")
+  p = proyectos_db.actualizar_proyecto(proyecto_id, data)
+  if not p:
+    return jsonify({"error": "Proyecto no encontrado"}), 404
+  return jsonify(p)
+
+
+@proyectos_crud_bp.patch("/api/proyectos/<int:proyecto_id>/estado")
+def api_cambiar_estado_proyecto(proyecto_id: int):
+  data = request.get_json(silent=True) or {}
+  estado = (data.get("estado") or "").strip()
+  if not estado:
+    return _bad_request("El estado es obligatorio")
+  motivo = (data.get("motivo") or "").strip() or None
+  p = proyectos_db.cambiar_estado_proyecto(proyecto_id, estado, motivo)
+  if not p:
+    return jsonify({"error": "Proyecto no encontrado o estado invalido"}), 404
+  return jsonify(p)
+
+
+@proyectos_crud_bp.get("/api/proyectos/<int:proyecto_id>/partes")
+def api_listar_partes(proyecto_id: int):
+  return jsonify({"partes": proyectos_db.listar_partes(proyecto_id)})
+
+
+@proyectos_crud_bp.post("/api/proyectos/<int:proyecto_id>/partes")
+def api_crear_parte(proyecto_id: int):
+  data = request.get_json(silent=True) or {}
+  parte = proyectos_db.crear_parte(proyecto_id, data)
+  return jsonify(parte), 201
+
+
+@proyectos_crud_bp.put("/api/proyectos/partes/<int:parte_id>")
+def api_actualizar_parte(parte_id: int):
+  data = request.get_json(silent=True) or {}
+  parte = proyectos_db.actualizar_parte(parte_id, data)
+  if not parte:
+    return jsonify({"error": "Parte no encontrado"}), 404
+  return jsonify(parte)
+
+
+@proyectos_crud_bp.get("/api/proyectos/dashboard")
+def api_proyectos_dashboard():
+  proyectos_db.init_proyectos_db()
+  return jsonify(proyectos_db.dashboard())
+
+
+@proyectos_crud_bp.post("/api/proyectos/<int:proyecto_id>/recursos")
+def api_asignar_recurso(proyecto_id: int):
+  data = request.get_json(silent=True) or {}
+  recurso = proyectos_db.asignar_recurso(proyecto_id, data)
+  return jsonify(recurso), 201
+
+
+@proyectos_crud_bp.delete("/api/proyectos/recursos/<int:recurso_id>")
+def api_desasignar_recurso(recurso_id: int):
+  ok = proyectos_db.desasignar_recurso(recurso_id)
+  if not ok:
+    return jsonify({"error": "Recurso no encontrado"}), 404
+  return jsonify({"ok": True})
+
+
+@proyectos_crud_bp.get("/api/proyectos/<int:pid>/documentos")
+def api_listar_documentos_proyecto(pid):
+  proyectos_db.init_proyectos_db()
+  from core.db import conectar as _db_conectar
+  with _db_conectar() as conn:
+    docs = [dict(r) for r in conn.execute(
+      "SELECT * FROM proyecto_documentos WHERE proyecto_id = ? ORDER BY created_at DESC", (pid,)
+    ).fetchall()]
+  return jsonify({"documentos": docs})
+
+
+@proyectos_crud_bp.post("/api/proyectos/<int:pid>/documentos")
+def api_crear_documento_proyecto(pid):
+  proyectos_db.init_proyectos_db()
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return jsonify({"error": "El nombre es obligatorio"}), 400
+  from core.db import conectar as _db_conectar, now_iso as _db_now
+  with _db_conectar() as conn:
+    conn.execute("""
+      INSERT INTO proyecto_documentos (proyecto_id, nombre, tipo, descripcion, url_externa, fecha_documento, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (pid, nombre, data.get("tipo", "otro"), data.get("descripcion"),
+          data.get("url_externa"), data.get("fecha_documento"), _db_now()))
+    did = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    doc = dict(conn.execute("SELECT * FROM proyecto_documentos WHERE id = ?", (did,)).fetchone())
+  return jsonify(doc), 201
+
+
+@proyectos_crud_bp.delete("/api/proyectos/<int:pid>/documentos/<int:did>")
+def api_eliminar_documento_proyecto(pid, did):
+  proyectos_db.init_proyectos_db()
+  from core.db import conectar as _db_conectar
+  with _db_conectar() as conn:
+    conn.execute("DELETE FROM proyecto_documentos WHERE id = ? AND proyecto_id = ?", (did, pid))
+  return jsonify({"ok": True})
+
+
+# ─── Presupuestos ──────────────────────────────────────────────────────────────
+from core import presupuestos_db
+
+presupuestos_bp = Blueprint("presupuestos", __name__)
+
+
+@presupuestos_bp.get("/api/presupuestos")
+def api_listar_presupuestos():
+  presupuestos_db.init_presupuestos_db()
+  estado = (request.args.get("estado") or "").strip() or None
+  tercero_id = request.args.get("tercero_id", type=int) or None
+  empresa_id = (request.args.get("empresa_id") or "").strip() or None
+  return jsonify({"presupuestos": presupuestos_db.listar_presupuestos(
+    estado=estado, tercero_id=tercero_id, empresa_id=empresa_id,
+  )})
+
+
+@presupuestos_bp.get("/api/presupuestos/<int:presupuesto_id>")
+def api_obtener_presupuesto(presupuesto_id: int):
+  presupuestos_db.init_presupuestos_db()
+  p = presupuestos_db.obtener_presupuesto(presupuesto_id)
+  if not p:
+    return jsonify({"error": "Presupuesto no encontrado"}), 404
+  return jsonify(p)
+
+
+@presupuestos_bp.post("/api/presupuestos")
+def api_crear_presupuesto():
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  if not (data.get("nombre_proyecto") or "").strip():
+    return _bad_request("El nombre del proyecto es obligatorio")
+  if not data.get("empresa_id"):
+    return _bad_request("La empresa es obligatoria")
+  if not data.get("tercero_id"):
+    return _bad_request("El cliente (tercero_id) es obligatorio")
+  p = presupuestos_db.crear_presupuesto(data)
+  return jsonify(p), 201
+
+
+@presupuestos_bp.put("/api/presupuestos/<int:presupuesto_id>")
+def api_actualizar_presupuesto(presupuesto_id: int):
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  p = presupuestos_db.actualizar_presupuesto(presupuesto_id, data)
+  if not p:
+    return jsonify({"error": "Presupuesto no encontrado"}), 404
+  return jsonify(p)
+
+
+@presupuestos_bp.put("/api/presupuestos/<int:presupuesto_id>/estado")
+def api_cambiar_estado_presupuesto(presupuesto_id: int):
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  estado = (data.get("estado") or "").strip()
+  if not estado:
+    return _bad_request("El estado es obligatorio")
+  p = presupuestos_db.cambiar_estado_presupuesto(presupuesto_id, estado)
+  if not p:
+    return jsonify({"error": "Presupuesto no encontrado o estado inválido"}), 404
+  return jsonify(p)
+
+
+# --- Versiones ---
+
+@presupuestos_bp.post("/api/presupuestos/<int:presupuesto_id>/versiones")
+def api_crear_version_presupuesto(presupuesto_id: int):
+  presupuestos_db.init_presupuestos_db()
+  v = presupuestos_db.crear_version(presupuesto_id)
+  if not v:
+    return jsonify({"error": "Presupuesto no encontrado"}), 404
+  return jsonify(v), 201
+
+
+@presupuestos_bp.get("/api/presupuestos/versiones/<int:version_id>")
+def api_obtener_version_presupuesto(version_id: int):
+  presupuestos_db.init_presupuestos_db()
+  v = presupuestos_db.obtener_version(version_id)
+  if not v:
+    return jsonify({"error": "Versión no encontrada"}), 404
+  return jsonify(v)
+
+
+@presupuestos_bp.put("/api/presupuestos/versiones/<int:version_id>")
+def api_actualizar_version_presupuesto(version_id: int):
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  v = presupuestos_db.actualizar_version(version_id, data)
+  if not v:
+    return jsonify({"error": "Versión no encontrada"}), 404
+  return jsonify(v)
+
+
+@presupuestos_bp.put("/api/presupuestos/versiones/<int:version_id>/lineas")
+def api_guardar_lineas_presupuesto(version_id: int):
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  lineas = data.get("lineas")
+  if lineas is None or not isinstance(lineas, list):
+    return _bad_request("Se requiere un array 'lineas'")
+  result = presupuestos_db.guardar_lineas(version_id, lineas)
+  # Obtener total actualizado
+  v = presupuestos_db.obtener_version(version_id)
+  return jsonify({"lineas": result, "total": v["total"] if v else 0})
+
+
+@presupuestos_bp.get("/api/presupuestos/versiones/<int:version_id>/pdf")
+def api_generar_pdf_presupuesto(version_id: int):
+  presupuestos_db.init_presupuestos_db()
+  from core.presupuestos_pdf import generar_pdf_presupuesto
+  try:
+    pdf_bytes = generar_pdf_presupuesto(version_id)
+    return Response(pdf_bytes, mimetype="application/pdf",
+                    headers={"Content-Disposition": f"inline; filename=presupuesto_{version_id}.pdf"})
+  except ValueError as e:
+    return jsonify({"error": str(e)}), 404
+  except Exception as e:
+    logger.exception("Error generando PDF presupuesto %d", version_id)
+    return jsonify({"error": str(e)}), 500
+
+
+# --- Plantillas T&C ---
+
+@presupuestos_bp.get("/api/presupuestos/plantillas-tc")
+def api_listar_plantillas_tc():
+  presupuestos_db.init_presupuestos_db()
+  activas = request.args.get("activas_solo", "true").lower() in ("1", "true", "si")
+  return jsonify({"plantillas": presupuestos_db.listar_plantillas_tc(activas_solo=activas)})
+
+
+@presupuestos_bp.get("/api/presupuestos/plantillas-tc/<int:plantilla_id>")
+def api_obtener_plantilla_tc(plantilla_id: int):
+  presupuestos_db.init_presupuestos_db()
+  p = presupuestos_db.obtener_plantilla_tc(plantilla_id)
+  if not p:
+    return jsonify({"error": "Plantilla no encontrada"}), 404
+  return jsonify(p)
+
+
+@presupuestos_bp.post("/api/presupuestos/plantillas-tc")
+def api_crear_plantilla_tc():
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  if not (data.get("nombre") or "").strip():
+    return _bad_request("El nombre de la plantilla es obligatorio")
+  if not (data.get("contenido") or "").strip():
+    return _bad_request("El contenido es obligatorio")
+  p = presupuestos_db.crear_plantilla_tc(data)
+  return jsonify(p), 201
+
+
+@presupuestos_bp.put("/api/presupuestos/plantillas-tc/<int:plantilla_id>")
+def api_actualizar_plantilla_tc(plantilla_id: int):
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  p = presupuestos_db.actualizar_plantilla_tc(plantilla_id, data)
+  if not p:
+    return jsonify({"error": "Plantilla no encontrada"}), 404
+  return jsonify(p)
+
+
+# --- Catálogo de partidas predefinidas ---
+
+@presupuestos_bp.get("/api/presupuestos/catalogo")
+def api_listar_catalogo():
+  presupuestos_db.init_presupuestos_db()
+  seccion = (request.args.get("seccion") or "").strip() or None
+  categoria = (request.args.get("categoria") or "").strip() or None
+  return jsonify({"catalogo": presupuestos_db.listar_catalogo(seccion=seccion, categoria=categoria)})
+
+
+@presupuestos_bp.post("/api/presupuestos/catalogo")
+def api_crear_item_catalogo():
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  if not (data.get("titulo") or "").strip():
+    return _bad_request("El título es obligatorio")
+  try:
+    item = presupuestos_db.crear_item_catalogo(data)
+  except ValueError as e:
+    return _bad_request(str(e))
+  return jsonify(item), 201
+
+
+@presupuestos_bp.put("/api/presupuestos/catalogo/<int:item_id>")
+def api_actualizar_item_catalogo(item_id: int):
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  item = presupuestos_db.actualizar_item_catalogo(item_id, data)
+  if not item:
+    return jsonify({"error": "Item no encontrado"}), 404
+  return jsonify(item)
+
+
+@presupuestos_bp.delete("/api/presupuestos/catalogo/<int:item_id>")
+def api_eliminar_item_catalogo(item_id: int):
+  presupuestos_db.init_presupuestos_db()
+  item = presupuestos_db.eliminar_item_catalogo(item_id)
+  if not item:
+    return jsonify({"error": "Item no encontrado"}), 404
+  return jsonify({"ok": True, "item": item})
+
+
 # Registrar blueprints
 app.register_blueprint(facturas_proveedores_bp)
 app.register_blueprint(proveedores_bp)
@@ -4611,6 +5710,9 @@ app.register_blueprint(control_calidad_bp)
 app.register_blueprint(bancos_bp)
 app.register_blueprint(transporte_bp)
 app.register_blueprint(crm_bp)
+app.register_blueprint(tesoreria_bp)
+app.register_blueprint(proyectos_crud_bp)
+app.register_blueprint(presupuestos_bp)
 
 
 if __name__ == "__main__":

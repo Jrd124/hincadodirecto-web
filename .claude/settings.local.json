@@ -22,7 +22,20 @@
       "Bash(__NEW_LINE_fc9b440a66a0ac3a__ echo:*)",
       "Bash(echo \"=== FINAL VERIFICATION SUMMARY ===\"\necho \"\"\necho \"Checked all document.getElementById\\(\\).addEventListener\\(\\) calls in app.js \\(lines 490-3741\\)\"\necho \"\"\necho \"Element IDs referenced \\(18 total\\):\"\necho \"───────────────────────────────────\"\ncat /tmp/app_ids.txt | nl\necho \"\"\necho \"Result: ALL 18 ELEMENT IDs EXIST IN index.html\"\necho \"\"\necho \"No missing elements found - script will not crash due to missing getElementById\\(\\) targets.\")",
       "Bash(node:*)",
-      "Bash(head:*)"
+      "Bash(head:*)",
+      "Bash(find:*)",
+      "Bash(cd:*)",
+      "Bash(sqlite3:*)",
+      "Bash(ls -la ~/Downloads/BBVA*)",
+      "Bash(ls -la \"/c/Users/javie/Downloads/BBVA\"*)",
+      "Bash(fi)",
+      "Bash(for id:*)",
+      "Bash(do grep:*)",
+      "Bash(echo \"OK: $id\")",
+      "Bash(echo \"MISSING: $id\")",
+      "Bash(done)",
+      "Bash(cp \"static/assets/presupuestos/logo.jpg\" \"interfaz_facturas/static/assets/presupuestos/logo.jpg\")",
+      "Bash(cp \"static/assets/presupuestos/foto_maquinaria.png\" \"interfaz_facturas/static/assets/presupuestos/foto_maquinaria_real.png\")"
     ]
   }
 }

@@ -210,11 +210,37 @@ def directions_ors_multi(puntos: list[tuple[float, float]], api_key: str) -> dic
 
 
 def cargar_proveedores_transporte(base_dir: Path) -> list[dict[str, Any]]:
-  """Carga proveedores desde SQLite (gestion.db, tabla proveedores_transporte). Fuente única de datos."""
-  from core.proveedores_transporte_db import init_proveedores_transporte_db, listar_proveedores
+  """Carga transportistas desde terceros JOIN terceros_transporte_datos (sistema unificado)."""
+  from core.db import conectar as _db_conectar
 
-  init_proveedores_transporte_db()
-  return listar_proveedores()
+  with _db_conectar() as conn:
+    rows = conn.execute("""
+      SELECT t.id, t.nombre_canonico, t.telefono, t.email,
+             ttd.lat, ttd.lon, ttd.provincia, ttd.codigo_postal,
+             ttd.direccion_completa, ttd.web, ttd.telefono_fijo, ttd.telefono_movil
+      FROM terceros t
+      JOIN terceros_transporte_datos ttd ON ttd.tercero_id = t.id
+      WHERE t.es_transportista = 1
+    """).fetchall()
+
+  return [
+    {
+      "id": r["id"],
+      "nombre": r["nombre_canonico"] or "",
+      "telefono": r["telefono"] or "",
+      "telefono_fijo": r["telefono_fijo"] or "",
+      "telefono_movil": r["telefono_movil"] or "",
+      "email": r["email"] or "",
+      "web": r["web"] or "",
+      "localidad": r["direccion_completa"] or "",
+      "provincia": r["provincia"] or "",
+      "codigo_postal": r["codigo_postal"] or "",
+      "direccion": r["direccion_completa"] or "",
+      "lat": r["lat"],
+      "lon": r["lon"],
+    }
+    for r in rows
+  ]
 
 
 def _cargar_proveedores_desde_xlsx(base_dir: Path) -> list[dict[str, Any]]:

@@ -36,10 +36,15 @@ def normalizar_texto_proveedor(s: str) -> str:
 
 
 def normalizar_nif(nif: str) -> str:
-  """NIF/CIF para comparación: solo letras y dígitos en mayúsculas."""
+  """NIF/CIF para comparación: solo letras y dígitos en mayúsculas.
+  Si el formato no es un CIF/NIF español válido, devuelve cadena vacía."""
   if not nif or not isinstance(nif, str):
     return ""
   n = re.sub(r"[\s.\-]", "", nif.strip().upper())
+  if not terceros_db.validar_cif_nif(n):
+    if n:
+      logger.warning("[proveedores] CIF con formato invalido, ignorado: '%s' (raw: '%s')", n, nif)
+    return ""
   return n
 
 
@@ -101,6 +106,7 @@ def listar_proveedores_para_selector(empresa_id: str) -> list[dict]:
     lista.append({
       "nombre_canonico": prov,
       "nif": nif_prov,
+      "tercero_id": f.get("tercero_id") or None,
       "direccion": "",
       "localidad": (f.get("localidad_proveedor") or "").strip(),
       "pais": (f.get("pais_proveedor") or "").strip(),
@@ -265,6 +271,9 @@ def buscar_o_crear_proveedor(
         return (p["nombre_canonico"], lista, False)
 
   # 2) Match por similitud de nombre (evitar duplicados por tildes, "S.L.", etc.)
+  #    >= 95%: auto-vincular (diferencias menores de puntuacion)
+  #    85-95%: vincular pero loguear warning para revision
+  #    < 85%: no vincular
   if proveedor_raw:
     mejor_ratio = 0.0
     mejor_canonico: str | None = None
@@ -273,10 +282,20 @@ def buscar_o_crear_proveedor(
       if not canonico:
         continue
       r = similitud_nombres(proveedor_raw, canonico)
-      if r > mejor_ratio and r >= 0.82:
+      if r > mejor_ratio and r >= 0.85:
         mejor_ratio = r
         mejor_canonico = canonico
     if mejor_canonico:
+      if mejor_ratio < 0.95:
+        logger.warning(
+          "[proveedores] Match por similitud (%.0f%%): '%s' -> '%s' [REQUIERE REVISION]",
+          mejor_ratio * 100, proveedor_raw, mejor_canonico,
+        )
+      else:
+        logger.info(
+          "[proveedores] Match por similitud (%.0f%%): '%s' -> '%s'",
+          mejor_ratio * 100, proveedor_raw, mejor_canonico,
+        )
       return (mejor_canonico, lista, False)
 
   # 3) Nuevo proveedor: solo si tiene nombre real (no registrar proveedores vacíos/genéricos)
