@@ -1,5 +1,7 @@
 # Claves y secretos
 .env
+*.env
+!.env.example
 
 # Bases de datos (datos de producción, no código)
 *.db
@@ -35,4 +37,29 @@ env/
 *.swp
 *.swo
 *~
+.cursor/
+
+# Claude Code worktrees
 .claude/worktrees/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Archivos temporales
+*.tmp
+*.bak
+
+# Node (del repo del socio u otros)
+node_modules/
+
+# Repo clonado solo para comparación / análisis (código del socio; no versionar aquí)
+hincado-mantenimiento/
+
+# Carpeta static duplicada en raíz (la canónica es interfaz_facturas/static/)
+static/
