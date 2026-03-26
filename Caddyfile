@@ -1,0 +1,18 @@
+erp.hincadodirecto.com {
+    reverse_proxy erp:8000
+
+    # Headers de seguridad
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+
+    # Logs
+    log {
+        output file /data/access.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+    }
+}

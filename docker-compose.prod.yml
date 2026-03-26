@@ -1,0 +1,45 @@
+version: "3.8"
+
+services:
+  erp:
+    image: ghcr.io/jrd124/hincado-erp:latest
+    container_name: hincado-erp
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - erp-data:/app/data
+      - erp-static:/app/static/assets
+    expose:
+      - "8000"
+    networks:
+      - web
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: hincado-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - web
+    depends_on:
+      - erp
+
+volumes:
+  erp-data:
+    driver: local
+  erp-static:
+    driver: local
+  caddy-data:
+    driver: local
+  caddy-config:
+    driver: local
+
+networks:
+  web:
+    driver: bridge
