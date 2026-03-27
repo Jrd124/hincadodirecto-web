@@ -1,0 +1,19 @@
+## Listado de empresas para el equipo financiero de facturas
+## Puedes editar este archivo para añadir o modificar empresas.
+
+[[empresa]]
+id = "hincado_directo"
+nombre = "Hincado Directo, S.L."
+
+[[empresa]]
+id = "global_nutria"
+nombre = "Global Nutria, S.L."
+
+[[empresa]]
+id = "nutria_capital"
+nombre = "Nutria Capital, S.L."
+
+[[empresa]]
+id = "summitbridge_capital"
+nombre = "Summitbridge Capital, S.L."
+
