@@ -5,6 +5,7 @@ import difflib
 import hashlib
 import io
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 import re
 import shutil
@@ -13,7 +14,23 @@ import time
 import unicodedata
 import zipfile
 
-logger = logging.getLogger(__name__)
+# ─── Logging con rotación ────────────────────────────────────────────────────
+_log_dir = os.path.join(os.path.dirname(__file__), "data", "logs")
+os.makedirs(_log_dir, exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        RotatingFileHandler(
+            os.path.join(_log_dir, "erp.log"),
+            maxBytes=5 * 1024 * 1024,
+            backupCount=5,
+            encoding="utf-8",
+        ),
+        logging.StreamHandler(),
+    ],
+)
+logger = logging.getLogger("erp")
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
@@ -646,7 +663,13 @@ def procesar_lote(empresa_id: str, carpeta: Path, tarjeta_id: str | None = None)
 app = Flask(__name__, static_folder=".", static_url_path="")
 app.secret_key = SECRET_KEY
 
-# ─── Autenticación (Flask-Login) ─────────────────────────────────────────────
+# ─── Autenticación (Flask-Login + BD) ────────────────────────────────────────
+
+from core.usuarios_db import init_usuarios_db, verificar_credenciales
+init_usuarios_db()
+
+from core import maquinaria_db
+maquinaria_db.init_maquinaria_db()
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -654,27 +677,58 @@ login_manager.login_view = "login_page"
 
 
 class _User(UserMixin):
-  def __init__(self, username: str):
-    self.id = username
+  def __init__(self, uid, username, nombre="", rol="admin"):
+    self.id = str(uid)
+    self.username = username
+    self.nombre = nombre
+    self.rol = rol
 
 
 @login_manager.user_loader
 def _load_user(user_id: str):
+  # Intentar cargar desde BD
+  from core.usuarios_db import obtener_usuario
+  u = obtener_usuario(int(user_id)) if user_id.isdigit() else None
+  if u:
+    return _User(u["id"], u["username"], u["nombre"], u["rol"])
+  # Fallback legacy: el user_id es el username del .env
   if user_id == ADMIN_USER:
-    return _User(user_id)
+    return _User(0, ADMIN_USER, "Admin (.env)", "admin")
   return None
+
+
+def requiere_rol(*roles_permitidos):
+  """Decorador para proteger endpoints por rol."""
+  from functools import wraps
+  def decorator(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+      rol = getattr(current_user, "rol", "admin") if current_user.is_authenticated else ""
+      if rol not in roles_permitidos:
+        return jsonify({"error": "Sin permisos"}), 403
+      return f(*args, **kwargs)
+    return wrapper
+  return decorator
 
 
 @app.before_request
 def _require_login():
   """Protege todas las rutas excepto login y archivos estáticos del login."""
-  rutas_publicas = ("login_page", "login_post", "static")
+  rutas_publicas = ("login_page", "login_post", "static", "api_health")
   if request.endpoint in rutas_publicas:
     return
   if not current_user.is_authenticated:
     if request.path.startswith("/api/"):
       return jsonify({"error": "No autenticado"}), 401
     return redirect(url_for("login_page"))
+
+
+@app.after_request
+def _log_api_request(response):
+  if request.path.startswith("/api/"):
+    user = current_user.username if current_user.is_authenticated else "anon"
+    logger.info("%s %s -> %s [%s]", request.method, request.path, response.status_code, user)
+  return response
 
 
 @app.get("/login")
@@ -688,9 +742,18 @@ def login_page():
 def login_post():
   username = (request.form.get("username") or "").strip()
   password = (request.form.get("password") or "")
-  if username == ADMIN_USER and password == ADMIN_PASSWORD:
-    login_user(_User(username))
+  # Intentar contra BD primero
+  usuario = verificar_credenciales(username, password)
+  if usuario:
+    login_user(_User(usuario["id"], usuario["username"], usuario["nombre"], usuario["rol"]))
+    logger.info("Login OK: %s (rol=%s)", username, usuario["rol"])
     return redirect("/")
+  # Fallback: credenciales del .env (compatibilidad temporal)
+  if username == ADMIN_USER and password == ADMIN_PASSWORD:
+    login_user(_User(0, username, "Admin (.env)", "admin"))
+    logger.info("Login OK (fallback .env): %s", username)
+    return redirect("/")
+  logger.warning("Login fallido: %s", username)
   return redirect("/login?error=1")
 
 
@@ -700,10 +763,140 @@ def logout():
   return redirect("/login")
 
 
+# ─── Gestión de usuarios ─────────────────────────────────────────────────────
+
+
+@app.get("/api/usuarios")
+@requiere_rol("admin")
+def api_listar_usuarios():
+  from core.usuarios_db import listar_usuarios
+  return jsonify({"usuarios": listar_usuarios()})
+
+
+@app.post("/api/usuarios")
+@requiere_rol("admin")
+def api_crear_usuario():
+  from core.usuarios_db import crear_usuario
+  data = request.get_json(silent=True) or {}
+  try:
+    user = crear_usuario(data)
+    return jsonify(user), 201
+  except ValueError as e:
+    return jsonify({"error": str(e)}), 400
+
+
+@app.put("/api/usuarios/<int:uid>")
+@requiere_rol("admin")
+def api_actualizar_usuario(uid):
+  from core.usuarios_db import actualizar_usuario
+  data = request.get_json(silent=True) or {}
+  try:
+    user = actualizar_usuario(uid, data)
+    return jsonify(user)
+  except ValueError as e:
+    return jsonify({"error": str(e)}), 400
+
+
+@app.get("/api/usuarios/me")
+def api_usuario_actual():
+  """El usuario actual puede ver sus datos."""
+  return jsonify({
+    "id": int(current_user.id) if current_user.id != "0" else 0,
+    "username": current_user.username,
+    "nombre": current_user.nombre,
+    "rol": current_user.rol,
+  })
+
+
+@app.put("/api/usuarios/me/password")
+def api_cambiar_mi_password():
+  """El usuario actual puede cambiar su propia contrasena."""
+  from core.usuarios_db import cambiar_password
+  data = request.get_json(silent=True) or {}
+  uid = int(current_user.id) if current_user.id != "0" else 0
+  if not uid:
+    return jsonify({"error": "Usuario legacy (.env), no se puede cambiar"}), 400
+  ok = cambiar_password(uid, data.get("password_actual", ""), data.get("password_nueva", ""))
+  if ok:
+    return jsonify({"ok": True})
+  return jsonify({"error": "Contrasena actual incorrecta o nueva muy corta"}), 400
+
+
+# ─── Maquinaria ──────────────────────────────────────────────────────────────
+
+
+@app.get("/api/maquinaria/maquinas")
+def api_listar_maquinas():
+  return jsonify({"maquinas": maquinaria_db.listar_maquinas()})
+
+
+@app.get("/api/maquinaria/maquinas/<int:mid>")
+def api_obtener_maquina(mid):
+  maq = maquinaria_db.obtener_maquina(mid)
+  if not maq:
+    return jsonify({"error": "No encontrada"}), 404
+  return jsonify(maq)
+
+
+@app.post("/api/maquinaria/maquinas")
+def api_crear_maquina():
+  data = request.get_json(silent=True) or {}
+  return jsonify(maquinaria_db.crear_maquina(data)), 201
+
+
+@app.put("/api/maquinaria/maquinas/<int:mid>")
+def api_actualizar_maquina(mid):
+  data = request.get_json(silent=True) or {}
+  return jsonify(maquinaria_db.actualizar_maquina(mid, data))
+
+
+@app.get("/api/maquinaria/templates/<tipo>")
+def api_templates_checklist(tipo):
+  return jsonify({"templates": maquinaria_db.obtener_templates_checklist(tipo)})
+
+
+@app.post("/api/maquinaria/checks")
+def api_crear_check():
+  data = request.get_json(silent=True) or {}
+  data["usuario_id"] = int(current_user.id) if current_user.is_authenticated and current_user.id != "0" else None
+  return jsonify(maquinaria_db.crear_check_semanal(data)), 201
+
+
+@app.put("/api/maquinaria/checks/<int:cid>/cerrar")
+def api_cerrar_check(cid):
+  return jsonify(maquinaria_db.cerrar_check(cid))
+
+
+@app.post("/api/maquinaria/incidencias")
+def api_crear_incidencia():
+  data = request.get_json(silent=True) or {}
+  data["usuario_id"] = int(current_user.id) if current_user.is_authenticated and current_user.id != "0" else None
+  return jsonify(maquinaria_db.crear_incidencia(data)), 201
+
+
+@app.put("/api/maquinaria/incidencias/<int:iid>")
+def api_actualizar_incidencia(iid):
+  data = request.get_json(silent=True) or {}
+  return jsonify(maquinaria_db.actualizar_incidencia(iid, data))
+
+
 @app.get("/")
 def index():
   """Sirve la página principal de la interfaz de facturas."""
   return send_from_directory(app.static_folder, "index.html")
+
+
+@app.get("/api/health")
+def api_health():
+  """Health check para Docker y monitorizacion."""
+  from core.db import conectar as _conectar_db
+  from datetime import datetime as _dt
+  try:
+    with _conectar_db() as conn:
+      conn.execute("SELECT 1")
+    return jsonify({"status": "ok", "timestamp": _dt.now().isoformat()})
+  except Exception as e:
+    return jsonify({"status": "error", "detail": str(e)}), 503
 
 
 @app.get("/api/dashboard")
@@ -837,6 +1030,164 @@ def api_finanzas_resumen():
         result["sin_conciliar"] = r3["cnt"]
   except Exception as e:
     logging.getLogger(__name__).warning("Error en /api/finanzas/resumen: %s", e)
+  return jsonify(result)
+
+
+def _parse_importe_es(val):
+  """Parsea importe en formato español/inglés mixto a float."""
+  if not val:
+    return 0.0
+  s = str(val).strip().replace('\u20ac', '').replace(' ', '')
+  if ',' in s and '.' in s:
+    # Formato español con miles: 1.234,56
+    s = s.replace('.', '').replace(',', '.')
+  elif ',' in s:
+    # Coma decimal sin miles: 42,00 o 60500,00
+    s = s.replace(',', '.')
+  elif '.' in s:
+    # Punto: puede ser decimal inglés (42.00) o miles español (1.234)
+    parts = s.split('.')
+    if len(parts) == 2 and len(parts[1]) <= 2:
+      pass  # Decimal inglés, ya correcto
+    else:
+      s = s.replace('.', '')
+  try:
+    return float(s)
+  except (ValueError, TypeError):
+    return 0.0
+
+
+def _sum_importes(rows, *cols):
+  """Suma importes de las filas usando parseo robusto. Prueba cols en orden."""
+  total = 0.0
+  for r in rows:
+    for c in cols:
+      v = r[c] if c in r.keys() else None
+      if v:
+        total += _parse_importe_es(v)
+        break
+  return round(total, 2)
+
+
+@app.get("/api/finanzas/dashboard")
+def api_finanzas_dashboard():
+  """Dashboard financiero completo."""
+  from datetime import date as _date
+  from core.db import conectar as _conectar_db
+
+  year = _date.today().year
+  result = {
+    "year": year,
+    "facturacion_clientes": {"total": 0, "num": 0},
+    "cobros_pendientes": {"total": 0, "num": 0},
+    "facturacion_proveedores": {"total": 0, "num": 0},
+    "pagos_pendientes": {"total": 0, "num": 0},
+    "margen_bruto": 0,
+    "proyectos": [],
+    "pipeline": [],
+    "pipeline_total": 0,
+    "movimientos_sin_conciliar": 0,
+  }
+
+  try:
+    with _conectar_db() as conn:
+      # Facturación clientes año actual
+      rows = conn.execute(
+        "SELECT total_a_pagar FROM facturas_cliente WHERE fecha_factura LIKE ?",
+        (f"{year}%",),
+      ).fetchall()
+      result["facturacion_clientes"] = {
+        "total": _sum_importes(rows, "total_a_pagar"), "num": len(rows),
+      }
+
+      # Cobros pendientes
+      rows = conn.execute(
+        "SELECT total_a_pagar FROM facturas_cliente "
+        "WHERE estado_cobro IS NULL OR estado_cobro IN ('pendiente','parcial','')"
+      ).fetchall()
+      result["cobros_pendientes"] = {
+        "total": _sum_importes(rows, "total_a_pagar"), "num": len(rows),
+      }
+
+      # Facturación proveedores año actual
+      rows = conn.execute(
+        "SELECT total, total_a_pagar FROM facturas_proveedor WHERE fecha_factura LIKE ?",
+        (f"{year}%",),
+      ).fetchall()
+      result["facturacion_proveedores"] = {
+        "total": _sum_importes(rows, "total", "total_a_pagar"), "num": len(rows),
+      }
+
+      # Pagos pendientes
+      rows = conn.execute(
+        "SELECT total, total_a_pagar FROM facturas_proveedor "
+        "WHERE estado_pago IS NULL OR estado_pago IN ('pendiente','Pendiente','')"
+      ).fetchall()
+      result["pagos_pendientes"] = {
+        "total": _sum_importes(rows, "total", "total_a_pagar"), "num": len(rows),
+      }
+
+      result["margen_bruto"] = round(
+        result["facturacion_clientes"]["total"] - result["facturacion_proveedores"]["total"], 2
+      )
+
+      # Rentabilidad por proyecto
+      proyectos = [dict(r) for r in conn.execute("""
+        SELECT p.id, p.nombre, p.estado, p.importe_presupuestado,
+               t.nombre_canonico AS cliente
+        FROM proyectos p
+        LEFT JOIN terceros t ON t.id = p.cliente_tercero_id
+        WHERE p.estado IN ('vivo','terminado','pausado')
+        ORDER BY p.estado, p.nombre
+      """).fetchall()]
+
+      for proy in proyectos:
+        rows = conn.execute(
+          "SELECT total_a_pagar FROM facturas_cliente WHERE proyecto_id = ?",
+          [proy["id"]],
+        ).fetchall()
+        proy["facturado"] = _sum_importes(rows, "total_a_pagar")
+
+        rows = conn.execute(
+          "SELECT total, total_a_pagar FROM facturas_proveedor WHERE proyecto_id = ?",
+          [proy["id"]],
+        ).fetchall()
+        proy["costes"] = _sum_importes(rows, "total", "total_a_pagar")
+
+        proy["margen"] = round(proy["facturado"] - proy["costes"], 2)
+        proy["margen_pct"] = round(proy["margen"] / proy["facturado"] * 100, 1) if proy["facturado"] > 0 else 0
+
+      result["proyectos"] = proyectos
+
+      # Pipeline comercial
+      try:
+        pipeline = [dict(r) for r in conn.execute("""
+          SELECT p.id, p.referencia, p.nombre_proyecto, p.estado,
+                 v.total AS importe,
+                 t.nombre_canonico AS cliente
+          FROM presupuestos p
+          LEFT JOIN presupuesto_versiones v ON v.presupuesto_id = p.id AND v.es_activa = 1
+          LEFT JOIN terceros t ON t.id = p.tercero_id
+          WHERE p.estado IN ('enviada','negociacion')
+          ORDER BY v.total DESC
+        """).fetchall()]
+        result["pipeline"] = pipeline
+        result["pipeline_total"] = round(sum(p.get("importe") or 0 for p in pipeline), 2)
+      except Exception:
+        pass
+
+      # Movimientos sin conciliar
+      try:
+        r = conn.execute(
+          "SELECT COUNT(*) FROM movimientos_banco WHERE conciliado_at IS NULL OR TRIM(conciliado_at) = ''"
+        ).fetchone()
+        result["movimientos_sin_conciliar"] = r[0] if r else 0
+      except Exception:
+        pass
+
+  except Exception as e:
+    logging.getLogger(__name__).warning("Error en /api/finanzas/dashboard: %s", e)
+
   return jsonify(result)
 
 
@@ -3097,6 +3448,28 @@ def actualizar_factura_cliente():
   ok = facturas_cliente_db.update_factura_cliente(empresa_id, actualizado, clave_original)
   if not ok:
     return jsonify({"error": "No se encontró la factura de cliente a actualizar"}), 404
+  # Vincular factura de cliente a proyecto si se especificó
+  proyecto_id_cli = factura.get("proyecto_id")
+  if proyecto_id_cli is not None:
+    try:
+      from core.db import conectar as _fcc_conectar
+      with _fcc_conectar() as _fcc_conn:
+        _fcc_cols = {r[1] for r in _fcc_conn.execute("PRAGMA table_info(facturas_cliente)").fetchall()}
+        if "proyecto_id" in _fcc_cols:
+          id_num = (clave_original.get("numero_factura") or factura.get("numero_factura") or "").strip()
+          id_fecha = (clave_original.get("fecha_factura") or factura.get("fecha_factura") or "").strip()
+          id_cli = (clave_original.get("cliente") or factura.get("cliente") or "").strip()
+          row_cli = _fcc_conn.execute(
+            """SELECT id FROM facturas_cliente WHERE empresa_id = ?
+               AND (? = '' OR numero_factura = ?) AND (? = '' OR fecha_factura = ?) AND (? = '' OR cliente = ?)
+               LIMIT 1""",
+            (empresa_id, id_num, id_num, id_fecha, id_fecha, id_cli, id_cli),
+          ).fetchone()
+          if row_cli:
+            pid_cli = int(proyecto_id_cli) if proyecto_id_cli not in ("", "null") else None
+            _fcc_conn.execute("UPDATE facturas_cliente SET proyecto_id = ? WHERE id = ?", (pid_cli, row_cli[0]))
+    except Exception as e:
+      logger.warning("Error al vincular proyecto en factura cliente: %s", e)
   _invalidar_cache_listado_clientes(empresa_id)
   return jsonify({"ok": True, "mensaje": "Factura de cliente actualizada."})
 
@@ -5498,6 +5871,82 @@ def api_eliminar_documento_proyecto(pid, did):
   return jsonify({"ok": True})
 
 
+# ─── Certificaciones ─────────────────────────────────────────────────────────
+
+
+@proyectos_crud_bp.get("/api/proyectos/<int:pid>/certificaciones")
+def api_listar_certificaciones(pid):
+  proyectos_db.init_proyectos_db()
+  certs = proyectos_db.listar_certificaciones(pid)
+  return jsonify({"certificaciones": certs})
+
+
+@proyectos_crud_bp.post("/api/proyectos/<int:pid>/certificaciones")
+def api_crear_certificacion(pid):
+  proyectos_db.init_proyectos_db()
+  data = request.get_json(silent=True) or {}
+  if not data.get('fecha_desde') or not data.get('fecha_hasta'):
+    return jsonify({"error": "Fechas requeridas"}), 400
+  precios = {
+    'precio_hinca': float(data.get('precio_hinca', 0)),
+    'precio_hora_admin': float(data.get('precio_hora_admin', 0)),
+    'importe_transporte': float(data.get('importe_transporte', 0)),
+  }
+  cert = proyectos_db.crear_certificacion(pid, data['fecha_desde'], data['fecha_hasta'], precios)
+  return jsonify(cert), 201
+
+
+@proyectos_crud_bp.get("/api/certificaciones/<int:cid>")
+def api_obtener_certificacion(cid):
+  proyectos_db.init_proyectos_db()
+  cert = proyectos_db.obtener_certificacion(cid)
+  if not cert:
+    return jsonify({"error": "No encontrada"}), 404
+  return jsonify(cert)
+
+
+@proyectos_crud_bp.put("/api/certificaciones/<int:cid>/estado")
+def api_cambiar_estado_certificacion(cid):
+  proyectos_db.init_proyectos_db()
+  data = request.get_json(silent=True) or {}
+  from core.db import conectar as _db_conectar, now_iso as _db_now
+  with _db_conectar() as conn:
+    conn.execute("UPDATE certificaciones SET estado = ?, updated_at = ? WHERE id = ?",
+                 [data.get('estado', 'borrador'), _db_now(), cid])
+  return jsonify({"ok": True})
+
+
+@proyectos_crud_bp.delete("/api/certificaciones/<int:cid>")
+def api_eliminar_certificacion(cid):
+  proyectos_db.init_proyectos_db()
+  from core.db import conectar as _db_conectar
+  with _db_conectar() as conn:
+    conn.execute("DELETE FROM certificacion_detalle WHERE certificacion_id = ?", [cid])
+    conn.execute("DELETE FROM certificaciones WHERE id = ?", [cid])
+  return jsonify({"ok": True})
+
+
+@proyectos_crud_bp.get("/api/certificaciones/<int:cid>/pdf")
+def api_certificacion_pdf(cid):
+  proyectos_db.init_proyectos_db()
+  cert = proyectos_db.obtener_certificacion(cid)
+  if not cert:
+    return jsonify({"error": "Certificación no encontrada"}), 404
+  proyecto = proyectos_db.obtener_dashboard_proyecto(cert["proyecto_id"])
+  if not proyecto:
+    return jsonify({"error": "Proyecto no encontrado"}), 404
+  from core.certificaciones_pdf import generar_pdf_certificacion
+  pdf_bytes = generar_pdf_certificacion(cert, proyecto)
+  nombre = proyecto.get("nombre", "").replace(" ", "_")
+  numero = cert.get("numero", 1)
+  return send_file(
+    io.BytesIO(pdf_bytes),
+    mimetype="application/pdf",
+    as_attachment=False,
+    download_name=f"Certificacion_{nombre}_{numero}.pdf",
+  )
+
+
 # ─── Presupuestos ──────────────────────────────────────────────────────────────
 from core import presupuestos_db
 
@@ -5714,19 +6163,11 @@ app.register_blueprint(tesoreria_bp)
 app.register_blueprint(proyectos_crud_bp)
 app.register_blueprint(presupuestos_bp)
 
+logger.info("ERP arrancado — blueprints registrados")
+
 
 if __name__ == "__main__":
-  # Configurar logging: consola + archivo persistente
-  _log_dir = DATOS_DIR / "logs"
-  _log_dir.mkdir(parents=True, exist_ok=True)
-  logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-      logging.StreamHandler(),
-      logging.FileHandler(_log_dir / "app.log", encoding="utf-8"),
-    ],
-  )
+  # Logging ya configurado al inicio del módulo (RotatingFileHandler)
   ensure_dirs()
   app.run(debug=True, port=8000)
 

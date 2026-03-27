@@ -34,6 +34,8 @@ CAMPOS_FACTURAS_CLIENTE = [
   "num_ayudantes",
   "pricing_servicio",
   "pricing_transporte",
+  "retenciones",
+  "anticipos",
   "iva",
   "total_a_pagar",
   "numero_factura",
@@ -86,6 +88,16 @@ def init_facturas_cliente_db() -> None:
     cols_existentes = {row[1] for row in cur_info.fetchall()}
     if "estado_cobro" not in cols_existentes:
       conn.execute("ALTER TABLE facturas_cliente ADD COLUMN estado_cobro TEXT DEFAULT 'pendiente'")
+    if "retenciones" not in cols_existentes:
+      try:
+        conn.execute("ALTER TABLE facturas_cliente ADD COLUMN retenciones TEXT DEFAULT '0'")
+      except Exception:
+        pass
+    if "anticipos" not in cols_existentes:
+      try:
+        conn.execute("ALTER TABLE facturas_cliente ADD COLUMN anticipos TEXT DEFAULT '0'")
+      except Exception:
+        pass
   _initialized = True
 
 

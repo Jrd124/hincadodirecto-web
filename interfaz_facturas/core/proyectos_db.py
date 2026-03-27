@@ -133,6 +133,61 @@ def init_proyectos_db() -> None:
                 conn.execute("CREATE INDEX IF NOT EXISTS ix_fact_prov_proyecto ON facturas_proveedor(proyecto_id)")
         except Exception:
             pass
+        # Migration: add proyecto_id to facturas_cliente if missing
+        try:
+            fc_cols = {r[1] for r in conn.execute("PRAGMA table_info(facturas_cliente)").fetchall()}
+            if "proyecto_id" not in fc_cols:
+                conn.execute("ALTER TABLE facturas_cliente ADD COLUMN proyecto_id INTEGER REFERENCES proyectos(id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS ix_fact_cli_proyecto ON facturas_cliente(proyecto_id)")
+        except Exception:
+            pass
+        # Migration: add horas_admin to proyecto_partes if missing
+        try:
+            pp_cols = {r[1] for r in conn.execute("PRAGMA table_info(proyecto_partes)").fetchall()}
+            if "horas_admin" not in pp_cols:
+                conn.execute("ALTER TABLE proyecto_partes ADD COLUMN horas_admin REAL DEFAULT 0")
+        except Exception:
+            pass
+        # ── Certificaciones ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS certificaciones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                proyecto_id INTEGER NOT NULL REFERENCES proyectos(id) ON DELETE CASCADE,
+                numero INTEGER NOT NULL DEFAULT 1,
+                fecha_desde TEXT NOT NULL,
+                fecha_hasta TEXT NOT NULL,
+                tipo TEXT NOT NULL DEFAULT 'mixto' CHECK(tipo IN ('produccion','administracion','mixto')),
+                total_hincas INTEGER DEFAULT 0,
+                precio_hinca REAL DEFAULT 0,
+                importe_produccion REAL DEFAULT 0,
+                total_horas_admin REAL DEFAULT 0,
+                precio_hora_admin REAL DEFAULT 0,
+                importe_administracion REAL DEFAULT 0,
+                importe_transporte REAL DEFAULT 0,
+                importe_total REAL DEFAULT 0,
+                estado TEXT DEFAULT 'borrador' CHECK(estado IN ('borrador','enviada','aprobada')),
+                factura_cliente_id INTEGER REFERENCES facturas_cliente(id),
+                notas TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                UNIQUE(proyecto_id, numero)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_cert_proyecto ON certificaciones(proyecto_id)")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS certificacion_detalle (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                certificacion_id INTEGER NOT NULL REFERENCES certificaciones(id) ON DELETE CASCADE,
+                fecha TEXT NOT NULL,
+                descripcion TEXT,
+                hincas INTEGER DEFAULT 0,
+                horas_admin REAL DEFAULT 0,
+                horas_maquina1 REAL DEFAULT 0,
+                horas_maquina2 REAL DEFAULT 0,
+                parte_id INTEGER REFERENCES proyecto_partes(id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_cert_det_cert ON certificacion_detalle(certificacion_id)")
     _initialized = True
 
 
@@ -268,16 +323,24 @@ def obtener_dashboard_proyecto(proyecto_id: int) -> dict | None:
             WHERE pr.proyecto_id = ? ORDER BY pr.tipo, pr.fecha_inicio
         """, (proyecto_id,)).fetchall()]
 
-        # Facturas de cliente vinculadas (por nombre del proyecto)
+        # Facturas de cliente vinculadas: FK directa primero, fallback por nombre
         nombre_proy = (proyecto.get("nombre") or "").strip()
         try:
-            if nombre_proy:
+            # Primero por FK directa (proyecto_id)
+            fc_cols = {r[1] for r in conn.execute("PRAGMA table_info(facturas_cliente)").fetchall()}
+            if "proyecto_id" in fc_cols:
+                proyecto["facturas_cliente"] = [dict(r) for r in conn.execute(
+                    "SELECT * FROM facturas_cliente WHERE proyecto_id = ? ORDER BY fecha_factura DESC",
+                    (proyecto_id,),
+                ).fetchall()]
+            else:
+                proyecto["facturas_cliente"] = []
+            # Fallback: si no hay por FK, buscar por nombre (facturas anteriores a la migración)
+            if not proyecto["facturas_cliente"] and nombre_proy:
                 proyecto["facturas_cliente"] = [dict(r) for r in conn.execute(
                     "SELECT * FROM facturas_cliente WHERE proyecto = ? ORDER BY fecha_factura DESC",
                     (nombre_proy,),
                 ).fetchall()]
-            else:
-                proyecto["facturas_cliente"] = []
         except Exception:
             proyecto["facturas_cliente"] = []
 
@@ -322,6 +385,17 @@ def obtener_dashboard_proyecto(proyecto_id: int) -> dict | None:
             ).fetchall()]
         except Exception:
             proyecto["documentos"] = []
+
+        # Certificaciones
+        try:
+            proyecto["certificaciones"] = [dict(r) for r in conn.execute("""
+                SELECT c.*, fc.numero_factura AS factura_ref
+                FROM certificaciones c
+                LEFT JOIN facturas_cliente fc ON fc.id = c.factura_cliente_id
+                WHERE c.proyecto_id = ? ORDER BY c.numero DESC
+            """, (proyecto_id,)).fetchall()]
+        except Exception:
+            proyecto["certificaciones"] = []
 
         # Costes (facturas de proveedor imputadas al proyecto)
         try:
@@ -634,3 +708,92 @@ def dashboard() -> dict:
         "importe_facturado": round(facturado, 2),
         "importe_costes": round(costes, 2),
     }
+
+
+# ── Certificaciones ──────────────────────────────────────────────────────────
+
+
+def crear_certificacion(proyecto_id: int, fecha_desde: str, fecha_hasta: str, precios: dict) -> dict:
+    """Genera una certificación a partir de los partes de trabajo entre las fechas dadas."""
+    init_proyectos_db()
+    if fecha_desde > fecha_hasta:
+        fecha_desde, fecha_hasta = fecha_hasta, fecha_desde
+    with _conectar() as conn:
+        partes = conn.execute("""
+            SELECT * FROM proyecto_partes
+            WHERE proyecto_id = ? AND fecha >= ? AND fecha <= ?
+            ORDER BY fecha ASC
+        """, [proyecto_id, fecha_desde, fecha_hasta]).fetchall()
+
+        total_hincas = sum(p['hincas_realizadas'] or 0 for p in partes)
+        total_horas_admin = sum(p['horas_admin'] or 0 for p in partes)
+
+        precio_hinca = precios.get('precio_hinca', 0)
+        precio_hora_admin = precios.get('precio_hora_admin', 0)
+        importe_transporte = precios.get('importe_transporte', 0)
+
+        importe_produccion = total_hincas * precio_hinca
+        importe_administracion = total_horas_admin * precio_hora_admin
+        importe_total = importe_produccion + importe_administracion + importe_transporte
+
+        row = conn.execute(
+            "SELECT COALESCE(MAX(numero), 0) + 1 FROM certificaciones WHERE proyecto_id = ?",
+            [proyecto_id],
+        ).fetchone()
+        numero = row[0]
+
+        if total_hincas > 0 and total_horas_admin > 0:
+            tipo = 'mixto'
+        elif total_hincas > 0:
+            tipo = 'produccion'
+        else:
+            tipo = 'administracion'
+
+        ahora = _now()
+        conn.execute("""
+            INSERT INTO certificaciones
+            (proyecto_id, numero, fecha_desde, fecha_hasta, tipo,
+             total_hincas, precio_hinca, importe_produccion,
+             total_horas_admin, precio_hora_admin, importe_administracion,
+             importe_transporte, importe_total, estado, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'borrador', ?)
+        """, [proyecto_id, numero, fecha_desde, fecha_hasta, tipo,
+              total_hincas, precio_hinca, importe_produccion,
+              total_horas_admin, precio_hora_admin, importe_administracion,
+              importe_transporte, importe_total, ahora])
+
+        cert_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        for p in partes:
+            conn.execute("""
+                INSERT INTO certificacion_detalle
+                (certificacion_id, fecha, descripcion, hincas, horas_admin, parte_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, [cert_id, p['fecha'], p['notas'] or p['incidencias'] or '',
+                  p['hincas_realizadas'] or 0, p['horas_admin'] or 0, p['id']])
+
+        return dict(conn.execute("SELECT * FROM certificaciones WHERE id = ?", [cert_id]).fetchone())
+
+
+def listar_certificaciones(proyecto_id: int) -> list:
+    init_proyectos_db()
+    with _conectar() as conn:
+        return [dict(r) for r in conn.execute("""
+            SELECT c.*, fc.numero_factura AS factura_ref
+            FROM certificaciones c
+            LEFT JOIN facturas_cliente fc ON fc.id = c.factura_cliente_id
+            WHERE c.proyecto_id = ? ORDER BY c.numero DESC
+        """, [proyecto_id]).fetchall()]
+
+
+def obtener_certificacion(cert_id: int) -> dict | None:
+    init_proyectos_db()
+    with _conectar() as conn:
+        cert = conn.execute("SELECT * FROM certificaciones WHERE id = ?", [cert_id]).fetchone()
+        if not cert:
+            return None
+        cert = dict(cert)
+        cert['detalle'] = [dict(r) for r in conn.execute("""
+            SELECT * FROM certificacion_detalle WHERE certificacion_id = ? ORDER BY fecha ASC
+        """, [cert_id]).fetchall()]
+        return cert

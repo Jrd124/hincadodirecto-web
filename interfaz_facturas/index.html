@@ -66,6 +66,13 @@
             <a href="#" class="sidebar-child" id="nav-proyectos-onboarding">Onboarding</a>
           </div>
         </div>
+        <!-- Maquinaria -->
+        <div class="sidebar-group">
+          <a href="#" class="sidebar-item" id="nav-maquinaria-modulo">
+            <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="6" width="12" height="8" rx="1"/><path d="M4 6V4a4 4 0 018 0v2"/><circle cx="8" cy="10" r="1.5"/></svg>
+            <span class="sidebar-label">Maquinaria</span>
+          </a>
+        </div>
         <!-- RRHH -->
         <div class="sidebar-group">
           <a href="#" class="sidebar-item sidebar-parent" id="nav-rrhh-modulo" data-group="rrhh">
@@ -113,13 +120,21 @@
             <a href="#" class="sidebar-child" id="nav-crm-interacciones">Interacciones</a>
           </div>
         </div>
+        <!-- Usuarios (solo admin) -->
+        <div class="sidebar-group" id="sidebar-group-usuarios" style="display:none;">
+          <a href="#" class="sidebar-item" id="nav-usuarios-modulo">
+            <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3 2.7-5.5 6-5.5s6 2.5 6 5.5"/></svg>
+            <span class="sidebar-label">Usuarios</span>
+          </a>
+        </div>
       </nav>
       <div class="sidebar-footer" id="sidebar-footer">
         <div class="sidebar-user">
           <span class="sidebar-avatar" id="sidebar-avatar">??</span>
           <span class="sidebar-username" id="sidebar-username">Usuario</span>
         </div>
-        <a href="/logout" class="sidebar-logout">Cerrar sesión</a>
+        <div id="sidebar-user-rol" style="font-size:11px;color:var(--color-text-secondary);padding:0 16px 4px;"></div>
+        <a href="/logout" class="sidebar-logout">Cerrar sesi&oacute;n</a>
       </div>
     </aside>
     <div class="sidebar-overlay" id="sidebar-overlay"></div>
@@ -479,6 +494,7 @@
                   <option value="">Todos los cobros</option>
                   <option value="pendiente">Pendiente</option><option value="cobrada">Cobrada</option><option value="parcial">Parcial</option>
                 </select>
+                <button type="button" class="btn-alerta-activa" id="cli-btn-filtro-alertas" style="display:none;" title="Mostrar solo facturas con descuadre de importes">&triangledown; Descuadre</button>
               <div class="acciones-derecha">
                   <button type="button" class="btn-icon-accion" id="cli-btn-cargar" title="Actualizar listado"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg></button>
                   <button type="button" class="btn-icon-descarga" id="cli-btn-exportar" title="Descargar Excel"><svg width="18" height="18" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="3" fill="#107C41"/><text x="12" y="15.5" text-anchor="middle" fill="#fff" font-size="7" font-weight="700" font-family="Inter,sans-serif">XLS</text></svg></button>
@@ -652,37 +668,25 @@
         </section>
       </div>
 
+      <!-- ===== USUARIOS ===== -->
+      <div id="panel-usuarios" class="panel-usuarios">
+        <div id="usuarios-content" style="max-width:800px;margin:0 auto;padding:24px 20px;"></div>
+      </div>
+
+      <!-- ===== MAQUINARIA ===== -->
+      <div id="panel-maquinaria" class="panel-maquinaria">
+        <div id="maquinaria-content" style="max-width:1200px;margin:0 auto;padding:24px 20px;"></div>
+      </div>
+      <div id="panel-maquinaria-detalle" class="panel-maquinaria">
+        <div id="maquinaria-detalle-content" style="max-width:1200px;margin:0 auto;padding:24px 20px;"></div>
+      </div>
+
       <!-- ===== DASHBOARD FINANZAS ===== -->
       <div id="panel-finanzas-inicio" class="panel-finanzas">
-        <div class="breadcrumb-visual">Finanzas</div>
-        <h1>Finanzas</h1>
-        <p class="subtitle" style="font-size:14px;color:#64748B;margin:0 0 20px;">Visión general del área financiera</p>
-        <div class="modulo-nav-grid">
-          <div class="modulo-nav-card modulo-nav-card-blue" data-nav="finanzas:proveedores">
-            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-            <div><span class="modulo-nav-title">Proveedores</span><p class="modulo-nav-desc">Facturas recibidas, maestro de proveedores y centros de coste</p></div>
-          </div>
-          <div class="modulo-nav-card modulo-nav-card-green" data-nav="finanzas:clientes">
-            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="7" r="3"/><path d="M2 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/><circle cx="18" cy="9" r="2.5"/><path d="M22 21c0-3-2.2-5.5-5-5.9"/></svg>
-            <div><span class="modulo-nav-title">Clientes</span><p class="modulo-nav-desc">Facturas emitidas, maestro de clientes y cobros</p></div>
-          </div>
-          <div class="modulo-nav-card modulo-nav-card-yellow" data-nav="finanzas:bancos">
-            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/></svg>
-            <div><span class="modulo-nav-title">Bancos</span><p class="modulo-nav-desc">Movimientos bancarios, conciliación y tarjetas</p></div>
-          </div>
-          <div class="modulo-nav-card modulo-nav-card-red" data-nav="finanzas:control_calidad">
-            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-            <div><span class="modulo-nav-title">Control de calidad</span><p class="modulo-nav-desc">Analisis de errores y validacion de datos</p></div>
-          </div>
-          <div class="modulo-nav-card modulo-nav-card-blue" data-nav="finanzas:tesoreria">
-            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>
-            <div><span class="modulo-nav-title">Tesoreria</span><p class="modulo-nav-desc">Flujo de caja, vencimientos y previsiones</p></div>
-          </div>
-        </div>
-        <div class="modulo-metricas" id="finanzas-metricas">
-          <span class="resumen-item"><span class="resumen-label">Facturado proveedores (año)</span><span class="resumen-valor" id="fin-met-prov">—</span></span>
-          <span class="resumen-item"><span class="resumen-label">Facturado clientes (año)</span><span class="resumen-valor" id="fin-met-cli">—</span></span>
-          <span class="resumen-item"><span class="resumen-label">Movimientos sin conciliar</span><span class="resumen-valor" id="fin-met-sinconc">—</span></span>
+        <div id="finanzas-dashboard-content">
+          <div class="breadcrumb-visual">Finanzas</div>
+          <h1>Finanzas</h1>
+          <p class="subtitle" style="font-size:14px;color:#64748B;margin:0 0 20px;">Cargando dashboard financiero...</p>
         </div>
       </div>
 
@@ -2251,55 +2255,152 @@
     </div>
 
     <div id="modal-editar-cli-overlay" class="modal-overlay" aria-hidden="true">
-      <div class="modal-editar" role="dialog" aria-labelledby="modal-editar-cli-titulo">
-        <h2 id="modal-editar-cli-titulo">Editar factura de cliente</h2>
+      <div class="modal-editar" role="dialog" aria-labelledby="modal-editar-cli-titulo" style="max-width:650px;max-height:90vh;overflow-y:auto;">
+        <h2 id="modal-editar-cli-titulo" style="margin:0 0 16px;font-size:18px;">Editar factura de cliente</h2>
         <form id="form-editar-factura-cli">
-          <label for="edc-fecha">Fecha (YYYY-MM-DD)</label>
-          <input type="text" id="edc-fecha" name="fecha_factura" placeholder="2026-01-15" />
-          <div class="fila-selector-proveedor">
-            <label for="edc-selector-cliente">Cliente del listado</label>
-            <div class="selector-proveedor-con-boton">
-              <select id="edc-selector-cliente" aria-label="Seleccionar cliente">
-                <option value="">Seleccionar cliente…</option>
-              </select>
-              <button type="button" class="secondary" id="edc-btn-nuevo-cliente">Crear nuevo cliente</button>
+
+          <!-- Sección 1: Cliente -->
+          <div style="border:1px solid var(--color-border);border-radius:var(--radius-md);margin-bottom:12px;overflow:hidden;">
+            <div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);display:flex;align-items:center;gap:8px;">
+              <div style="width:4px;height:20px;border-radius:2px;background:#2563EB;flex-shrink:0;"></div>
+              <span style="font-size:14px;font-weight:600;">Cliente</span>
+            </div>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:12px;">
+              <div style="display:flex;gap:8px;align-items:end;">
+                <div style="flex:1;">
+                  <label for="edc-selector-cliente" class="form-label" style="font-size:12px;">Cliente del listado</label>
+                  <select id="edc-selector-cliente" class="form-input" style="font-size:13px;" aria-label="Seleccionar cliente">
+                    <option value="">Seleccionar cliente…</option>
+                  </select>
+                </div>
+                <button type="button" class="secondary" id="edc-btn-nuevo-cliente" style="white-space:nowrap;height:36px;font-size:12px;">Crear nuevo</button>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                  <label for="edc-cliente" class="form-label" style="font-size:12px;">Cliente</label>
+                  <input type="text" id="edc-cliente" name="cliente" class="form-input" style="font-size:13px;" />
+                </div>
+                <div>
+                  <label for="edc-nif" class="form-label" style="font-size:12px;">CIF / NIF</label>
+                  <input type="text" id="edc-nif" name="cif_nif" class="form-input" style="font-size:13px;" />
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                  <label for="edc-pais" class="form-label" style="font-size:12px;">País</label>
+                  <input type="text" id="edc-pais" name="pais" class="form-input" style="font-size:13px;" />
+                </div>
+                <div>
+                  <label for="edc-localidad" class="form-label" style="font-size:12px;">Localidad</label>
+                  <input type="text" id="edc-localidad" name="localidad" class="form-input" style="font-size:13px;" />
+                </div>
+              </div>
             </div>
           </div>
-          <label for="edc-cliente">Cliente</label>
-          <input type="text" id="edc-cliente" name="cliente" />
-          <label for="edc-nif">CIF / NIF</label>
-          <input type="text" id="edc-nif" name="cif_nif" />
-          <div class="form-row">
-            <div class="form-group"><label for="edc-pais">País</label><input type="text" id="edc-pais" name="pais" /></div>
-            <div class="form-group"><label for="edc-localidad">Localidad</label><input type="text" id="edc-localidad" name="localidad" /></div>
-          </div>
-          <div class="form-row">
-            <div class="form-group"><label for="edc-proyecto">Proyecto</label><input type="text" id="edc-proyecto" name="proyecto" /></div>
-            <div class="form-group">
-              <label for="edc-tipologia">Tipología</label>
-              <select id="edc-tipologia" name="tipologia"><option value="">Seleccionar…</option><option value="Administración">Administración</option><option value="Producción">Producción</option></select>
+
+          <!-- Sección 2: Datos de la factura -->
+          <div style="border:1px solid var(--color-border);border-radius:var(--radius-md);margin-bottom:12px;overflow:hidden;">
+            <div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);display:flex;align-items:center;gap:8px;">
+              <div style="width:4px;height:20px;border-radius:2px;background:#16A34A;flex-shrink:0;"></div>
+              <span style="font-size:14px;font-weight:600;">Datos de la factura</span>
+            </div>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:12px;">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                  <label for="edc-fecha" class="form-label" style="font-size:12px;">Fecha (YYYY-MM-DD)</label>
+                  <input type="text" id="edc-fecha" name="fecha_factura" class="form-input" style="font-size:13px;" placeholder="2026-01-15" />
+                </div>
+                <div>
+                  <label for="edc-num-factura" class="form-label" style="font-size:12px;">Nº factura</label>
+                  <input type="text" id="edc-num-factura" name="numero_factura" class="form-input" style="font-size:13px;" />
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                  <label for="edc-proyecto" class="form-label" style="font-size:12px;">Proyecto (nombre)</label>
+                  <input type="text" id="edc-proyecto" name="proyecto" class="form-input" style="font-size:13px;" />
+                </div>
+                <div>
+                  <label for="edc-tipologia" class="form-label" style="font-size:12px;">Tipología</label>
+                  <select id="edc-tipologia" name="tipologia" class="form-input" style="font-size:13px;">
+                    <option value="">Seleccionar…</option>
+                    <option value="Administración">Administración</option>
+                    <option value="Producción">Producción</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label for="edc-proyecto-id" class="form-label" style="font-size:12px;">Vincular a proyecto</label>
+                <select id="edc-proyecto-id" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;">
+                  <option value="">Sin vincular</option>
+                </select>
+              </div>
             </div>
           </div>
-          <div class="form-row">
-            <div class="form-group"><label for="edc-hincadoras">Hincadoras</label><input type="text" id="edc-hincadoras" name="num_hincadoras" /></div>
-            <div class="form-group"><label for="edc-ayudantes">Ayudantes</label><input type="text" id="edc-ayudantes" name="num_ayudantes" /></div>
+
+          <!-- Sección 3: Importes -->
+          <div style="border:1px solid var(--color-border);border-radius:var(--radius-md);margin-bottom:12px;overflow:hidden;">
+            <div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);display:flex;align-items:center;gap:8px;">
+              <div style="width:4px;height:20px;border-radius:2px;background:#CA8A04;flex-shrink:0;"></div>
+              <span style="font-size:14px;font-weight:600;">Importes</span>
+            </div>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:12px;">
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;">
+                <div>
+                  <label for="edc-hincadoras" class="form-label" style="font-size:12px;">Hincadoras</label>
+                  <input type="text" id="edc-hincadoras" name="num_hincadoras" class="form-input" style="font-size:13px;" />
+                </div>
+                <div>
+                  <label for="edc-ayudantes" class="form-label" style="font-size:12px;">Ayudantes</label>
+                  <input type="text" id="edc-ayudantes" name="num_ayudantes" class="form-input" style="font-size:13px;" />
+                </div>
+                <div>
+                  <label for="edc-pricing-servicio" class="form-label" style="font-size:12px;">P. Servicio</label>
+                  <input type="text" id="edc-pricing-servicio" name="pricing_servicio" class="form-input" style="font-size:13px;" />
+                </div>
+                <div>
+                  <label for="edc-pricing-transporte" class="form-label" style="font-size:12px;">P. Transporte</label>
+                  <input type="text" id="edc-pricing-transporte" name="pricing_transporte" class="form-input" style="font-size:13px;" />
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;">
+                <div>
+                  <label for="edc-retenciones" class="form-label" style="font-size:12px;">Retenciones</label>
+                  <input type="text" id="edc-retenciones" class="form-input" style="font-size:13px;" placeholder="0,00" />
+                </div>
+                <div>
+                  <label for="edc-anticipos" class="form-label" style="font-size:12px;">Anticipos</label>
+                  <input type="text" id="edc-anticipos" class="form-input" style="font-size:13px;" placeholder="0,00" />
+                </div>
+                <div>
+                  <label for="edc-iva" class="form-label" style="font-size:12px;">IVA</label>
+                  <input type="text" id="edc-iva" name="iva" class="form-input" style="font-size:13px;" />
+                </div>
+                <div>
+                  <label for="edc-total" class="form-label" style="font-size:12px;">Total a cobrar</label>
+                  <input type="text" id="edc-total" name="total_a_pagar" class="form-input" style="font-size:13px;font-weight:600;" />
+                </div>
+              </div>
+              <div id="edc-descuadre" style="display:none;padding:8px 12px;border-radius:var(--radius-sm);font-size:12px;margin-top:8px;"></div>
+            </div>
           </div>
-          <div class="form-row">
-            <div class="form-group"><label for="edc-pricing-servicio">P. Servicio</label><input type="text" id="edc-pricing-servicio" name="pricing_servicio" /></div>
-            <div class="form-group"><label for="edc-pricing-transporte">P. Transporte</label><input type="text" id="edc-pricing-transporte" name="pricing_transporte" /></div>
+
+          <!-- Sección 4: Cobros -->
+          <div style="border:1px solid var(--color-border);border-radius:var(--radius-md);margin-bottom:12px;overflow:hidden;">
+            <div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);display:flex;align-items:center;gap:8px;">
+              <div style="width:4px;height:20px;border-radius:2px;background:#64748B;flex-shrink:0;"></div>
+              <span style="font-size:14px;font-weight:600;">Conciliación bancaria</span>
+            </div>
+            <div style="padding:16px;">
+              <div id="edc-conciliacion-wrap" class="ed-conciliacion-wrap conciliacion-box">
+                <p id="edc-conciliacion-resumen" class="conciliacion-text"></p>
+                <p id="edc-conciliacion-pendiente" class="conciliacion-highlight"></p>
+              </div>
+            </div>
           </div>
-          <label for="edc-num-factura">Nº factura</label>
-          <input type="text" id="edc-num-factura" name="numero_factura" />
-          <div class="form-row">
-            <div class="form-group"><label for="edc-iva">IVA</label><input type="text" id="edc-iva" name="iva" /></div>
-            <div class="form-group"><label for="edc-total">Total a cobrar</label><input type="text" id="edc-total" name="total_a_pagar" /></div>
-          </div>
-          <div id="edc-conciliacion-wrap" class="ed-conciliacion-wrap conciliacion-box" style="display:none;">
-            <h3 class="conciliacion-title">Conciliación bancaria (cobros)</h3>
-            <p id="edc-conciliacion-resumen" class="conciliacion-text"></p>
-            <p id="edc-conciliacion-pendiente" class="conciliacion-highlight"></p>
-          </div>
-          <div class="modal-actions">
+
+          <!-- Footer: Botones -->
+          <div style="display:flex;justify-content:flex-end;gap:8px;padding-top:4px;">
             <button type="button" class="secondary" id="btn-cerrar-editar-cli">Cancelar</button>
             <button type="submit" class="primary">Guardar</button>
           </div>
@@ -2551,6 +2652,6 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="/static/js/app.js"></script>
+    <script src="/static/js/app.js?v=11"></script>
   </body>
 </html>

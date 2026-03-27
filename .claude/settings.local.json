@@ -35,7 +35,13 @@
       "Bash(echo \"MISSING: $id\")",
       "Bash(done)",
       "Bash(cp \"static/assets/presupuestos/logo.jpg\" \"interfaz_facturas/static/assets/presupuestos/logo.jpg\")",
-      "Bash(cp \"static/assets/presupuestos/foto_maquinaria.png\" \"interfaz_facturas/static/assets/presupuestos/foto_maquinaria_real.png\")"
+      "Bash(cp \"static/assets/presupuestos/foto_maquinaria.png\" \"interfaz_facturas/static/assets/presupuestos/foto_maquinaria_real.png\")",
+      "Bash(git push:*)",
+      "Bash(git remote:*)",
+      "Bash(pip show:*)",
+      "Bash(python -c \":*)",
+      "Bash(ls -la /c/Users/javie/Desktop/cursor_test/interfaz_facturas/*.txt)",
+      "Bash(ls:*)"
     ]
   }
 }

@@ -453,7 +453,9 @@
       .panel-control-calidad,
       .panel-tesoreria,
       .panel-crm,
-      .panel-presupuestos {
+      .panel-presupuestos,
+      .panel-usuarios,
+      .panel-maquinaria {
         display: none;
       }
       .panel-facturas.visible,
@@ -468,7 +470,9 @@
       .panel-control-calidad.visible,
       .panel-tesoreria.visible,
       .panel-crm.visible,
-      .panel-presupuestos.visible {
+      .panel-presupuestos.visible,
+      .panel-usuarios.visible,
+      .panel-maquinaria.visible {
         display: block;
       }
       .panel-proyectos > .layout {
@@ -4297,14 +4301,28 @@
         #proy-dash-kpis > div:nth-child(2) {
           grid-column: 1 / -1;
         }
+        #finanzas-kpis {
+          grid-template-columns: repeat(3, 1fr) !important;
+        }
+        #finanzas-cols {
+          grid-template-columns: 1fr !important;
+        }
       }
       @media (max-width: 900px) {
         .proy-dash-tab-content > div[style*="grid-template-columns"] {
           grid-template-columns: 1fr !important;
         }
+        .proy-dash-tab-content div[style*="grid-template-columns:3fr 2fr"],
+        .proy-dash-tab-content div[style*="grid-template-columns: 3fr 2fr"] {
+          grid-template-columns: 1fr !important;
+        }
       }
       @media (max-width: 768px) {
         #proy-dash-kpis {
+          grid-template-columns: 1fr !important;
+        }
+        #proy-dash-recursos-section div[style*="grid-template-columns:1fr 1fr 1fr"],
+        #proy-dash-recursos-section div[style*="grid-template-columns: 1fr 1fr 1fr"] {
           grid-template-columns: 1fr !important;
         }
       }

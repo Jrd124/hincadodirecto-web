@@ -120,6 +120,7 @@ python -m pytest interfaz_facturas/tests/test_logica_pura.py -v
 
 ## Documentación adicional
 
+- `docs/CHECKLIST_SECUENCIAL_ERP_Y_MANTENIMIENTO.md` — **Checklist secuencial** (GitHub en equipo, plataforma, multi-usuario, módulo mantenimiento máquinas)
 - `servicio_interfaz_facturas.md` — Cómo configurar el arranque automático con el Programador de tareas
 - `docs/PLAN_MAESTRO_Y_ACCION.md` — Plan maestro del proyecto
 - `data/README_DATOS_FACTURAS.md` — Estructura de los datos de facturas
