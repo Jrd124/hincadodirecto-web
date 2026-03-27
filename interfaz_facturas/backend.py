@@ -150,6 +150,7 @@ bancos_bp = Blueprint("bancos", __name__)
 transporte_bp = Blueprint("transporte", __name__)
 crm_bp = Blueprint("crm", __name__)
 tesoreria_bp = Blueprint("tesoreria", __name__)
+onedrive_bp = Blueprint("onedrive", __name__)
 
 # Workers para procesamiento en paralelo del pipeline de facturas (OpenAI/vision)
 _MAX_WORKERS_EXTRACTOR_LLM = 4
@@ -2764,6 +2765,8 @@ def eliminar_facturas():
 def servir_archivo():
   """
   Sirve un archivo de factura por ruta. Solo permite rutas dentro de data/.
+  Si el archivo no existe localmente y SharePoint está configurado,
+  intenta descargarlo de SharePoint como fallback.
   """
   ruta_param = request.args.get("ruta")
   if not ruta_param:
@@ -2779,10 +2782,36 @@ def servir_archivo():
   except ValueError:
     return jsonify({"error": "Ruta no permitida"}), 403
 
-  if not ruta.exists() or not ruta.is_file():
-    return jsonify({"error": "Archivo no encontrado"}), 404
+  if ruta.exists() and ruta.is_file():
+    return send_file(ruta, as_attachment=False, download_name=ruta.name)
 
-  return send_file(ruta, as_attachment=False, download_name=ruta.name)
+  # Fallback: intentar desde SharePoint si está configurado
+  if os.environ.get("MICROSOFT_CLIENT_ID"):
+    try:
+      from core.onedrive_db import get_sharepoint_client
+
+      # Convertir ruta local a ruta relativa dentro de data/
+      rel = ruta.relative_to(DATOS_DIR.resolve())
+      sp_path = str(rel).replace("\\", "/")
+      client = get_sharepoint_client()
+      contenido = client.descargar_archivo(sp_path)
+      if contenido:
+        ext = ruta.suffix.lstrip(".").lower()
+        ct_map = {
+            "pdf": "application/pdf", "jpg": "image/jpeg",
+            "jpeg": "image/jpeg", "png": "image/png",
+        }
+        from flask import Response
+
+        return Response(
+            contenido,
+            mimetype=ct_map.get(ext, "application/octet-stream"),
+            headers={"Content-Disposition": f'inline; filename="{ruta.name}"'},
+        )
+    except Exception as exc:
+      logger.warning("Fallback SharePoint falló para %s: %s", ruta_param, exc)
+
+  return jsonify({"error": "Archivo no encontrado"}), 404
 
 
 # ─── Pipeline de procesamiento de Facturas de Clientes (Emitidas) ─────────
@@ -6150,6 +6179,70 @@ def api_eliminar_item_catalogo(item_id: int):
   return jsonify({"ok": True, "item": item})
 
 
+# ─── ONEDRIVE / SHAREPOINT ────────────────────────────────────────────────────
+
+
+@onedrive_bp.get("/api/onedrive/status")
+def api_onedrive_status():
+    """Verifica la conexión con SharePoint."""
+    from core.onedrive_db import get_sharepoint_client
+
+    client = get_sharepoint_client()
+    status = client.verificar_conexion()
+    return jsonify(status)
+
+
+@onedrive_bp.get("/api/onedrive/listar")
+def api_onedrive_listar():
+    """Lista archivos en una carpeta de SharePoint."""
+    from core.onedrive_db import get_sharepoint_client
+
+    folder = request.args.get("folder", "")
+    client = get_sharepoint_client()
+    archivos = client.listar_archivos(folder)
+    return jsonify({"archivos": archivos})
+
+
+@onedrive_bp.get("/api/onedrive/archivo")
+def api_onedrive_archivo():
+    """Sirve un archivo de SharePoint como proxy (evita problemas de CORS)."""
+    from core.onedrive_db import get_sharepoint_client
+
+    file_path = request.args.get("path", "")
+    if not file_path:
+        return _bad_request("Falta path")
+
+    client = get_sharepoint_client()
+    try:
+        contenido = client.descargar_archivo(file_path)
+    except Exception as exc:
+        logger.error("Error descargando de SharePoint %s: %s", file_path, exc)
+        return jsonify({"error": "Error conectando con SharePoint"}), 502
+
+    if not contenido:
+        return jsonify({"error": "Archivo no encontrado en SharePoint"}), 404
+
+    ext = file_path.rsplit(".", 1)[-1].lower() if "." in file_path else ""
+    content_types = {
+        "pdf": "application/pdf",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "png": "image/png",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "csv": "text/csv",
+    }
+    ct = content_types.get(ext, "application/octet-stream")
+    filename = file_path.split("/")[-1]
+
+    from flask import Response
+
+    return Response(
+        contenido,
+        mimetype=ct,
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
 # Registrar blueprints
 app.register_blueprint(facturas_proveedores_bp)
 app.register_blueprint(proveedores_bp)
@@ -6162,6 +6255,7 @@ app.register_blueprint(crm_bp)
 app.register_blueprint(tesoreria_bp)
 app.register_blueprint(proyectos_crud_bp)
 app.register_blueprint(presupuestos_bp)
+app.register_blueprint(onedrive_bp)
 
 logger.info("ERP arrancado — blueprints registrados")
 
