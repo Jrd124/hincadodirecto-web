@@ -2772,10 +2772,15 @@ def servir_archivo():
   if not ruta_param:
     return _bad_request("Falta ruta")
 
-  ruta = Path(ruta_param)
-  if not ruta.is_absolute():
-    ruta = DATOS_DIR / ruta
-  ruta = ruta.resolve()
+  # Extraer ruta relativa a data/ (las rutas en BD pueden ser absolutas de Windows)
+  ruta_rel = ruta_param
+  for sep in ("\\data\\", "/data/", "\\data/", "/data\\"):
+    if sep in ruta_rel:
+      ruta_rel = ruta_rel.split(sep, 1)[1]
+      break
+  ruta_rel = ruta_rel.replace("\\", "/")
+
+  ruta = (DATOS_DIR / ruta_rel).resolve()
 
   try:
     ruta.relative_to(DATOS_DIR.resolve())
@@ -2790,11 +2795,8 @@ def servir_archivo():
     try:
       from core.onedrive_db import get_sharepoint_client
 
-      # Convertir ruta local a ruta relativa dentro de data/
-      rel = ruta.relative_to(DATOS_DIR.resolve())
-      sp_path = str(rel).replace("\\", "/")
       client = get_sharepoint_client()
-      contenido = client.descargar_archivo(sp_path)
+      contenido = client.descargar_archivo(ruta_rel)
       if contenido:
         ext = ruta.suffix.lstrip(".").lower()
         ct_map = {
