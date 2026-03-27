@@ -574,6 +574,48 @@ def _base_maestra_csv(filas: list[dict], empresa_id: str) -> dict:
   }
 
 
+def _subir_lote_a_sharepoint(tabla: list[dict], tipo: str = "Facturas Recibidas") -> None:
+  """Sube PDFs procesados a SharePoint en background. No falla si OneDrive no está configurado."""
+  if not os.environ.get("MICROSOFT_CLIENT_ID"):
+    return
+  try:
+    from core.onedrive_db import get_sharepoint_client
+    client = get_sharepoint_client()
+  except Exception as exc:
+    logger.warning("No se pudo conectar a SharePoint para subida: %s", exc)
+    return
+
+  meses_en = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ]
+  for fila in tabla:
+    ruta_local = fila.get("ruta_destino") or fila.get("ruta_archivo") or ""
+    if not ruta_local or not Path(ruta_local).is_file():
+      continue
+    empresa = fila.get("empresa_id", "")
+    fecha = fila.get("fecha_factura", "")
+    try:
+      from datetime import datetime as _dt
+      dt = _dt.strptime(fecha[:10], "%Y-%m-%d")
+    except Exception:
+      from datetime import datetime as _dt
+      dt = _dt.now()
+    mes_carpeta = f"{dt.month:02d}. {meses_en[dt.month - 1]}"
+    nombre = Path(ruta_local).name
+    sp_path = f"{tipo}/{empresa}/{dt.year}/{mes_carpeta}/{nombre}"
+    try:
+      with open(ruta_local, "rb") as f:
+        contenido = f.read()
+      resultado = client.subir_archivo(sp_path, contenido)
+      if resultado:
+        logger.info("Factura subida a SharePoint: %s", sp_path)
+      else:
+        logger.warning("Error subiendo factura a SharePoint: %s", sp_path)
+    except Exception as exc:
+      logger.warning("Error subiendo %s a SharePoint: %s", sp_path, exc)
+
+
 def procesar_lote(empresa_id: str, carpeta: Path, tarjeta_id: str | None = None) -> dict:
   """
   Orquestador interno: aplica Recolector → Extractor → Revisor → Archivador → Base de datos.
@@ -618,6 +660,7 @@ def procesar_lote(empresa_id: str, carpeta: Path, tarjeta_id: str | None = None)
   if duplicados_omitidos:
     logger.info("Duplicados omitidos: %d", duplicados_omitidos)
   tabla = _archivar_por_fecha(tabla_sin_duplicados, FACTURAS_RECIBIDAS_DIR)
+  _subir_lote_a_sharepoint(tabla, "Facturas Recibidas")
   tabla = _homogeneizar_proveedores(tabla, empresa_id)
   tabla = _enriquecer_pais_desde_localidad(tabla)
 
@@ -2989,6 +3032,7 @@ def procesar_lote_clientes(empresa_id: str, carpeta: Path) -> dict:
   ]
   duplicados_omitidos = len(tabla) - len(tabla_sin_duplicados)
   tabla = _archivar_por_fecha(tabla_sin_duplicados, FACTURAS_EMITIDAS_DIR, actualizar_ruta_archivo=True)
+  _subir_lote_a_sharepoint(tabla, "Facturas Emitidas")
 
   # Crear/vincular clientes a terceros via gateway unificado antes de insertar
   from core.terceros_db import crear_o_vincular_tercero, init_terceros_db
