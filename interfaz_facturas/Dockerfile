@@ -20,6 +20,9 @@ RUN pip install --no-cache-dir gunicorn
 # Copiar codigo
 COPY . .
 
+# Base dir para config.py (evita que parents[1] resuelva a "/" en el contenedor)
+ENV APP_BASE_DIR=/app
+
 # Crear directorios de datos si no existen
 RUN mkdir -p /app/data /app/data/logs /app/data/backups
 

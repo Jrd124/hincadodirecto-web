@@ -12,7 +12,8 @@ from openai import OpenAI
 
 
 # Rutas base de la aplicación
-BASE_DIR = Path(__file__).resolve().parents[1]
+# APP_BASE_DIR permite sobreescribir en Docker donde parents[1] resuelve a "/"
+BASE_DIR = Path(os.environ.get("APP_BASE_DIR", Path(__file__).resolve().parents[1]))
 DATOS_DIR = BASE_DIR / "data"
 SUBIDAS_DIR = DATOS_DIR / "subidas"
 FACTURAS_RECIBIDAS_DIR = DATOS_DIR / "Facturas Recibidas"
