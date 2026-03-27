@@ -10,145 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; }
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      display: flex;
-      min-height: 100vh;
-    }
-
-    /* ===== MITAD IZQUIERDA ===== */
-    .login-brand {
-      flex: 1;
-      background: linear-gradient(160deg, #1E293B 0%, #0F172A 100%);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 48px;
-    }
-    .login-brand-inner {
-      max-width: 400px;
-    }
-    .login-brand-title {
-      font-size: 32px;
-      font-weight: 700;
-      color: #fff;
-      margin-bottom: 12px;
-      line-height: 1.2;
-    }
-    .login-brand-subtitle {
-      font-size: 16px;
-      color: rgba(255,255,255,0.6);
-      line-height: 1.5;
-      margin-bottom: 36px;
-    }
-    .login-brand-features {
-      list-style: none;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-    .login-brand-features li {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 14px;
-      color: rgba(255,255,255,0.7);
-    }
-    .login-brand-features li::before {
-      content: "";
-      display: block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #3B82F6;
-      flex-shrink: 0;
-    }
-
-    /* ===== MITAD DERECHA ===== */
-    .login-form-side {
-      flex: 1;
-      background: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 48px 32px;
-    }
-    .login-card {
-      width: 100%;
-      max-width: 380px;
-    }
-    .login-card h1 {
-      font-size: 24px;
-      font-weight: 700;
-      color: #1E293B;
-      margin-bottom: 8px;
-    }
-    .login-card .login-hint {
-      font-size: 14px;
-      color: #64748B;
-      margin-bottom: 32px;
-    }
-    .login-card .form-group {
-      margin-bottom: 20px;
-    }
-    .login-card label {
-      display: block;
-      font-size: 13px;
-      font-weight: 600;
-      color: #374151;
-      margin-bottom: 6px;
-    }
-    .login-card input[type="text"],
-    .login-card input[type="password"] {
-      width: 100%;
-      padding: 12px 16px;
-      border: 1px solid #E2E8F0;
-      border-radius: 8px;
-      font-size: 15px;
-      font-family: inherit;
-      color: #1E293B;
-      background: #fff;
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    }
-    .login-card input::placeholder {
-      color: #94A3B8;
-    }
-    .login-card input:focus {
-      outline: none;
-      border-color: #2563EB;
-      box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
-    }
-    .login-card button {
-      width: 100%;
-      padding: 12px;
-      background: #2563EB;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 15px;
-      font-weight: 600;
-      font-family: inherit;
-      cursor: pointer;
-      transition: background 0.2s ease;
-      margin-top: 4px;
-    }
-    .login-card button:hover {
-      background: #1D4ED8;
-    }
-    .login-card button:focus-visible {
-      outline: 2px solid #2563EB;
-      outline-offset: 2px;
-    }
-    .login-footer {
-      text-align: center;
-      font-size: 12px;
-      color: #94A3B8;
-      margin-top: 24px;
-    }
-
-    /* ===== ERROR ===== */
+    html, body { height: 100%; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
     .error {
       background: #FEF2F2;
       border: 1px solid #FECACA;
@@ -160,45 +22,47 @@
       text-align: center;
       line-height: 1.4;
     }
-
-    /* ===== RESPONSIVE ===== */
-    @media (max-width: 768px) {
-      .login-brand {
-        display: none;
-      }
-      body {
-        background: #F8FAFC;
-      }
-      .login-form-side {
-        background: #F8FAFC;
-        padding: 32px 24px;
-      }
-    }
   </style>
 </head>
 <body>
-  <div class="login-brand">
-    <div class="login-brand-inner">
-      <img src="/static/assets/presupuestos/logo.jpg" alt="Hincado Directo" style="max-width:250px;height:auto;margin-bottom:24px;">
-      <div class="login-brand-subtitle">ERP | Gesti&oacute;n integral</div>
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F1F5F9;">
+    <div style="width:100%;max-width:380px;padding:20px;">
+      <!-- Logo centrado -->
+      <div style="text-align:center;margin-bottom:32px;">
+        <img src="/static/assets/presupuestos/logo.jpg" alt="Hincado Directo" style="max-width:200px;height:auto;margin-bottom:12px;">
+        <div style="font-size:14px;color:#64748B;letter-spacing:1px;">ERP | Gesti&oacute;n integral</div>
+      </div>
+
+      <!-- Card del formulario -->
+      <div style="background:white;border-radius:12px;padding:32px;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <h2 style="margin:0 0 4px;font-size:20px;font-weight:600;text-align:center;">Iniciar sesi&oacute;n</h2>
+        <p style="margin:0 0 24px;font-size:13px;color:#64748B;text-align:center;">Introduce tus credenciales</p>
+
+        <div id="error-msg" class="error" style="display:none;"></div>
+
+        <form method="POST" action="/login">
+          <div style="margin-bottom:16px;">
+            <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px;color:#374151;">Usuario</label>
+            <input type="text" name="username" placeholder="Tu usuario" required autofocus autocomplete="username"
+                   style="width:100%;padding:10px 14px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;transition:border-color 0.15s;"
+                   onfocus="this.style.borderColor='#2563EB'" onblur="this.style.borderColor='#D1D5DB'">
+          </div>
+          <div style="margin-bottom:24px;">
+            <label style="display:block;font-size:13px;font-weight:500;margin-bottom:6px;color:#374151;">Contrase&ntilde;a</label>
+            <input type="password" name="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" required autocomplete="current-password"
+                   style="width:100%;padding:10px 14px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;transition:border-color 0.15s;"
+                   onfocus="this.style.borderColor='#2563EB'" onblur="this.style.borderColor='#D1D5DB'">
+          </div>
+          <button type="submit"
+                  style="width:100%;padding:12px;background:#2563EB;color:white;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:background 0.15s;"
+                  onmouseover="this.style.background='#1D4ED8'" onmouseout="this.style.background='#2563EB'">
+            Entrar
+          </button>
+        </form>
+      </div>
+
+      <p style="text-align:center;font-size:12px;color:#94A3B8;margin-top:20px;">Acceso restringido a usuarios autorizados</p>
     </div>
-  </div>
-  <div class="login-form-side">
-    <form class="login-card" method="POST" action="/login">
-      <h1>Iniciar sesi&oacute;n</h1>
-      <p class="login-hint">Introduce tus credenciales para acceder</p>
-      <div id="error-msg" class="error" style="display:none;"></div>
-      <div class="form-group">
-        <label for="username">Usuario</label>
-        <input type="text" id="username" name="username" placeholder="usuario@empresa.com" autocomplete="username" required autofocus>
-      </div>
-      <div class="form-group">
-        <label for="password">Contrase&ntilde;a</label>
-        <input type="password" id="password" name="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password" required>
-      </div>
-      <button type="submit">Entrar</button>
-      <div class="login-footer">Acceso restringido a usuarios autorizados</div>
-    </form>
   </div>
   <script>
     const params = new URLSearchParams(window.location.search);
