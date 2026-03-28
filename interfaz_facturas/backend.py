@@ -711,6 +711,15 @@ init_usuarios_db()
 from core import maquinaria_db
 maquinaria_db.init_maquinaria_db()
 
+from core import empleados_db
+empleados_db.init_empleados_db()
+
+from core import vehiculos_db
+vehiculos_db.init_vehiculos_db()
+
+from core import cae_db
+cae_db.init_cae_db()
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "usuarios.login_page"
@@ -4812,7 +4821,23 @@ def importar_bbva():
 
 # ─── Registrar blueprints ─────────────────────────────────────────────────────
 
-# Blueprints definidos en este archivo (finanzas/bancos/facturas)
+# Rutas movidas a routes/ por Javier:
+# - CRM → routes/crm.py
+# - Transporte → routes/transporte.py
+# - Tesorería → routes/tesoreria.py
+# - Proyectos → routes/proyectos.py
+# - Presupuestos → routes/presupuestos.py
+# - OneDrive → routes/onedrive.py
+
+
+# CAE, Vehículos, Empleados → routes/cae.py, routes/vehiculos.py, routes/empleados.py
+
+
+
+
+
+
+# ─── Registrar blueprints ─────────────────────────────────────────────────────
 app.register_blueprint(facturas_proveedores_bp)
 app.register_blueprint(proveedores_bp)
 app.register_blueprint(facturas_clientes_bp)
@@ -4833,6 +4858,9 @@ from routes.proyectos import proyectos_bp as proyectos_routes_bp
 from routes.presupuestos import presupuestos_bp as presupuestos_routes_bp
 from routes.onedrive import onedrive_bp as onedrive_routes_bp
 from routes.transporte import transporte_bp as transporte_routes_bp
+from routes.cae import cae_bp as cae_routes_bp
+from routes.vehiculos import vehiculos_bp as vehiculos_routes_bp
+from routes.empleados import empleados_bp as empleados_routes_bp
 
 app.register_blueprint(usuarios_bp)
 app.register_blueprint(maquinaria_bp)
@@ -4843,6 +4871,9 @@ app.register_blueprint(proyectos_routes_bp)
 app.register_blueprint(presupuestos_routes_bp)
 app.register_blueprint(onedrive_routes_bp)
 app.register_blueprint(transporte_routes_bp)
+app.register_blueprint(cae_routes_bp)
+app.register_blueprint(vehiculos_routes_bp)
+app.register_blueprint(empleados_routes_bp)
 
 logger.info("ERP arrancado — blueprints registrados")
 

@@ -4722,3 +4722,69 @@
         box-sizing: border-box;
         min-width: 0;
       }
+
+
+/* === MODULO CAE === */
+
+.panel-cae { padding: 2rem; }
+
+.panel-cae .stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+}
+
+.panel-cae .stat-card {
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 8px;
+  padding: 1.2rem;
+  text-align: center;
+}
+
+.panel-cae .stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.panel-cae .stat-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary, #6c757d);
+  margin-top: 0.25rem;
+}
+
+.panel-cae .cae-danger { color: #dc3545; }
+.panel-cae .cae-warning { color: #ffc107; }
+
+.panel-cae .btn-link {
+  background: none;
+  border: none;
+  color: var(--accent, #2563eb);
+  cursor: pointer;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.panel-cae .btn-link:hover { opacity: 0.8; }
+
+.cae-folder-item:hover { background: var(--bg-hover, #f5f5f5); }
+
+/* Modal overlay reuse (CAE modals) */
+#modal-cae-folder-explorer .modal-body,
+#modal-cae-nuevo-expediente .modal-body,
+#modal-cae-nueva-plantilla .modal-body {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+#modal-cae-nueva-plantilla .modal-footer,
+#modal-cae-nuevo-expediente .modal-footer,
+#modal-cae-folder-explorer .modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 1rem;
+  border-top: 1px solid var(--border, #e0e0e0);
+}

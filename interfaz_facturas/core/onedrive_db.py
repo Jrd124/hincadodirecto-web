@@ -172,6 +172,92 @@ class SharePointClient:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+    # === METODOS DELTA SYNC (CAE) === #
+
+    def delta_sync(self, drive_id: str, folder_id: str, delta_token: str | None = None) -> tuple[list, str | None]:
+        """Sincronizacion incremental de una carpeta via delta query.
+
+        Si delta_token es None, hace full sync.
+        Devuelve (lista_items, nuevo_delta_token).
+        """
+        if delta_token:
+            url = delta_token  # El delta token ES la URL completa de la siguiente pagina
+        else:
+            url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{folder_id}/delta"
+
+        all_items = []
+        new_token = None
+
+        while url:
+            resp = requests.get(url, headers=self._headers())
+            if resp.status_code != 200:
+                logger.error(f"Error delta sync: {resp.status_code} {resp.text}")
+                break
+
+            data = resp.json()
+            items = data.get("value", [])
+            all_items.extend(items)
+
+            # Paginar si hay @odata.nextLink
+            url = data.get("@odata.nextLink")
+
+            # El delta link final para la proxima sincronizacion
+            if "@odata.deltaLink" in data:
+                new_token = data["@odata.deltaLink"]
+
+        return all_items, new_token
+
+    def obtener_carpetas_drive(self, drive_id: str, folder_id: str | None = None) -> list:
+        """Lista subcarpetas de un drive/folder (para explorador de carpetas CAE).
+
+        Si folder_id es None, lista la raiz del drive.
+        """
+        if folder_id:
+            url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{folder_id}/children"
+        else:
+            url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root/children"
+
+        resp = requests.get(url, headers=self._headers())
+        if resp.status_code != 200:
+            logger.warning(f"Error listando carpetas: {resp.status_code}")
+            return []
+
+        items = resp.json().get("value", [])
+        return [
+            {
+                "id": i["id"],
+                "name": i["name"],
+                "is_folder": "folder" in i,
+                "child_count": i.get("folder", {}).get("childCount", 0) if "folder" in i else 0,
+                "path": i.get("parentReference", {}).get("path", "") + "/" + i["name"],
+                "size": i.get("size", 0),
+                "modified": i.get("lastModifiedDateTime", ""),
+            }
+            for i in items
+        ]
+
+    def resolve_folder_path(self, drive_id: str, folder_id: str) -> str:
+        """Obtiene la ruta completa de un folder."""
+        url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{folder_id}"
+        resp = requests.get(url, headers=self._headers())
+        if resp.status_code != 200:
+            return ""
+        data = resp.json()
+        parent_path = data.get("parentReference", {}).get("path", "")
+        return f"{parent_path}/{data.get('name', '')}"
+
+    def obtener_drives(self) -> list:
+        """Lista todos los drives disponibles (para seleccionar en config CAE)."""
+        site_id = self._get_site_id()
+        url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives"
+        resp = requests.get(url, headers=self._headers())
+        if resp.status_code != 200:
+            return []
+        return [
+            {"id": d["id"], "name": d.get("name", ""), "web_url": d.get("webUrl", "")}
+            for d in resp.json().get("value", [])
+        ]
+
 
 _client = None
 

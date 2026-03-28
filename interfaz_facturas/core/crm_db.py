@@ -157,6 +157,15 @@ def init_crm_db() -> None:
             );
             CREATE INDEX IF NOT EXISTS ix_crm_oph_oportunidad ON crm_oportunidades_historial(oportunidad_id);
         """)
+        # Migration: add CAE columns to crm_empresas
+        try:
+            emp_cols = {r[1] for r in conn.execute("PRAGMA table_info(crm_empresas)").fetchall()}
+            if "cae_plataforma" not in emp_cols:
+                conn.execute("ALTER TABLE crm_empresas ADD COLUMN cae_plataforma TEXT")
+            if "cae_url" not in emp_cols:
+                conn.execute("ALTER TABLE crm_empresas ADD COLUMN cae_url TEXT")
+        except Exception:
+            pass
     _initialized = True
 
 

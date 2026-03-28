@@ -148,6 +148,12 @@ def init_proyectos_db() -> None:
                 conn.execute("ALTER TABLE proyecto_partes ADD COLUMN horas_admin REAL DEFAULT 0")
         except Exception:
             pass
+        # Migration: add cae_expediente_id to proyectos (CAE module)
+        try:
+            if "cae_expediente_id" not in cols:
+                conn.execute("ALTER TABLE proyectos ADD COLUMN cae_expediente_id INTEGER")
+        except Exception:
+            pass
         # ── Certificaciones ──
         conn.execute("""
             CREATE TABLE IF NOT EXISTS certificaciones (
@@ -209,6 +215,34 @@ _PROY_SELECT = """
     LEFT JOIN presupuestos pres ON pres.id = p.presupuesto_id
     LEFT JOIN crm_oportunidades oport ON oport.id = p.oportunidad_id
 """
+
+
+def obtener_estado_cae(proyecto_id: int) -> dict | None:
+    """Obtiene resumen del estado CAE de un proyecto (si tiene expediente vinculado)."""
+    init_proyectos_db()
+    with _conectar() as conn:
+        exp = conn.execute(
+            "SELECT id, estado FROM cae_expedientes WHERE proyecto_id = ?", [proyecto_id]
+        ).fetchone()
+        if not exp:
+            return None
+        resultados = conn.execute(
+            "SELECT status, COUNT(*) as cnt FROM cae_resultados WHERE expediente_id = ? GROUP BY status",
+            [exp["id"]],
+        ).fetchall()
+        counts = {r["status"]: r["cnt"] for r in resultados}
+        total = sum(counts.values())
+        pct = round(counts.get("READY", 0) / total * 100) if total > 0 else 0
+        return {
+            "expediente_id": exp["id"],
+            "estado": exp["estado"],
+            "total": total,
+            "ready": counts.get("READY", 0),
+            "missing": counts.get("MISSING", 0),
+            "expired": counts.get("EXPIRED", 0),
+            "doubtful": counts.get("DOUBTFUL", 0),
+            "porcentaje_completo": pct,
+        }
 
 
 def listar_proyectos(

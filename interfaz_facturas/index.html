@@ -73,6 +73,22 @@
             <span class="sidebar-label">Maquinaria</span>
           </a>
         </div>
+        <!-- CAE -->
+        <div class="sidebar-group">
+          <a href="#" class="sidebar-item sidebar-parent" id="nav-cae-modulo" data-group="cae">
+            <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1L2 4v4c0 3.3 2.6 6.4 6 7 3.4-.6 6-3.7 6-7V4L8 1z"/><path d="M6 8l2 2 3-3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span class="sidebar-label">CAE</span>
+            <svg class="sidebar-chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4"/></svg>
+          </a>
+          <div class="sidebar-children" id="sidebar-children-cae">
+            <a href="#" class="sidebar-child" id="nav-cae-inicio">Inicio</a>
+            <a href="#" class="sidebar-child" id="nav-cae-documentos">Documentos</a>
+            <a href="#" class="sidebar-child" id="nav-cae-expedientes">Expedientes</a>
+            <a href="#" class="sidebar-child" id="nav-cae-plantillas">Plantillas</a>
+            <a href="#" class="sidebar-child" id="nav-cae-tareas">Tareas</a>
+            <a href="#" class="sidebar-child" id="nav-cae-config">Config</a>
+          </div>
+        </div>
         <!-- RRHH -->
         <div class="sidebar-group">
           <a href="#" class="sidebar-item sidebar-parent" id="nav-rrhh-modulo" data-group="rrhh">
@@ -2647,6 +2663,164 @@
             <button type="button" class="secondary btn-danger ml-auto" id="btn-eliminar-proveedor" style="display: none;">Eliminar</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- === MODULO CAE === -->
+
+    <!-- CAE Inicio -->
+    <div id="panel-cae-inicio" class="panel-cae" style="display:none;">
+      <div class="breadcrumb-visual">CAE &rsaquo; Inicio</div>
+      <h1>Radar documental CAE</h1>
+      <p class="subtitle">Coordinaci&oacute;n de Actividades Empresariales &mdash; estado general de cumplimiento.</p>
+      <div class="stats-grid" id="cae-stats-grid">
+        <div class="stat-card"><div class="stat-value" id="cae-stat-expedientes">-</div><div class="stat-label">Expedientes activos</div></div>
+        <div class="stat-card"><div class="stat-value" id="cae-stat-docs">-</div><div class="stat-label">Documentos indexados</div></div>
+        <div class="stat-card"><div class="stat-value cae-danger" id="cae-stat-caducados">-</div><div class="stat-label">Caducados</div></div>
+        <div class="stat-card"><div class="stat-value cae-warning" id="cae-stat-tareas">-</div><div class="stat-label">Tareas pendientes</div></div>
+      </div>
+      <div class="card" style="margin-top:1.5rem;">
+        <h3>Expedientes recientes</h3>
+        <table class="tabla-generica"><thead><tr><th>Proyecto</th><th>Plantilla</th><th>Estado</th><th>&Uacute;ltimo an&aacute;lisis</th><th></th></tr></thead><tbody id="cae-expedientes-recientes"></tbody></table>
+      </div>
+    </div>
+
+    <!-- CAE Documentos -->
+    <div id="panel-cae-documentos" class="panel-cae" style="display:none;">
+      <div class="breadcrumb-visual">CAE &rsaquo; Documentos</div>
+      <h1>Documentos indexados</h1>
+      <p class="subtitle">Documentos encontrados en OneDrive, clasificados autom&aacute;ticamente.</p>
+      <div class="card" style="margin-bottom:1rem;">
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+          <input type="text" id="cae-doc-busqueda" placeholder="Buscar por nombre..." style="flex:1;min-width:200px;" />
+          <select id="cae-doc-filter-type"><option value="">Tipo: Todos</option></select>
+          <select id="cae-doc-filter-entity"><option value="">Entidad: Todas</option><option value="EMPRESA">Empresa</option><option value="OPERARIO">Operario</option><option value="MAQUINA">M&aacute;quina</option><option value="VEHICULO">Veh&iacute;culo</option></select>
+          <select id="cae-doc-filter-confidence"><option value="">Confianza: Toda</option><option value="CONFIRMED">Confirmado</option><option value="SUGGESTED">Sugerido</option><option value="UNKNOWN">Desconocido</option></select>
+          <button class="secondary" id="cae-doc-filtrar">Filtrar</button>
+        </div>
+      </div>
+      <div class="card"><table class="tabla-generica"><thead><tr><th>Nombre</th><th>Tipo doc</th><th>Entidad</th><th>Confianza</th><th>Caducidad</th><th></th></tr></thead><tbody id="cae-documentos-tabla"></tbody></table></div>
+    </div>
+
+    <!-- CAE Expedientes -->
+    <div id="panel-cae-expedientes" class="panel-cae" style="display:none;">
+      <div class="breadcrumb-visual">CAE &rsaquo; Expedientes</div>
+      <h1>Expedientes CAE</h1>
+      <p class="subtitle">Cada expediente vincula un proyecto con una plantilla de requisitos documentales.</p>
+      <div style="margin-bottom:1rem;"><button class="primary" id="btn-nuevo-expediente">+ Nuevo expediente</button></div>
+      <div class="card"><table class="tabla-generica"><thead><tr><th>Proyecto</th><th>Plantilla</th><th>Estado</th><th>&Uacute;ltimo an&aacute;lisis</th><th></th></tr></thead><tbody id="cae-expedientes-tabla"></tbody></table></div>
+    </div>
+
+    <!-- CAE Expediente Detalle -->
+    <div id="panel-cae-expediente-detalle" class="panel-cae" style="display:none;">
+      <div class="breadcrumb-visual">CAE &rsaquo; Expedientes &rsaquo; <span id="cae-exp-det-nombre">Detalle</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h1 id="cae-exp-det-titulo">Expediente</h1>
+        <div><button class="secondary" id="btn-cae-exp-volver">&larr; Volver</button> <button class="primary" id="btn-cae-exp-analizar">Analizar</button></div>
+      </div>
+      <div class="stats-grid" id="cae-exp-det-stats" style="margin-bottom:1.5rem;"></div>
+      <div class="card" style="margin-bottom:1rem;">
+        <h3>Entidades asignadas</h3>
+        <div id="cae-exp-entidades" style="margin-bottom:0.5rem;"></div>
+        <div style="display:flex;gap:0.5rem;">
+          <select id="cae-exp-ent-type"><option value="OPERARIO">Operario</option><option value="MAQUINA">M&aacute;quina</option><option value="VEHICULO">Veh&iacute;culo</option></select>
+          <select id="cae-exp-ent-id"></select>
+          <button class="secondary" id="btn-cae-exp-asignar">Asignar</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Radar documental</h3>
+        <div id="cae-radar-container" style="overflow-x:auto;"></div>
+      </div>
+      <div class="card" style="margin-top:1rem;">
+        <h3>Tareas</h3>
+        <table class="tabla-generica"><thead><tr><th>Prioridad</th><th>T&iacute;tulo</th><th>Tipo</th><th>Estado</th><th></th></tr></thead><tbody id="cae-exp-tareas"></tbody></table>
+      </div>
+    </div>
+
+    <!-- CAE Plantillas -->
+    <div id="panel-cae-plantillas" class="panel-cae" style="display:none;">
+      <div class="breadcrumb-visual">CAE &rsaquo; Plantillas</div>
+      <h1>Plantillas de requisitos</h1>
+      <p class="subtitle">Define qu&eacute; documentos exige cada cliente para cada tipo de entidad.</p>
+      <div style="margin-bottom:1rem;"><button class="primary" id="btn-nueva-plantilla">+ Nueva plantilla</button></div>
+      <div id="cae-plantillas-lista"></div>
+    </div>
+
+    <!-- CAE Tareas -->
+    <div id="panel-cae-tareas" class="panel-cae" style="display:none;">
+      <div class="breadcrumb-visual">CAE &rsaquo; Tareas</div>
+      <h1>Tareas CAE</h1>
+      <p class="subtitle">Documentos faltantes, caducados o por revisar.</p>
+      <div class="card" style="margin-bottom:1rem;">
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+          <select id="cae-tarea-filter-estado"><option value="">Estado: Todos</option><option value="PENDIENTE">Pendiente</option><option value="EN_CURSO">En curso</option><option value="COMPLETADA">Completada</option><option value="DESCARTADA">Descartada</option></select>
+          <select id="cae-tarea-filter-prioridad"><option value="">Prioridad: Todas</option><option value="HIGH">Alta</option><option value="MEDIUM">Media</option><option value="LOW">Baja</option></select>
+          <button class="secondary" id="cae-tareas-filtrar">Filtrar</button>
+        </div>
+      </div>
+      <div class="card"><table class="tabla-generica"><thead><tr><th>Prioridad</th><th>T&iacute;tulo</th><th>Tipo</th><th>Estado</th><th></th></tr></thead><tbody id="cae-tareas-tabla"></tbody></table></div>
+    </div>
+
+    <!-- CAE Config -->
+    <div id="panel-cae-config" class="panel-cae" style="display:none;">
+      <div class="breadcrumb-visual">CAE &rsaquo; Configuraci&oacute;n</div>
+      <h1>Configuraci&oacute;n CAE</h1>
+      <p class="subtitle">Conexi&oacute;n OneDrive y carpetas de indexaci&oacute;n.</p>
+      <div class="card" style="margin-bottom:1rem;">
+        <h3>Carpetas de indexaci&oacute;n</h3>
+        <p style="color:var(--text-secondary);font-size:0.9rem;">Selecciona las carpetas de OneDrive donde buscar documentos CAE.</p>
+        <div id="cae-carpetas-lista" style="margin:1rem 0;"></div>
+        <button class="secondary" id="btn-cae-add-carpeta">+ A&ntilde;adir carpeta</button>
+      </div>
+      <div class="card" style="margin-bottom:1rem;">
+        <h3>Sincronizaci&oacute;n</h3>
+        <button class="primary" id="btn-cae-sync-ahora">Sincronizar ahora</button>
+        <div id="cae-sync-status" style="margin-top:0.5rem;"></div>
+      </div>
+      <div class="card">
+        <h3>Historial de sincronizaciones</h3>
+        <table class="tabla-generica"><thead><tr><th>Carpeta</th><th>Inicio</th><th>Encontrados</th><th>Nuevos</th><th>Estado</th></tr></thead><tbody id="cae-sync-runs-tabla"></tbody></table>
+      </div>
+    </div>
+
+    <!-- Modal: explorador de carpetas OneDrive (CAE) -->
+    <div id="modal-cae-folder-explorer" class="modal-overlay" style="display:none;">
+      <div class="modal" style="max-width:600px;">
+        <div class="modal-header"><h3>Seleccionar carpeta</h3><button class="modal-close" id="btn-cae-folder-close">&times;</button></div>
+        <div class="modal-body">
+          <div id="cae-folder-breadcrumb" style="margin-bottom:0.5rem;font-size:0.85rem;color:var(--text-secondary);"></div>
+          <div id="cae-folder-list" style="max-height:400px;overflow-y:auto;"></div>
+        </div>
+        <div class="modal-footer"><input type="text" id="cae-folder-label" placeholder="Etiqueta (opcional)" style="flex:1;margin-right:0.5rem;" /><button class="primary" id="btn-cae-folder-select">Seleccionar esta carpeta</button></div>
+      </div>
+    </div>
+
+    <!-- Modal: nuevo expediente CAE -->
+    <div id="modal-cae-nuevo-expediente" class="modal-overlay" style="display:none;">
+      <div class="modal" style="max-width:500px;">
+        <div class="modal-header"><h3>Nuevo expediente CAE</h3><button class="modal-close" id="btn-cae-exp-modal-close">&times;</button></div>
+        <div class="modal-body">
+          <div class="form-group"><label>Proyecto</label><select id="cae-exp-proyecto-select" style="width:100%;"></select></div>
+          <div class="form-group"><label>Plantilla de requisitos</label><select id="cae-exp-plantilla-select" style="width:100%;"></select></div>
+        </div>
+        <div class="modal-footer"><button class="primary" id="btn-cae-exp-crear">Crear expediente</button></div>
+      </div>
+    </div>
+
+    <!-- Modal: nueva plantilla CAE -->
+    <div id="modal-cae-nueva-plantilla" class="modal-overlay" style="display:none;">
+      <div class="modal" style="max-width:700px;">
+        <div class="modal-header"><h3 id="cae-plantilla-modal-titulo">Nueva plantilla</h3><button class="modal-close" id="btn-cae-plantilla-modal-close">&times;</button></div>
+        <div class="modal-body">
+          <div class="form-group"><label>Nombre</label><input type="text" id="cae-plantilla-nombre" style="width:100%;" /></div>
+          <div class="form-group"><label>Cliente (empresa CRM)</label><select id="cae-plantilla-cliente" style="width:100%;"><option value="">Sin cliente espec&iacute;fico</option></select></div>
+          <div class="form-group"><label>Descripci&oacute;n</label><textarea id="cae-plantilla-desc" rows="2" style="width:100%;"></textarea></div>
+          <h4 style="margin-top:1rem;">Requisitos documentales</h4>
+          <div id="cae-plantilla-items-lista"></div>
+          <button class="secondary" id="btn-cae-plantilla-add-item" style="margin-top:0.5rem;">+ A&ntilde;adir requisito</button>
+        </div>
+        <div class="modal-footer"><button class="primary" id="btn-cae-plantilla-guardar">Guardar</button></div>
       </div>
     </div>
 
