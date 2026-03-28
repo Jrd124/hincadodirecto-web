@@ -951,7 +951,7 @@ def api_dashboard():
   mes_actual = _dt.now().strftime("%Y-%m")
   empresas = [{"id": id_, "nombre": nombre} for id_, nombre in EMPRESAS_CLIENTE.items()]
   result = {
-    "usuario": current_user.id if current_user.is_authenticated else "",
+    "usuario": current_user.nombre if current_user.is_authenticated else "",
     "facturas_pendientes_count": 0,
     "importe_pendiente_total": 0.0,
     "facturas_mes_count": 0,
