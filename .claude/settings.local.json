@@ -41,7 +41,22 @@
       "Bash(pip show:*)",
       "Bash(python -c \":*)",
       "Bash(ls -la /c/Users/javie/Desktop/cursor_test/interfaz_facturas/*.txt)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(du -sh C:/Users/javie/Desktop/cursor_test/data/*/)",
+      "Bash(sed 's/.*\\\\.//')",
+      "Bash(ssh:*)",
+      "Bash(ssh-keygen:*)",
+      "Bash(chmod 600 /c/Users/javie/.ssh/id_ed25519)",
+      "Bash(taskkill //F //IM python.exe)",
+      "Bash(taskkill //F //IM python3.exe)",
+      "Bash(for f:*)",
+      "Bash(do)",
+      "Bash(echo \"OK: $f\")",
+      "Bash(echo \"FAIL: $f\")",
+      "Bash(wc -l routes/*.py)",
+      "Bash(git stash:*)",
+      "Bash(wc:*)",
+      "Bash(cat interfaz_facturas/static/js/modules/*.js interfaz_facturas/static/js/app.js)"
     ]
   }
 }
