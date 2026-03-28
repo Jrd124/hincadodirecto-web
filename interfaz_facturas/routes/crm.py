@@ -1,0 +1,283 @@
+"""Rutas CRM: empresas, contactos, interacciones, oportunidades."""
+from __future__ import annotations
+
+import logging
+
+from flask import Blueprint, jsonify, request
+
+from core import crm_db
+from routes.helpers import _bad_request
+
+logger = logging.getLogger("erp")
+
+crm_bp = Blueprint("crm", __name__)
+
+
+@crm_bp.post("/api/crm/sync-terceros")
+def crm_sync_terceros():
+  resultado = crm_db.sincronizar_desde_terceros()
+  return jsonify(resultado)
+
+
+@crm_bp.get("/api/crm/empresas")
+def crm_listar_empresas():
+  crm_db.sincronizar_desde_terceros()
+  tipo = (request.args.get("tipo") or "").strip() or None
+  q = (request.args.get("q") or "").strip() or None
+  activo_raw = request.args.get("activo")
+  activo = int(activo_raw) if activo_raw is not None and activo_raw.strip() != "" else None
+  limit = min(int(request.args.get("limit") or 50), 200)
+  offset = int(request.args.get("offset") or 0)
+  resultado = crm_db.listar_empresas(tipo=tipo, q=q, activo=activo, limit=limit, offset=offset)
+  return jsonify(resultado)
+
+
+@crm_bp.get("/api/crm/empresas/<int:empresa_id>")
+def crm_obtener_empresa(empresa_id: int):
+  empresa = crm_db.obtener_empresa(empresa_id)
+  if not empresa:
+    return jsonify({"error": "Empresa CRM no encontrada"}), 404
+  return jsonify(empresa)
+
+
+@crm_bp.post("/api/crm/empresas")
+def crm_crear_empresa():
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre de la empresa es obligatorio")
+  tipo = (data.get("tipo") or "lead").strip()
+  if tipo not in ("cliente", "proveedor", "ambos", "lead"):
+    return _bad_request("Tipo debe ser cliente, proveedor, ambos o lead")
+  empresa = crm_db.crear_empresa(data)
+  return jsonify(empresa), 201
+
+
+@crm_bp.put("/api/crm/empresas/<int:empresa_id>")
+def crm_actualizar_empresa(empresa_id: int):
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre de la empresa es obligatorio")
+  empresa = crm_db.actualizar_empresa(empresa_id, data)
+  if not empresa:
+    return jsonify({"error": "Empresa CRM no encontrada"}), 404
+  return jsonify(empresa)
+
+
+@crm_bp.get("/api/crm/stats")
+def crm_stats():
+  return jsonify(crm_db.estadisticas_crm())
+
+
+@crm_bp.get("/api/crm/duplicados")
+def crm_detectar_duplicados():
+  grupos = crm_db.detectar_duplicados()
+  return jsonify({"grupos": grupos, "total_grupos": len(grupos)})
+
+
+@crm_bp.post("/api/crm/fusionar")
+def crm_fusionar():
+  data = request.get_json(silent=True) or {}
+  principal_id = data.get("principal_id")
+  absorbido_id = data.get("absorbido_id")
+  if not principal_id or not absorbido_id:
+    return _bad_request("Se requieren principal_id y absorbido_id")
+  if principal_id == absorbido_id:
+    return _bad_request("No se puede fusionar un tercero consigo mismo")
+  resultado = crm_db.fusionar_terceros(int(principal_id), int(absorbido_id))
+  return jsonify(resultado)
+
+
+@crm_bp.post("/api/crm/vincular-facturas")
+def crm_vincular_facturas():
+  stats = crm_db.vincular_facturas_a_terceros()
+  return jsonify(stats)
+
+
+# ─── CRM Contactos ──────────────────────────────────────────────────────────
+
+@crm_bp.get("/api/crm/contactos")
+def crm_listar_contactos():
+  empresa_id = request.args.get("empresa_id", type=int)
+  q = (request.args.get("q") or "").strip() or None
+  limit = min(int(request.args.get("limit") or 50), 200)
+  offset = int(request.args.get("offset") or 0)
+  return jsonify(crm_db.listar_contactos(empresa_id=empresa_id, q=q, limit=limit, offset=offset))
+
+
+@crm_bp.get("/api/crm/contactos/<int:contacto_id>")
+def crm_obtener_contacto(contacto_id: int):
+  contacto = crm_db.obtener_contacto(contacto_id)
+  if not contacto:
+    return jsonify({"error": "Contacto no encontrado"}), 404
+  return jsonify(contacto)
+
+
+@crm_bp.post("/api/crm/contactos")
+def crm_crear_contacto():
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre del contacto es obligatorio")
+  contacto = crm_db.crear_contacto(data)
+  return jsonify(contacto), 201
+
+
+@crm_bp.put("/api/crm/contactos/<int:contacto_id>")
+def crm_actualizar_contacto(contacto_id: int):
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre del contacto es obligatorio")
+  contacto = crm_db.actualizar_contacto(contacto_id, data)
+  if not contacto:
+    return jsonify({"error": "Contacto no encontrado"}), 404
+  return jsonify(contacto)
+
+
+@crm_bp.delete("/api/crm/contactos/<int:contacto_id>")
+def crm_eliminar_contacto(contacto_id: int):
+  ok = crm_db.eliminar_contacto(contacto_id)
+  if not ok:
+    return jsonify({"error": "Contacto no encontrado"}), 404
+  return jsonify({"ok": True})
+
+
+# ─── CRM Interacciones ──────────────────────────────────────────────────────
+
+@crm_bp.get("/api/crm/interacciones")
+def crm_listar_interacciones():
+  empresa_id = request.args.get("empresa_id", type=int)
+  contacto_id = request.args.get("contacto_id", type=int)
+  tipo = (request.args.get("tipo") or "").strip() or None
+  fecha_desde = (request.args.get("fecha_desde") or "").strip() or None
+  fecha_hasta = (request.args.get("fecha_hasta") or "").strip() or None
+  q = (request.args.get("q") or "").strip() or None
+  limit = min(int(request.args.get("limit") or 50), 200)
+  offset = int(request.args.get("offset") or 0)
+  return jsonify(crm_db.listar_interacciones(
+    empresa_id=empresa_id, contacto_id=contacto_id, tipo=tipo,
+    fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, q=q,
+    limit=limit, offset=offset,
+  ))
+
+
+@crm_bp.post("/api/crm/interacciones")
+def crm_crear_interaccion():
+  data = request.get_json(silent=True) or {}
+  tipo = (data.get("tipo") or "").strip()
+  if tipo not in ("llamada", "email", "reunion", "nota", "whatsapp", "visita"):
+    return _bad_request("Tipo debe ser llamada, email, reunion, nota, whatsapp o visita")
+  interaccion = crm_db.crear_interaccion(data)
+  return jsonify(interaccion), 201
+
+
+@crm_bp.get("/api/crm/interacciones/<int:interaccion_id>")
+def crm_obtener_interaccion(interaccion_id: int):
+  with __import__('core.db', fromlist=['conectar']).conectar() as conn:
+    row = conn.execute("""
+      SELECT i.*, c.nombre AS nombre_contacto, c.apellidos AS apellidos_contacto,
+             e.nombre AS nombre_empresa
+      FROM crm_interacciones i
+      LEFT JOIN crm_contactos c ON c.id = i.contacto_id
+      LEFT JOIN crm_empresas e ON e.id = i.empresa_id
+      WHERE i.id = ?
+    """, (interaccion_id,)).fetchone()
+  if not row:
+    return jsonify({"error": "Interaccion no encontrada"}), 404
+  return jsonify(dict(row))
+
+
+@crm_bp.put("/api/crm/interacciones/<int:interaccion_id>")
+def crm_actualizar_interaccion(interaccion_id: int):
+  data = request.get_json(silent=True) or {}
+  interaccion = crm_db.actualizar_interaccion(interaccion_id, data)
+  if not interaccion:
+    return jsonify({"error": "Interaccion no encontrada"}), 404
+  return jsonify(interaccion)
+
+
+@crm_bp.delete("/api/crm/interacciones/<int:interaccion_id>")
+def crm_eliminar_interaccion(interaccion_id: int):
+  ok = crm_db.eliminar_interaccion(interaccion_id)
+  if not ok:
+    return jsonify({"error": "Interaccion no encontrada"}), 404
+  return jsonify({"ok": True})
+
+
+@crm_bp.get("/api/crm/interacciones/pendientes")
+def crm_interacciones_pendientes():
+  return jsonify({"interacciones": crm_db.interacciones_pendientes()})
+
+
+# ─── CRM Oportunidades ──────────────────────────────────────────────────────
+
+@crm_bp.get("/api/crm/oportunidades")
+def crm_listar_oportunidades():
+  estado = (request.args.get("estado") or "").strip() or None
+  empresa_id = request.args.get("empresa_id", type=int)
+  contacto_id = request.args.get("contacto_id", type=int)
+  fuente = (request.args.get("fuente") or "").strip() or None
+  q = (request.args.get("q") or "").strip() or None
+  limit = min(int(request.args.get("limit") or 200), 500)
+  offset = int(request.args.get("offset") or 0)
+  return jsonify(crm_db.listar_oportunidades(
+    estado=estado, empresa_id=empresa_id, contacto_id=contacto_id,
+    fuente=fuente, q=q, limit=limit, offset=offset,
+  ))
+
+
+@crm_bp.get("/api/crm/oportunidades/<int:oportunidad_id>")
+def crm_obtener_oportunidad(oportunidad_id: int):
+  op = crm_db.obtener_oportunidad(oportunidad_id)
+  if not op:
+    return jsonify({"error": "Oportunidad no encontrada"}), 404
+  return jsonify(op)
+
+
+@crm_bp.post("/api/crm/oportunidades")
+def crm_crear_oportunidad():
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre de la oportunidad es obligatorio")
+  if not data.get("empresa_id"):
+    return _bad_request("La empresa es obligatoria")
+  op = crm_db.crear_oportunidad(data)
+  return jsonify(op), 201
+
+
+@crm_bp.put("/api/crm/oportunidades/<int:oportunidad_id>")
+def crm_actualizar_oportunidad(oportunidad_id: int):
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre de la oportunidad es obligatorio")
+  estado = (data.get("estado") or "").strip()
+  if estado == "perdida" and not (data.get("motivo_perdida") or "").strip():
+    return _bad_request("El motivo de perdida es obligatorio para estado 'perdida'")
+  op = crm_db.actualizar_oportunidad(oportunidad_id, data)
+  if not op:
+    return jsonify({"error": "Oportunidad no encontrada"}), 404
+  return jsonify(op)
+
+
+@crm_bp.patch("/api/crm/oportunidades/<int:oportunidad_id>/estado")
+def crm_cambiar_estado_oportunidad(oportunidad_id: int):
+  data = request.get_json(silent=True) or {}
+  estado = (data.get("estado") or "").strip()
+  if not estado:
+    return _bad_request("El estado es obligatorio")
+  if estado == "perdida" and not (data.get("motivo_perdida") or "").strip():
+    return _bad_request("El motivo de perdida es obligatorio")
+  motivo = (data.get("motivo_perdida") or "").strip() or None
+  op = crm_db.cambiar_estado_oportunidad(oportunidad_id, estado, motivo)
+  if not op:
+    return jsonify({"error": "Oportunidad no encontrada o estado invalido"}), 404
+  return jsonify(op)
+
+
+@crm_bp.get("/api/crm/oportunidades/pipeline")
+def crm_pipeline_oportunidades():
+  return jsonify({"pipeline": crm_db.pipeline_oportunidades()})

@@ -147,6 +147,10 @@ facturas_clientes_bp = Blueprint("facturas_clientes", __name__)
 archivo_bp = Blueprint("archivo", __name__)
 control_calidad_bp = Blueprint("control_calidad", __name__)
 bancos_bp = Blueprint("bancos", __name__)
+transporte_bp = Blueprint("transporte", __name__)
+crm_bp = Blueprint("crm", __name__)
+tesoreria_bp = Blueprint("tesoreria", __name__)
+onedrive_bp = Blueprint("onedrive", __name__)
 
 # Workers para procesamiento en paralelo del pipeline de facturas (OpenAI/vision)
 _MAX_WORKERS_EXTRACTOR_LLM = 4
@@ -713,7 +717,7 @@ maquinaria_db.init_maquinaria_db()
 
 login_manager = LoginManager()
 login_manager.init_app(app)
-login_manager.login_view = "usuarios.login_page"
+login_manager.login_view = "login_page"
 
 
 class _User(UserMixin):
@@ -754,13 +758,13 @@ def requiere_rol(*roles_permitidos):
 @app.before_request
 def _require_login():
   """Protege todas las rutas excepto login y archivos estáticos del login."""
-  rutas_publicas = ("usuarios.login_page", "usuarios.login_post", "static", "api_general.api_health")
+  rutas_publicas = ("login_page", "login_post", "static", "api_health")
   if request.endpoint in rutas_publicas:
     return
   if not current_user.is_authenticated:
     if request.path.startswith("/api/"):
       return jsonify({"error": "No autenticado"}), 401
-    return redirect(url_for("usuarios.login_page"))
+    return redirect(url_for("login_page"))
 
 
 @app.after_request
@@ -771,13 +775,477 @@ def _log_api_request(response):
   return response
 
 
-# Auth + usuarios endpoints → routes/usuarios.py
+@app.get("/login")
+def login_page():
+  if current_user.is_authenticated:
+    return redirect("/")
+  return send_from_directory(app.static_folder, "login.html")
 
 
-# Maquinaria endpoints → routes/maquinaria.py
+@app.post("/login")
+def login_post():
+  username = (request.form.get("username") or "").strip()
+  password = (request.form.get("password") or "")
+  # Intentar contra BD primero
+  usuario = verificar_credenciales(username, password)
+  if usuario:
+    login_user(_User(usuario["id"], usuario["username"], usuario["nombre"], usuario["rol"]))
+    logger.info("Login OK: %s (rol=%s)", username, usuario["rol"])
+    return redirect("/")
+  # Fallback: credenciales del .env (compatibilidad temporal)
+  if username == ADMIN_USER and password == ADMIN_PASSWORD:
+    login_user(_User(0, username, "Admin (.env)", "admin"))
+    logger.info("Login OK (fallback .env): %s", username)
+    return redirect("/")
+  logger.warning("Login fallido: %s", username)
+  return redirect("/login?error=1")
 
 
-# index() + health + dashboard + finanzas + empresas → routes/api_general.py
+@app.get("/logout")
+def logout():
+  logout_user()
+  return redirect("/login")
+
+
+# ─── Gestión de usuarios ─────────────────────────────────────────────────────
+
+
+@app.get("/api/usuarios")
+@requiere_rol("admin")
+def api_listar_usuarios():
+  from core.usuarios_db import listar_usuarios
+  return jsonify({"usuarios": listar_usuarios()})
+
+
+@app.post("/api/usuarios")
+@requiere_rol("admin")
+def api_crear_usuario():
+  from core.usuarios_db import crear_usuario
+  data = request.get_json(silent=True) or {}
+  try:
+    user = crear_usuario(data)
+    return jsonify(user), 201
+  except ValueError as e:
+    return jsonify({"error": str(e)}), 400
+
+
+@app.put("/api/usuarios/<int:uid>")
+@requiere_rol("admin")
+def api_actualizar_usuario(uid):
+  from core.usuarios_db import actualizar_usuario
+  data = request.get_json(silent=True) or {}
+  try:
+    user = actualizar_usuario(uid, data)
+    return jsonify(user)
+  except ValueError as e:
+    return jsonify({"error": str(e)}), 400
+
+
+@app.get("/api/usuarios/me")
+def api_usuario_actual():
+  """El usuario actual puede ver sus datos."""
+  return jsonify({
+    "id": int(current_user.id) if current_user.id != "0" else 0,
+    "username": current_user.username,
+    "nombre": current_user.nombre,
+    "rol": current_user.rol,
+  })
+
+
+@app.put("/api/usuarios/me/password")
+def api_cambiar_mi_password():
+  """El usuario actual puede cambiar su propia contrasena."""
+  from core.usuarios_db import cambiar_password
+  data = request.get_json(silent=True) or {}
+  uid = int(current_user.id) if current_user.id != "0" else 0
+  if not uid:
+    return jsonify({"error": "Usuario legacy (.env), no se puede cambiar"}), 400
+  ok = cambiar_password(uid, data.get("password_actual", ""), data.get("password_nueva", ""))
+  if ok:
+    return jsonify({"ok": True})
+  return jsonify({"error": "Contrasena actual incorrecta o nueva muy corta"}), 400
+
+
+# ─── Maquinaria ──────────────────────────────────────────────────────────────
+
+
+@app.get("/api/maquinaria/maquinas")
+def api_listar_maquinas():
+  return jsonify({"maquinas": maquinaria_db.listar_maquinas()})
+
+
+@app.get("/api/maquinaria/maquinas/<int:mid>")
+def api_obtener_maquina(mid):
+  maq = maquinaria_db.obtener_maquina(mid)
+  if not maq:
+    return jsonify({"error": "No encontrada"}), 404
+  return jsonify(maq)
+
+
+@app.post("/api/maquinaria/maquinas")
+def api_crear_maquina():
+  data = request.get_json(silent=True) or {}
+  return jsonify(maquinaria_db.crear_maquina(data)), 201
+
+
+@app.put("/api/maquinaria/maquinas/<int:mid>")
+def api_actualizar_maquina(mid):
+  data = request.get_json(silent=True) or {}
+  return jsonify(maquinaria_db.actualizar_maquina(mid, data))
+
+
+@app.get("/api/maquinaria/templates/<tipo>")
+def api_templates_checklist(tipo):
+  return jsonify({"templates": maquinaria_db.obtener_templates_checklist(tipo)})
+
+
+@app.post("/api/maquinaria/checks")
+def api_crear_check():
+  data = request.get_json(silent=True) or {}
+  data["usuario_id"] = int(current_user.id) if current_user.is_authenticated and current_user.id != "0" else None
+  return jsonify(maquinaria_db.crear_check_semanal(data)), 201
+
+
+@app.put("/api/maquinaria/checks/<int:cid>/cerrar")
+def api_cerrar_check(cid):
+  return jsonify(maquinaria_db.cerrar_check(cid))
+
+
+@app.post("/api/maquinaria/incidencias")
+def api_crear_incidencia():
+  data = request.get_json(silent=True) or {}
+  data["usuario_id"] = int(current_user.id) if current_user.is_authenticated and current_user.id != "0" else None
+  return jsonify(maquinaria_db.crear_incidencia(data)), 201
+
+
+@app.put("/api/maquinaria/incidencias/<int:iid>")
+def api_actualizar_incidencia(iid):
+  data = request.get_json(silent=True) or {}
+  return jsonify(maquinaria_db.actualizar_incidencia(iid, data))
+
+
+@app.get("/")
+def index():
+  """Sirve la página principal de la interfaz de facturas."""
+  return send_from_directory(app.static_folder, "index.html")
+
+
+@app.get("/api/health")
+def api_health():
+  """Health check para Docker y monitorizacion."""
+  from core.db import conectar as _conectar_db
+  from datetime import datetime as _dt
+  try:
+    with _conectar_db() as conn:
+      conn.execute("SELECT 1")
+    return jsonify({"status": "ok", "timestamp": _dt.now().isoformat()})
+  except Exception as e:
+    return jsonify({"status": "error", "detail": str(e)}), 503
+
+
+@app.get("/api/dashboard")
+def api_dashboard():
+  """Devuelve datos agregados para el dashboard de inicio."""
+  from datetime import datetime as _dt
+  from core.db import conectar as _conectar_db
+  mes_actual = _dt.now().strftime("%Y-%m")
+  empresas = [{"id": id_, "nombre": nombre} for id_, nombre in EMPRESAS_CLIENTE.items()]
+  result = {
+    "usuario": current_user.nombre if current_user.is_authenticated else "",
+    "facturas_pendientes_count": 0,
+    "importe_pendiente_total": 0.0,
+    "facturas_mes_count": 0,
+    "empresas_activas": len(empresas),
+    "ultimas_facturas": [],
+    "pendientes_por_empresa": [],
+  }
+  try:
+    with _conectar_db() as conn:
+      # Facturas pendientes (total)
+      row = conn.execute(
+        "SELECT COUNT(*) as cnt, COALESCE(SUM(CAST(REPLACE(REPLACE(total_a_pagar, '.', ''), ',', '.') AS REAL)), 0) as total "
+        "FROM facturas_proveedor WHERE LOWER(TRIM(estado_pago)) = 'pendiente'"
+      ).fetchone()
+      if row:
+        result["facturas_pendientes_count"] = row["cnt"]
+        result["importe_pendiente_total"] = round(row["total"], 2)
+      # Facturas del mes actual
+      row2 = conn.execute(
+        "SELECT COUNT(*) as cnt FROM facturas_proveedor WHERE fecha_factura LIKE ?",
+        (mes_actual + "%",),
+      ).fetchone()
+      if row2:
+        result["facturas_mes_count"] = row2["cnt"]
+      # Últimas 5 facturas
+      rows = conn.execute(
+        "SELECT fecha_factura, proveedor, total_a_pagar, estado_pago, empresa_id "
+        "FROM facturas_proveedor ORDER BY fecha_factura DESC LIMIT 5"
+      ).fetchall()
+      emp_map = {e["id"]: e["nombre"] for e in empresas}
+      result["ultimas_facturas"] = [
+        {"fecha": r["fecha_factura"], "proveedor": r["proveedor"], "total": r["total_a_pagar"], "empresa": emp_map.get(r["empresa_id"], r["empresa_id"] or "—")}
+        for r in rows
+      ]
+      # Pendientes por empresa
+      rows2 = conn.execute(
+        "SELECT empresa_id, COUNT(*) as cnt, COALESCE(SUM(CAST(REPLACE(REPLACE(total_a_pagar, '.', ''), ',', '.') AS REAL)), 0) as total "
+        "FROM facturas_proveedor WHERE LOWER(TRIM(estado_pago)) = 'pendiente' GROUP BY empresa_id"
+      ).fetchall()
+      result["pendientes_por_empresa"] = [
+        {"empresa": emp_map.get(r["empresa_id"], r["empresa_id"]), "count": r["cnt"], "importe": round(r["total"], 2)}
+        for r in rows2
+      ]
+      # --- Datos para gráficos ---
+      _meses_es = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"]
+      from datetime import timedelta as _td
+      hoy = _dt.now()
+      meses_rango = []
+      for i in range(5, -1, -1):
+        d = hoy.replace(day=1) - _td(days=i * 28)
+        d = d.replace(day=1)
+        meses_rango.append((d.year, d.month))
+      # deduplicate preserving order
+      seen = set()
+      meses_uniq = []
+      for ym in meses_rango:
+        if ym not in seen:
+          seen.add(ym)
+          meses_uniq.append(ym)
+      # ensure exactly 6
+      if len(meses_uniq) < 6:
+        d = _dt(meses_uniq[0][0], meses_uniq[0][1], 1) - _td(days=1)
+        meses_uniq.insert(0, (d.year, d.month))
+      meses_uniq = meses_uniq[-6:]
+      facturas_por_mes = []
+      for y, m in meses_uniq:
+        prefix = f"{y}-{m:02d}"
+        r = conn.execute(
+          "SELECT COUNT(*) as cnt, COALESCE(SUM(CAST(REPLACE(REPLACE(total_a_pagar, '.', ''), ',', '.') AS REAL)), 0) as total "
+          "FROM facturas_proveedor WHERE fecha_factura LIKE ?", (prefix + "%",)
+        ).fetchone()
+        facturas_por_mes.append({"mes": _meses_es[m - 1], "count": r["cnt"], "importe": round(r["total"], 2)})
+      result["facturas_por_mes"] = facturas_por_mes
+      # Facturas por estado
+      estados = conn.execute(
+        "SELECT LOWER(TRIM(estado_pago)) as st, COUNT(*) as cnt FROM facturas_proveedor GROUP BY st"
+      ).fetchall()
+      estado_map = {"pendiente": 0, "pagada": 0, "parcial": 0}
+      for e in estados:
+        st = e["st"]
+        if st in estado_map:
+          estado_map[st] = e["cnt"]
+      result["facturas_por_estado"] = estado_map
+      # Top 5 proveedores
+      top = conn.execute(
+        "SELECT proveedor, COALESCE(SUM(CAST(REPLACE(REPLACE(total_a_pagar, '.', ''), ',', '.') AS REAL)), 0) as total "
+        "FROM facturas_proveedor GROUP BY proveedor ORDER BY total DESC LIMIT 5"
+      ).fetchall()
+      result["top_proveedores"] = [{"nombre": t["proveedor"], "importe": round(t["total"], 2)} for t in top]
+  except Exception as e:
+    logging.getLogger(__name__).warning("Error en /api/dashboard: %s", e)
+  return jsonify(result)
+
+
+@app.get("/api/finanzas/resumen")
+def api_finanzas_resumen():
+  """Resumen rápido para el dashboard del módulo Finanzas."""
+  from datetime import datetime as _dt
+  from core.db import conectar as _conectar_db
+  anio = _dt.now().strftime("%Y")
+  result = {"total_prov": 0.0, "total_cli": 0.0, "sin_conciliar": 0}
+  try:
+    with _conectar_db() as conn:
+      r = conn.execute(
+        "SELECT COALESCE(SUM(CAST(REPLACE(REPLACE(total_a_pagar,'.',''),',','.') AS REAL)),0) as t "
+        "FROM facturas_proveedor WHERE fecha_factura LIKE ?", (anio + "%",)
+      ).fetchone()
+      if r:
+        result["total_prov"] = round(r["t"], 2)
+      r2 = conn.execute(
+        "SELECT COALESCE(SUM(CAST(REPLACE(REPLACE(total_a_pagar,'.',''),',','.') AS REAL)),0) as t "
+        "FROM facturas_cliente WHERE fecha_factura LIKE ?", (anio + "%",)
+      ).fetchone()
+      if r2:
+        result["total_cli"] = round(r2["t"], 2)
+      r3 = conn.execute(
+        "SELECT COUNT(*) as cnt FROM movimientos_banco WHERE conciliado_at IS NULL OR TRIM(conciliado_at) = ''"
+      ).fetchone()
+      if r3:
+        result["sin_conciliar"] = r3["cnt"]
+  except Exception as e:
+    logging.getLogger(__name__).warning("Error en /api/finanzas/resumen: %s", e)
+  return jsonify(result)
+
+
+def _parse_importe_es(val):
+  """Parsea importe en formato español/inglés mixto a float."""
+  if not val:
+    return 0.0
+  s = str(val).strip().replace('\u20ac', '').replace(' ', '')
+  if ',' in s and '.' in s:
+    # Formato español con miles: 1.234,56
+    s = s.replace('.', '').replace(',', '.')
+  elif ',' in s:
+    # Coma decimal sin miles: 42,00 o 60500,00
+    s = s.replace(',', '.')
+  elif '.' in s:
+    # Punto: puede ser decimal inglés (42.00) o miles español (1.234)
+    parts = s.split('.')
+    if len(parts) == 2 and len(parts[1]) <= 2:
+      pass  # Decimal inglés, ya correcto
+    else:
+      s = s.replace('.', '')
+  try:
+    return float(s)
+  except (ValueError, TypeError):
+    return 0.0
+
+
+def _sum_importes(rows, *cols):
+  """Suma importes de las filas usando parseo robusto. Prueba cols en orden."""
+  total = 0.0
+  for r in rows:
+    for c in cols:
+      v = r[c] if c in r.keys() else None
+      if v:
+        total += _parse_importe_es(v)
+        break
+  return round(total, 2)
+
+
+@app.get("/api/finanzas/dashboard")
+def api_finanzas_dashboard():
+  """Dashboard financiero completo."""
+  from datetime import date as _date
+  from core.db import conectar as _conectar_db
+
+  year = _date.today().year
+  result = {
+    "year": year,
+    "facturacion_clientes": {"total": 0, "num": 0},
+    "cobros_pendientes": {"total": 0, "num": 0},
+    "facturacion_proveedores": {"total": 0, "num": 0},
+    "pagos_pendientes": {"total": 0, "num": 0},
+    "margen_bruto": 0,
+    "proyectos": [],
+    "pipeline": [],
+    "pipeline_total": 0,
+    "movimientos_sin_conciliar": 0,
+  }
+
+  try:
+    with _conectar_db() as conn:
+      # Facturación clientes año actual
+      rows = conn.execute(
+        "SELECT total_a_pagar FROM facturas_cliente WHERE fecha_factura LIKE ?",
+        (f"{year}%",),
+      ).fetchall()
+      result["facturacion_clientes"] = {
+        "total": _sum_importes(rows, "total_a_pagar"), "num": len(rows),
+      }
+
+      # Cobros pendientes
+      rows = conn.execute(
+        "SELECT total_a_pagar FROM facturas_cliente "
+        "WHERE estado_cobro IS NULL OR estado_cobro IN ('pendiente','parcial','')"
+      ).fetchall()
+      result["cobros_pendientes"] = {
+        "total": _sum_importes(rows, "total_a_pagar"), "num": len(rows),
+      }
+
+      # Facturación proveedores año actual
+      rows = conn.execute(
+        "SELECT total, total_a_pagar FROM facturas_proveedor WHERE fecha_factura LIKE ?",
+        (f"{year}%",),
+      ).fetchall()
+      result["facturacion_proveedores"] = {
+        "total": _sum_importes(rows, "total", "total_a_pagar"), "num": len(rows),
+      }
+
+      # Pagos pendientes
+      rows = conn.execute(
+        "SELECT total, total_a_pagar FROM facturas_proveedor "
+        "WHERE estado_pago IS NULL OR estado_pago IN ('pendiente','Pendiente','')"
+      ).fetchall()
+      result["pagos_pendientes"] = {
+        "total": _sum_importes(rows, "total", "total_a_pagar"), "num": len(rows),
+      }
+
+      result["margen_bruto"] = round(
+        result["facturacion_clientes"]["total"] - result["facturacion_proveedores"]["total"], 2
+      )
+
+      # Rentabilidad por proyecto
+      proyectos = [dict(r) for r in conn.execute("""
+        SELECT p.id, p.nombre, p.estado, p.importe_presupuestado,
+               t.nombre_canonico AS cliente
+        FROM proyectos p
+        LEFT JOIN terceros t ON t.id = p.cliente_tercero_id
+        WHERE p.estado IN ('vivo','terminado','pausado')
+        ORDER BY p.estado, p.nombre
+      """).fetchall()]
+
+      for proy in proyectos:
+        rows = conn.execute(
+          "SELECT total_a_pagar FROM facturas_cliente WHERE proyecto_id = ?",
+          [proy["id"]],
+        ).fetchall()
+        proy["facturado"] = _sum_importes(rows, "total_a_pagar")
+
+        rows = conn.execute(
+          "SELECT total, total_a_pagar FROM facturas_proveedor WHERE proyecto_id = ?",
+          [proy["id"]],
+        ).fetchall()
+        proy["costes"] = _sum_importes(rows, "total", "total_a_pagar")
+
+        proy["margen"] = round(proy["facturado"] - proy["costes"], 2)
+        proy["margen_pct"] = round(proy["margen"] / proy["facturado"] * 100, 1) if proy["facturado"] > 0 else 0
+
+      result["proyectos"] = proyectos
+
+      # Pipeline comercial
+      try:
+        pipeline = [dict(r) for r in conn.execute("""
+          SELECT p.id, p.referencia, p.nombre_proyecto, p.estado,
+                 v.total AS importe,
+                 t.nombre_canonico AS cliente
+          FROM presupuestos p
+          LEFT JOIN presupuesto_versiones v ON v.presupuesto_id = p.id AND v.es_activa = 1
+          LEFT JOIN terceros t ON t.id = p.tercero_id
+          WHERE p.estado IN ('enviada','negociacion')
+          ORDER BY v.total DESC
+        """).fetchall()]
+        result["pipeline"] = pipeline
+        result["pipeline_total"] = round(sum(p.get("importe") or 0 for p in pipeline), 2)
+      except Exception:
+        pass
+
+      # Movimientos sin conciliar
+      try:
+        r = conn.execute(
+          "SELECT COUNT(*) FROM movimientos_banco WHERE conciliado_at IS NULL OR TRIM(conciliado_at) = ''"
+        ).fetchone()
+        result["movimientos_sin_conciliar"] = r[0] if r else 0
+      except Exception:
+        pass
+
+  except Exception as e:
+    logging.getLogger(__name__).warning("Error en /api/finanzas/dashboard: %s", e)
+
+  return jsonify(result)
+
+
+@app.get("/api/empresas")
+def listar_empresas():
+  """
+  Devuelve el listado de empresas cargado desde config/empresas.toml.
+  Formato: [{ "id": "...", "nombre": "..." }, ...]
+  """
+  empresas = [{"id": id_, "nombre": nombre} for id_, nombre in EMPRESAS_CLIENTE.items()]
+  resp = jsonify(empresas)
+  resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+  resp.headers["Pragma"] = "no-cache"
+  return resp
 
 
 @facturas_proveedores_bp.post("/api/procesar")
@@ -4789,60 +5257,1051 @@ def importar_bbva():
   })
 
 
-# Transporte buscar → routes/transporte.py
+# ─── Proyectos > Transporte: ruta y proveedores en la ruta ─────────────────
+@transporte_bp.route("/api/proyectos/transporte/buscar", methods=["POST"])
+def transporte_buscar():
+  """
+  Recibe origen y destino (texto). Calcula la ruta con OpenRouteService y devuelve
+  proveedores de transporte de maquinaria situados a menos de 50 km de la ruta.
+  Requiere OPENROUTESERVICE_API_KEY en .env (clave gratuita en openrouteservice.org).
+  """
+  data = request.get_json(silent=True) or {}
+  origen = (data.get("origen") or "").strip()
+  destino = (data.get("destino") or "").strip()
+  paradas = data.get("paradas")
+  if paradas is not None and not isinstance(paradas, list):
+    paradas = []
+  paradas = [str(p).strip() for p in (paradas or []) if str(p).strip()]
+  if not origen or not destino:
+    return jsonify({"error": "Faltan origen o destino"}), 400
+  api_key = (OPENROUTESERVICE_API_KEY or "").strip()
+  if not api_key:
+    return jsonify({"error": "No está configurada la API key de OpenRouteService. Añade OPENROUTESERVICE_API_KEY en .env"}), 503
+  try:
+    resultado = _buscar_ruta_y_proveedores(origen, destino, BASE_DIR, api_key, radio_km=50.0, paradas=paradas)
+  except Exception as e:
+    return jsonify({"error": "Error al calcular ruta o proveedores: " + str(e)}), 500
+  return jsonify(resultado)
 
 
-# CRM endpoints → routes/crm.py
+# ─── CRM (Gestión de relaciones comerciales) ─────────────────────────────────
+
+@crm_bp.post("/api/crm/sync-terceros")
+def crm_sync_terceros():
+  resultado = crm_db.sincronizar_desde_terceros()
+  return jsonify(resultado)
 
 
-# Transporte proveedores → routes/transporte.py
+@crm_bp.get("/api/crm/empresas")
+def crm_listar_empresas():
+  # Auto-sync terceros → crm_empresas on first access
+  crm_db.sincronizar_desde_terceros()
+  tipo = (request.args.get("tipo") or "").strip() or None
+  q = (request.args.get("q") or "").strip() or None
+  activo_raw = request.args.get("activo")
+  activo = int(activo_raw) if activo_raw is not None and activo_raw.strip() != "" else None
+  limit = min(int(request.args.get("limit") or 50), 200)
+  offset = int(request.args.get("offset") or 0)
+  resultado = crm_db.listar_empresas(tipo=tipo, q=q, activo=activo, limit=limit, offset=offset)
+  return jsonify(resultado)
 
 
-# Tesorería → routes/tesoreria.py
+@crm_bp.get("/api/crm/empresas/<int:empresa_id>")
+def crm_obtener_empresa(empresa_id: int):
+  empresa = crm_db.obtener_empresa(empresa_id)
+  if not empresa:
+    return jsonify({"error": "Empresa CRM no encontrada"}), 404
+  return jsonify(empresa)
 
 
-# Proyectos + certificaciones → routes/proyectos.py
+@crm_bp.post("/api/crm/empresas")
+def crm_crear_empresa():
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre de la empresa es obligatorio")
+  tipo = (data.get("tipo") or "lead").strip()
+  if tipo not in ("cliente", "proveedor", "ambos", "lead"):
+    return _bad_request("Tipo debe ser cliente, proveedor, ambos o lead")
+  empresa = crm_db.crear_empresa(data)
+  return jsonify(empresa), 201
 
 
-# Presupuestos → routes/presupuestos.py
+@crm_bp.put("/api/crm/empresas/<int:empresa_id>")
+def crm_actualizar_empresa(empresa_id: int):
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre de la empresa es obligatorio")
+  empresa = crm_db.actualizar_empresa(empresa_id, data)
+  if not empresa:
+    return jsonify({"error": "Empresa CRM no encontrada"}), 404
+  return jsonify(empresa)
 
 
-# OneDrive → routes/onedrive.py
+@crm_bp.get("/api/crm/stats")
+def crm_stats():
+  return jsonify(crm_db.estadisticas_crm())
 
 
-# ─── Registrar blueprints ─────────────────────────────────────────────────────
+@crm_bp.get("/api/crm/duplicados")
+def crm_detectar_duplicados():
+  grupos = crm_db.detectar_duplicados()
+  return jsonify({"grupos": grupos, "total_grupos": len(grupos)})
 
-# Blueprints definidos en este archivo (finanzas/bancos/facturas)
+
+@crm_bp.post("/api/crm/fusionar")
+def crm_fusionar():
+  data = request.get_json(silent=True) or {}
+  principal_id = data.get("principal_id")
+  absorbido_id = data.get("absorbido_id")
+  if not principal_id or not absorbido_id:
+    return _bad_request("Se requieren principal_id y absorbido_id")
+  if principal_id == absorbido_id:
+    return _bad_request("No se puede fusionar un tercero consigo mismo")
+  resultado = crm_db.fusionar_terceros(int(principal_id), int(absorbido_id))
+  return jsonify(resultado)
+
+
+@crm_bp.post("/api/crm/vincular-facturas")
+def crm_vincular_facturas():
+  stats = crm_db.vincular_facturas_a_terceros()
+  return jsonify(stats)
+
+
+# ─── CRM Contactos ──────────────────────────────────────────────────────────
+
+@crm_bp.get("/api/crm/contactos")
+def crm_listar_contactos():
+  empresa_id = request.args.get("empresa_id", type=int)
+  q = (request.args.get("q") or "").strip() or None
+  limit = min(int(request.args.get("limit") or 50), 200)
+  offset = int(request.args.get("offset") or 0)
+  return jsonify(crm_db.listar_contactos(empresa_id=empresa_id, q=q, limit=limit, offset=offset))
+
+
+@crm_bp.get("/api/crm/contactos/<int:contacto_id>")
+def crm_obtener_contacto(contacto_id: int):
+  contacto = crm_db.obtener_contacto(contacto_id)
+  if not contacto:
+    return jsonify({"error": "Contacto no encontrado"}), 404
+  return jsonify(contacto)
+
+
+@crm_bp.post("/api/crm/contactos")
+def crm_crear_contacto():
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre del contacto es obligatorio")
+  contacto = crm_db.crear_contacto(data)
+  return jsonify(contacto), 201
+
+
+@crm_bp.put("/api/crm/contactos/<int:contacto_id>")
+def crm_actualizar_contacto(contacto_id: int):
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre del contacto es obligatorio")
+  contacto = crm_db.actualizar_contacto(contacto_id, data)
+  if not contacto:
+    return jsonify({"error": "Contacto no encontrado"}), 404
+  return jsonify(contacto)
+
+
+@crm_bp.delete("/api/crm/contactos/<int:contacto_id>")
+def crm_eliminar_contacto(contacto_id: int):
+  ok = crm_db.eliminar_contacto(contacto_id)
+  if not ok:
+    return jsonify({"error": "Contacto no encontrado"}), 404
+  return jsonify({"ok": True})
+
+
+# ─── CRM Interacciones ──────────────────────────────────────────────────────
+
+@crm_bp.get("/api/crm/interacciones")
+def crm_listar_interacciones():
+  empresa_id = request.args.get("empresa_id", type=int)
+  contacto_id = request.args.get("contacto_id", type=int)
+  tipo = (request.args.get("tipo") or "").strip() or None
+  fecha_desde = (request.args.get("fecha_desde") or "").strip() or None
+  fecha_hasta = (request.args.get("fecha_hasta") or "").strip() or None
+  q = (request.args.get("q") or "").strip() or None
+  limit = min(int(request.args.get("limit") or 50), 200)
+  offset = int(request.args.get("offset") or 0)
+  return jsonify(crm_db.listar_interacciones(
+    empresa_id=empresa_id, contacto_id=contacto_id, tipo=tipo,
+    fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, q=q,
+    limit=limit, offset=offset,
+  ))
+
+
+@crm_bp.post("/api/crm/interacciones")
+def crm_crear_interaccion():
+  data = request.get_json(silent=True) or {}
+  tipo = (data.get("tipo") or "").strip()
+  if tipo not in ("llamada", "email", "reunion", "nota", "whatsapp", "visita"):
+    return _bad_request("Tipo debe ser llamada, email, reunion, nota, whatsapp o visita")
+  interaccion = crm_db.crear_interaccion(data)
+  return jsonify(interaccion), 201
+
+
+@crm_bp.get("/api/crm/interacciones/<int:interaccion_id>")
+def crm_obtener_interaccion(interaccion_id: int):
+  with __import__('core.db', fromlist=['conectar']).conectar() as conn:
+    row = conn.execute("""
+      SELECT i.*, c.nombre AS nombre_contacto, c.apellidos AS apellidos_contacto,
+             e.nombre AS nombre_empresa
+      FROM crm_interacciones i
+      LEFT JOIN crm_contactos c ON c.id = i.contacto_id
+      LEFT JOIN crm_empresas e ON e.id = i.empresa_id
+      WHERE i.id = ?
+    """, (interaccion_id,)).fetchone()
+  if not row:
+    return jsonify({"error": "Interaccion no encontrada"}), 404
+  return jsonify(dict(row))
+
+
+@crm_bp.put("/api/crm/interacciones/<int:interaccion_id>")
+def crm_actualizar_interaccion(interaccion_id: int):
+  data = request.get_json(silent=True) or {}
+  interaccion = crm_db.actualizar_interaccion(interaccion_id, data)
+  if not interaccion:
+    return jsonify({"error": "Interaccion no encontrada"}), 404
+  return jsonify(interaccion)
+
+
+@crm_bp.delete("/api/crm/interacciones/<int:interaccion_id>")
+def crm_eliminar_interaccion(interaccion_id: int):
+  ok = crm_db.eliminar_interaccion(interaccion_id)
+  if not ok:
+    return jsonify({"error": "Interaccion no encontrada"}), 404
+  return jsonify({"ok": True})
+
+
+@crm_bp.get("/api/crm/interacciones/pendientes")
+def crm_interacciones_pendientes():
+  return jsonify({"interacciones": crm_db.interacciones_pendientes()})
+
+
+# ─── CRM Oportunidades ──────────────────────────────────────────────────────
+
+@crm_bp.get("/api/crm/oportunidades")
+def crm_listar_oportunidades():
+  estado = (request.args.get("estado") or "").strip() or None
+  empresa_id = request.args.get("empresa_id", type=int)
+  contacto_id = request.args.get("contacto_id", type=int)
+  fuente = (request.args.get("fuente") or "").strip() or None
+  q = (request.args.get("q") or "").strip() or None
+  limit = min(int(request.args.get("limit") or 200), 500)
+  offset = int(request.args.get("offset") or 0)
+  return jsonify(crm_db.listar_oportunidades(
+    estado=estado, empresa_id=empresa_id, contacto_id=contacto_id,
+    fuente=fuente, q=q, limit=limit, offset=offset,
+  ))
+
+
+@crm_bp.get("/api/crm/oportunidades/<int:oportunidad_id>")
+def crm_obtener_oportunidad(oportunidad_id: int):
+  op = crm_db.obtener_oportunidad(oportunidad_id)
+  if not op:
+    return jsonify({"error": "Oportunidad no encontrada"}), 404
+  return jsonify(op)
+
+
+@crm_bp.post("/api/crm/oportunidades")
+def crm_crear_oportunidad():
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre de la oportunidad es obligatorio")
+  if not data.get("empresa_id"):
+    return _bad_request("La empresa es obligatoria")
+  op = crm_db.crear_oportunidad(data)
+  return jsonify(op), 201
+
+
+@crm_bp.put("/api/crm/oportunidades/<int:oportunidad_id>")
+def crm_actualizar_oportunidad(oportunidad_id: int):
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return _bad_request("El nombre de la oportunidad es obligatorio")
+  estado = (data.get("estado") or "").strip()
+  if estado == "perdida" and not (data.get("motivo_perdida") or "").strip():
+    return _bad_request("El motivo de perdida es obligatorio para estado 'perdida'")
+  op = crm_db.actualizar_oportunidad(oportunidad_id, data)
+  if not op:
+    return jsonify({"error": "Oportunidad no encontrada"}), 404
+  return jsonify(op)
+
+
+@crm_bp.patch("/api/crm/oportunidades/<int:oportunidad_id>/estado")
+def crm_cambiar_estado_oportunidad(oportunidad_id: int):
+  data = request.get_json(silent=True) or {}
+  estado = (data.get("estado") or "").strip()
+  if not estado:
+    return _bad_request("El estado es obligatorio")
+  if estado == "perdida" and not (data.get("motivo_perdida") or "").strip():
+    return _bad_request("El motivo de perdida es obligatorio")
+  motivo = (data.get("motivo_perdida") or "").strip() or None
+  op = crm_db.cambiar_estado_oportunidad(oportunidad_id, estado, motivo)
+  if not op:
+    return jsonify({"error": "Oportunidad no encontrada o estado invalido"}), 404
+  return jsonify(op)
+
+
+@crm_bp.get("/api/crm/oportunidades/pipeline")
+def crm_pipeline_oportunidades():
+  return jsonify({"pipeline": crm_db.pipeline_oportunidades()})
+
+
+@transporte_bp.route("/api/proyectos/transporte/proveedores", methods=["GET"])
+def transporte_listar_proveedores():
+  """Lista todos los proveedores de transporte (con id) para el modal de gestión."""
+  try:
+    lista = _listar_proveedores_transporte_admin()
+    return jsonify({"proveedores": lista})
+  except Exception as e:
+    return jsonify({"error": str(e)}), 500
+
+
+@transporte_bp.route("/api/proyectos/transporte/proveedores", methods=["POST"])
+def transporte_alta_proveedor():
+  """Añade un nuevo proveedor de transporte (incorporar transportista)."""
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return jsonify({"error": "El nombre es obligatorio"}), 400
+  try:
+    datos = {
+      "nombre": nombre,
+      "telefono": (data.get("telefono") or "").strip(),
+      "telefono_fijo": (data.get("telefono_fijo") or "").strip(),
+      "telefono_movil": (data.get("telefono_movil") or "").strip(),
+      "email": (data.get("email") or "").strip(),
+      "web": (data.get("web") or "").strip(),
+      "localidad": (data.get("localidad") or "").strip(),
+      "provincia": (data.get("provincia") or "").strip(),
+      "codigo_postal": (data.get("codigo_postal") or "").strip(),
+      "direccion": (data.get("direccion") or "").strip(),
+      "lat": data.get("lat"),
+      "lon": data.get("lon"),
+    }
+    if datos["lat"] is not None:
+      try:
+        datos["lat"] = float(datos["lat"])
+      except (TypeError, ValueError):
+        datos["lat"] = None
+    if datos["lon"] is not None:
+      try:
+        datos["lon"] = float(datos["lon"])
+      except (TypeError, ValueError):
+        datos["lon"] = None
+    id_ = _alta_proveedor_transporte(datos)
+    return jsonify({"ok": True, "id": id_})
+  except Exception as e:
+    return jsonify({"error": str(e)}), 500
+
+
+@transporte_bp.route("/api/proyectos/transporte/proveedores/<int:proveedor_id>", methods=["GET"])
+def transporte_obtener_proveedor(proveedor_id):
+  """Devuelve un proveedor por id."""
+  p = _obtener_proveedor_transporte(proveedor_id)
+  if not p:
+    return jsonify({"error": "Proveedor no encontrado"}), 404
+  return jsonify(p)
+
+
+@transporte_bp.route("/api/proyectos/transporte/proveedores/<int:proveedor_id>", methods=["PUT"])
+def transporte_actualizar_proveedor(proveedor_id):
+  """Actualiza un proveedor de transporte."""
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return jsonify({"error": "El nombre es obligatorio"}), 400
+  try:
+    datos = {
+      "nombre": nombre,
+      "telefono": (data.get("telefono") or "").strip(),
+      "telefono_fijo": (data.get("telefono_fijo") or "").strip(),
+      "telefono_movil": (data.get("telefono_movil") or "").strip(),
+      "email": (data.get("email") or "").strip(),
+      "web": (data.get("web") or "").strip(),
+      "localidad": (data.get("localidad") or "").strip(),
+      "provincia": (data.get("provincia") or "").strip(),
+      "codigo_postal": (data.get("codigo_postal") or "").strip(),
+      "direccion": (data.get("direccion") or "").strip(),
+      "lat": data.get("lat"),
+      "lon": data.get("lon"),
+    }
+    for key in ("lat", "lon"):
+      if datos[key] is not None:
+        try:
+          datos[key] = float(datos[key])
+        except (TypeError, ValueError):
+          datos[key] = None
+    ok = _actualizar_proveedor_transporte(proveedor_id, datos)
+    if not ok:
+      return jsonify({"error": "Proveedor no encontrado"}), 404
+    return jsonify({"ok": True})
+  except Exception as e:
+    return jsonify({"error": str(e)}), 500
+
+
+@transporte_bp.route("/api/proyectos/transporte/proveedores/carga-masiva", methods=["POST"])
+def transporte_carga_masiva():
+  """Subida masiva de proveedores desde un archivo Excel (.xlsx)."""
+  if "archivo" not in request.files:
+    return jsonify({"error": "Falta el archivo. Usa el campo 'archivo'."}), 400
+  f = request.files["archivo"]
+  if not f or not f.filename:
+    return jsonify({"error": "No se ha seleccionado ningún archivo"}), 400
+  if not f.filename.lower().endswith((".xlsx", ".xls")):
+    return jsonify({"error": "El archivo debe ser Excel (.xlsx o .xls)"}), 400
+  try:
+    contenido = f.read()
+  except Exception as e:
+    return jsonify({"error": "Error leyendo el archivo: " + str(e)}), 500
+  try:
+    from io import BytesIO
+    lista = _parsear_xlsx_proveedores_stream(BytesIO(contenido))
+  except Exception as e:
+    return jsonify({"error": "Error al parsear el Excel: " + str(e)}), 500
+  if not lista:
+    return jsonify({"error": "No se encontraron filas válidas en el Excel", "insertados": 0}), 400
+  try:
+    n = _insertar_proveedores_transporte_lista(lista)
+    return jsonify({"ok": True, "insertados": n, "total_filas": len(lista)})
+  except Exception as e:
+    return jsonify({"error": str(e)}), 500
+
+
+@transporte_bp.route("/api/proyectos/transporte/proveedores/exportar-excel", methods=["POST"])
+def transporte_exportar_proveedores_excel():
+  """Genera un Excel con los proveedores de la ruta (listado actual) e información de contacto."""
+  try:
+    import openpyxl
+    from openpyxl import Workbook
+  except ImportError:
+    return jsonify({"error": "openpyxl no instalado"}), 500
+  data = request.get_json(silent=True) or {}
+  proveedores = data.get("proveedores")
+  if not isinstance(proveedores, list):
+    return jsonify({"error": "Se espera un array 'proveedores' en el body"}), 400
+  ruta_info = data.get("ruta") or {}
+  wb = Workbook()
+  ws = wb.active
+  if ws is None:
+    return jsonify({"error": "No se pudo crear la hoja"}), 500
+  ws.title = "Proveedores ruta"
+  headers = [
+    "Nombre", "Provincia", "Localidad", "Código postal", "Dirección",
+    "Tel. fijo", "Tel. móvil", "Email", "Web", "Distancia (km)",
+  ]
+  row = 1
+  if ruta_info.get("texto") or ruta_info.get("distancia_km") is not None or ruta_info.get("duracion_min") is not None:
+    ws.cell(row=row, column=1, value="Ruta: " + (ruta_info.get("texto") or ""))
+    row += 1
+    if ruta_info.get("distancia_km") is not None or ruta_info.get("duracion_min") is not None:
+      ws.cell(row=row, column=1, value="Distancia: {} km · Duración: {} min".format(
+        ruta_info.get("distancia_km") if ruta_info.get("distancia_km") is not None else "",
+        ruta_info.get("duracion_min") if ruta_info.get("duracion_min") is not None else "",
+      ))
+      row += 1
+    row += 1
+  for col, h in enumerate(headers, 1):
+    ws.cell(row=row, column=col, value=h)
+  row += 1
+  for p in proveedores:
+    if not isinstance(p, dict):
+      continue
+    dist_km = p.get("distancia_km")
+    if dist_km is not None:
+      try:
+        dist_km = float(dist_km)
+      except (TypeError, ValueError):
+        dist_km = ""
+    ws.cell(row=row, column=1, value=(p.get("nombre") or ""))
+    ws.cell(row=row, column=2, value=(p.get("provincia") or ""))
+    ws.cell(row=row, column=3, value=(p.get("localidad") or ""))
+    ws.cell(row=row, column=4, value=(p.get("codigo_postal") or ""))
+    ws.cell(row=row, column=5, value=(p.get("direccion") or ""))
+    ws.cell(row=row, column=6, value=(p.get("telefono_fijo") or ""))
+    ws.cell(row=row, column=7, value=(p.get("telefono_movil") or ""))
+    ws.cell(row=row, column=8, value=(p.get("email") or ""))
+    ws.cell(row=row, column=9, value=(p.get("web") or ""))
+    ws.cell(row=row, column=10, value=round(dist_km, 2) if isinstance(dist_km, (int, float)) else (dist_km if dist_km != "" else ""))
+    row += 1
+  output = io.BytesIO()
+  wb.save(output)
+  output.seek(0)
+  filename = "proveedores_ruta.xlsx"
+  return send_file(
+    output,
+    mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    as_attachment=True,
+    download_name=filename,
+  )
+
+
+# ─── Tesoreria ───────────────────────────────────────────────────────────────
+
+from core import tesoreria_db
+
+
+@tesoreria_bp.get("/api/tesoreria/resumen")
+def tesoreria_resumen():
+  empresa_id = (request.args.get("empresa_id") or "").strip() or None
+  return jsonify(tesoreria_db.resumen(empresa_id))
+
+
+@tesoreria_bp.get("/api/tesoreria/calendario")
+def tesoreria_calendario():
+  fecha_desde = (request.args.get("fecha_desde") or "").strip() or None
+  fecha_hasta = (request.args.get("fecha_hasta") or "").strip() or None
+  tipo = (request.args.get("tipo") or "").strip() or None
+  empresa_id = (request.args.get("empresa_id") or "").strip() or None
+  return jsonify({"eventos": tesoreria_db.calendario(fecha_desde, fecha_hasta, tipo, empresa_id)})
+
+
+@tesoreria_bp.get("/api/tesoreria/aging")
+def tesoreria_aging():
+  tipo = (request.args.get("tipo") or "proveedores").strip()
+  empresa_id = (request.args.get("empresa_id") or "").strip() or None
+  return jsonify({"aging": tesoreria_db.aging(tipo, empresa_id)})
+
+
+@tesoreria_bp.get("/api/tesoreria/flujo-caja")
+def tesoreria_flujo_caja():
+  empresa_id = (request.args.get("empresa_id") or "").strip() or None
+  return jsonify({"flujo": tesoreria_db.flujo_caja(empresa_id)})
+
+
+@tesoreria_bp.put("/api/tesoreria/condiciones/<int:tercero_id>")
+def tesoreria_set_condiciones(tercero_id: int):
+  data = request.get_json(silent=True) or {}
+  dias = data.get("dias_pago", 30)
+  notas = (data.get("notas") or "").strip() or None
+  result = tesoreria_db.set_condiciones(tercero_id, int(dias), notas)
+  return jsonify(result)
+
+
+@tesoreria_bp.get("/api/tesoreria/alertas")
+def tesoreria_alertas():
+  empresa_id = (request.args.get("empresa_id") or "").strip() or None
+  return jsonify(tesoreria_db.alertas_vencidas(empresa_id))
+
+
+# ─── Proyectos ───────────────────────────────────────────────────────────────
+
+from core import proyectos_db
+
+proyectos_crud_bp = Blueprint("proyectos_crud", __name__)
+
+
+@proyectos_crud_bp.get("/api/proyectos")
+def api_listar_proyectos():
+  proyectos_db.init_proyectos_db()
+  estado = (request.args.get("estado") or "").strip() or None
+  empresa_id = (request.args.get("empresa_id") or "").strip() or None
+  tipo_trabajo = (request.args.get("tipo_trabajo") or "").strip() or None
+  q = (request.args.get("q") or "").strip() or None
+  tercero_id = request.args.get("tercero_id", type=int) or None
+  return jsonify({"proyectos": proyectos_db.listar_proyectos(estado=estado, empresa_id=empresa_id, tipo_trabajo=tipo_trabajo, q=q, tercero_id=tercero_id)})
+
+
+@proyectos_crud_bp.get("/api/proyectos/<int:proyecto_id>")
+def api_obtener_proyecto(proyecto_id: int):
+  proyectos_db.init_proyectos_db()
+  p = proyectos_db.obtener_proyecto(proyecto_id)
+  if not p:
+    return jsonify({"error": "Proyecto no encontrado"}), 404
+  return jsonify(p)
+
+
+@proyectos_crud_bp.get("/api/proyectos/<int:pid>/dashboard")
+def api_proyecto_dashboard(pid):
+  proyectos_db.init_proyectos_db()
+  data = proyectos_db.obtener_dashboard_proyecto(pid)
+  if not data:
+    return jsonify({"error": "Proyecto no encontrado"}), 404
+  return jsonify(data)
+
+
+@proyectos_crud_bp.post("/api/proyectos")
+def api_crear_proyecto():
+  data = request.get_json(silent=True) or {}
+  if not (data.get("nombre") or "").strip():
+    return _bad_request("El nombre del proyecto es obligatorio")
+  if not data.get("empresa_id"):
+    return _bad_request("La empresa es obligatoria")
+  p = proyectos_db.crear_proyecto(data)
+  return jsonify(p), 201
+
+
+@proyectos_crud_bp.put("/api/proyectos/<int:proyecto_id>")
+def api_actualizar_proyecto(proyecto_id: int):
+  data = request.get_json(silent=True) or {}
+  if not (data.get("nombre") or "").strip():
+    return _bad_request("El nombre del proyecto es obligatorio")
+  p = proyectos_db.actualizar_proyecto(proyecto_id, data)
+  if not p:
+    return jsonify({"error": "Proyecto no encontrado"}), 404
+  return jsonify(p)
+
+
+@proyectos_crud_bp.patch("/api/proyectos/<int:proyecto_id>/estado")
+def api_cambiar_estado_proyecto(proyecto_id: int):
+  data = request.get_json(silent=True) or {}
+  estado = (data.get("estado") or "").strip()
+  if not estado:
+    return _bad_request("El estado es obligatorio")
+  motivo = (data.get("motivo") or "").strip() or None
+  p = proyectos_db.cambiar_estado_proyecto(proyecto_id, estado, motivo)
+  if not p:
+    return jsonify({"error": "Proyecto no encontrado o estado invalido"}), 404
+  return jsonify(p)
+
+
+@proyectos_crud_bp.get("/api/proyectos/<int:proyecto_id>/partes")
+def api_listar_partes(proyecto_id: int):
+  return jsonify({"partes": proyectos_db.listar_partes(proyecto_id)})
+
+
+@proyectos_crud_bp.post("/api/proyectos/<int:proyecto_id>/partes")
+def api_crear_parte(proyecto_id: int):
+  data = request.get_json(silent=True) or {}
+  parte = proyectos_db.crear_parte(proyecto_id, data)
+  return jsonify(parte), 201
+
+
+@proyectos_crud_bp.put("/api/proyectos/partes/<int:parte_id>")
+def api_actualizar_parte(parte_id: int):
+  data = request.get_json(silent=True) or {}
+  parte = proyectos_db.actualizar_parte(parte_id, data)
+  if not parte:
+    return jsonify({"error": "Parte no encontrado"}), 404
+  return jsonify(parte)
+
+
+@proyectos_crud_bp.get("/api/proyectos/dashboard")
+def api_proyectos_dashboard():
+  proyectos_db.init_proyectos_db()
+  return jsonify(proyectos_db.dashboard())
+
+
+@proyectos_crud_bp.post("/api/proyectos/<int:proyecto_id>/recursos")
+def api_asignar_recurso(proyecto_id: int):
+  data = request.get_json(silent=True) or {}
+  recurso = proyectos_db.asignar_recurso(proyecto_id, data)
+  return jsonify(recurso), 201
+
+
+@proyectos_crud_bp.delete("/api/proyectos/recursos/<int:recurso_id>")
+def api_desasignar_recurso(recurso_id: int):
+  ok = proyectos_db.desasignar_recurso(recurso_id)
+  if not ok:
+    return jsonify({"error": "Recurso no encontrado"}), 404
+  return jsonify({"ok": True})
+
+
+@proyectos_crud_bp.get("/api/proyectos/<int:pid>/documentos")
+def api_listar_documentos_proyecto(pid):
+  proyectos_db.init_proyectos_db()
+  from core.db import conectar as _db_conectar
+  with _db_conectar() as conn:
+    docs = [dict(r) for r in conn.execute(
+      "SELECT * FROM proyecto_documentos WHERE proyecto_id = ? ORDER BY created_at DESC", (pid,)
+    ).fetchall()]
+  return jsonify({"documentos": docs})
+
+
+@proyectos_crud_bp.post("/api/proyectos/<int:pid>/documentos")
+def api_crear_documento_proyecto(pid):
+  proyectos_db.init_proyectos_db()
+  data = request.get_json(silent=True) or {}
+  nombre = (data.get("nombre") or "").strip()
+  if not nombre:
+    return jsonify({"error": "El nombre es obligatorio"}), 400
+  from core.db import conectar as _db_conectar, now_iso as _db_now
+  with _db_conectar() as conn:
+    conn.execute("""
+      INSERT INTO proyecto_documentos (proyecto_id, nombre, tipo, descripcion, url_externa, fecha_documento, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (pid, nombre, data.get("tipo", "otro"), data.get("descripcion"),
+          data.get("url_externa"), data.get("fecha_documento"), _db_now()))
+    did = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    doc = dict(conn.execute("SELECT * FROM proyecto_documentos WHERE id = ?", (did,)).fetchone())
+  return jsonify(doc), 201
+
+
+@proyectos_crud_bp.delete("/api/proyectos/<int:pid>/documentos/<int:did>")
+def api_eliminar_documento_proyecto(pid, did):
+  proyectos_db.init_proyectos_db()
+  from core.db import conectar as _db_conectar
+  with _db_conectar() as conn:
+    conn.execute("DELETE FROM proyecto_documentos WHERE id = ? AND proyecto_id = ?", (did, pid))
+  return jsonify({"ok": True})
+
+
+# ─── Certificaciones ─────────────────────────────────────────────────────────
+
+
+@proyectos_crud_bp.get("/api/proyectos/<int:pid>/certificaciones")
+def api_listar_certificaciones(pid):
+  proyectos_db.init_proyectos_db()
+  certs = proyectos_db.listar_certificaciones(pid)
+  return jsonify({"certificaciones": certs})
+
+
+@proyectos_crud_bp.post("/api/proyectos/<int:pid>/certificaciones")
+def api_crear_certificacion(pid):
+  proyectos_db.init_proyectos_db()
+  data = request.get_json(silent=True) or {}
+  if not data.get('fecha_desde') or not data.get('fecha_hasta'):
+    return jsonify({"error": "Fechas requeridas"}), 400
+  precios = {
+    'precio_hinca': float(data.get('precio_hinca', 0)),
+    'precio_hora_admin': float(data.get('precio_hora_admin', 0)),
+    'importe_transporte': float(data.get('importe_transporte', 0)),
+  }
+  cert = proyectos_db.crear_certificacion(pid, data['fecha_desde'], data['fecha_hasta'], precios)
+  return jsonify(cert), 201
+
+
+@proyectos_crud_bp.get("/api/certificaciones/<int:cid>")
+def api_obtener_certificacion(cid):
+  proyectos_db.init_proyectos_db()
+  cert = proyectos_db.obtener_certificacion(cid)
+  if not cert:
+    return jsonify({"error": "No encontrada"}), 404
+  return jsonify(cert)
+
+
+@proyectos_crud_bp.put("/api/certificaciones/<int:cid>/estado")
+def api_cambiar_estado_certificacion(cid):
+  proyectos_db.init_proyectos_db()
+  data = request.get_json(silent=True) or {}
+  from core.db import conectar as _db_conectar, now_iso as _db_now
+  with _db_conectar() as conn:
+    conn.execute("UPDATE certificaciones SET estado = ?, updated_at = ? WHERE id = ?",
+                 [data.get('estado', 'borrador'), _db_now(), cid])
+  return jsonify({"ok": True})
+
+
+@proyectos_crud_bp.delete("/api/certificaciones/<int:cid>")
+def api_eliminar_certificacion(cid):
+  proyectos_db.init_proyectos_db()
+  from core.db import conectar as _db_conectar
+  with _db_conectar() as conn:
+    conn.execute("DELETE FROM certificacion_detalle WHERE certificacion_id = ?", [cid])
+    conn.execute("DELETE FROM certificaciones WHERE id = ?", [cid])
+  return jsonify({"ok": True})
+
+
+@proyectos_crud_bp.get("/api/certificaciones/<int:cid>/pdf")
+def api_certificacion_pdf(cid):
+  proyectos_db.init_proyectos_db()
+  cert = proyectos_db.obtener_certificacion(cid)
+  if not cert:
+    return jsonify({"error": "Certificación no encontrada"}), 404
+  proyecto = proyectos_db.obtener_dashboard_proyecto(cert["proyecto_id"])
+  if not proyecto:
+    return jsonify({"error": "Proyecto no encontrado"}), 404
+  from core.certificaciones_pdf import generar_pdf_certificacion
+  pdf_bytes = generar_pdf_certificacion(cert, proyecto)
+  nombre = proyecto.get("nombre", "").replace(" ", "_")
+  numero = cert.get("numero", 1)
+  return send_file(
+    io.BytesIO(pdf_bytes),
+    mimetype="application/pdf",
+    as_attachment=False,
+    download_name=f"Certificacion_{nombre}_{numero}.pdf",
+  )
+
+
+# ─── Presupuestos ──────────────────────────────────────────────────────────────
+from core import presupuestos_db
+
+presupuestos_bp = Blueprint("presupuestos", __name__)
+
+
+@presupuestos_bp.get("/api/presupuestos")
+def api_listar_presupuestos():
+  presupuestos_db.init_presupuestos_db()
+  estado = (request.args.get("estado") or "").strip() or None
+  tercero_id = request.args.get("tercero_id", type=int) or None
+  empresa_id = (request.args.get("empresa_id") or "").strip() or None
+  return jsonify({"presupuestos": presupuestos_db.listar_presupuestos(
+    estado=estado, tercero_id=tercero_id, empresa_id=empresa_id,
+  )})
+
+
+@presupuestos_bp.get("/api/presupuestos/<int:presupuesto_id>")
+def api_obtener_presupuesto(presupuesto_id: int):
+  presupuestos_db.init_presupuestos_db()
+  p = presupuestos_db.obtener_presupuesto(presupuesto_id)
+  if not p:
+    return jsonify({"error": "Presupuesto no encontrado"}), 404
+  return jsonify(p)
+
+
+@presupuestos_bp.post("/api/presupuestos")
+def api_crear_presupuesto():
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  if not (data.get("nombre_proyecto") or "").strip():
+    return _bad_request("El nombre del proyecto es obligatorio")
+  if not data.get("empresa_id"):
+    return _bad_request("La empresa es obligatoria")
+  if not data.get("tercero_id"):
+    return _bad_request("El cliente (tercero_id) es obligatorio")
+  p = presupuestos_db.crear_presupuesto(data)
+  return jsonify(p), 201
+
+
+@presupuestos_bp.put("/api/presupuestos/<int:presupuesto_id>")
+def api_actualizar_presupuesto(presupuesto_id: int):
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  p = presupuestos_db.actualizar_presupuesto(presupuesto_id, data)
+  if not p:
+    return jsonify({"error": "Presupuesto no encontrado"}), 404
+  return jsonify(p)
+
+
+@presupuestos_bp.put("/api/presupuestos/<int:presupuesto_id>/estado")
+def api_cambiar_estado_presupuesto(presupuesto_id: int):
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  estado = (data.get("estado") or "").strip()
+  if not estado:
+    return _bad_request("El estado es obligatorio")
+  p = presupuestos_db.cambiar_estado_presupuesto(presupuesto_id, estado)
+  if not p:
+    return jsonify({"error": "Presupuesto no encontrado o estado inválido"}), 404
+  return jsonify(p)
+
+
+# --- Versiones ---
+
+@presupuestos_bp.post("/api/presupuestos/<int:presupuesto_id>/versiones")
+def api_crear_version_presupuesto(presupuesto_id: int):
+  presupuestos_db.init_presupuestos_db()
+  v = presupuestos_db.crear_version(presupuesto_id)
+  if not v:
+    return jsonify({"error": "Presupuesto no encontrado"}), 404
+  return jsonify(v), 201
+
+
+@presupuestos_bp.get("/api/presupuestos/versiones/<int:version_id>")
+def api_obtener_version_presupuesto(version_id: int):
+  presupuestos_db.init_presupuestos_db()
+  v = presupuestos_db.obtener_version(version_id)
+  if not v:
+    return jsonify({"error": "Versión no encontrada"}), 404
+  return jsonify(v)
+
+
+@presupuestos_bp.put("/api/presupuestos/versiones/<int:version_id>")
+def api_actualizar_version_presupuesto(version_id: int):
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  v = presupuestos_db.actualizar_version(version_id, data)
+  if not v:
+    return jsonify({"error": "Versión no encontrada"}), 404
+  return jsonify(v)
+
+
+@presupuestos_bp.put("/api/presupuestos/versiones/<int:version_id>/lineas")
+def api_guardar_lineas_presupuesto(version_id: int):
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  lineas = data.get("lineas")
+  if lineas is None or not isinstance(lineas, list):
+    return _bad_request("Se requiere un array 'lineas'")
+  result = presupuestos_db.guardar_lineas(version_id, lineas)
+  # Obtener total actualizado
+  v = presupuestos_db.obtener_version(version_id)
+  return jsonify({"lineas": result, "total": v["total"] if v else 0})
+
+
+@presupuestos_bp.get("/api/presupuestos/versiones/<int:version_id>/pdf")
+def api_generar_pdf_presupuesto(version_id: int):
+  presupuestos_db.init_presupuestos_db()
+  from core.presupuestos_pdf import generar_pdf_presupuesto
+  try:
+    pdf_bytes = generar_pdf_presupuesto(version_id)
+    return Response(pdf_bytes, mimetype="application/pdf",
+                    headers={"Content-Disposition": f"inline; filename=presupuesto_{version_id}.pdf"})
+  except ValueError as e:
+    return jsonify({"error": str(e)}), 404
+  except Exception as e:
+    logger.exception("Error generando PDF presupuesto %d", version_id)
+    return jsonify({"error": str(e)}), 500
+
+
+# --- Plantillas T&C ---
+
+@presupuestos_bp.get("/api/presupuestos/plantillas-tc")
+def api_listar_plantillas_tc():
+  presupuestos_db.init_presupuestos_db()
+  activas = request.args.get("activas_solo", "true").lower() in ("1", "true", "si")
+  return jsonify({"plantillas": presupuestos_db.listar_plantillas_tc(activas_solo=activas)})
+
+
+@presupuestos_bp.get("/api/presupuestos/plantillas-tc/<int:plantilla_id>")
+def api_obtener_plantilla_tc(plantilla_id: int):
+  presupuestos_db.init_presupuestos_db()
+  p = presupuestos_db.obtener_plantilla_tc(plantilla_id)
+  if not p:
+    return jsonify({"error": "Plantilla no encontrada"}), 404
+  return jsonify(p)
+
+
+@presupuestos_bp.post("/api/presupuestos/plantillas-tc")
+def api_crear_plantilla_tc():
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  if not (data.get("nombre") or "").strip():
+    return _bad_request("El nombre de la plantilla es obligatorio")
+  if not (data.get("contenido") or "").strip():
+    return _bad_request("El contenido es obligatorio")
+  p = presupuestos_db.crear_plantilla_tc(data)
+  return jsonify(p), 201
+
+
+@presupuestos_bp.put("/api/presupuestos/plantillas-tc/<int:plantilla_id>")
+def api_actualizar_plantilla_tc(plantilla_id: int):
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  p = presupuestos_db.actualizar_plantilla_tc(plantilla_id, data)
+  if not p:
+    return jsonify({"error": "Plantilla no encontrada"}), 404
+  return jsonify(p)
+
+
+# --- Catálogo de partidas predefinidas ---
+
+@presupuestos_bp.get("/api/presupuestos/catalogo")
+def api_listar_catalogo():
+  presupuestos_db.init_presupuestos_db()
+  seccion = (request.args.get("seccion") or "").strip() or None
+  categoria = (request.args.get("categoria") or "").strip() or None
+  return jsonify({"catalogo": presupuestos_db.listar_catalogo(seccion=seccion, categoria=categoria)})
+
+
+@presupuestos_bp.post("/api/presupuestos/catalogo")
+def api_crear_item_catalogo():
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  if not (data.get("titulo") or "").strip():
+    return _bad_request("El título es obligatorio")
+  try:
+    item = presupuestos_db.crear_item_catalogo(data)
+  except ValueError as e:
+    return _bad_request(str(e))
+  return jsonify(item), 201
+
+
+@presupuestos_bp.put("/api/presupuestos/catalogo/<int:item_id>")
+def api_actualizar_item_catalogo(item_id: int):
+  presupuestos_db.init_presupuestos_db()
+  data = request.get_json(silent=True) or {}
+  item = presupuestos_db.actualizar_item_catalogo(item_id, data)
+  if not item:
+    return jsonify({"error": "Item no encontrado"}), 404
+  return jsonify(item)
+
+
+@presupuestos_bp.delete("/api/presupuestos/catalogo/<int:item_id>")
+def api_eliminar_item_catalogo(item_id: int):
+  presupuestos_db.init_presupuestos_db()
+  item = presupuestos_db.eliminar_item_catalogo(item_id)
+  if not item:
+    return jsonify({"error": "Item no encontrado"}), 404
+  return jsonify({"ok": True, "item": item})
+
+
+# ─── ONEDRIVE / SHAREPOINT ────────────────────────────────────────────────────
+
+
+@onedrive_bp.get("/api/onedrive/status")
+def api_onedrive_status():
+    """Verifica la conexión con SharePoint."""
+    from core.onedrive_db import get_sharepoint_client
+
+    client = get_sharepoint_client()
+    status = client.verificar_conexion()
+    return jsonify(status)
+
+
+@onedrive_bp.get("/api/onedrive/listar")
+def api_onedrive_listar():
+    """Lista archivos en una carpeta de SharePoint."""
+    from core.onedrive_db import get_sharepoint_client
+
+    folder = request.args.get("folder", "")
+    client = get_sharepoint_client()
+    archivos = client.listar_archivos(folder)
+    return jsonify({"archivos": archivos})
+
+
+@onedrive_bp.get("/api/onedrive/archivo")
+def api_onedrive_archivo():
+    """Sirve un archivo de SharePoint como proxy (evita problemas de CORS)."""
+    from core.onedrive_db import get_sharepoint_client
+
+    file_path = request.args.get("path", "")
+    if not file_path:
+        return _bad_request("Falta path")
+
+    client = get_sharepoint_client()
+    try:
+        contenido = client.descargar_archivo(file_path)
+    except Exception as exc:
+        logger.error("Error descargando de SharePoint %s: %s", file_path, exc)
+        return jsonify({"error": "Error conectando con SharePoint"}), 502
+
+    if not contenido:
+        return jsonify({"error": "Archivo no encontrado en SharePoint"}), 404
+
+    ext = file_path.rsplit(".", 1)[-1].lower() if "." in file_path else ""
+    content_types = {
+        "pdf": "application/pdf",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "png": "image/png",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "csv": "text/csv",
+    }
+    ct = content_types.get(ext, "application/octet-stream")
+    filename = file_path.split("/")[-1]
+
+    from flask import Response
+
+    return Response(
+        contenido,
+        mimetype=ct,
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+# Registrar blueprints
 app.register_blueprint(facturas_proveedores_bp)
 app.register_blueprint(proveedores_bp)
 app.register_blueprint(facturas_clientes_bp)
 app.register_blueprint(archivo_bp)
 app.register_blueprint(control_calidad_bp)
 app.register_blueprint(bancos_bp)
-
-# Re-exportar helpers movidos a routes/ para compatibilidad con tests
-from routes.helpers import _parse_importe_es, _sum_importes  # noqa: F401
-
-# Blueprints extraídos a routes/
-from routes.usuarios import usuarios_bp
-from routes.maquinaria import maquinaria_bp
-from routes.api_general import api_general_bp
-from routes.crm import crm_bp as crm_routes_bp
-from routes.tesoreria import tesoreria_bp as tesoreria_routes_bp
-from routes.proyectos import proyectos_bp as proyectos_routes_bp
-from routes.presupuestos import presupuestos_bp as presupuestos_routes_bp
-from routes.onedrive import onedrive_bp as onedrive_routes_bp
-from routes.transporte import transporte_bp as transporte_routes_bp
-
-app.register_blueprint(usuarios_bp)
-app.register_blueprint(maquinaria_bp)
-app.register_blueprint(api_general_bp)
-app.register_blueprint(crm_routes_bp)
-app.register_blueprint(tesoreria_routes_bp)
-app.register_blueprint(proyectos_routes_bp)
-app.register_blueprint(presupuestos_routes_bp)
-app.register_blueprint(onedrive_routes_bp)
-app.register_blueprint(transporte_routes_bp)
+app.register_blueprint(transporte_bp)
+app.register_blueprint(crm_bp)
+app.register_blueprint(tesoreria_bp)
+app.register_blueprint(proyectos_crud_bp)
+app.register_blueprint(presupuestos_bp)
+app.register_blueprint(onedrive_bp)
 
 logger.info("ERP arrancado — blueprints registrados")
 
