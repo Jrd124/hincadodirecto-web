@@ -594,6 +594,17 @@ function activarModulo(nombre) {
   if (nombre !== "finanzas") {
     document.getElementById("submenu-finanzas").classList.remove("visible");
   }
+  // Toggle body.cae-active — CSS handles sidebar visual collapse
+  document.body.classList.toggle("cae-active", nombre === "cae");
+  // Update --sidebar-width so container margin follows (same mechanism as Maquinaria)
+  if (nombre === "cae") {
+    document.documentElement.style.setProperty("--sidebar-width", "64px");
+  } else {
+    var _sb = document.getElementById("sidebar");
+    var _isCol = _sb && _sb.classList.contains("collapsed");
+    document.documentElement.style.setProperty("--sidebar-width", _isCol ? "64px" : "240px");
+  }
+
   if (nombre === "inicio") {
     cargarDashboard();
   } else if (nombre === "finanzas") {
@@ -652,6 +663,7 @@ function activarSubpanel(modulo, subpanel) {
   else if (modulo === "rrhh") rrhhSubpanel = subpanel;
   else if (modulo === "crm") crmSubpanel = subpanel;
   else if (modulo === "presupuestos") presupuestosSubpanel = subpanel;
+  else if (modulo === "cae") caeSubpanel = subpanel;
   Object.keys(mod.paneles).forEach((k) => {
     document.getElementById(mod.paneles[k]).classList.toggle("visible", k === subpanel);
     if (mod.subNavLinks[k]) {
@@ -711,16 +723,13 @@ document.getElementById("nav-finanzas-tesoreria").addEventListener("click", (e) 
 // Apply container margin-left EARLY — before any navigation that might loop
 (function earlyContainerMargin() {
   var sb = document.querySelector(".sidebar");
-  var ct = document.querySelector(".container");
-  if (!sb || !ct) return;
+  if (!sb) return;
   var collapsed = false;
   try { collapsed = localStorage.getItem("sidebar-collapsed") === "1"; } catch (e) {}
   if (collapsed) sb.classList.add("collapsed");
-  if (window.innerWidth > 1024) {
-    ct.style.setProperty("margin-left", collapsed ? "64px" : "240px", "important");
-  } else {
-    ct.style.setProperty("margin-left", "0", "important");
-  }
+  // Layout driven purely by CSS variable --sidebar-width
+  var sw = collapsed ? "64px" : (window.innerWidth > 1024 ? "240px" : "0px");
+  document.documentElement.style.setProperty("--sidebar-width", sw);
 })();
 
 (function setEstadoInicialFinanzas() {
@@ -850,6 +859,14 @@ var navMaquinaria = document.getElementById("nav-maquinaria-modulo");
 if (navMaquinaria) navMaquinaria.addEventListener("click", function (e) {
   e.preventDefault();
   activarModulo("maquinaria");
+});
+
+var navCae = document.getElementById("nav-cae-modulo");
+if (navCae) navCae.addEventListener("click", function (e) {
+  e.preventDefault();
+  activarModulo("cae");
+  caeSubpanel = "inicio";
+  _caeOnPanelShow("inicio");
 });
 
 
@@ -1055,18 +1072,19 @@ function cargarFinanzasInicio() {
     "nav-crm-modulo": "CRM"
   };
 
+  // Exposed on window so activarModulo can auto-collapse for CAE
+  window.applyCollapsed = applyCollapsed;
   function applyCollapsed(collapsed) {
     sidebar.classList.toggle("collapsed", collapsed);
-    // Force container margin-left with !important via setProperty
+    // Layout driven purely by CSS variable --sidebar-width (no inline overrides)
+    var sidebarW = collapsed ? "64px" : "240px";
+    document.documentElement.style.setProperty("--sidebar-width", sidebarW);
+    // Remove any stale inline styles on the container so CSS variable takes effect
     var containerEl = document.querySelector(".container");
     if (containerEl) {
-      if (window.innerWidth > 1024) {
-        containerEl.style.setProperty("margin-left", collapsed ? "64px" : "240px", "important");
-      } else {
-        containerEl.style.setProperty("margin-left", "0", "important");
-      }
+      containerEl.style.removeProperty("margin-left");
+      containerEl.style.removeProperty("width");
     }
-    document.documentElement.style.setProperty("--sidebar-width", collapsed ? "64px" : "240px");
     if (toggleBtn) {
       toggleBtn.innerHTML = collapsed ? "&raquo;" : "&laquo;";
       toggleBtn.title = collapsed ? "Expandir menú" : "Colapsar menú";
@@ -1092,7 +1110,7 @@ function cargarFinanzasInicio() {
   }
 
   // Expand/collapse groups (accordion: collapse others at top level)
-  var topLevelGroups = ["finanzas", "proyectos", "rrhh", "presupuestos", "crm"];
+  var topLevelGroups = ["finanzas", "proyectos", "rrhh", "presupuestos", "crm", "cae"];
 
   function toggleGroup(el) {
     var group = el.getAttribute("data-group");
@@ -1206,6 +1224,14 @@ function cargarFinanzasInicio() {
       var pLeafId = "nav-presupuestos-" + presupuestosSubpanel;
       var pLeaf = document.getElementById(pLeafId);
       if (pLeaf) pLeaf.classList.add("activo");
+    } else if (moduloActivo === "cae") {
+      var caem = document.getElementById("nav-cae-modulo");
+      if (caem) { caem.classList.add("activo"); caem.classList.add("expanded"); }
+      var caec = document.getElementById("sidebar-children-cae");
+      if (caec) caec.classList.add("open");
+      var caeLeafId = "nav-cae-" + caeSubpanel.replace("_", "-");
+      var caeLeaf = document.getElementById(caeLeafId);
+      if (caeLeaf) caeLeaf.classList.add("activo");
     }
 
     // Close sidebar on mobile after nav
@@ -1231,30 +1257,14 @@ function cargarFinanzasInicio() {
 
   // User info is now loaded from /api/usuarios/me (see Usuarios section below)
 
-  // On resize, update container margin-left for the current collapsed state
+  // On resize, update --sidebar-width for the current collapsed state
   window.addEventListener("resize", function () {
-    var containerEl = document.querySelector(".container");
-    if (containerEl) {
-      if (window.innerWidth > 1024) {
-        containerEl.style.setProperty("margin-left", sidebar.classList.contains("collapsed") ? "64px" : "240px", "important");
-      } else {
-        containerEl.style.setProperty("margin-left", "0", "important");
-      }
-    }
+    var sw = sidebar.classList.contains("collapsed") ? "64px" : (window.innerWidth > 1024 ? "240px" : "0px");
+    document.documentElement.style.setProperty("--sidebar-width", sw);
   });
 
   // Initial sync
   syncSidebar();
-  // Set initial container margin-left with !important
-  var _initContainer = document.querySelector(".container");
-  if (_initContainer) {
-    var _isCollapsed = sidebar.classList.contains("collapsed");
-    if (window.innerWidth > 1024) {
-      _initContainer.style.setProperty("margin-left", _isCollapsed ? "64px" : "240px", "important");
-    } else {
-      _initContainer.style.setProperty("margin-left", "0", "important");
-    }
-  }
 })();
 
 // Bancos: paginación mejorada
@@ -11492,7 +11502,8 @@ window.caeEliminarCarpeta = function (cid) {
 
 function _caeAbrirModalExpediente() {
   var modal = document.getElementById("modal-cae-nuevo-expediente");
-  modal.style.display = "flex";
+  modal.style.display = "";
+  modal.classList.add("visible");
   // Load projects
   _caeFetch("/api/proyectos/").then(function (d) {
     var sel = document.getElementById("cae-exp-proyecto-select");
@@ -11515,7 +11526,8 @@ function _caeAbrirModalExpediente() {
 
 function _caeAbrirModalPlantilla(pid) {
   var modal = document.getElementById("modal-cae-nueva-plantilla");
-  modal.style.display = "flex";
+  modal.style.display = "";
+  modal.classList.add("visible");
   document.getElementById("cae-plantilla-modal-titulo").textContent = pid ? "Editar plantilla" : "Nueva plantilla";
   modal.dataset.editId = pid || "";
 
@@ -11574,7 +11586,8 @@ function _caeAddPlantillaItemRow(container, item, idx) {
 
 function _caeAbrirFolderExplorer() {
   var modal = document.getElementById("modal-cae-folder-explorer");
-  modal.style.display = "flex";
+  modal.style.display = "";
+  modal.classList.add("visible");
   _caeFolderState = { driveId: null, folderId: null, path: [{ name: "Drives", driveId: null, folderId: null }] };
   // First: list drives
   _caeFetch("/api/cae/onedrive/drives").then(function (d) {
@@ -11712,7 +11725,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   var btnPlantillaClose = document.getElementById("btn-cae-plantilla-modal-close");
   if (btnPlantillaClose) btnPlantillaClose.addEventListener("click", function () {
-    document.getElementById("modal-cae-nueva-plantilla").style.display = "none";
+    document.getElementById("modal-cae-nueva-plantilla").classList.remove("visible");
   });
 
   var btnAddItem = document.getElementById("btn-cae-plantilla-add-item");
@@ -11744,13 +11757,13 @@ document.addEventListener("DOMContentLoaded", function () {
     var url = editId ? "/api/cae/plantillas/" + editId : "/api/cae/plantillas";
     var method = editId ? "PUT" : "POST";
     fetch(url, { method: method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
-      .then(function () { modal.style.display = "none"; caeCargarPlantillas(); mostrarToast("Plantilla guardada", "success"); });
+      .then(function () { modal.classList.remove("visible"); caeCargarPlantillas(); mostrarToast("Plantilla guardada", "success"); });
   });
 
   // Expediente modal
   var btnExpClose = document.getElementById("btn-cae-exp-modal-close");
   if (btnExpClose) btnExpClose.addEventListener("click", function () {
-    document.getElementById("modal-cae-nuevo-expediente").style.display = "none";
+    document.getElementById("modal-cae-nuevo-expediente").classList.remove("visible");
   });
 
   var btnExpCrear = document.getElementById("btn-cae-exp-crear");
@@ -11763,7 +11776,7 @@ document.addEventListener("DOMContentLoaded", function () {
       body: JSON.stringify({ proyecto_id: parseInt(pid), plantilla_id: tid ? parseInt(tid) : null })
     }).then(function (r) { return r.json(); })
       .then(function (d) {
-        document.getElementById("modal-cae-nuevo-expediente").style.display = "none";
+        document.getElementById("modal-cae-nuevo-expediente").classList.remove("visible");
         if (d.error) { mostrarToast(d.error, "error"); return; }
         mostrarToast("Expediente creado", "success");
         caeVerExpediente(d.id);
@@ -11776,7 +11789,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   var btnFolderClose = document.getElementById("btn-cae-folder-close");
   if (btnFolderClose) btnFolderClose.addEventListener("click", function () {
-    document.getElementById("modal-cae-folder-explorer").style.display = "none";
+    document.getElementById("modal-cae-folder-explorer").classList.remove("visible");
   });
 
   var btnFolderSelect = document.getElementById("btn-cae-folder-select");
@@ -11793,7 +11806,7 @@ document.addEventListener("DOMContentLoaded", function () {
         label: label,
       })
     }).then(function () {
-      document.getElementById("modal-cae-folder-explorer").style.display = "none";
+      document.getElementById("modal-cae-folder-explorer").classList.remove("visible");
       document.getElementById("cae-folder-label").value = "";
       caeCargarConfig();
       mostrarToast("Carpeta anadida", "success");
@@ -11847,11 +11860,9 @@ function _caeOnPanelShow(panel) {
   if (panel === "config") caeCargarConfig();
 }
 
-// Hook into module change to trigger CAE data loading
-var _origMostrarSubpanel = window.mostrarSubpanel;
-if (typeof _origMostrarSubpanel === "function") {
-  window.mostrarSubpanel = function (mod, sub) {
-    _origMostrarSubpanel(mod, sub);
-    if (mod === "cae") _caeOnPanelShow(sub);
-  };
-}
+// Bridge: expose mostrarSubpanel globally so CAE event listeners can call it
+// It delegates to the existing activarSubpanel + triggers CAE data loading
+window.mostrarSubpanel = function (mod, sub) {
+  activarSubpanel(mod, sub);
+  if (mod === "cae") _caeOnPanelShow(sub);
+};

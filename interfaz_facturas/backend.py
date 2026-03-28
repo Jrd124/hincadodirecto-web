@@ -708,6 +708,9 @@ app.secret_key = SECRET_KEY
 from core.usuarios_db import init_usuarios_db, verificar_credenciales
 init_usuarios_db()
 
+from core import proyectos_db
+proyectos_db.init_proyectos_db()
+
 from core import maquinaria_db
 maquinaria_db.init_maquinaria_db()
 

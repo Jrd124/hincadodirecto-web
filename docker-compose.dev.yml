@@ -1,0 +1,31 @@
+# ── Hincado ERP – Docker Compose para desarrollo local ──
+# Uso:  docker compose -f docker-compose.dev.yml up --build
+#
+# Construye la imagen desde el código local (no tira de GHCR),
+# monta los archivos en vivo para recarga rápida y expone en localhost:8000.
+
+version: "3.8"
+
+services:
+  erp:
+    build:
+      context: ./interfaz_facturas
+      dockerfile: Dockerfile
+    container_name: hincado-erp-dev
+    restart: "no"
+    env_file: ./interfaz_facturas/.env
+    environment:
+      - FLASK_ENV=development
+    volumes:
+      # Monta el código fuente para ver cambios sin rebuild
+      - ./interfaz_facturas:/app
+      # Datos persistentes locales
+      - erp-dev-data:/app/data
+    ports:
+      - "8000:8000"
+    # Usa Flask dev server en vez de Gunicorn para auto-reload
+    command: ["python", "backend.py"]
+
+volumes:
+  erp-dev-data:
+    driver: local

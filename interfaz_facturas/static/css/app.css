@@ -435,8 +435,11 @@
         .sidebar-toggle {
           display: none;
         }
-        .container {
-          margin-left: 0;
+        .container,
+        .panel-cae {
+          --sidebar-width: 0px !important;
+          margin-left: 0 !important;
+          width: 100% !important;
         }
       }
 
@@ -455,7 +458,8 @@
       .panel-crm,
       .panel-presupuestos,
       .panel-usuarios,
-      .panel-maquinaria {
+      .panel-maquinaria,
+      .panel-cae {
         display: none;
       }
       .panel-facturas.visible,
@@ -472,7 +476,8 @@
       .panel-crm.visible,
       .panel-presupuestos.visible,
       .panel-usuarios.visible,
-      .panel-maquinaria.visible {
+      .panel-maquinaria.visible,
+      .panel-cae.visible {
         display: block;
       }
       .panel-proyectos > .layout {
@@ -4726,7 +4731,14 @@
 
 /* === MODULO CAE === */
 
-.panel-cae { padding: 2rem; }
+.panel-cae {
+  margin-left: var(--sidebar-width);
+  padding: 2rem;
+  max-width: 1800px;
+  box-sizing: border-box;
+  overflow-x: auto;
+  transition: margin-left 0.25s ease;
+}
 
 .panel-cae .stats-grid {
   display: grid;
@@ -4757,6 +4769,15 @@
 .panel-cae .cae-danger { color: #dc3545; }
 .panel-cae .cae-warning { color: #ffc107; }
 
+/* CAE tables: prevent overflow, allow horizontal scroll */
+.panel-cae .card {
+  overflow-x: auto;
+}
+.panel-cae .tabla-generica {
+  width: 100%;
+  min-width: 600px;
+}
+
 .panel-cae .btn-link {
   background: none;
   border: none;
@@ -4770,6 +4791,39 @@
 .panel-cae .btn-link:hover { opacity: 0.8; }
 
 .cae-folder-item:hover { background: var(--bg-hover, #f5f5f5); }
+
+/* Generic .modal inner dialog (used by CAE modals) */
+.modal-overlay > .modal {
+  background: var(--color-white, #fff);
+  border-radius: var(--radius-lg, 12px);
+  padding: 0;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-modal, 0 8px 30px rgba(0,0,0,0.18));
+  transform: translateY(10px);
+  opacity: 0;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+.modal-overlay.visible > .modal {
+  transform: translateY(0);
+  opacity: 1;
+}
+.modal .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border, #e0e0e0);
+}
+.modal .modal-header h3 { margin: 0; font-size: 1.1rem; font-weight: 700; }
+.modal .modal-close {
+  background: none; border: none; font-size: 1.5rem; cursor: pointer;
+  color: var(--text-secondary, #6c757d); line-height: 1;
+}
+.modal .modal-body { padding: 1.25rem; }
+.modal .modal-body .form-group { margin-bottom: 1rem; }
+.modal .modal-body .form-group label { display: block; margin-bottom: 0.25rem; font-weight: 600; font-size: 0.85rem; }
 
 /* Modal overlay reuse (CAE modals) */
 #modal-cae-folder-explorer .modal-body,
@@ -4787,4 +4841,98 @@
   align-items: center;
   padding: 1rem;
   border-top: 1px solid var(--border, #e0e0e0);
+}
+
+/* === CAE ACTIVE: sidebar collapse + full-width content ===
+   Only on desktop (>1024px). On mobile the sidebar is already hidden. */
+@media (min-width: 1025px) {
+  body.cae-active .sidebar {
+    width: 64px !important;
+  }
+  body.cae-active .sidebar .sidebar-brand {
+    padding: 24px 0 !important;
+    justify-content: center !important;
+  }
+  body.cae-active .sidebar .sidebar-brand-text {
+    opacity: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
+    position: absolute !important;
+  }
+  body.cae-active .sidebar .sidebar-item {
+    justify-content: center !important;
+    padding: 12px 0 !important;
+    gap: 0 !important;
+  }
+  body.cae-active .sidebar .sidebar-label {
+    opacity: 0 !important;
+    width: 0 !important;
+    overflow: hidden !important;
+    position: absolute !important;
+  }
+  body.cae-active .sidebar .sidebar-chevron {
+    display: none !important;
+  }
+  body.cae-active .sidebar .sidebar-children {
+    display: none !important;
+  }
+  body.cae-active .sidebar .sidebar-footer {
+    padding: 16px 0 !important;
+    align-items: center !important;
+  }
+  body.cae-active .sidebar .sidebar-username,
+  body.cae-active .sidebar .sidebar-logout {
+    display: none !important;
+  }
+  body.cae-active .sidebar .sidebar-user {
+    justify-content: center !important;
+    gap: 0 !important;
+  }
+  /* Hover flyout: temporarily expand over content */
+  body.cae-active .sidebar:hover {
+    width: 240px !important;
+  }
+  body.cae-active .sidebar:hover .sidebar-brand {
+    padding: 24px !important;
+    justify-content: space-between !important;
+  }
+  body.cae-active .sidebar:hover .sidebar-brand-text {
+    opacity: 1 !important;
+    width: auto !important;
+    position: static !important;
+  }
+  body.cae-active .sidebar:hover .sidebar-item {
+    justify-content: flex-start !important;
+    padding: 10px 20px !important;
+    gap: 10px !important;
+  }
+  body.cae-active .sidebar:hover .sidebar-label {
+    opacity: 1 !important;
+    width: auto !important;
+    position: static !important;
+  }
+  body.cae-active .sidebar:hover .sidebar-chevron {
+    display: block !important;
+  }
+  body.cae-active .sidebar:hover .sidebar-children {
+    display: flex !important;
+  }
+  body.cae-active .sidebar:hover .sidebar-children:not(.open) {
+    max-height: 0 !important;
+  }
+  body.cae-active .sidebar:hover .sidebar-child,
+  body.cae-active .sidebar:hover .sidebar-leaf {
+    display: flex !important;
+  }
+  body.cae-active .sidebar:hover .sidebar-footer {
+    padding: 16px 20px !important;
+  }
+  body.cae-active .sidebar:hover .sidebar-username,
+  body.cae-active .sidebar:hover .sidebar-logout {
+    display: block !important;
+  }
+  body.cae-active .sidebar:hover .sidebar-user {
+    gap: 10px !important;
+  }
+  /* Container layout handled by --sidebar-width CSS variable (same as other modules) */
 }
