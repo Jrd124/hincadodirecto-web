@@ -659,6 +659,7 @@ function _caeOnPanelShow(panel) {
 window.mostrarSubpanel = function (mod, sub) {
   activarSubpanel(mod, sub);
   if (mod === "cae") _caeOnPanelShow(sub);
+  if (mod === "rrhh" && typeof window._rrhhOnPanelShow === "function") window._rrhhOnPanelShow(sub);
 };
 
 // ── Expose functions globally for onclick handlers and external callers ──
