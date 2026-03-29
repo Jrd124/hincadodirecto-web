@@ -5,7 +5,7 @@
     <title>HD | ERP</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
-    <link rel="stylesheet" href="/static/css/app.css?v=26" />
+    <link rel="stylesheet" href="/static/css/app.css?v=28" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
   </head>
   <body>
@@ -1177,11 +1177,138 @@
         </div>
       </div>
       <div id="panel-rrhh-equipo" class="panel-rrhh">
-        <div class="card card-placeholder">
-          <svg class="placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="7" r="3"/><path d="M2 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/><circle cx="18" cy="9" r="2.5"/><path d="M22 21c0-3-2.2-5.5-5-5.9"/></svg>
-          <h1>Equipo</h1>
-          <span class="badge-proximamente">Próximamente</span>
-          <p class="placeholder-desc">Gestión del equipo y asignación de proyectos</p>
+        <!-- Barra superior: búsqueda + botón nuevo -->
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1.25rem;">
+          <div style="display:flex;align-items:center;gap:0.5rem;flex:1;min-width:200px;max-width:400px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;color:var(--text-secondary)"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input id="rrhh-equipo-buscar" type="text" placeholder="Buscar por nombre, DNI o puesto…" style="flex:1;padding:0.5rem 0.75rem;border:1px solid var(--border,#dee2e6);border-radius:var(--radius-md,8px);font-size:0.9rem;">
+          </div>
+          <button id="btn-nuevo-empleado" onclick="_rrhhAbrirModalEmpleado()" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.55rem 1.1rem;background:var(--color-primary,#2563eb);color:#fff;border:none;border-radius:var(--radius-md,8px);font-weight:600;font-size:0.9rem;cursor:pointer;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M12 5v14M5 12h14"/></svg>
+            Nuevo trabajador
+          </button>
+        </div>
+        <!-- Tabla empleados ACTIVOS -->
+        <h4 style="margin:0 0 0.5rem;font-size:0.95rem;font-weight:700;color:var(--text-primary,#1a1a1a);">Empleados activos</h4>
+        <div class="card" style="overflow-x:auto;padding:0;">
+          <table id="tabla-empleados-activos" style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+            <thead>
+              <tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
+                <th style="padding:0.7rem 1rem;font-weight:700;white-space:nowrap;">Nombre</th>
+                <th style="padding:0.7rem 0.75rem;font-weight:700;">DNI</th>
+                <th style="padding:0.7rem 0.75rem;font-weight:700;">Puesto</th>
+                <th style="padding:0.7rem 0.75rem;font-weight:700;">Teléfono</th>
+                <th style="padding:0.7rem 0.75rem;font-weight:700;">Estado</th>
+                <th style="padding:0.7rem 0.75rem;font-weight:700;">PRL</th>
+                <th style="padding:0.7rem 0.75rem;font-weight:700;">Apto médico</th>
+                <th style="padding:0.7rem 0.75rem;font-weight:700;">Carnet</th>
+                <th style="padding:0.7rem 0.75rem;font-weight:700;text-align:center;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-empleados-activos">
+              <tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--text-secondary);">Cargando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Desplegable empleados INACTIVOS -->
+        <div id="rrhh-inactivos-wrapper" style="margin-top:1.5rem;display:none;">
+          <button id="btn-toggle-inactivos" onclick="_rrhhToggleInactivos()" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.45rem 0.75rem;background:none;border:1px solid var(--border,#dee2e6);border-radius:var(--radius-md,8px);cursor:pointer;font-size:0.88rem;font-weight:600;color:var(--text-secondary,#6c757d);">
+            <svg id="icono-toggle-inactivos" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;transition:transform 0.2s;"><path d="M6 9l6 6 6-6"/></svg>
+            Inactivos (<span id="count-inactivos">0</span>)
+          </button>
+          <div id="rrhh-inactivos-panel" style="display:none;margin-top:0.5rem;">
+            <div class="card" style="overflow-x:auto;padding:0;opacity:0.85;">
+              <table id="tabla-empleados-inactivos" style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+                <thead>
+                  <tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
+                    <th style="padding:0.7rem 1rem;font-weight:700;white-space:nowrap;">Nombre</th>
+                    <th style="padding:0.7rem 0.75rem;font-weight:700;">DNI</th>
+                    <th style="padding:0.7rem 0.75rem;font-weight:700;">Puesto</th>
+                    <th style="padding:0.7rem 0.75rem;font-weight:700;">Teléfono</th>
+                    <th style="padding:0.7rem 0.75rem;font-weight:700;">Estado</th>
+                    <th style="padding:0.7rem 0.75rem;font-weight:700;">PRL</th>
+                    <th style="padding:0.7rem 0.75rem;font-weight:700;">Apto médico</th>
+                    <th style="padding:0.7rem 0.75rem;font-weight:700;">Carnet</th>
+                    <th style="padding:0.7rem 0.75rem;font-weight:700;text-align:center;">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-empleados-inactivos">
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal crear/editar empleado -->
+        <div id="modal-rrhh-empleado" class="modal-overlay" style="display:none;">
+          <div class="modal" style="max-width:720px;">
+            <div class="modal-header">
+              <h3 id="modal-emp-titulo">Nuevo trabajador</h3>
+              <button class="modal-close" onclick="_rrhhCerrarModalEmpleado()">&times;</button>
+            </div>
+            <div class="modal-body">
+              <input type="hidden" id="emp-id">
+              <!-- Sección 1: Datos personales -->
+              <h4 style="margin:0 0 0.75rem;font-size:0.95rem;color:var(--color-primary,#2563eb);">Datos personales</h4>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem 1rem;">
+                <div class="form-group"><label>Nombre *</label><input id="emp-nombre" type="text" required style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+                <div class="form-group"><label>Apellidos</label><input id="emp-apellidos" type="text" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+                <div class="form-group"><label>DNI</label><input id="emp-dni" type="text" placeholder="12345678A" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+                <div class="form-group"><label>Nº Seguridad Social</label><input id="emp-nss" type="text" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+                <div class="form-group"><label>Teléfono</label><input id="emp-telefono" type="text" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+                <div class="form-group"><label>Email</label><input id="emp-email" type="email" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+              </div>
+              <!-- Sección 2: Datos laborales -->
+              <h4 style="margin:1.25rem 0 0.75rem;font-size:0.95rem;color:var(--color-primary,#2563eb);">Datos laborales</h4>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem 1rem;">
+                <div class="form-group"><label>Puesto</label><input id="emp-puesto" type="text" placeholder="Operario, Encargado…" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+                <div class="form-group"><label>Categoría</label><input id="emp-categoria" type="text" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+                <div class="form-group"><label>Fecha alta</label><input id="emp-fecha-alta" type="date" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+                <div class="form-group">
+                  <label>Estado</label>
+                  <select id="emp-estado" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;">
+                    <option value="activo">Activo</option>
+                    <option value="baja">Baja</option>
+                    <option value="vacaciones">Vacaciones</option>
+                  </select>
+                </div>
+              </div>
+              <!-- Sección 3: Formación y PRL -->
+              <h4 style="margin:1.25rem 0 0.75rem;font-size:0.95rem;color:var(--color-primary,#2563eb);">Formación y PRL</h4>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem 1rem;">
+                <div class="form-group" style="display:flex;align-items:center;gap:0.5rem;">
+                  <input id="emp-prl-basico" type="checkbox" style="width:18px;height:18px;">
+                  <label for="emp-prl-basico" style="margin:0;font-weight:600;">PRL Básico</label>
+                </div>
+                <div class="form-group"><label>Horas PRL</label>
+                  <select id="emp-prl-horas" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;">
+                    <option value="">—</option><option value="20">20h</option><option value="60">60h</option>
+                  </select>
+                </div>
+                <div class="form-group"><label>Caducidad PRL básico</label><input id="emp-prl-basico-cad" type="date" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+                <div class="form-group"><label>PRL específico</label><input id="emp-prl-especifico" type="text" placeholder="Descripción curso…" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+                <div class="form-group"><label>Cad. PRL específico</label><input id="emp-prl-especifico-cad" type="date" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+                <div class="form-group" style="display:flex;align-items:center;gap:0.5rem;">
+                  <input id="emp-apto-medico" type="checkbox" style="width:18px;height:18px;">
+                  <label for="emp-apto-medico" style="margin:0;font-weight:600;">Apto médico</label>
+                </div>
+                <div class="form-group"><label>Cad. apto médico</label><input id="emp-apto-medico-cad" type="date" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+                <div class="form-group"><label>Carnet conducir</label><input id="emp-carnet-conducir" type="text" placeholder="B, C, C+E…" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+                <div class="form-group"><label>Cad. carnet conducir</label><input id="emp-carnet-conducir-cad" type="date" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+                <div class="form-group"><label>Carnet maquinaria</label><input id="emp-carnet-maquinaria" type="text" placeholder="Tipos habilitados…" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+                <div class="form-group"><label>Cad. carnet maquinaria</label><input id="emp-carnet-maquinaria-cad" type="date" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+                <div class="form-group" style="grid-column:1/-1;"><label>Formación específica</label><textarea id="emp-formacion-especifica" rows="2" placeholder="Otros cursos, habilitaciones…" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;resize:vertical;"></textarea></div>
+              </div>
+              <!-- Notas -->
+              <div class="form-group" style="margin-top:1rem;"><label>Notas</label><textarea id="emp-notas" rows="2" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;resize:vertical;"></textarea></div>
+              <!-- Botón guardar -->
+              <div style="display:flex;justify-content:flex-end;gap:0.75rem;margin-top:1.25rem;">
+                <button onclick="_rrhhCerrarModalEmpleado()" style="padding:0.5rem 1rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);background:#fff;cursor:pointer;font-size:0.88rem;">Cancelar</button>
+                <button onclick="_rrhhGuardarEmpleado()" style="padding:0.5rem 1.2rem;background:var(--color-primary,#2563eb);color:#fff;border:none;border-radius:var(--radius-md,8px);font-weight:600;cursor:pointer;font-size:0.88rem;">Guardar</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <div id="panel-rrhh-reserva" class="panel-rrhh">
@@ -2864,6 +2991,7 @@
     <script src="/static/js/modules/usuarios.js?v=27"></script>
     <script src="/static/js/modules/transporte.js?v=27"></script>
     <script src="/static/js/modules/cae.js?v=27"></script>
-    <script src="/static/js/app.js?v=27"></script>
+    <script src="/static/js/modules/rrhh.js?v=28"></script>
+    <script src="/static/js/app.js?v=28"></script>
   </body>
 </html>

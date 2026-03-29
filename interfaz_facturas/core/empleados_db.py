@@ -6,6 +6,25 @@ from core.db import conectar as _conectar, now_iso as _now
 _initialized = False
 
 
+# ── Columnas de formación / PRL que se añaden con ALTER TABLE ────────────
+_EXTRA_COLUMNS = [
+    ("nss", "TEXT"),                      # Nº Seguridad Social
+    ("carnet_conducir", "TEXT"),           # Tipo: B, C, C+E, etc.
+    ("carnet_conducir_caducidad", "TEXT"), # Fecha ISO
+    ("carnet_maquinaria", "TEXT"),         # Tipos habilitados
+    ("carnet_maquinaria_caducidad", "TEXT"),
+    ("prl_basico", "INTEGER DEFAULT 0"),  # 1 = tiene curso PRL básico (20h/60h)
+    ("prl_basico_horas", "INTEGER"),      # Horas del curso (20 o 60)
+    ("prl_basico_caducidad", "TEXT"),
+    ("prl_especifico", "TEXT"),           # Descripción del curso específico
+    ("prl_especifico_caducidad", "TEXT"),
+    ("apto_medico", "INTEGER DEFAULT 0"), # 1 = tiene apto médico vigente
+    ("apto_medico_caducidad", "TEXT"),
+    ("formacion_especifica", "TEXT"),      # Otros cursos / habilitaciones (texto libre)
+    ("foto_url", "TEXT"),                 # Ruta o URL de foto del empleado
+]
+
+
 def init_empleados_db() -> None:
     global _initialized
     if _initialized:
@@ -29,10 +48,30 @@ def init_empleados_db() -> None:
                 updated_at TEXT
             )
         """)
+        # Migración progresiva: añadir columnas nuevas si no existen
+        existing = {r[1] for r in conn.execute("PRAGMA table_info(empleados)").fetchall()}
+        for col_name, col_type in _EXTRA_COLUMNS:
+            if col_name not in existing:
+                conn.execute(f"ALTER TABLE empleados ADD COLUMN {col_name} {col_type}")
     _initialized = True
 
 
-# ── CRUD Empleados ──────────────────────────────────────────────────────────
+# ── Campos permitidos en CREATE / UPDATE ─────────────────────────────────
+
+_CAMPOS = [
+    "nombre", "apellidos", "dni", "puesto", "categoria",
+    "telefono", "email", "fecha_alta", "fecha_baja", "estado", "notas",
+    # Formación y PRL
+    "nss", "carnet_conducir", "carnet_conducir_caducidad",
+    "carnet_maquinaria", "carnet_maquinaria_caducidad",
+    "prl_basico", "prl_basico_horas", "prl_basico_caducidad",
+    "prl_especifico", "prl_especifico_caducidad",
+    "apto_medico", "apto_medico_caducidad",
+    "formacion_especifica", "foto_url",
+]
+
+
+# ── CRUD Empleados ──────────────────────────────────────────────────────
 
 
 def listar_empleados(solo_activos: bool = True) -> list:
@@ -55,26 +94,17 @@ def obtener_empleado(emp_id: int) -> dict | None:
 def crear_empleado(data: dict) -> dict:
     init_empleados_db()
     now = _now()
+    cols = ["created_at", "updated_at"]
+    vals = [now, now]
+    for c in _CAMPOS:
+        if c in data:
+            cols.append(c)
+            vals.append(data[c])
+    placeholders = ", ".join(["?"] * len(vals))
+    col_names = ", ".join(cols)
     with _conectar() as conn:
         cur = conn.execute(
-            "INSERT INTO empleados (nombre, apellidos, dni, puesto, categoria, "
-            "telefono, email, fecha_alta, fecha_baja, estado, notas, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [
-                data.get("nombre", ""),
-                data.get("apellidos"),
-                data.get("dni"),
-                data.get("puesto"),
-                data.get("categoria"),
-                data.get("telefono"),
-                data.get("email"),
-                data.get("fecha_alta"),
-                data.get("fecha_baja"),
-                data.get("estado", "activo"),
-                data.get("notas"),
-                now,
-                now,
-            ],
+            f"INSERT INTO empleados ({col_names}) VALUES ({placeholders})", vals
         )
         return obtener_empleado(cur.lastrowid) or {"id": cur.lastrowid}
 
@@ -82,13 +112,9 @@ def crear_empleado(data: dict) -> dict:
 def actualizar_empleado(emp_id: int, data: dict) -> dict:
     init_empleados_db()
     now = _now()
-    campos_permitidos = [
-        "nombre", "apellidos", "dni", "puesto", "categoria",
-        "telefono", "email", "fecha_alta", "fecha_baja", "estado", "notas",
-    ]
     sets = []
     vals = []
-    for c in campos_permitidos:
+    for c in _CAMPOS:
         if c in data:
             sets.append(f"{c} = ?")
             vals.append(data[c])

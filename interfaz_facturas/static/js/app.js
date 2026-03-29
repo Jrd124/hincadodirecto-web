@@ -426,6 +426,7 @@ function restaurarDesdeHash() {
         rrhhSubpanel = sp;
         activarModulo("rrhh");
         activarSubpanel("rrhh", sp);
+        if (typeof window._rrhhOnPanelShow === "function") window._rrhhOnPanelShow(sp);
       } else {
         rrhhSubpanel = "inicio";
         activarModulo("rrhh");
@@ -706,6 +707,7 @@ document.getElementById("nav-proyectos-onboarding").addEventListener("click", (e
 document.getElementById("nav-rrhh-equipo").addEventListener("click", (e) => {
   e.preventDefault();
   activarSubpanel("rrhh", "equipo");
+  if (typeof window._rrhhOnPanelShow === "function") window._rrhhOnPanelShow("equipo");
 });
 document.getElementById("nav-rrhh-reserva").addEventListener("click", (e) => {
   e.preventDefault();
