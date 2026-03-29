@@ -390,9 +390,11 @@ function restaurarDesdeHash() {
         if (child === "proveedores" && partes.length >= 3) {
           var sp = partes[2];
           if (sp === "facturas" || sp === "proveedores" || sp === "cecos") activarSubpanel("proveedores", sp);
+          if (sp === "proveedores" && typeof window._comprobarBannerDuplicados === "function") window._comprobarBannerDuplicados("proveedor");
         } else if (child === "clientes" && partes.length >= 3) {
           var sp = partes[2];
           if (sp === "clientes_facturas" || sp === "clientes_listado") activarSubpanel("clientes", sp);
+          if (sp === "clientes_listado" && typeof window._comprobarBannerDuplicados === "function") window._comprobarBannerDuplicados("cliente");
         }
       } else {
         finanzasChild = "inicio";
@@ -662,6 +664,7 @@ document.getElementById("nav-proveedores").addEventListener("click", (e) => {
   e.preventDefault();
   e.stopPropagation();
   activarSubpanel("proveedores", "proveedores");
+  if (typeof window._comprobarBannerDuplicados === "function") window._comprobarBannerDuplicados("proveedor");
 });
 document.getElementById("nav-cecos").addEventListener("click", (e) => {
   e.preventDefault();
@@ -677,8 +680,8 @@ document.getElementById("nav-clientes-listado").addEventListener("click", (e) =>
   e.preventDefault();
   e.stopPropagation();
   activarSubpanel("clientes", "clientes_listado");
+  if (typeof window._comprobarBannerDuplicados === "function") window._comprobarBannerDuplicados("cliente");
 });
-
 document.getElementById("nav-proyectos-cotizados").addEventListener("click", (e) => {
   e.preventDefault();
   activarSubpanel("proyectos", "cotizados");

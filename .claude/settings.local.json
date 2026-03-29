@@ -56,7 +56,9 @@
       "Bash(wc -l routes/*.py)",
       "Bash(git stash:*)",
       "Bash(wc:*)",
-      "Bash(cat interfaz_facturas/static/js/modules/*.js interfaz_facturas/static/js/app.js)"
+      "Bash(cat interfaz_facturas/static/js/modules/*.js interfaz_facturas/static/js/app.js)",
+      "Bash(git pull:*)",
+      "Bash(git checkout:*)"
     ]
   }
 }

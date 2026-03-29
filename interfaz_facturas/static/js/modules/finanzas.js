@@ -3099,6 +3099,7 @@ const filtroEstadoPagoProveedor = document.getElementById("filtro-estado-pago-pr
 const filtroTarjetaProveedor = document.getElementById("filtro-tarjeta-proveedor");
 
 empresaProveedoresEl.addEventListener("change", async () => {
+  if (typeof window._comprobarBannerDuplicados === "function") window._comprobarBannerDuplicados("proveedor");
   const emp = empresaProveedoresEl.value;
   listaProveedoresEl.innerHTML = "";
   tablaFacturasProveedorWrapper.style.display = "none";
@@ -3210,6 +3211,8 @@ function cerrarModalProveedor() {
 async function refrescarListaProveedores() {
   const emp = empresaProveedoresEl.value;
   if (!emp) return;
+  // Comprobar duplicados pendientes para mostrar banner
+  if (typeof window._comprobarBannerDuplicados === "function") window._comprobarBannerDuplicados("proveedor");
   try {
     const resp = await fetch("/api/proveedores?empresa_id=" + encodeURIComponent(emp) + "&solo_con_facturas=1");
     const json = await resp.json();
@@ -4477,6 +4480,7 @@ let clienteSeleccionadoNombre = "";
 const sortStateClienteListado = { key: "", dir: "asc" };
 
 empresaClientesListadoEl.addEventListener("change", async () => {
+  if (typeof window._comprobarBannerDuplicados === "function") window._comprobarBannerDuplicados("cliente");
   const emp = empresaClientesListadoEl.value;
   listaClientesUnicosEl.innerHTML = "";
   tablaFacturasClienteWrapper.style.display = "none";
@@ -4594,6 +4598,8 @@ function cerrarModalCliente() {
 async function refrescarListaClientes() {
   const emp = empresaClientesListadoEl.value;
   if (!emp) return;
+  // Comprobar duplicados pendientes para mostrar banner
+  if (typeof window._comprobarBannerDuplicados === "function") window._comprobarBannerDuplicados("cliente");
   try {
     const resp = await fetch("/api/empresas/" + encodeURIComponent(emp) + "/clientes");
     const json = await resp.json();
@@ -4639,6 +4645,21 @@ async function refrescarListaClientes() {
 document.getElementById("btn-nuevo-cliente").addEventListener("click", () => {
   abrirModalNuevoCliente(empresaClientesListadoEl.value);
 });
+
+var btnSincronizarClientes = document.getElementById("btn-sincronizar-clientes");
+if (btnSincronizarClientes) {
+  btnSincronizarClientes.addEventListener("click", async () => {
+    btnSincronizarClientes.disabled = true;
+    try {
+      await refrescarListaClientes();
+      mostrarToast("Listado de clientes actualizado.", "success");
+    } catch (err) {
+      mostrarToast("Error al refrescar clientes.", "error");
+    } finally {
+      btnSincronizarClientes.disabled = false;
+    }
+  });
+}
 
 document.getElementById("btn-cancelar-cliente").addEventListener("click", cerrarModalCliente);
 
@@ -5192,3 +5213,113 @@ window.cerrarModalCliente = cerrarModalCliente;
 window.abrirModalEdicionCli = abrirModalEdicionCli;
 window.cerrarModalEdicionCli = cerrarModalEdicionCli;
 window.renderTablaClientesFacturas = renderTablaClientesFacturas;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DUPLICADOS FINANZAS (Proveedores y Clientes) — banner + modal
+// ═══════════════════════════════════════════════════════════════════════════
+
+(function () {
+  var modalEl = document.getElementById("modal-finanzas-dedup");
+  var gruposEl = document.getElementById("finanzas-dedup-grupos");
+  var historialEl = document.getElementById("finanzas-dedup-historial");
+  var resumenEl = document.getElementById("finanzas-dedup-resumen");
+  var vacioEl = document.getElementById("finanzas-dedup-vacio");
+  var tituloEl = document.getElementById("modal-finanzas-dedup-titulo");
+
+  // Cerrar modal
+  var btnCerrar = document.getElementById("btn-cerrar-dedup-finanzas");
+  if (btnCerrar) btnCerrar.addEventListener("click", _cerrarModal);
+  if (modalEl) modalEl.addEventListener("click", function (e) { if (e.target === modalEl) _cerrarModal(); });
+
+  function _cerrarModal() {
+    if (!modalEl) return;
+    modalEl.classList.remove("visible");
+    modalEl.setAttribute("aria-hidden", "true");
+  }
+
+  // Init tabs del modal finanzas (deferred until _initDedupTabs is available)
+  var _tabsInited = false;
+  function _ensureTabs() {
+    if (_tabsInited || !modalEl) return;
+    if (typeof window._initDedupTabs === "function") {
+      window._initDedupTabs(modalEl);
+      _tabsInited = true;
+    }
+  }
+
+  // Abrir modal con duplicados filtrados por tipo
+  function abrirModalDuplicadosFinanzas(tipo) {
+    if (!modalEl) return;
+    _ensureTabs();
+    var label = tipo === "proveedor" ? "proveedores" : "clientes";
+    if (tituloEl) tituloEl.textContent = "Revisar duplicados de " + label;
+
+    modalEl.classList.add("visible");
+    modalEl.setAttribute("aria-hidden", "false");
+    gruposEl.innerHTML = '<p style="text-align:center;color:#94a3b8;">Analizando duplicados...</p>';
+    if (historialEl) historialEl.style.display = "none";
+    if (vacioEl) vacioEl.style.display = "none";
+    if (resumenEl) resumenEl.textContent = "";
+    gruposEl.style.display = "";
+
+    // Reset tabs to Pendientes
+    modalEl.querySelectorAll(".dedup-tab").forEach(function (t) {
+      t.classList.remove("active", "primary", "secondary");
+      t.classList.add(t.dataset.tab === "pendientes" ? "primary" : "secondary");
+      if (t.dataset.tab === "pendientes") t.classList.add("active");
+    });
+
+    fetch("/api/terceros/duplicados?tipo=" + encodeURIComponent(tipo))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var grupos = data.grupos || [];
+        if (typeof window._renderDedupGrupos === "function") {
+          window._renderDedupGrupos(grupos, gruposEl, resumenEl, vacioEl, {
+            tipo: tipo,
+            onRefresh: function () {
+              abrirModalDuplicadosFinanzas(tipo);
+              _comprobarBannerDuplicados(tipo);
+            }
+          });
+        }
+      })
+      .catch(function (err) {
+        gruposEl.innerHTML = '<p style="color:#b91c1c;text-align:center;">Error: ' + (err.message || err) + '</p>';
+      });
+  }
+
+  // Comprobar y mostrar/ocultar banner de duplicados
+  function _comprobarBannerDuplicados(tipo) {
+    var bannerId = tipo === "proveedor" ? "banner-duplicados-proveedores" : "banner-duplicados-clientes";
+    var bannerEl = document.getElementById(bannerId);
+    if (!bannerEl) return;
+
+    fetch("/api/terceros/duplicados-count?tipo=" + encodeURIComponent(tipo))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var total = data.total || 0;
+        if (total > 0) {
+          var label = tipo === "proveedor" ? "los proveedores" : "los clientes";
+          bannerEl.innerHTML =
+            '<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:#FEF3C7;border:1px solid rgba(245,158,11,0.19);border-radius:8px;margin-bottom:16px;">' +
+              '<span style="font-size:18px;">\u26A0\uFE0F</span>' +
+              '<span style="flex:1;font-size:14px;color:#92400E;">Se han encontrado <strong>' + total + '</strong> posibles duplicados entre ' + label + '</span>' +
+              '<button type="button" id="btn-banner-dedup-' + tipo + '" style="padding:6px 14px;background:#F59E0B;color:white;border:none;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;">Revisar duplicados</button>' +
+            '</div>';
+          bannerEl.style.display = "";
+          document.getElementById("btn-banner-dedup-" + tipo).addEventListener("click", function () {
+            abrirModalDuplicadosFinanzas(tipo);
+          });
+        } else {
+          bannerEl.innerHTML = "";
+          bannerEl.style.display = "none";
+        }
+      })
+      .catch(function () {
+        bannerEl.style.display = "none";
+      });
+  }
+
+  window.abrirModalDuplicadosFinanzas = abrirModalDuplicadosFinanzas;
+  window._comprobarBannerDuplicados = _comprobarBannerDuplicados;
+})();

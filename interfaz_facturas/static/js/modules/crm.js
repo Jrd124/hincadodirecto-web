@@ -317,122 +317,246 @@
   // ── Deduplicación ──────────────────────────────────────────────────────────
   var dedupModalEl = document.getElementById("modal-crm-dedup");
   var dedupGruposEl = document.getElementById("crm-dedup-grupos");
+  var dedupHistorialEl = document.getElementById("crm-dedup-historial");
   var dedupVacioEl = document.getElementById("crm-dedup-vacio");
   var dedupResumenEl = document.getElementById("crm-dedup-resumen");
+
+  // ── Renderizar grupos de duplicados (reutilizable) ─────────────────────────
+  function _renderDedupGrupos(grupos, containerEl, resumenEl, vacioEl, opts) {
+    var tipo = (opts && opts.tipo) || "all";
+    var onRefresh = (opts && opts.onRefresh) || function () {};
+    containerEl.innerHTML = "";
+    if (grupos.length === 0) {
+      if (vacioEl) vacioEl.style.display = "block";
+      if (resumenEl) resumenEl.textContent = "0 grupos de posibles duplicados detectados.";
+      return;
+    }
+    if (vacioEl) vacioEl.style.display = "none";
+    var totalRegs = 0;
+    grupos.forEach(function (g) { totalRegs += g.registros.length; });
+    if (resumenEl) resumenEl.textContent = grupos.length + " grupo(s) de posibles duplicados (" + totalRegs + " registros afectados).";
+
+    grupos.forEach(function (grupo, gi) {
+      var div = document.createElement("div");
+      div.className = "crm-dedup-grupo";
+      var titulo = document.createElement("div");
+      titulo.className = "crm-dedup-grupo-titulo";
+      titulo.textContent = "Grupo " + (gi + 1) + ": " + grupo.motivo;
+      div.appendChild(titulo);
+
+      var fichasDiv = document.createElement("div");
+      fichasDiv.className = "crm-dedup-fichas";
+
+      grupo.registros.forEach(function (reg) {
+        var ficha = document.createElement("div");
+        ficha.className = "crm-dedup-ficha";
+        ficha.dataset.id = reg.id;
+
+        var campos = [
+          { label: "ID", value: "#" + reg.id },
+          { label: "Nombre", value: reg.nombre_canonico },
+          { label: "CIF/NIF", value: reg.nif },
+          { label: "Localidad", value: reg.localidad },
+          { label: "Direccion", value: reg.direccion },
+          { label: "Telefono", value: reg.telefono },
+          { label: "Email", value: reg.email },
+        ];
+
+        var html = '<label class="crm-dedup-radio"><input type="radio" name="dedup-principal-' + tipo + '-' + gi + '" value="' + reg.id + '"> Principal (se queda)</label>';
+        html += '<h4>' + _esc(reg.nombre_canonico) + '</h4>';
+        campos.forEach(function (c) {
+          var val = c.value ? _esc(c.value) : '<span class="vacio">vacio</span>';
+          html += '<div class="crm-dedup-campo"><strong>' + c.label + ':</strong> ' + val + '</div>';
+        });
+        html += '<div class="crm-dedup-facturas">Facturas prov: ' + (reg.num_facturas_prov || 0) + ' | Facturas cli: ' + (reg.num_facturas_cli || 0) + '</div>';
+        ficha.innerHTML = html;
+
+        ficha.querySelector("input[type=radio]").addEventListener("change", function () {
+          fichasDiv.querySelectorAll(".crm-dedup-ficha").forEach(function (f) { f.classList.remove("seleccionado"); });
+          ficha.classList.add("seleccionado");
+        });
+
+        fichasDiv.appendChild(ficha);
+      });
+
+      div.appendChild(fichasDiv);
+
+      // Botones de acción
+      var acciones = document.createElement("div");
+      acciones.className = "crm-dedup-acciones";
+      acciones.style.cssText = "display:flex;gap:8px;justify-content:flex-end;margin-top:8px;";
+
+      // Botón Fusionar
+      var btnFusionar = document.createElement("button");
+      btnFusionar.className = "primary";
+      btnFusionar.textContent = "Fusionar grupo";
+      btnFusionar.addEventListener("click", function () {
+        var radios = div.querySelectorAll("input[name='dedup-principal-" + tipo + "-" + gi + "']");
+        var principalId = null;
+        radios.forEach(function (r) { if (r.checked) principalId = parseInt(r.value); });
+        if (!principalId) {
+          alert("Selecciona el registro principal (el que se queda) antes de fusionar.");
+          return;
+        }
+        var absorbidos = grupo.registros.filter(function (r) { return r.id !== principalId; }).map(function (r) { return r.id; });
+        if (!confirm("Se fusionaran " + absorbidos.length + " registro(s) en el principal #" + principalId + ". Las facturas y datos se transferiran. Continuar?")) return;
+
+        var promesas = absorbidos.map(function (absId) {
+          return fetch("/api/crm/fusionar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ principal_id: principalId, absorbido_id: absId })
+          }).then(function (r) { return r.json(); });
+        });
+
+        Promise.all(promesas).then(function (resultados) {
+          var totalProv = 0, totalCli = 0, camposCopiados = [];
+          resultados.forEach(function (res) {
+            totalProv += res.facturas_prov_reasignadas || 0;
+            totalCli += res.facturas_cli_reasignadas || 0;
+            camposCopiados = camposCopiados.concat(res.campos_copiados || []);
+          });
+          div.innerHTML = '<div style="text-align:center;padding:16px;color:#059669;font-weight:600;">' +
+            'Fusionado correctamente. Facturas prov reasignadas: ' + totalProv +
+            ', Facturas cli reasignadas: ' + totalCli +
+            (camposCopiados.length ? '. Campos copiados: ' + camposCopiados.join(", ") : '') +
+            '</div>';
+          if (typeof _crmCargarEmpresas === "function") _crmCargarEmpresas();
+          onRefresh();
+        }).catch(function (err) {
+          alert("Error al fusionar: " + err.message);
+        });
+      });
+      acciones.appendChild(btnFusionar);
+
+      // Botón No son duplicadas
+      var btnNodup = document.createElement("button");
+      btnNodup.className = "secondary";
+      btnNodup.textContent = "No son duplicadas";
+      btnNodup.addEventListener("click", function () {
+        var ids = grupo.registros.map(function (r) { return r.id; });
+        if (!confirm("Marcar este grupo como no-duplicados? No volveran a aparecer en el listado.")) return;
+        // Marcar todos los pares del grupo
+        var promesas = [];
+        for (var a = 0; a < ids.length; a++) {
+          for (var b = a + 1; b < ids.length; b++) {
+            promesas.push(fetch("/api/terceros/no-duplicados", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ tercero_id_1: ids[a], tercero_id_2: ids[b] })
+            }));
+          }
+        }
+        Promise.all(promesas).then(function () {
+          div.innerHTML = '<div style="text-align:center;padding:16px;color:#64748b;font-weight:600;">Marcado como no-duplicados.</div>';
+          onRefresh();
+        }).catch(function (err) {
+          alert("Error: " + err.message);
+        });
+      });
+      acciones.appendChild(btnNodup);
+
+      div.appendChild(acciones);
+      containerEl.appendChild(div);
+    });
+  }
+
+  // ── Renderizar historial de fusiones ───────────────────────────────────────
+  function _renderHistorialFusiones(containerEl) {
+    containerEl.innerHTML = '<p style="text-align:center;color:#94a3b8;">Cargando historial...</p>';
+    fetch("/api/terceros/fusiones-log")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var fusiones = data.fusiones || [];
+        if (fusiones.length === 0) {
+          containerEl.innerHTML = '<p style="text-align:center;padding:40px;color:#94a3b8;">No hay fusiones registradas.</p>';
+          return;
+        }
+        var html = '<table class="tabla-historial-fusiones" style="width:100%;border-collapse:collapse;font-size:0.9rem;">';
+        html += '<thead><tr style="border-bottom:2px solid #e2e8f0;text-align:left;">' +
+          '<th style="padding:8px;">Fecha</th>' +
+          '<th style="padding:8px;">Conservado</th>' +
+          '<th style="padding:8px;">Eliminado</th>' +
+          '<th style="padding:8px;">Motivo</th>' +
+          '</tr></thead><tbody>';
+        fusiones.forEach(function (f) {
+          html += '<tr style="border-bottom:1px solid #f1f5f9;">' +
+            '<td style="padding:8px;">' + _esc(f.fecha || "") + '</td>' +
+            '<td style="padding:8px;">#' + f.tercero_conservado_id + ' ' + _esc(f.nombre_conservado || "") + '</td>' +
+            '<td style="padding:8px;">#' + f.tercero_eliminado_id + ' ' + _esc(f.nombre_eliminado || "") + '</td>' +
+            '<td style="padding:8px;">' + _esc(f.motivo || "") + '</td>' +
+            '</tr>';
+        });
+        html += '</tbody></table>';
+        containerEl.innerHTML = html;
+      })
+      .catch(function (err) {
+        containerEl.innerHTML = '<p style="color:#b91c1c;text-align:center;">Error: ' + _esc(err.message) + '</p>';
+      });
+  }
+
+  // ── Lógica de pestañas genérica ────────────────────────────────────────────
+  function _initDedupTabs(containerEl) {
+    var tabs = containerEl.querySelectorAll(".dedup-tab");
+    tabs.forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        var panel = tab.dataset.panel;
+        var tabType = tab.dataset.tab;
+        // Actualizar botones activos
+        tabs.forEach(function (t) {
+          if (t.dataset.panel === panel) {
+            t.classList.remove("active", "primary", "secondary");
+            t.classList.add(t === tab ? "primary" : "secondary");
+            if (t === tab) t.classList.add("active");
+          }
+        });
+        // Mostrar/ocultar contenido
+        var prefix = panel === "crm" ? "crm" : (panel === "finanzas" ? "finanzas" : (panel === "proveedores" ? "prov" : "cli"));
+        var gruposEl = document.getElementById(prefix + "-dedup-grupos");
+        var histEl = document.getElementById(prefix + "-dedup-historial");
+        var vacioEl = document.getElementById(prefix + "-dedup-vacio");
+        var resumenEl = document.getElementById(prefix + "-dedup-resumen");
+        if (tabType === "pendientes") {
+          if (gruposEl) gruposEl.style.display = "";
+          if (histEl) histEl.style.display = "none";
+          if (vacioEl && gruposEl && gruposEl.children.length === 0) vacioEl.style.display = "block";
+          if (resumenEl) resumenEl.style.display = "";
+        } else {
+          if (gruposEl) gruposEl.style.display = "none";
+          if (histEl) histEl.style.display = "";
+          if (vacioEl) vacioEl.style.display = "none";
+          if (resumenEl) resumenEl.style.display = "none";
+          _renderHistorialFusiones(histEl);
+        }
+      });
+    });
+  }
+
+  // Inicializar tabs del modal CRM
+  _initDedupTabs(dedupModalEl);
 
   function _dedupAbrir() {
     dedupModalEl.classList.add("visible");
     dedupModalEl.setAttribute("aria-hidden", "false");
     dedupGruposEl.innerHTML = '<p style="text-align:center;color:#94a3b8;">Analizando duplicados...</p>';
+    if (dedupHistorialEl) dedupHistorialEl.style.display = "none";
     dedupVacioEl.style.display = "none";
     dedupResumenEl.textContent = "";
+    // Reset tabs to Pendientes
+    dedupModalEl.querySelectorAll(".dedup-tab").forEach(function (t) {
+      t.classList.remove("active", "primary", "secondary");
+      t.classList.add(t.dataset.tab === "pendientes" ? "primary" : "secondary");
+      if (t.dataset.tab === "pendientes") t.classList.add("active");
+    });
+    dedupGruposEl.style.display = "";
 
     fetch("/api/crm/duplicados")
       .then(function (r) { return r.json(); })
       .then(function (data) {
         var grupos = data.grupos || [];
-        if (grupos.length === 0) {
-          dedupGruposEl.innerHTML = "";
-          dedupVacioEl.style.display = "block";
-          dedupResumenEl.textContent = "0 grupos de posibles duplicados detectados.";
-          return;
-        }
-        var totalRegs = 0;
-        grupos.forEach(function (g) { totalRegs += g.registros.length; });
-        dedupResumenEl.textContent = grupos.length + " grupo(s) de posibles duplicados (" + totalRegs + " registros afectados).";
-        dedupGruposEl.innerHTML = "";
-        grupos.forEach(function (grupo, gi) {
-          var div = document.createElement("div");
-          div.className = "crm-dedup-grupo";
-          var titulo = document.createElement("div");
-          titulo.className = "crm-dedup-grupo-titulo";
-          titulo.textContent = "Grupo " + (gi + 1) + ": " + grupo.motivo;
-          div.appendChild(titulo);
-
-          var fichasDiv = document.createElement("div");
-          fichasDiv.className = "crm-dedup-fichas";
-
-          grupo.registros.forEach(function (reg) {
-            var ficha = document.createElement("div");
-            ficha.className = "crm-dedup-ficha";
-            ficha.dataset.id = reg.id;
-
-            var campos = [
-              { label: "ID", value: "#" + reg.id },
-              { label: "Nombre", value: reg.nombre_canonico },
-              { label: "CIF/NIF", value: reg.nif },
-              { label: "Localidad", value: reg.localidad },
-              { label: "Direccion", value: reg.direccion },
-              { label: "Telefono", value: reg.telefono },
-              { label: "Email", value: reg.email },
-            ];
-
-            var html = '<label class="crm-dedup-radio"><input type="radio" name="dedup-principal-' + gi + '" value="' + reg.id + '"> Principal (se queda)</label>';
-            html += '<h4>' + _esc(reg.nombre_canonico) + '</h4>';
-            campos.forEach(function (c) {
-              var val = c.value ? _esc(c.value) : '<span class="vacio">vacio</span>';
-              html += '<div class="crm-dedup-campo"><strong>' + c.label + ':</strong> ' + val + '</div>';
-            });
-            html += '<div class="crm-dedup-facturas">Facturas prov: ' + (reg.num_facturas_prov || 0) + ' | Facturas cli: ' + (reg.num_facturas_cli || 0) + '</div>';
-            ficha.innerHTML = html;
-
-            // Highlight on radio select
-            ficha.querySelector("input[type=radio]").addEventListener("change", function () {
-              fichasDiv.querySelectorAll(".crm-dedup-ficha").forEach(function (f) { f.classList.remove("seleccionado"); });
-              ficha.classList.add("seleccionado");
-            });
-
-            fichasDiv.appendChild(ficha);
-          });
-
-          div.appendChild(fichasDiv);
-
-          // Boton fusionar
-          var acciones = document.createElement("div");
-          acciones.className = "crm-dedup-acciones";
-          var btnFusionar = document.createElement("button");
-          btnFusionar.className = "primary";
-          btnFusionar.textContent = "Fusionar grupo";
-          btnFusionar.addEventListener("click", function () {
-            var radios = div.querySelectorAll("input[name='dedup-principal-" + gi + "']");
-            var principalId = null;
-            radios.forEach(function (r) { if (r.checked) principalId = parseInt(r.value); });
-            if (!principalId) {
-              alert("Selecciona el registro principal (el que se queda) antes de fusionar.");
-              return;
-            }
-            var absorbidos = grupo.registros.filter(function (r) { return r.id !== principalId; }).map(function (r) { return r.id; });
-            if (!confirm("Se fusionaran " + absorbidos.length + " registro(s) en el principal #" + principalId + ". Las facturas y datos se transferiran. Continuar?")) return;
-
-            var promesas = absorbidos.map(function (absId) {
-              return fetch("/api/crm/fusionar", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ principal_id: principalId, absorbido_id: absId })
-              }).then(function (r) { return r.json(); });
-            });
-
-            Promise.all(promesas).then(function (resultados) {
-              var totalProv = 0, totalCli = 0, camposCopiados = [];
-              resultados.forEach(function (res) {
-                totalProv += res.facturas_prov_reasignadas || 0;
-                totalCli += res.facturas_cli_reasignadas || 0;
-                camposCopiados = camposCopiados.concat(res.campos_copiados || []);
-              });
-              div.innerHTML = '<div style="text-align:center;padding:16px;color:#059669;font-weight:600;">' +
-                'Fusionado correctamente. Facturas prov reasignadas: ' + totalProv +
-                ', Facturas cli reasignadas: ' + totalCli +
-                (camposCopiados.length ? '. Campos copiados: ' + camposCopiados.join(", ") : '') +
-                '</div>';
-              _crmCargarEmpresas();
-            }).catch(function (err) {
-              alert("Error al fusionar: " + err.message);
-            });
-          });
-          acciones.appendChild(btnFusionar);
-          div.appendChild(acciones);
-
-          dedupGruposEl.appendChild(div);
+        _renderDedupGrupos(grupos, dedupGruposEl, dedupResumenEl, dedupVacioEl, {
+          tipo: "crm",
+          onRefresh: function () { _dedupAbrir(); }
         });
       })
       .catch(function (err) {
@@ -448,6 +572,11 @@
   document.getElementById("btn-revisar-duplicados-crm").addEventListener("click", _dedupAbrir);
   document.getElementById("btn-cerrar-dedup").addEventListener("click", _dedupCerrar);
   dedupModalEl.addEventListener("click", function (e) { if (e.target === dedupModalEl) _dedupCerrar(); });
+
+  // ── Exponer funciones reutilizables para Finanzas ──────────────────────────
+  window._renderDedupGrupos = _renderDedupGrupos;
+  window._renderHistorialFusiones = _renderHistorialFusiones;
+  window._initDedupTabs = _initDedupTabs;
 
   // Load CRM data when navigating to it via MutationObserver
   // ═══════════════════════════════════════════════════════════════════════════

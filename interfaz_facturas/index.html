@@ -370,6 +370,7 @@
             <p class="subtitle">
               Elige la empresa y un proveedor para ver el listado de facturas recibidas de ese proveedor.
             </p>
+            <div id="banner-duplicados-proveedores" style="display:none;"></div>
             <div class="proveedores-layout">
               <div class="proveedores-lista-wrapper">
                 <label>Listado de proveedores</label>
@@ -570,11 +571,13 @@
             <p class="subtitle">
               Elige la empresa y un cliente para ver el listado de facturas emitidas a ese cliente.
             </p>
+            <div id="banner-duplicados-clientes" style="display:none;"></div>
             <div class="proveedores-layout">
               <div class="proveedores-lista-wrapper">
                 <label>Listado de clientes</label>
                 <div class="lista-acciones-top">
                   <button type="button" class="primary btn-sm" id="btn-nuevo-cliente">+ Nuevo cliente</button>
+                  <button type="button" class="btn-icon-accion" id="btn-sincronizar-clientes" title="Refrescar listado de clientes"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg></button>
                 </div>
                 <ul id="lista-clientes-unicos" aria-label="Clientes de la empresa"></ul>
               </div>
@@ -1989,13 +1992,38 @@
       <div id="modal-crm-dedup" class="modal-overlay" role="dialog" aria-labelledby="modal-crm-dedup-titulo" aria-modal="true" aria-hidden="true">
         <div class="modal-content" style="max-width:960px;max-height:85vh;overflow-y:auto;">
           <h2 id="modal-crm-dedup-titulo">Revisar duplicados</h2>
-          <p id="crm-dedup-resumen" style="color:#64748b;margin-bottom:16px;"></p>
+          <div class="dedup-tabs" style="display:flex;gap:8px;margin-bottom:16px;">
+            <button type="button" class="primary btn-sm dedup-tab active" data-tab="pendientes" data-panel="crm">Pendientes</button>
+            <button type="button" class="secondary btn-sm dedup-tab" data-tab="historial" data-panel="crm">Historial de fusiones</button>
+          </div>
+          <p id="crm-dedup-resumen" style="color:#64748b;margin-bottom:12px;"></p>
           <div id="crm-dedup-grupos"></div>
+          <div id="crm-dedup-historial" style="display:none;"></div>
           <div id="crm-dedup-vacio" style="text-align:center;padding:40px;color:#94a3b8;display:none;">
             No se detectaron duplicados. La base de datos está limpia.
           </div>
           <div class="form-actions" style="margin-top:20px;">
             <button type="button" class="secondary" id="btn-cerrar-dedup">Cerrar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal deduplicación Finanzas -->
+      <div id="modal-finanzas-dedup" class="modal-overlay" role="dialog" aria-labelledby="modal-finanzas-dedup-titulo" aria-modal="true" aria-hidden="true">
+        <div class="modal-content" style="max-width:960px;max-height:85vh;overflow-y:auto;">
+          <h2 id="modal-finanzas-dedup-titulo">Revisar duplicados</h2>
+          <div class="dedup-tabs" style="display:flex;gap:8px;margin-bottom:16px;">
+            <button type="button" class="primary btn-sm dedup-tab active" data-tab="pendientes" data-panel="finanzas">Pendientes</button>
+            <button type="button" class="secondary btn-sm dedup-tab" data-tab="historial" data-panel="finanzas">Historial de fusiones</button>
+          </div>
+          <p id="finanzas-dedup-resumen" style="color:#64748b;margin-bottom:12px;"></p>
+          <div id="finanzas-dedup-grupos"></div>
+          <div id="finanzas-dedup-historial" style="display:none;"></div>
+          <div id="finanzas-dedup-vacio" style="text-align:center;padding:40px;color:#94a3b8;display:none;">
+            No se detectaron duplicados.
+          </div>
+          <div class="form-actions" style="margin-top:20px;">
+            <button type="button" class="secondary" id="btn-cerrar-dedup-finanzas">Cerrar</button>
           </div>
         </div>
       </div>

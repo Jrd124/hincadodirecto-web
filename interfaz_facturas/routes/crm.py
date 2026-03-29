@@ -72,7 +72,8 @@ def crm_stats():
 
 @crm_bp.get("/api/crm/duplicados")
 def crm_detectar_duplicados():
-  grupos = crm_db.detectar_duplicados()
+  tipo = (request.args.get("tipo") or "all").strip()
+  grupos = crm_db.detectar_duplicados(tipo=tipo)
   return jsonify({"grupos": grupos, "total_grupos": len(grupos)})
 
 
@@ -86,6 +87,42 @@ def crm_fusionar():
   if principal_id == absorbido_id:
     return _bad_request("No se puede fusionar un tercero consigo mismo")
   resultado = crm_db.fusionar_terceros(int(principal_id), int(absorbido_id))
+  return jsonify(resultado)
+
+
+@crm_bp.get("/api/terceros/duplicados")
+def terceros_duplicados():
+  """Endpoint genérico de duplicados: ?tipo=all|proveedor|cliente"""
+  tipo = (request.args.get("tipo") or "all").strip()
+  grupos = crm_db.detectar_duplicados(tipo=tipo)
+  return jsonify({"grupos": grupos, "total_grupos": len(grupos)})
+
+
+@crm_bp.get("/api/terceros/duplicados-count")
+def terceros_duplicados_count():
+  """Devuelve solo el conteo de grupos de duplicados pendientes."""
+  tipo = (request.args.get("tipo") or "all").strip()
+  total = crm_db.contar_duplicados(tipo=tipo)
+  return jsonify({"total": total})
+
+
+@crm_bp.get("/api/terceros/fusiones-log")
+def terceros_fusiones_log():
+  limit = min(int(request.args.get("limit") or 100), 500)
+  offset = int(request.args.get("offset") or 0)
+  return jsonify(crm_db.listar_fusiones_log(limit=limit, offset=offset))
+
+
+@crm_bp.post("/api/terceros/no-duplicados")
+def terceros_no_duplicados():
+  data = request.get_json(silent=True) or {}
+  id1 = data.get("tercero_id_1")
+  id2 = data.get("tercero_id_2")
+  if not id1 or not id2:
+    return _bad_request("Se requieren tercero_id_1 y tercero_id_2")
+  if id1 == id2:
+    return _bad_request("Los IDs deben ser diferentes")
+  resultado = crm_db.marcar_no_duplicados(int(id1), int(id2))
   return jsonify(resultado)
 
 

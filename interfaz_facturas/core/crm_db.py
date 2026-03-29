@@ -166,6 +166,55 @@ def init_crm_db() -> None:
                 conn.execute("ALTER TABLE crm_empresas ADD COLUMN cae_url TEXT")
         except Exception:
             pass
+
+        # ── Tablas auxiliares para duplicados ────────────────────────────────
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS terceros_fusiones_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tercero_conservado_id INTEGER,
+                tercero_eliminado_id INTEGER,
+                nombre_conservado TEXT,
+                nombre_eliminado TEXT,
+                motivo TEXT,
+                usuario TEXT,
+                fecha TEXT
+            );
+            CREATE TABLE IF NOT EXISTS terceros_no_duplicados (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tercero_id_1 INTEGER,
+                tercero_id_2 INTEGER,
+                usuario TEXT,
+                fecha TEXT
+            );
+            CREATE INDEX IF NOT EXISTS ix_tnd_par ON terceros_no_duplicados(tercero_id_1, tercero_id_2);
+        """)
+
+        # Migration: backfill fusiones_log from existing [FUSIONADO→X] entries
+        existing_log = conn.execute("SELECT COUNT(*) FROM terceros_fusiones_log").fetchone()[0]
+        if existing_log == 0:
+            fusionados = conn.execute(
+                "SELECT id, nombre_canonico, updated_at FROM terceros WHERE nombre_canonico LIKE '[FUSIONADO→%'"
+            ).fetchall()
+            for f in fusionados:
+                nombre = f["nombre_canonico"]
+                # Parse: [FUSIONADO→123] Nombre Original
+                try:
+                    arrow_end = nombre.index("]")
+                    principal_id = int(nombre[len("[FUSIONADO→"):arrow_end])
+                    nombre_eliminado = nombre[arrow_end + 2:]  # skip "] "
+                    principal = conn.execute(
+                        "SELECT nombre_canonico FROM terceros WHERE id = ?", (principal_id,)
+                    ).fetchone()
+                    nombre_conservado = principal["nombre_canonico"] if principal else "?"
+                    conn.execute(
+                        """INSERT INTO terceros_fusiones_log
+                           (tercero_conservado_id, tercero_eliminado_id, nombre_conservado, nombre_eliminado, motivo, usuario, fecha)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (principal_id, f["id"], nombre_conservado, nombre_eliminado,
+                         "Fusión histórica (migrada)", "sistema", f["updated_at"] or _now())
+                    )
+                except (ValueError, IndexError):
+                    pass
     _initialized = True
 
 
@@ -881,23 +930,55 @@ from core.terceros_db import validar_cif_nif
 
 # ─── DETECCIÓN DE DUPLICADOS ─────────────────────────────────────────────────
 
-def detectar_duplicados() -> list[dict[str, Any]]:
+def _cargar_pares_no_duplicados(conn: sqlite3.Connection) -> set[tuple[int, int]]:
+    """Devuelve set de pares (min_id, max_id) marcados como no-duplicados."""
+    rows = conn.execute("SELECT tercero_id_1, tercero_id_2 FROM terceros_no_duplicados").fetchall()
+    return {(min(r[0], r[1]), max(r[0], r[1])) for r in rows}
+
+
+def _grupo_tiene_par_descartado(registros: list[dict], no_dup: set[tuple[int, int]]) -> bool:
+    """Devuelve True si TODOS los pares del grupo están descartados."""
+    ids = [r["id"] for r in registros]
+    for i in range(len(ids)):
+        for j in range(i + 1, len(ids)):
+            par = (min(ids[i], ids[j]), max(ids[i], ids[j]))
+            if par not in no_dup:
+                return False
+    return True
+
+
+def detectar_duplicados(tipo: str = "all") -> list[dict[str, Any]]:
     """Detecta grupos de posibles duplicados en terceros por CIF o nombre.
+
+    Args:
+        tipo: 'all', 'proveedor' o 'cliente' — filtra por rol del tercero.
 
     Returns lista de grupos, cada uno con:
       { "motivo": str, "registros": [dict, ...] }
+    Solo devuelve terceros NO fusionados y excluye pares marcados como no-duplicados.
     """
     init_crm_db()
     grupos: list[dict[str, Any]] = []
     vistos: set[int] = set()
 
+    # Filtro de tipo
+    tipo_filtro = ""
+    if tipo == "proveedor":
+        tipo_filtro = " AND t.es_proveedor = 1"
+    elif tipo == "cliente":
+        tipo_filtro = " AND t.es_cliente = 1"
+
     with _conectar() as conn:
-        # 1) Duplicados por CIF normalizado
-        all_terceros = conn.execute("""
+        no_dup = _cargar_pares_no_duplicados(conn)
+
+        # 1) Duplicados por CIF normalizado — excluir fusionados
+        all_terceros = conn.execute(f"""
             SELECT t.*, ce.id AS crm_id
             FROM terceros t
             LEFT JOIN crm_empresas ce ON ce.tercero_id = t.id
             WHERE t.nif IS NOT NULL AND t.nif != ''
+              AND t.nombre_canonico NOT LIKE '[FUSIONADO→%'
+              {tipo_filtro}
         """).fetchall()
 
         por_cif: dict[str, list[dict]] = {}
@@ -910,9 +991,11 @@ def detectar_duplicados() -> list[dict[str, Any]]:
         for cif_norm, registros in por_cif.items():
             if len(registros) < 2:
                 continue
+            # Excluir grupos cuyos pares están todos descartados
+            if _grupo_tiene_par_descartado(registros, no_dup):
+                continue
             ids = tuple(r["id"] for r in registros)
             vistos.update(ids)
-            # Enriquecer con nº facturas
             for r in registros:
                 r["num_facturas_prov"] = conn.execute(
                     "SELECT COUNT(*) FROM facturas_proveedor WHERE UPPER(REPLACE(REPLACE(REPLACE(nif_proveedor,' ',''),'.',''),'-','')) = ?",
@@ -925,10 +1008,12 @@ def detectar_duplicados() -> list[dict[str, Any]]:
             grupos.append({"motivo": f"Mismo CIF normalizado: {cif_norm}", "registros": registros})
 
         # 2) Duplicados por nombre normalizado (excluir ya detectados por CIF)
-        all_t = conn.execute("""
+        all_t = conn.execute(f"""
             SELECT t.*, ce.id AS crm_id
             FROM terceros t
             LEFT JOIN crm_empresas ce ON ce.tercero_id = t.id
+            WHERE t.nombre_canonico NOT LIKE '[FUSIONADO→%'
+              {tipo_filtro}
         """).fetchall()
 
         por_nombre: dict[str, list[dict]] = {}
@@ -942,6 +1027,8 @@ def detectar_duplicados() -> list[dict[str, Any]]:
 
         for nn, registros in por_nombre.items():
             if len(registros) < 2:
+                continue
+            if _grupo_tiene_par_descartado(registros, no_dup):
                 continue
             for r in registros:
                 nif_norm = normalizar_cif(r.get("nif"))
@@ -1083,6 +1170,15 @@ def fusionar_terceros(principal_id: int, absorbido_id: int) -> dict[str, Any]:
             (_now(), f"[FUSIONADO→{principal_id}] {absorbido['nombre_canonico']}", absorbido_id)
         )
 
+        # 7. Registrar en log de fusiones
+        conn.execute(
+            """INSERT INTO terceros_fusiones_log
+               (tercero_conservado_id, tercero_eliminado_id, nombre_conservado, nombre_eliminado, motivo, usuario, fecha)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (principal_id, absorbido_id, principal["nombre_canonico"],
+             absorbido["nombre_canonico"], "Fusión manual", "sistema", _now())
+        )
+
     return resultado
 
 
@@ -1195,3 +1291,42 @@ def vincular_facturas_a_terceros() -> dict[str, Any]:
         stats["facturas_cli_sin_vincular"] = stats["facturas_cli_total"] - ya_vinculadas_cli
 
     return stats
+
+
+# ─── HISTORIAL DE FUSIONES ──────────────────────────────────────────────────
+
+def listar_fusiones_log(limit: int = 100, offset: int = 0) -> dict[str, Any]:
+    """Devuelve el historial de fusiones con paginación."""
+    init_crm_db()
+    with _conectar() as conn:
+        total = conn.execute("SELECT COUNT(*) FROM terceros_fusiones_log").fetchone()[0]
+        rows = conn.execute(
+            "SELECT * FROM terceros_fusiones_log ORDER BY fecha DESC LIMIT ? OFFSET ?",
+            (limit, offset)
+        ).fetchall()
+        return {"fusiones": [dict(r) for r in rows], "total": total}
+
+
+# ─── MARCAR COMO NO-DUPLICADOS ──────────────────────────────────────────────
+
+def marcar_no_duplicados(tercero_id_1: int, tercero_id_2: int, usuario: str = "sistema") -> dict[str, Any]:
+    """Marca un par de terceros como no-duplicados para excluirlos del detector."""
+    init_crm_db()
+    id_min = min(tercero_id_1, tercero_id_2)
+    id_max = max(tercero_id_1, tercero_id_2)
+    with _conectar() as conn:
+        existe = conn.execute(
+            "SELECT id FROM terceros_no_duplicados WHERE tercero_id_1 = ? AND tercero_id_2 = ?",
+            (id_min, id_max)
+        ).fetchone()
+        if not existe:
+            conn.execute(
+                "INSERT INTO terceros_no_duplicados (tercero_id_1, tercero_id_2, usuario, fecha) VALUES (?, ?, ?, ?)",
+                (id_min, id_max, usuario, _now())
+            )
+    return {"ok": True}
+
+
+def contar_duplicados(tipo: str = "all") -> int:
+    """Devuelve solo el número total de grupos de duplicados pendientes."""
+    return len(detectar_duplicados(tipo=tipo))
