@@ -263,12 +263,28 @@
 
         // ═══ Sección: Facturación ═══
         var fc = p.facturas_cliente || [];
+        function _dashParseMoney(v) {
+          var s = String(v || "").replace(/\s/g, "");
+          if (s.indexOf(",") !== -1) s = s.replace(/\./g, "").replace(",", ".");
+          var n = parseFloat(s); return isNaN(n) ? 0 : n;
+        }
+        function _dashFmtMoney(v) {
+          var n = _dashParseMoney(v);
+          return n ? Math.round(n).toLocaleString("es-ES") + " \u20AC" : "\u2014";
+        }
+        function _dashCobroBadge(estado) {
+          var val = (estado || "pendiente").toString().trim().toLowerCase();
+          var colores = { cobrada: "#16A34A", parcial: "#2563EB", pendiente: "#CA8A04" };
+          var color = colores[val] || colores.pendiente;
+          var label = val.charAt(0).toUpperCase() + val.slice(1);
+          return '<span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:500;background:' + color + '15;color:' + color + ';border:1px solid ' + color + '30;">' + label + '</span>';
+        }
         var factFilas = fc.map(function (f) {
           return '<tr style="border-bottom:1px solid var(--color-border);">' +
             '<td style="padding:8px 6px;font-weight:500;">' + _esc(f.numero_factura || "\u2014") + '</td>' +
             '<td style="padding:8px 6px;">' + _esc((f.fecha_factura || "").substring(0, 10)) + '</td>' +
-            '<td style="padding:8px 6px;text-align:right;font-weight:500;">' + _esc(f.total_a_pagar || "\u2014") + '</td>' +
-            '<td style="padding:8px 6px;text-align:center;"><span class="status-badge status-badge--' + ((f.estado_cobro || "pendiente") === "cobrada" ? "adjudicada" : "negociacion") + '">' + _esc(f.estado_cobro || "pendiente") + '</span></td></tr>';
+            '<td style="padding:8px 6px;text-align:right;font-weight:500;">' + _dashFmtMoney(f.total_a_pagar) + '</td>' +
+            '<td style="padding:8px 6px;text-align:center;">' + _dashCobroBadge(f.estado_cobro) + '</td></tr>';
         }).join("");
         var factTotal = 0;
         fc.forEach(function (f) {

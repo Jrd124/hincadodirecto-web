@@ -1510,7 +1510,7 @@ def sugerencias_conciliacion_tarjeta():
       """
       SELECT id, fecha_operacion, concepto, importe
       FROM movimientos
-      WHERE (empresa_id IS NULL OR empresa_id = ?)
+      WHERE empresa_id = ?
         AND (tarjeta_id IS NULL OR tarjeta_id = 0)
         AND (factura_proveedor_id IS NULL)
         AND (conciliado_at IS NULL OR conciliado_at = '')
@@ -3266,6 +3266,8 @@ def _init_movimientos_db():
       if col not in columnas_existentes:
         conn.execute(f"ALTER TABLE movimientos ADD COLUMN {col} {sql_type}")
     conn.execute("CREATE INDEX IF NOT EXISTS ix_movimientos_factura_proveedor ON movimientos(factura_proveedor_id)")
+    # Backfill: assign empresa_id to movimientos that don't have one
+    conn.execute("UPDATE movimientos SET empresa_id = 'hincado_directo' WHERE empresa_id IS NULL OR empresa_id = ''")
     conn.commit()
   finally:
     conn.close()
@@ -3769,7 +3771,7 @@ def listar_movimientos():
       conditions.append("fecha_operacion <= ?")
       params.append(fecha_hasta)
     if empresa_id:
-      conditions.append("(empresa_id IS NULL OR empresa_id = ?)")
+      conditions.append("empresa_id = ?")
       params.append(empresa_id)
     if concepto:
       conditions.append("(concepto IS NOT NULL AND concepto LIKE ?)")
@@ -3878,7 +3880,7 @@ def listar_movimientos():
       cond_acum.append("fecha_operacion <= ?")
       params_acum.append(fecha_hasta)
     if empresa_id:
-      cond_acum.append("(empresa_id IS NULL OR empresa_id = ?)")
+      cond_acum.append("empresa_id = ?")
       params_acum.append(empresa_id)
     where_acum = (" WHERE " + " AND ".join(cond_acum)) if cond_acum else ""
     params_acum.append(5000)
@@ -4009,7 +4011,7 @@ def conciliacion_sugerencias():
     if fecha_hasta:
       cond_mov.append("fecha_operacion <= ?")
       params_mov.append(fecha_hasta)
-    cond_mov.append("(empresa_id IS NULL OR empresa_id = ?)")
+    cond_mov.append("empresa_id = ?")
     params_mov.append(empresa_id)
     where_mov = " AND ".join(cond_mov)
     movimientos = conn_bancos.execute(
@@ -4591,7 +4593,7 @@ def exportar_movimientos_bancos():
       conditions.append("fecha_operacion <= ?")
       params.append(fecha_hasta)
     if empresa_id:
-      conditions.append("(empresa_id IS NULL OR empresa_id = ?)")
+      conditions.append("empresa_id = ?")
       params.append(empresa_id)
     if concepto:
       conditions.append("(concepto IS NOT NULL AND concepto LIKE ?)")

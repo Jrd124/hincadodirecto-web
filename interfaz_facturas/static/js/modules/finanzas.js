@@ -2374,15 +2374,11 @@ function renderTablaFacturas(opts) {
       const td = document.createElement("td");
       const raw = (f[col.key] ?? "").toString().trim();
       if (col.key === "estado_pago" || col.key === "estado_cobro") {
-        const val = raw.toLowerCase();
-        if (val) {
-          const badge = document.createElement("span");
-          badge.className = "badge-pago badge-pago-" + val;
-          badge.textContent = raw;
-          td.appendChild(badge);
-        } else {
-          td.textContent = "—";
-        }
+        const val = (raw || "pendiente").toLowerCase();
+        const badge = document.createElement("span");
+        badge.className = "badge-pago badge-pago-" + val;
+        badge.textContent = val.charAt(0).toUpperCase() + val.slice(1);
+        td.appendChild(badge);
       } else if (col.key === "fecha_factura" && raw.length >= 10) {
         // Formato compacto dd/mm/yy
         var partes = raw.slice(0, 10).split("-");
@@ -4869,15 +4865,11 @@ function renderFacturasClienteListado(facturas) {
       const td = document.createElement("td");
       const raw = (f[col.key] ?? "").toString().trim();
       if (col.key === "estado_cobro") {
-        const val = raw.toLowerCase();
-        if (val) {
-          const badge = document.createElement("span");
-          badge.className = "badge-pago badge-pago-" + val;
-          badge.textContent = raw;
-          td.appendChild(badge);
-        } else {
-          td.textContent = "—";
-        }
+        const val = (raw || "pendiente").toLowerCase();
+        const badge = document.createElement("span");
+        badge.className = "badge-pago badge-pago-" + val;
+        badge.textContent = val.charAt(0).toUpperCase() + val.slice(1);
+        td.appendChild(badge);
       } else if (col.key === "fecha_factura" && raw.length >= 10) {
         var partesFCli = raw.slice(0, 10).split("-");
         td.textContent = partesFCli.length === 3 ? partesFCli[2] + "/" + partesFCli[1] + "/" + partesFCli[0].slice(2) : raw;
