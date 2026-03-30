@@ -104,6 +104,14 @@ def api_actualizar_parte(parte_id: int):
   return jsonify(parte)
 
 
+@proyectos_bp.delete("/api/proyectos/partes/<int:parte_id>")
+def api_eliminar_parte(parte_id: int):
+  ok = proyectos_db.eliminar_parte(parte_id)
+  if not ok:
+    return jsonify({"error": "Parte no encontrado"}), 404
+  return jsonify({"ok": True})
+
+
 @proyectos_bp.get("/api/proyectos/dashboard")
 def api_proyectos_dashboard():
   proyectos_db.init_proyectos_db()

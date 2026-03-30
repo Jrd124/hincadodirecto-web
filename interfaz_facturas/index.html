@@ -894,35 +894,8 @@
       </div>
 
       <!-- Modal parte de trabajo -->
-      <div id="modal-parte" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true">
-        <div class="modal-content" style="max-width:600px;">
-          <h2 id="modal-parte-titulo">Registrar parte de trabajo</h2>
-          <form id="form-parte" novalidate>
-            <input type="hidden" id="parte-proyecto-id" />
-            <input type="hidden" id="parte-edit-id" />
-            <div class="form-row">
-              <div class="form-group"><label for="parte-fecha">Fecha</label><input type="date" id="parte-fecha" /></div>
-              <div class="form-group"><label for="parte-hincas">Hincas realizadas</label><input type="number" id="parte-hincas" min="0" /></div>
-            </div>
-            <div class="form-row">
-              <div class="form-group"><label for="parte-horas-maq">Horas maquina</label><input type="number" id="parte-horas-maq" step="0.5" min="0" /></div>
-              <div class="form-group"><label for="parte-horas-pers">Horas personal</label><input type="number" id="parte-horas-pers" step="0.5" min="0" /></div>
-            </div>
-            <div class="form-row">
-              <div class="form-group"><label for="parte-operadores">N operadores</label><input type="number" id="parte-operadores" min="1" value="1" /></div>
-              <div class="form-group"><label for="parte-ayudantes">N ayudantes</label><input type="number" id="parte-ayudantes" min="0" value="0" /></div>
-            </div>
-            <div class="form-row">
-              <div class="form-group"><label for="parte-terreno">Terreno</label><select id="parte-terreno"><option value="">--</option><option value="normal">Normal</option><option value="rocoso">Rocoso</option><option value="arcilloso">Arcilloso</option><option value="arenoso">Arenoso</option></select></div>
-              <div class="form-group"><label for="parte-meteo">Meteorologia</label><select id="parte-meteo"><option value="">--</option><option value="bueno">Bueno</option><option value="lluvia">Lluvia</option><option value="viento">Viento</option><option value="calor_extremo">Calor extremo</option></select></div>
-            </div>
-            <div class="form-group"><label for="parte-combustible">Combustible (litros)</label><input type="number" id="parte-combustible" step="0.1" min="0" /></div>
-            <div class="form-group"><label for="parte-incidencias">Incidencias</label><textarea id="parte-incidencias" rows="2" style="width:100%;"></textarea></div>
-            <div class="form-group"><label for="parte-notas">Notas</label><textarea id="parte-notas" rows="2" style="width:100%;"></textarea></div>
-            <div class="form-actions"><button type="submit" class="primary">Guardar</button><button type="button" class="secondary" id="btn-cancelar-parte">Cancelar</button></div>
-          </form>
-        </div>
-      </div>
+      <!-- Modal parte unificado: se genera dinámicamente en proyectos.js -->
+      <div id="modal-parte" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true"></div>
 
       <div id="panel-proyectos-transporte" class="panel-proyectos panel-proyectos-transporte">
         <div class="layout transporte-layout">

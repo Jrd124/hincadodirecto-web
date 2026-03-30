@@ -728,6 +728,23 @@ def actualizar_parte(parte_id: int, data: dict) -> dict | None:
         return dict(conn.execute("SELECT * FROM proyecto_partes WHERE id = ?", (parte_id,)).fetchone())
 
 
+def eliminar_parte(parte_id: int) -> bool:
+    init_proyectos_db()
+    ahora = _now()
+    with _conectar() as conn:
+        row = conn.execute("SELECT proyecto_id, hincas_realizadas FROM proyecto_partes WHERE id = ?", (parte_id,)).fetchone()
+        if not row:
+            return False
+        hincas = row["hincas_realizadas"] or 0
+        conn.execute("DELETE FROM proyecto_partes WHERE id = ?", (parte_id,))
+        if hincas > 0:
+            conn.execute(
+                "UPDATE proyectos SET hincas_realizadas = MAX(0, COALESCE(hincas_realizadas, 0) - ?), updated_at = ? WHERE id = ?",
+                (hincas, ahora, row["proyecto_id"]),
+            )
+    return True
+
+
 # ── Recursos ─────────────────────────────────────────────────────────────────
 
 def asignar_recurso(proyecto_id: int, data: dict) -> dict:

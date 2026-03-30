@@ -3,7 +3,6 @@
   var proyModalEl = document.getElementById("modal-proyecto");
   var proyFormEl = document.getElementById("form-proyecto");
   var parteModalEl = document.getElementById("modal-parte");
-  var parteFormEl = document.getElementById("form-parte");
 
   function _fE(n) { return n ? Number(n).toLocaleString("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 0, maximumFractionDigits: 0 }) : ""; }
 
@@ -237,7 +236,11 @@
               '<td style="padding:8px 6px;text-align:right;">' + (pt.num_operadores || 0) + '</td>' +
               '<td style="padding:8px 6px;text-align:right;">' + (pt.num_ayudantes || 0) + '</td>' +
               '<td style="padding:8px 6px;text-align:right;">' + (pt.combustible_litros || "\u2014") + '</td>' +
-              '<td style="padding:8px 6px;font-size:12px;color:' + (pt.incidencias ? 'var(--color-danger)' : 'var(--color-text-secondary)') + ';">' + (pt.incidencias ? _esc(pt.incidencias).substring(0, 50) : "\u2014") + '</td></tr>';
+              '<td style="padding:8px 6px;font-size:12px;color:' + (pt.incidencias ? 'var(--color-danger)' : 'var(--color-text-secondary)') + ';">' + (pt.incidencias ? _esc(pt.incidencias).substring(0, 50) : "\u2014") + '</td>' +
+              '<td style="padding:8px 6px;text-align:center;white-space:nowrap;">' +
+                '<button onclick="parteEditar(' + pt.id + ',' + p.id + ')" class="btn-outline" style="font-size:11px;padding:2px 8px;">Editar</button> ' +
+                '<button onclick="parteEliminar(' + pt.id + ',' + p.id + ')" class="btn-outline" style="font-size:11px;padding:2px 8px;color:var(--color-danger);border-color:var(--color-danger);">Eliminar</button>' +
+              '</td></tr>';
           }).join("");
           partesHtml = '<div style="height:200px;margin-bottom:12px;"><canvas id="chart-avance-proyecto"></canvas></div>' +
             '<div style="max-height:400px;overflow-y:auto;"><table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="border-bottom:2px solid var(--color-border);position:sticky;top:0;background:var(--color-white);">' +
@@ -249,6 +252,7 @@
             '<th style="text-align:right;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Ayud.</th>' +
             '<th style="text-align:right;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Gasoil (L)</th>' +
             '<th style="text-align:left;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Incidencias</th>' +
+            '<th style="text-align:center;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Acciones</th>' +
             '</tr></thead><tbody>' + filas + '</tbody></table></div>';
         } else {
           partesHtml = '<p style="color:var(--color-text-secondary);font-size:13px;text-align:center;padding:24px;">Sin partes de trabajo registrados.</p>';
@@ -941,156 +945,344 @@
       .catch(function () { mostrarToast("Error de conexion.", "error"); });
   });
 
-  // ── Modal parte ──
-  window._proyRegistrarParte = function (proyId) {
-    document.getElementById("modal-parte-titulo").textContent = "Registrar parte de trabajo";
-    document.getElementById("parte-proyecto-id").value = proyId;
-    document.getElementById("parte-edit-id").value = "";
-    document.getElementById("parte-fecha").value = new Date().toISOString().substring(0, 10);
-    document.getElementById("parte-hincas").value = "";
-    document.getElementById("parte-horas-maq").value = "";
-    document.getElementById("parte-horas-pers").value = "";
-    document.getElementById("parte-operadores").value = "1";
-    document.getElementById("parte-ayudantes").value = "0";
-    document.getElementById("parte-terreno").value = "";
-    document.getElementById("parte-meteo").value = "";
-    document.getElementById("parte-combustible").value = "";
-    document.getElementById("parte-incidencias").value = "";
-    document.getElementById("parte-notas").value = "";
-    parteModalEl.classList.add("visible");
-    parteModalEl.setAttribute("aria-hidden", "false");
-  };
+  // ── Modal parte unificado (Manual + OCR) ──
 
-  document.getElementById("btn-cancelar-parte").addEventListener("click", function () {
-    parteModalEl.classList.remove("visible"); parteModalEl.setAttribute("aria-hidden", "true");
-  });
-  parteModalEl.addEventListener("click", function (e) { if (e.target === parteModalEl) { parteModalEl.classList.remove("visible"); parteModalEl.setAttribute("aria-hidden", "true"); } });
+  function _parteCerrarModal() {
+    parteModalEl.classList.remove("visible");
+    parteModalEl.setAttribute("aria-hidden", "true");
+    parteModalEl.innerHTML = "";
+  }
+  parteModalEl.addEventListener("click", function (e) { if (e.target === parteModalEl) _parteCerrarModal(); });
 
-  parteFormEl.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var proyId = document.getElementById("parte-proyecto-id").value;
-    var parteId = document.getElementById("parte-edit-id").value;
-    var body = {
-      fecha: document.getElementById("parte-fecha").value,
-      hincas_realizadas: document.getElementById("parte-hincas").value ? parseInt(document.getElementById("parte-hincas").value) : 0,
-      horas_maquina: document.getElementById("parte-horas-maq").value ? parseFloat(document.getElementById("parte-horas-maq").value) : 0,
-      horas_personal: document.getElementById("parte-horas-pers").value ? parseFloat(document.getElementById("parte-horas-pers").value) : 0,
-      num_operadores: document.getElementById("parte-operadores").value ? parseInt(document.getElementById("parte-operadores").value) : 1,
-      num_ayudantes: document.getElementById("parte-ayudantes").value ? parseInt(document.getElementById("parte-ayudantes").value) : 0,
-      condiciones_terreno: document.getElementById("parte-terreno").value,
-      meteorologia: document.getElementById("parte-meteo").value,
-      combustible_litros: document.getElementById("parte-combustible").value ? parseFloat(document.getElementById("parte-combustible").value) : null,
-      incidencias: document.getElementById("parte-incidencias").value,
-      notas: document.getElementById("parte-notas").value,
-    };
-    var url = parteId ? "/api/proyectos/partes/" + parteId : "/api/proyectos/" + proyId + "/partes";
-    var method = parteId ? "PUT" : "POST";
-    fetch(url, { method: method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
-      .then(function (res) {
-        if (!res.ok) { mostrarToast(res.data.error || "Error", "error"); return; }
-        parteModalEl.classList.remove("visible"); parteModalEl.setAttribute("aria-hidden", "true");
-        _proyVivos();
-        mostrarToast("Parte registrado.", "success");
-      })
-      .catch(function () { mostrarToast("Error de conexion.", "error"); });
-  });
-
-  // ── OCR Partes de trabajo ──
-
-  window.partesProcesarFoto = function (proyectoId) {
-    var existing = document.getElementById("modal-parte-ocr");
-    if (existing) existing.remove();
-    var modal = document.createElement("div");
-    modal.className = "modal-overlay visible";
-    modal.id = "modal-parte-ocr";
-    modal.style.zIndex = "110";
-    modal.addEventListener("click", function (e) { if (e.target === modal) modal.remove(); });
-    modal.innerHTML =
+  window.parteNuevoUnificado = function (proyectoId, tabInicial) {
+    var hoy = new Date().toISOString().substring(0, 10);
+    parteModalEl.innerHTML =
       '<div class="modal-content" style="max-width:700px;max-height:90vh;overflow-y:auto;">' +
-        '<h2 style="margin:0 0 16px;">Procesar parte de trabajo</h2>' +
+        '<h2 style="margin:0 0 16px;">Registrar parte de trabajo</h2>' +
 
-        '<div id="ocr-paso-1">' +
-          '<div id="ocr-dropzone" style="border:2px dashed var(--color-border);border-radius:12px;padding:40px;text-align:center;cursor:pointer;margin-bottom:16px;" onclick="document.getElementById(\'ocr-input-foto\').click()">' +
-            '<div style="font-size:32px;margin-bottom:8px;">📷</div>' +
-            '<div style="font-size:14px;color:var(--color-text-secondary);">Haz click o arrastra una foto del parte</div>' +
-            '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px;">JPG, PNG o WEBP</div>' +
-          '</div>' +
-          '<input type="file" id="ocr-input-foto" accept="image/*" capture="environment" style="display:none;">' +
-          '<div id="ocr-preview" style="display:none;text-align:center;margin-bottom:16px;">' +
-            '<img id="ocr-preview-img" style="max-width:100%;max-height:300px;border-radius:8px;">' +
-          '</div>' +
-          '<div id="ocr-loading" style="display:none;text-align:center;padding:20px;">' +
-            '<div style="font-size:14px;color:var(--color-text-secondary);">Procesando parte con IA...</div>' +
-            '<div style="margin-top:8px;font-size:12px;color:var(--color-text-secondary);">Esto puede tardar 5-10 segundos</div>' +
-          '</div>' +
+        // Tabs
+        '<div style="display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid var(--color-border);">' +
+          '<button id="tab-parte-manual" onclick="parteTabSwitch(\'manual\')" style="padding:10px 20px;font-size:14px;font-weight:500;border:none;background:none;cursor:pointer;margin-bottom:-2px;border-bottom:2px solid #2563EB;color:#2563EB;">\uD83D\uDCDD Manual</button>' +
+          '<button id="tab-parte-foto" onclick="parteTabSwitch(\'foto\')" style="padding:10px 20px;font-size:14px;font-weight:500;border:none;background:none;cursor:pointer;margin-bottom:-2px;border-bottom:2px solid transparent;color:var(--color-text-secondary);">\uD83D\uDCF7 Procesar foto</button>' +
         '</div>' +
 
-        '<div id="ocr-paso-2" style="display:none;">' +
-          '<div style="background:#EFF6FF;border:1px solid #2563EB30;border-radius:8px;padding:12px;margin-bottom:16px;">' +
-            '<span style="font-size:13px;color:#2563EB;">Datos extraidos automaticamente. Revisa y corrige si es necesario.</span>' +
+        // Tab Manual
+        '<div id="parte-contenido-manual">' +
+          '<div style="border-left:3px solid #16A34A;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+            '<div style="font-size:14px;font-weight:600;color:#16A34A;margin-bottom:12px;">Produccion</div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Fecha</label>' +
+                '<input type="date" id="parte-fecha" value="' + hoy + '" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Hincas realizadas</label>' +
+                '<input type="number" id="parte-hincas" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Horas maquina</label>' +
+                '<input type="number" id="parte-horas-maq" step="0.5" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Horas personal</label>' +
+                '<input type="number" id="parte-horas-pers" step="0.5" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">N\u00BA operadores</label>' +
+                '<input type="number" id="parte-operadores" min="0" value="1" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">N\u00BA ayudantes</label>' +
+                '<input type="number" id="parte-ayudantes" min="0" value="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+            '</div>' +
           '</div>' +
 
           '<div style="border-left:3px solid #2563EB;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
-            '<div style="font-size:14px;font-weight:600;color:#2563EB;margin-bottom:12px;">Identificacion</div>' +
-            '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">' +
-              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">N\u00BA Parte</label>' +
-                '<input type="text" id="ocr-numero" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
-              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Fecha</label>' +
-                '<input type="date" id="ocr-fecha" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
-              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Proyecto</label>' +
-                '<select id="ocr-proyecto" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></select></div>' +
-            '</div>' +
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">' +
-              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Cliente</label>' +
-                '<input type="text" id="ocr-cliente" readonly style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:#f3f4f6;"></div>' +
-              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Obra / Poblacion</label>' +
-                '<input type="text" id="ocr-obra" readonly style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:#f3f4f6;"></div>' +
-            '</div>' +
-          '</div>' +
-
-          '<div style="border-left:3px solid #16A34A;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
-            '<div style="font-size:14px;font-weight:600;color:#16A34A;margin-bottom:12px;">Produccion</div>' +
-            '<div id="ocr-lineas-container"></div>' +
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">' +
-              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Total hincas</label>' +
-                '<input type="number" id="ocr-hincas" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
-              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Horas administracion</label>' +
-                '<input type="number" id="ocr-horas-admin" step="0.5" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+            '<div style="font-size:14px;font-weight:600;color:#2563EB;margin-bottom:12px;">Condiciones</div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Terreno</label>' +
+                '<select id="parte-terreno" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"><option value="">--</option><option value="normal">Normal</option><option value="rocoso">Rocoso</option><option value="arcilloso">Arcilloso</option><option value="arenoso">Arenoso</option></select></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Meteorologia</label>' +
+                '<select id="parte-meteo" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"><option value="">--</option><option value="bueno">Bueno</option><option value="lluvia">Lluvia</option><option value="viento">Viento</option><option value="calor_extremo">Calor extremo</option></select></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Combustible (litros)</label>' +
+                '<input type="number" id="parte-combustible" step="0.1" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
             '</div>' +
           '</div>' +
 
           '<div style="border-left:3px solid #CA8A04;padding:12px 16px;margin-bottom:16px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
-            '<div style="font-size:14px;font-weight:600;color:#CA8A04;margin-bottom:12px;">Incidencias</div>' +
-            '<textarea id="ocr-incidencias" rows="2" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;" placeholder="Sin incidencias"></textarea>' +
+            '<div style="font-size:14px;font-weight:600;color:#CA8A04;margin-bottom:12px;">Observaciones</div>' +
+            '<div style="display:grid;gap:10px;">' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Incidencias</label>' +
+                '<textarea id="parte-incidencias" rows="2" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;" placeholder="Sin incidencias"></textarea></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Notas</label>' +
+                '<textarea id="parte-notas" rows="2" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;"></textarea></div>' +
+            '</div>' +
           '</div>' +
 
           '<div style="display:flex;gap:8px;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--color-border);">' +
-            '<button class="secondary" style="padding:8px 20px;" onclick="document.getElementById(\'modal-parte-ocr\').remove()">Cancelar</button>' +
-            '<button class="primary" style="width:auto;padding:8px 20px;" onclick="partesGuardarOCR(' + proyectoId + ')">Guardar parte</button>' +
+            '<button class="secondary" style="padding:8px 20px;" onclick="_parteCerrarModalGlobal()">Cancelar</button>' +
+            '<button class="primary" style="width:auto;padding:8px 20px;" onclick="_parteGuardarManual(' + proyectoId + ')">Guardar parte</button>' +
+          '</div>' +
+        '</div>' +
+
+        // Tab Foto
+        '<div id="parte-contenido-foto" style="display:none;">' +
+          '<div id="ocr-paso-1">' +
+            '<div id="ocr-dropzone" style="border:2px dashed var(--color-border);border-radius:12px;padding:40px;text-align:center;cursor:pointer;margin-bottom:16px;" onclick="document.getElementById(\'ocr-input-foto\').click()">' +
+              '<div style="font-size:32px;margin-bottom:8px;">\uD83D\uDCF7</div>' +
+              '<div style="font-size:14px;color:var(--color-text-secondary);">Haz click o arrastra una foto del parte</div>' +
+              '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px;">JPG, PNG o WEBP</div>' +
+            '</div>' +
+            '<input type="file" id="ocr-input-foto" accept="image/*" capture="environment" style="display:none;">' +
+            '<div id="ocr-preview" style="display:none;text-align:center;margin-bottom:16px;">' +
+              '<img id="ocr-preview-img" style="max-width:100%;max-height:300px;border-radius:8px;">' +
+            '</div>' +
+            '<div id="ocr-loading" style="display:none;text-align:center;padding:20px;">' +
+              '<div style="font-size:14px;color:var(--color-text-secondary);">Procesando parte con IA...</div>' +
+              '<div style="margin-top:8px;font-size:12px;color:var(--color-text-secondary);">Esto puede tardar 5-10 segundos</div>' +
+            '</div>' +
+          '</div>' +
+
+          '<div id="ocr-paso-2" style="display:none;">' +
+            '<div style="background:#EFF6FF;border:1px solid #2563EB30;border-radius:8px;padding:12px;margin-bottom:16px;">' +
+              '<span style="font-size:13px;color:#2563EB;">Datos extraidos automaticamente. Revisa y corrige si es necesario.</span>' +
+            '</div>' +
+
+            '<div style="border-left:3px solid #2563EB;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+              '<div style="font-size:14px;font-weight:600;color:#2563EB;margin-bottom:12px;">Identificacion</div>' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">N\u00BA Parte</label>' +
+                  '<input type="text" id="ocr-numero" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Fecha</label>' +
+                  '<input type="date" id="ocr-fecha" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Proyecto</label>' +
+                  '<select id="ocr-proyecto" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></select></div>' +
+              '</div>' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Cliente</label>' +
+                  '<input type="text" id="ocr-cliente" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Obra / Poblacion</label>' +
+                  '<input type="text" id="ocr-obra" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '</div>' +
+            '</div>' +
+
+            '<div style="border-left:3px solid #16A34A;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+              '<div style="font-size:14px;font-weight:600;color:#16A34A;margin-bottom:12px;">Produccion</div>' +
+              '<div id="ocr-lineas-container"></div>' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Total hincas</label>' +
+                  '<input type="number" id="ocr-hincas" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Horas administracion</label>' +
+                  '<input type="number" id="ocr-horas-admin" step="0.5" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '</div>' +
+            '</div>' +
+
+            '<div style="border-left:3px solid #CA8A04;padding:12px 16px;margin-bottom:16px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+              '<div style="font-size:14px;font-weight:600;color:#CA8A04;margin-bottom:12px;">Incidencias</div>' +
+              '<textarea id="ocr-incidencias" rows="2" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;" placeholder="Sin incidencias"></textarea>' +
+            '</div>' +
+
+            '<div style="display:flex;gap:8px;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--color-border);">' +
+              '<button class="secondary" style="padding:8px 20px;" onclick="_parteCerrarModalGlobal()">Cancelar</button>' +
+              '<button class="primary" style="width:auto;padding:8px 20px;" onclick="partesGuardarOCR(' + proyectoId + ')">Guardar parte</button>' +
+            '</div>' +
           '</div>' +
         '</div>' +
       '</div>';
-    document.body.appendChild(modal);
 
-    // File input handler
-    document.getElementById("ocr-input-foto").addEventListener("change", function () {
-      _partesEnviarOCR(this, proyectoId);
-    });
+    // Wire file input
+    setTimeout(function () {
+      var fi = document.getElementById("ocr-input-foto");
+      if (fi) fi.addEventListener("change", function () { _partesEnviarOCR(this, proyectoId); });
+    }, 0);
 
-    // Load projects in select
+    // Load projects in OCR select
     fetch("/api/proyectos").then(function (r) { return r.json(); }).then(function (data) {
       var sel = document.getElementById("ocr-proyecto");
+      if (!sel) return;
       sel.innerHTML = '<option value="">Seleccionar...</option>';
-      (data.proyectos || []).forEach(function (p) {
+      (data.proyectos || []).forEach(function (pr) {
         var opt = document.createElement("option");
-        opt.value = p.id;
-        opt.textContent = (p.codigo ? p.codigo + " \u00B7 " : "") + p.nombre;
-        if (p.id === proyectoId) opt.selected = true;
+        opt.value = pr.id;
+        opt.textContent = (pr.codigo ? pr.codigo + " \u00B7 " : "") + pr.nombre;
+        if (pr.id === proyectoId) opt.selected = true;
         sel.appendChild(opt);
       });
     });
+
+    parteModalEl.classList.add("visible");
+    parteModalEl.setAttribute("aria-hidden", "false");
+
+    // Switch to requested tab
+    if (tabInicial === "foto") parteTabSwitch("foto");
   };
+
+  window._parteCerrarModalGlobal = _parteCerrarModal;
+
+  window.parteTabSwitch = function (tab) {
+    var manual = document.getElementById("parte-contenido-manual");
+    var foto = document.getElementById("parte-contenido-foto");
+    var btnManual = document.getElementById("tab-parte-manual");
+    var btnFoto = document.getElementById("tab-parte-foto");
+    if (!manual || !foto) return;
+    if (tab === "foto") {
+      manual.style.display = "none";
+      foto.style.display = "block";
+      btnManual.style.borderBottomColor = "transparent";
+      btnManual.style.color = "var(--color-text-secondary)";
+      btnFoto.style.borderBottomColor = "#2563EB";
+      btnFoto.style.color = "#2563EB";
+    } else {
+      manual.style.display = "block";
+      foto.style.display = "none";
+      btnManual.style.borderBottomColor = "#2563EB";
+      btnManual.style.color = "#2563EB";
+      btnFoto.style.borderBottomColor = "transparent";
+      btnFoto.style.color = "var(--color-text-secondary)";
+    }
+  };
+
+  // Alias old functions to unified modal
+  window._proyRegistrarParte = function (proyId) { parteNuevoUnificado(proyId, "manual"); };
+  window.partesProcesarFoto = function (proyId) { parteNuevoUnificado(proyId, "foto"); };
+
+  // Manual save
+  window._parteGuardarManual = function (proyectoId) {
+    var body = {
+      fecha: (document.getElementById("parte-fecha") || {}).value,
+      hincas_realizadas: parseInt((document.getElementById("parte-hincas") || {}).value) || 0,
+      horas_maquina: parseFloat((document.getElementById("parte-horas-maq") || {}).value) || 0,
+      horas_personal: parseFloat((document.getElementById("parte-horas-pers") || {}).value) || 0,
+      num_operadores: parseInt((document.getElementById("parte-operadores") || {}).value) || 1,
+      num_ayudantes: parseInt((document.getElementById("parte-ayudantes") || {}).value) || 0,
+      condiciones_terreno: (document.getElementById("parte-terreno") || {}).value || "",
+      meteorologia: (document.getElementById("parte-meteo") || {}).value || "",
+      combustible_litros: parseFloat((document.getElementById("parte-combustible") || {}).value) || null,
+      incidencias: (document.getElementById("parte-incidencias") || {}).value || "",
+      notas: (document.getElementById("parte-notas") || {}).value || "",
+    };
+    fetch("/api/proyectos/" + proyectoId + "/partes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok) { mostrarToast(res.data.error || "Error", "error"); return; }
+        _parteCerrarModal();
+        _proyVivos();
+        if (window.proyectoDashboard) proyectoDashboard(proyectoId);
+        mostrarToast("Parte registrado.", "success");
+      })
+      .catch(function () { mostrarToast("Error de conexion.", "error"); });
+  };
+
+  // ── Editar / Eliminar partes ──
+
+  window.parteEditar = function (parteId, proyectoId) {
+    // Fetch parte data from the cached dashboard data — parte is already loaded in p.partes
+    // We'll fetch fresh from the partes list
+    fetch("/api/proyectos/" + proyectoId + "/dashboard")
+      .then(function (r) { return r.json(); })
+      .then(function (dashData) {
+        var pt = null;
+        (dashData.partes || []).forEach(function (p) { if (p.id === parteId) pt = p; });
+        if (!pt) { mostrarToast("Parte no encontrado", "error"); return; }
+
+        var existing = document.getElementById("modal-parte-editar");
+        if (existing) existing.remove();
+        var modal = document.createElement("div");
+        modal.className = "modal-overlay visible";
+        modal.id = "modal-parte-editar";
+        modal.style.zIndex = "110";
+        modal.addEventListener("click", function (e) { if (e.target === modal) modal.remove(); });
+        modal.innerHTML =
+          '<div class="modal-content" style="max-width:600px;max-height:90vh;overflow-y:auto;">' +
+            '<h2 style="margin:0 0 16px;">Editar parte de trabajo</h2>' +
+
+            '<div style="border-left:3px solid #2563EB;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+              '<div style="font-size:14px;font-weight:600;color:#2563EB;margin-bottom:12px;">Identificacion</div>' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Fecha</label>' +
+                  '<input type="date" id="pe-fecha" value="' + _esc((pt.fecha || "").substring(0, 10)) + '" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">ID Parte</label>' +
+                  '<input type="text" value="#' + pt.id + '" readonly style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:#f3f4f6;color:#6b7280;cursor:not-allowed;"></div>' +
+              '</div>' +
+            '</div>' +
+
+            '<div style="border-left:3px solid #16A34A;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+              '<div style="font-size:14px;font-weight:600;color:#16A34A;margin-bottom:12px;">Produccion</div>' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Hincas realizadas</label>' +
+                  '<input type="number" id="pe-hincas" value="' + (pt.hincas_realizadas || 0) + '" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Horas maquina</label>' +
+                  '<input type="number" id="pe-horas-maq" value="' + (pt.horas_maquina || 0) + '" step="0.5" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Horas personal</label>' +
+                  '<input type="number" id="pe-horas-pers" value="' + (pt.horas_personal || 0) + '" step="0.5" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Operadores</label>' +
+                  '<input type="number" id="pe-operadores" value="' + (pt.num_operadores || 0) + '" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Ayudantes</label>' +
+                  '<input type="number" id="pe-ayudantes" value="' + (pt.num_ayudantes || 0) + '" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Gasoil (litros)</label>' +
+                  '<input type="number" id="pe-gasoil" value="' + (pt.combustible_litros || "") + '" step="0.1" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '</div>' +
+            '</div>' +
+
+            '<div style="border-left:3px solid #CA8A04;padding:12px 16px;margin-bottom:16px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+              '<div style="font-size:14px;font-weight:600;color:#CA8A04;margin-bottom:12px;">Incidencias y notas</div>' +
+              '<div style="display:grid;gap:10px;">' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Incidencias</label>' +
+                  '<textarea id="pe-incidencias" rows="2" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;" placeholder="Sin incidencias">' + _esc(pt.incidencias || "") + '</textarea></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Notas</label>' +
+                  '<textarea id="pe-notas" rows="2" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;">' + _esc(pt.notas || "") + '</textarea></div>' +
+              '</div>' +
+            '</div>' +
+
+            '<div style="display:flex;gap:8px;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--color-border);">' +
+              '<button class="secondary" style="padding:8px 20px;" onclick="document.getElementById(\'modal-parte-editar\').remove()">Cancelar</button>' +
+              '<button class="primary" style="width:auto;padding:8px 20px;" onclick="_parteGuardarEdicion(' + parteId + ',' + proyectoId + ')">Guardar cambios</button>' +
+            '</div>' +
+          '</div>';
+        document.body.appendChild(modal);
+      });
+  };
+
+  window._parteGuardarEdicion = function (parteId, proyectoId) {
+    var body = {
+      fecha: (document.getElementById("pe-fecha") || {}).value,
+      hincas_realizadas: parseInt((document.getElementById("pe-hincas") || {}).value) || 0,
+      horas_maquina: parseFloat((document.getElementById("pe-horas-maq") || {}).value) || 0,
+      horas_personal: parseFloat((document.getElementById("pe-horas-pers") || {}).value) || 0,
+      num_operadores: parseInt((document.getElementById("pe-operadores") || {}).value) || 0,
+      num_ayudantes: parseInt((document.getElementById("pe-ayudantes") || {}).value) || 0,
+      combustible_litros: parseFloat((document.getElementById("pe-gasoil") || {}).value) || null,
+      incidencias: (document.getElementById("pe-incidencias") || {}).value || "",
+      notas: (document.getElementById("pe-notas") || {}).value || "",
+    };
+    fetch("/api/proyectos/partes/" + parteId, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          var m = document.getElementById("modal-parte-editar");
+          if (m) m.remove();
+          mostrarToast("Parte actualizado.", "success");
+          proyectoDashboard(proyectoId);
+        } else {
+          mostrarToast(res.data.error || "Error al guardar", "error");
+        }
+      })
+      .catch(function () { mostrarToast("Error de conexion.", "error"); });
+  };
+
+  window.parteEliminar = function (parteId, proyectoId) {
+    if (!confirm("Eliminar este parte de trabajo? Esta accion no se puede deshacer.")) return;
+    fetch("/api/proyectos/partes/" + parteId, { method: "DELETE" })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          mostrarToast("Parte eliminado.", "success");
+          proyectoDashboard(proyectoId);
+        } else {
+          mostrarToast(res.data.error || "Error al eliminar", "error");
+        }
+      })
+      .catch(function () { mostrarToast("Error de conexion.", "error"); });
+  };
+
+  // ── OCR send/save (used by unified modal) ──
 
   function _partesEnviarOCR(input, proyectoId) {
     var file = input.files[0];
@@ -1163,7 +1355,7 @@
         }
 
         // Store original data
-        document.getElementById("modal-parte-ocr")._ocrDatos = datos;
+        parteModalEl._ocrDatos = datos;
 
         // Show step 2
         document.getElementById("ocr-paso-1").style.display = "none";
@@ -1199,7 +1391,7 @@
       });
     }
 
-    var ocrDatos = (document.getElementById("modal-parte-ocr") || {})._ocrDatos || {};
+    var ocrDatos = (parteModalEl || {})._ocrDatos || {};
     var datos = {
       proyecto_id: parseInt(proyectoId),
       numero_parte: (document.getElementById("ocr-numero") || {}).value,
@@ -1221,9 +1413,9 @@
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         if (res.ok) {
-          var m = document.getElementById("modal-parte-ocr");
-          if (m) m.remove();
+          _parteCerrarModal();
           mostrarToast("Parte registrado correctamente", "success");
+          _proyVivos();
           proyectoDashboard(parseInt(proyectoId));
         } else {
           mostrarToast(res.data.error || "Error al guardar", "error");
