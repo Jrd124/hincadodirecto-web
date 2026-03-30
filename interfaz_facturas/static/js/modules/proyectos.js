@@ -256,7 +256,10 @@
         document.getElementById("proy-dash-partes-section").innerHTML =
           '<div class="presup-section" style="margin-bottom:16px;">' +
             '<div class="presup-section-header"><div class="presup-section-number" style="background:#16A34A;">\uD83D\uDCCA</div><div class="presup-section-title">Partes de trabajo</div>' +
-            '<div style="margin-left:auto;font-size:13px;color:var(--color-text-secondary);">' + (p.partes ? p.partes.length : 0) + ' partes</div></div>' +
+            '<div style="margin-left:auto;display:flex;gap:8px;align-items:center;">' +
+              '<span style="font-size:13px;color:var(--color-text-secondary);">' + (p.partes ? p.partes.length : 0) + ' partes</span>' +
+              '<button class="btn-outline" style="font-size:12px;padding:4px 12px;" onclick="partesProcesarFoto(' + p.id + ')">📷 Procesar foto</button>' +
+            '</div></div>' +
             '<div class="presup-section-body" style="border-left-color:#16A34A;">' + partesHtml + '</div></div>';
 
         if (p.partes && p.partes.length) _renderChartAvanceProyecto(p);
@@ -992,4 +995,240 @@
       })
       .catch(function () { mostrarToast("Error de conexion.", "error"); });
   });
+
+  // ── OCR Partes de trabajo ──
+
+  window.partesProcesarFoto = function (proyectoId) {
+    var existing = document.getElementById("modal-parte-ocr");
+    if (existing) existing.remove();
+    var modal = document.createElement("div");
+    modal.className = "modal-overlay visible";
+    modal.id = "modal-parte-ocr";
+    modal.style.zIndex = "110";
+    modal.addEventListener("click", function (e) { if (e.target === modal) modal.remove(); });
+    modal.innerHTML =
+      '<div class="modal-content" style="max-width:700px;max-height:90vh;overflow-y:auto;">' +
+        '<h2 style="margin:0 0 16px;">Procesar parte de trabajo</h2>' +
+
+        '<div id="ocr-paso-1">' +
+          '<div id="ocr-dropzone" style="border:2px dashed var(--color-border);border-radius:12px;padding:40px;text-align:center;cursor:pointer;margin-bottom:16px;" onclick="document.getElementById(\'ocr-input-foto\').click()">' +
+            '<div style="font-size:32px;margin-bottom:8px;">📷</div>' +
+            '<div style="font-size:14px;color:var(--color-text-secondary);">Haz click o arrastra una foto del parte</div>' +
+            '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px;">JPG, PNG o WEBP</div>' +
+          '</div>' +
+          '<input type="file" id="ocr-input-foto" accept="image/*" capture="environment" style="display:none;">' +
+          '<div id="ocr-preview" style="display:none;text-align:center;margin-bottom:16px;">' +
+            '<img id="ocr-preview-img" style="max-width:100%;max-height:300px;border-radius:8px;">' +
+          '</div>' +
+          '<div id="ocr-loading" style="display:none;text-align:center;padding:20px;">' +
+            '<div style="font-size:14px;color:var(--color-text-secondary);">Procesando parte con IA...</div>' +
+            '<div style="margin-top:8px;font-size:12px;color:var(--color-text-secondary);">Esto puede tardar 5-10 segundos</div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div id="ocr-paso-2" style="display:none;">' +
+          '<div style="background:#EFF6FF;border:1px solid #2563EB30;border-radius:8px;padding:12px;margin-bottom:16px;">' +
+            '<span style="font-size:13px;color:#2563EB;">Datos extraidos automaticamente. Revisa y corrige si es necesario.</span>' +
+          '</div>' +
+
+          '<div style="border-left:3px solid #2563EB;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+            '<div style="font-size:14px;font-weight:600;color:#2563EB;margin-bottom:12px;">Identificacion</div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">N\u00BA Parte</label>' +
+                '<input type="text" id="ocr-numero" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Fecha</label>' +
+                '<input type="date" id="ocr-fecha" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Proyecto</label>' +
+                '<select id="ocr-proyecto" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></select></div>' +
+            '</div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Cliente</label>' +
+                '<input type="text" id="ocr-cliente" readonly style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:#f3f4f6;"></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Obra / Poblacion</label>' +
+                '<input type="text" id="ocr-obra" readonly style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:#f3f4f6;"></div>' +
+            '</div>' +
+          '</div>' +
+
+          '<div style="border-left:3px solid #16A34A;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+            '<div style="font-size:14px;font-weight:600;color:#16A34A;margin-bottom:12px;">Produccion</div>' +
+            '<div id="ocr-lineas-container"></div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Total hincas</label>' +
+                '<input type="number" id="ocr-hincas" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Horas administracion</label>' +
+                '<input type="number" id="ocr-horas-admin" step="0.5" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+            '</div>' +
+          '</div>' +
+
+          '<div style="border-left:3px solid #CA8A04;padding:12px 16px;margin-bottom:16px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+            '<div style="font-size:14px;font-weight:600;color:#CA8A04;margin-bottom:12px;">Incidencias</div>' +
+            '<textarea id="ocr-incidencias" rows="2" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;" placeholder="Sin incidencias"></textarea>' +
+          '</div>' +
+
+          '<div style="display:flex;gap:8px;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--color-border);">' +
+            '<button class="secondary" style="padding:8px 20px;" onclick="document.getElementById(\'modal-parte-ocr\').remove()">Cancelar</button>' +
+            '<button class="primary" style="width:auto;padding:8px 20px;" onclick="partesGuardarOCR(' + proyectoId + ')">Guardar parte</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+
+    // File input handler
+    document.getElementById("ocr-input-foto").addEventListener("change", function () {
+      _partesEnviarOCR(this, proyectoId);
+    });
+
+    // Load projects in select
+    fetch("/api/proyectos").then(function (r) { return r.json(); }).then(function (data) {
+      var sel = document.getElementById("ocr-proyecto");
+      sel.innerHTML = '<option value="">Seleccionar...</option>';
+      (data.proyectos || []).forEach(function (p) {
+        var opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = (p.codigo ? p.codigo + " \u00B7 " : "") + p.nombre;
+        if (p.id === proyectoId) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    });
+  };
+
+  function _partesEnviarOCR(input, proyectoId) {
+    var file = input.files[0];
+    if (!file) return;
+
+    // Preview
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      document.getElementById("ocr-preview-img").src = e.target.result;
+      document.getElementById("ocr-preview").style.display = "block";
+    };
+    reader.readAsDataURL(file);
+
+    // Loading
+    document.getElementById("ocr-dropzone").style.display = "none";
+    document.getElementById("ocr-loading").style.display = "block";
+
+    var formData = new FormData();
+    formData.append("imagen", file);
+
+    fetch("/api/partes/procesar-imagen", { method: "POST", body: formData })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        document.getElementById("ocr-loading").style.display = "none";
+        if (!res.ok || res.data.error) {
+          mostrarToast(res.data.error || "Error procesando la imagen", "error");
+          document.getElementById("ocr-dropzone").style.display = "";
+          return;
+        }
+        var datos = res.data;
+
+        // Fill step 2
+        document.getElementById("ocr-numero").value = datos.numero_parte || "";
+        document.getElementById("ocr-fecha").value = datos.fecha || "";
+        document.getElementById("ocr-cliente").value = datos.cliente || "";
+        document.getElementById("ocr-obra").value = (datos.obra || "") + (datos.poblacion ? " \u00B7 " + datos.poblacion : "");
+        document.getElementById("ocr-hincas").value = datos.total_hincas || 0;
+        document.getElementById("ocr-horas-admin").value = datos.horas_admin || 0;
+        document.getElementById("ocr-incidencias").value = datos.incidencias || "";
+
+        // Render detail lines
+        var container = document.getElementById("ocr-lineas-container");
+        var lineas = datos.lineas || [];
+        container.innerHTML = lineas.map(function (l, i) {
+          return '<div style="display:grid;grid-template-columns:2fr 2fr 1fr 1fr;gap:8px;margin-bottom:6px;align-items:end;">' +
+            '<div>' + (i === 0 ? '<label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">Operador</label>' : '') +
+              '<input type="text" class="ocr-linea-operador" value="' + _esc(l.operador || "") + '" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;"></div>' +
+            '<div>' + (i === 0 ? '<label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">Maquina</label>' : '') +
+              '<input type="text" class="ocr-linea-maquina" value="' + _esc(l.maquina || "") + '" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;"></div>' +
+            '<div>' + (i === 0 ? '<label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">Horas</label>' : '') +
+              '<input type="number" class="ocr-linea-horas" value="' + (l.horas || 0) + '" step="0.5" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;"></div>' +
+            '<div>' + (i === 0 ? '<label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">Rol</label>' : '') +
+              '<select class="ocr-linea-rol" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;">' +
+                '<option value="operador"' + (l.rol !== "ayudante" ? " selected" : "") + '>Operador</option>' +
+                '<option value="ayudante"' + (l.rol === "ayudante" ? " selected" : "") + '>Ayudante</option>' +
+              '</select></div>' +
+          '</div>';
+        }).join("");
+
+        // Auto-select project if obra matches
+        if (datos.obra) {
+          var sel = document.getElementById("ocr-proyecto");
+          var obraLower = datos.obra.toLowerCase();
+          for (var oi = 0; oi < sel.options.length; oi++) {
+            if (sel.options[oi].text.toLowerCase().indexOf(obraLower) !== -1) {
+              sel.selectedIndex = oi;
+              break;
+            }
+          }
+        }
+
+        // Store original data
+        document.getElementById("modal-parte-ocr")._ocrDatos = datos;
+
+        // Show step 2
+        document.getElementById("ocr-paso-1").style.display = "none";
+        document.getElementById("ocr-paso-2").style.display = "block";
+      })
+      .catch(function () {
+        document.getElementById("ocr-loading").style.display = "none";
+        document.getElementById("ocr-dropzone").style.display = "";
+        mostrarToast("Error de conexion", "error");
+      });
+  }
+
+  window.partesGuardarOCR = function (proyectoIdDefault) {
+    var selProy = document.getElementById("ocr-proyecto");
+    var proyectoId = (selProy && selProy.value) || proyectoIdDefault;
+    if (!proyectoId) {
+      mostrarToast("Selecciona un proyecto", "error");
+      return;
+    }
+
+    // Collect edited lines
+    var operadores = document.querySelectorAll(".ocr-linea-operador");
+    var maquinas = document.querySelectorAll(".ocr-linea-maquina");
+    var horas = document.querySelectorAll(".ocr-linea-horas");
+    var roles = document.querySelectorAll(".ocr-linea-rol");
+    var lineas = [];
+    for (var i = 0; i < operadores.length; i++) {
+      lineas.push({
+        operador: operadores[i].value,
+        maquina: maquinas[i] ? maquinas[i].value : "",
+        horas: parseFloat(horas[i] ? horas[i].value : 0) || 0,
+        rol: roles[i] ? roles[i].value : "operador",
+      });
+    }
+
+    var ocrDatos = (document.getElementById("modal-parte-ocr") || {})._ocrDatos || {};
+    var datos = {
+      proyecto_id: parseInt(proyectoId),
+      numero_parte: (document.getElementById("ocr-numero") || {}).value,
+      fecha: (document.getElementById("ocr-fecha") || {}).value,
+      cliente: (document.getElementById("ocr-cliente") || {}).value,
+      obra: (document.getElementById("ocr-obra") || {}).value,
+      total_hincas: parseInt((document.getElementById("ocr-hincas") || {}).value) || 0,
+      horas_admin: parseFloat((document.getElementById("ocr-horas-admin") || {}).value) || 0,
+      incidencias: (document.getElementById("ocr-incidencias") || {}).value,
+      lineas: lineas,
+      imagen_archivo: ocrDatos.imagen_archivo,
+    };
+
+    fetch("/api/partes/guardar-ocr", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(datos),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          var m = document.getElementById("modal-parte-ocr");
+          if (m) m.remove();
+          mostrarToast("Parte registrado correctamente", "success");
+          proyectoDashboard(parseInt(proyectoId));
+        } else {
+          mostrarToast(res.data.error || "Error al guardar", "error");
+        }
+      })
+      .catch(function () { mostrarToast("Error de conexion", "error"); });
+  };
 })();

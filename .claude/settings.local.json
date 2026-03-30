@@ -59,7 +59,8 @@
       "Bash(cat interfaz_facturas/static/js/modules/*.js interfaz_facturas/static/js/app.js)",
       "Bash(git pull:*)",
       "Bash(git checkout:*)",
-      "Bash(git merge:*)"
+      "Bash(git merge:*)",
+      "Bash(node -e \"require\\(''fs''\\).readFileSync\\(''static/js/modules/proyectos.js'',''utf8''\\)\")"
     ]
   }
 }
