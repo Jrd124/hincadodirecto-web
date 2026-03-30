@@ -844,6 +844,13 @@
   // ── Modal proyecto ──
   function _proyAbrirModal(p) {
     document.getElementById("modal-proyecto-titulo").textContent = p ? "Editar proyecto" : "Nuevo proyecto";
+    var badgeEl = document.getElementById("modal-proyecto-codigo-badge");
+    if (p && p.codigo) {
+      badgeEl.textContent = p.codigo;
+      badgeEl.style.display = "";
+    } else {
+      badgeEl.style.display = "none";
+    }
     document.getElementById("proy-edit-id").value = p ? p.id : "";
     document.getElementById("proy-nombre").value = p ? p.nombre || "" : "";
     var codigoEl = document.getElementById("proy-codigo");
