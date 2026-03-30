@@ -24,6 +24,7 @@ function cargarFinanzasInicio() {
         proyRows = d.proyectos.map(function (p) {
           var mc = p.margen >= 0 ? "#16A34A" : "#DC2626";
           return '<tr style="border-bottom:1px solid var(--color-border);cursor:pointer;" onclick="navegarAProyecto(' + p.id + ')">' +
+            '<td style="padding:8px 12px;white-space:nowrap;font-size:12px;font-weight:600;color:var(--color-primary);">' + _esc(p.codigo || "") + '</td>' +
             '<td style="padding:8px 12px;"><div style="font-weight:500;">' + _esc(p.nombre) + '</div>' +
               '<div style="font-size:11px;color:var(--color-text-secondary);">' + _esc(p.cliente || "") + ' \u00b7 <span class="status-badge status-badge--' + _esc(p.estado) + '">' + _esc(p.estado) + '</span></div></td>' +
             '<td style="padding:8px 12px;text-align:right;">' + _finFmtCompact(p.importe_presupuestado) + '</td>' +
@@ -89,6 +90,7 @@ function cargarFinanzasInicio() {
                 (proyRows
                   ? '<table style="width:100%;font-size:13px;border-collapse:collapse;">' +
                       '<thead><tr style="background:var(--color-bg-page);position:sticky;top:0;">' +
+                        '<th style="text-align:left;padding:8px 12px;font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;">Codigo</th>' +
                         '<th style="text-align:left;padding:8px 12px;font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;">Proyecto</th>' +
                         '<th style="text-align:right;padding:8px 12px;font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;">Presupuest.</th>' +
                         '<th style="text-align:right;padding:8px 12px;font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;">Facturado</th>' +
@@ -3640,7 +3642,7 @@ function abrirModalEdicion(f) {
         (d.proyectos || []).forEach(function (pr) {
           var opt = document.createElement("option");
           opt.value = String(pr.id);
-          opt.textContent = pr.nombre + " (" + (pr.estado || "") + ")";
+          opt.textContent = (pr.codigo ? pr.codigo + " \u00b7 " : "") + pr.nombre + " (" + (pr.estado || "") + ")";
           selProy.appendChild(opt);
         });
         if (f.proyecto_id) selProy.value = String(f.proyecto_id);
@@ -4220,7 +4222,7 @@ function abrirModalEdicionCli(f) {
         (d.proyectos || []).forEach(function (pr) {
           var opt = document.createElement("option");
           opt.value = String(pr.id);
-          opt.textContent = pr.nombre + " (" + (pr.estado || "") + ")";
+          opt.textContent = (pr.codigo ? pr.codigo + " \u00b7 " : "") + pr.nombre + " (" + (pr.estado || "") + ")";
           selProyCli.appendChild(opt);
         });
         if (f.proyecto_id) selProyCli.value = String(f.proyecto_id);

@@ -341,7 +341,7 @@ window.maqEditarModal = function (maqId) {
           var proyectos = pData.proyectos || [];
           var proyOpts = '<option value="">Sin proyecto</option>' +
             proyectos.map(function (p) {
-              return '<option value="' + p.id + '"' + (p.id === m.proyecto_id ? ' selected' : '') + '>' + _esc(p.nombre) + '</option>';
+              return '<option value="' + p.id + '"' + (p.id === m.proyecto_id ? ' selected' : '') + '>' + (p.codigo ? p.codigo + ' \u00b7 ' : '') + _esc(p.nombre) + '</option>';
             }).join("");
 
           var modal = document.createElement("div");

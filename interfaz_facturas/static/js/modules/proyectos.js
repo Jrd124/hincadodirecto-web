@@ -135,6 +135,7 @@
             '<div>' +
               '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">' +
                 '<button onclick="proyectoDashboardVolver()" style="background:none;border:none;cursor:pointer;font-size:18px;padding:0;color:var(--color-text-secondary);">\u2190</button>' +
+                (p.codigo ? '<span style="font-size:13px;font-weight:600;color:var(--color-primary);background:var(--color-primary)10;padding:2px 10px;border-radius:99px;border:1px solid var(--color-primary)30;">' + _esc(p.codigo) + '</span>' : '') +
                 '<h1 style="margin:0;font-size:24px;">' + _esc(p.nombre) + '</h1>' +
                 '<span class="status-badge status-badge--' + _esc(p.estado) + '">' + _esc(p.estado) + '</span>' +
               '</div>' +
@@ -665,10 +666,11 @@
         var proys = d.proyectos || [];
         var c = document.getElementById("proy-cotizados-tabla");
         if (!proys.length) { c.innerHTML = '<p class="crm-placeholder">Sin proyectos cotizados.</p>'; return; }
-        var html = '<table class="tabla-facturas"><thead><tr><th>Nombre</th><th>Cliente</th><th>Presupuesto</th><th>Parque</th><th>MW</th><th>Hincas</th><th>Tipo</th><th>Importe</th><th>Inicio est.</th><th>Acciones</th></tr></thead><tbody>';
+        var html = '<table class="tabla-facturas"><thead><tr><th>Codigo</th><th>Nombre</th><th>Cliente</th><th>Presupuesto</th><th>Parque</th><th>MW</th><th>Hincas</th><th>Tipo</th><th>Importe</th><th>Inicio est.</th><th>Acciones</th></tr></thead><tbody>';
         proys.forEach(function (p) {
           var presCol = p.presupuesto_id && p.presupuesto_ref ? '<a href="#" onclick="navegarAPresupuesto(' + p.presupuesto_id + ');return false;" style="color:#2563EB;text-decoration:none;font-size:12px;">' + _esc(p.presupuesto_ref) + '</a>' : '';
-          html += '<tr><td style="font-weight:600;"><a href="#" onclick="proyectoDashboard(' + p.id + ');return false;" style="color:var(--color-primary);text-decoration:none;">' + _esc(p.nombre) + '</a></td>' +
+          html += '<tr><td style="font-size:12px;font-weight:600;color:var(--color-primary);white-space:nowrap;">' + _esc(p.codigo || "") + '</td>' +
+            '<td style="font-weight:600;"><a href="#" onclick="proyectoDashboard(' + p.id + ');return false;" style="color:var(--color-primary);text-decoration:none;">' + _esc(p.nombre) + '</a></td>' +
             '<td>' + _esc(p.nombre_cliente || "") + '</td>' +
             '<td>' + presCol + '</td>' +
             '<td>' + _esc(p.nombre_parque || "") + '</td>' +
@@ -722,7 +724,9 @@
       }
       var _lb='';if(p.presupuesto_id&&p.presupuesto_ref)_lb+='<a href="#" onclick="navegarAPresupuesto('+p.presupuesto_id+');return false;" style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;background:#2563EB10;color:#2563EB;border-radius:99px;font-size:12px;text-decoration:none;border:1px solid #2563EB30;">\uD83D\uDCC4 '+_esc(p.presupuesto_ref)+'</a>';if(p.oportunidad_id&&p.oportunidad_nombre)_lb+='<a href="#" onclick="navegarAOportunidad('+p.oportunidad_id+');return false;" style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;background:#16A34A10;color:#16A34A;border-radius:99px;font-size:12px;text-decoration:none;border:1px solid #16A34A30;">\u2B50 '+_esc(p.oportunidad_nombre)+'</a>';
       return '<div class="' + cardClass + '">' +
-        '<div class="proy-card-header"><div><h3 style="cursor:pointer;color:var(--color-primary);" onclick="proyectoDashboard(' + p.id + ')">' + _esc(p.nombre) + '</h3>' +
+        '<div class="proy-card-header"><div>' +
+          (p.codigo ? '<span style="font-size:11px;font-weight:600;color:var(--color-primary);margin-bottom:2px;display:block;">' + _esc(p.codigo) + '</span>' : '') +
+          '<h3 style="cursor:pointer;color:var(--color-primary);" onclick="proyectoDashboard(' + p.id + ')">' + _esc(p.nombre) + '</h3>' +
           '<div class="proy-card-header-meta">' + _esc(p.nombre_cliente || "") +
           (p.ubicacion_texto ? ' &middot; ' + _esc(p.ubicacion_texto) : '') +
           (p.nombre_parque ? ' &middot; ' + _esc(p.nombre_parque) : '') + '</div></div>' +
@@ -791,7 +795,7 @@
         var proys = d.proyectos || [];
         var c = document.getElementById("proy-terminados-tabla");
         if (!proys.length) { c.innerHTML = '<p class="crm-placeholder">Sin proyectos terminados.</p>'; return; }
-        var html = '<table class="tabla-facturas"><thead><tr><th>Nombre</th><th>Cliente</th><th>Presupuesto</th><th>Tipo</th><th>Estado</th><th>Hincas</th><th>Dias</th><th>Facturado</th><th>Costes</th><th>Rentabilidad</th></tr></thead><tbody>';
+        var html = '<table class="tabla-facturas"><thead><tr><th>Codigo</th><th>Nombre</th><th>Cliente</th><th>Presupuesto</th><th>Tipo</th><th>Estado</th><th>Hincas</th><th>Dias</th><th>Facturado</th><th>Costes</th><th>Rentabilidad</th></tr></thead><tbody>';
         proys.forEach(function (p) {
           var rent = 0;
           if (p.importe_facturado && p.importe_costes) rent = Math.round((p.importe_facturado - p.importe_costes) / p.importe_facturado * 100);
@@ -802,6 +806,7 @@
             : '<span class="status-badge status-badge--terminado">Terminado</span>';
           var presColT = p.presupuesto_id && p.presupuesto_ref ? '<a href="#" onclick="event.stopPropagation();navegarAPresupuesto(' + p.presupuesto_id + ');return false;" style="color:#2563EB;text-decoration:none;font-size:12px;">' + _esc(p.presupuesto_ref) + '</a>' : '';
           html += '<tr style="cursor:pointer;' + (esCancelado ? 'opacity:0.7;' : '') + '" onclick="proyectoDashboard(' + p.id + ')">' +
+            '<td style="font-size:12px;font-weight:600;color:var(--color-primary);white-space:nowrap;">' + _esc(p.codigo || "") + '</td>' +
             '<td style="font-weight:600;">' + _esc(p.nombre) + '</td>' +
             '<td>' + _esc(p.nombre_cliente || "") + '</td>' +
             '<td>' + presColT + '</td>' +
@@ -825,7 +830,9 @@
     document.getElementById("modal-proyecto-titulo").textContent = p ? "Editar proyecto" : "Nuevo proyecto";
     document.getElementById("proy-edit-id").value = p ? p.id : "";
     document.getElementById("proy-nombre").value = p ? p.nombre || "" : "";
-    document.getElementById("proy-codigo").value = p ? p.codigo || "" : "";
+    var codigoEl = document.getElementById("proy-codigo");
+    codigoEl.value = p ? p.codigo || "" : "";
+    codigoEl.placeholder = p ? "" : "Se asignara automaticamente (PRY-2026-XXX)";
     document.getElementById("proy-tipo").value = p ? p.tipo_trabajo || "" : "";
     document.getElementById("proy-modalidad").value = p ? p.modalidad_facturacion || "" : "";
     document.getElementById("proy-parque").value = p ? p.nombre_parque || "" : "";

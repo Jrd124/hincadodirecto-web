@@ -374,7 +374,7 @@
       }
 
       var optsHtml = proyectos.map(function (p) {
-        return '<option value="' + p.id + '">' + _esc(p.nombre) + (p.cliente_nombre ? " \u2014 " + _esc(p.cliente_nombre) : "") + '</option>';
+        return '<option value="' + p.id + '">' + (p.codigo ? p.codigo + ' \u00b7 ' : '') + _esc(p.nombre) + (p.cliente_nombre ? " \u2014 " + _esc(p.cliente_nombre) : "") + '</option>';
       }).join("");
 
       modalContent.innerHTML =

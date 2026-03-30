@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from core.db import conectar as _conectar, now_iso as _now
@@ -194,7 +194,48 @@ def init_proyectos_db() -> None:
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS ix_cert_det_cert ON certificacion_detalle(certificacion_id)")
+        _backfill_codigos(conn)
     _initialized = True
+
+
+# ── Código único automático ──────────────────────────────────────────────────
+
+def _generar_codigo_proyecto(conn=None) -> str:
+    """Genera PRY-YYYY-NNN donde NNN es secuencial dentro del año."""
+    year = date.today().year
+    def _next(c):
+        row = c.execute(
+            "SELECT codigo FROM proyectos WHERE codigo LIKE ? ORDER BY codigo DESC LIMIT 1",
+            [f"PRY-{year}-%"],
+        ).fetchone()
+        if row and row["codigo"]:
+            ultimo_num = int(row["codigo"].split("-")[-1])
+            return ultimo_num + 1
+        return 1
+    if conn:
+        siguiente = _next(conn)
+    else:
+        with _conectar() as c:
+            siguiente = _next(c)
+    return f"PRY-{year}-{siguiente:03d}"
+
+
+def _backfill_codigos(conn) -> None:
+    """Asigna código a proyectos existentes que no lo tienen."""
+    proyectos_sin = conn.execute(
+        "SELECT id, created_at FROM proyectos WHERE codigo IS NULL OR codigo = '' ORDER BY id"
+    ).fetchall()
+    for p in proyectos_sin:
+        year = p["created_at"][:4] if p["created_at"] else "2025"
+        row = conn.execute(
+            "SELECT MAX(CAST(SUBSTR(codigo, -3) AS INTEGER)) AS mx FROM proyectos WHERE codigo LIKE ?",
+            [f"PRY-{year}-%"],
+        ).fetchone()
+        siguiente = (row["mx"] or 0) + 1
+        conn.execute(
+            "UPDATE proyectos SET codigo = ? WHERE id = ?",
+            [f"PRY-{year}-{siguiente:03d}", p["id"]],
+        )
 
 
 # ── Proyectos CRUD ───────────────────────────────────────────────────────────
@@ -271,9 +312,9 @@ def listar_proyectos(
         where_parts.append("p.tipo_trabajo = ?")
         params.append(tipo_trabajo)
     if q:
-        where_parts.append("(p.nombre LIKE ? OR p.nombre_parque LIKE ?)")
+        where_parts.append("(p.nombre LIKE ? OR p.nombre_parque LIKE ? OR p.codigo LIKE ?)")
         like = f"%{q}%"
-        params.extend([like, like])
+        params.extend([like, like, like])
     if tercero_id:
         where_parts.append("p.cliente_tercero_id = ?")
         params.append(tercero_id)
@@ -465,6 +506,7 @@ def crear_proyecto(data: dict) -> dict:
     init_proyectos_db()
     ahora = _now()
     with _conectar() as conn:
+        codigo = _generar_codigo_proyecto(conn)
         conn.execute("""
             INSERT INTO proyectos (nombre, codigo, empresa_id, cliente_tercero_id, oportunidad_id,
                 presupuesto_id,
@@ -476,7 +518,7 @@ def crear_proyecto(data: dict) -> dict:
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             (data.get("nombre") or "").strip(),
-            (data.get("codigo") or "").strip() or None,
+            codigo,
             data.get("empresa_id", ""),
             data.get("cliente_tercero_id") or None,
             data.get("oportunidad_id") or None,
@@ -523,10 +565,11 @@ def actualizar_proyecto(proyecto_id: int, data: dict) -> dict | None:
     init_proyectos_db()
     ahora = _now()
     with _conectar() as conn:
-        row = conn.execute("SELECT id, estado FROM proyectos WHERE id = ?", (proyecto_id,)).fetchone()
+        row = conn.execute("SELECT id, estado, codigo FROM proyectos WHERE id = ?", (proyecto_id,)).fetchone()
         if not row:
             return None
         estado_anterior = row["estado"]
+        codigo_existente = row["codigo"]
         nuevo_estado = (data.get("estado") or estado_anterior).strip()
         conn.execute("""
             UPDATE proyectos SET nombre=?, codigo=?, cliente_tercero_id=?, oportunidad_id=?,
@@ -539,7 +582,7 @@ def actualizar_proyecto(proyecto_id: int, data: dict) -> dict | None:
             WHERE id=?
         """, (
             (data.get("nombre") or "").strip(),
-            (data.get("codigo") or "").strip() or None,
+            codigo_existente,
             data.get("cliente_tercero_id") or None,
             data.get("oportunidad_id") or None,
             data.get("presupuesto_id") or None,
