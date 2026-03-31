@@ -343,7 +343,7 @@ def api_procesar_parte_imagen():
     ruta_dest = ruta_subidas / nombre_archivo
     ruta_dest.write_bytes(contenido)
 
-    datos["imagen_archivo"] = nombre_archivo
+    datos["imagen_archivo"] = "subidas/" + nombre_archivo
     datos["imagen_ruta"] = str(ruta_dest)
 
     return jsonify(datos)
