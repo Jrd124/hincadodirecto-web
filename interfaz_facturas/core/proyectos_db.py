@@ -148,6 +148,12 @@ def init_proyectos_db() -> None:
                 conn.execute("ALTER TABLE proyecto_partes ADD COLUMN horas_admin REAL DEFAULT 0")
         except Exception:
             pass
+        # Migration: add imagen_archivo to proyecto_partes if missing
+        try:
+            if "imagen_archivo" not in pp_cols:
+                conn.execute("ALTER TABLE proyecto_partes ADD COLUMN imagen_archivo TEXT")
+        except Exception:
+            pass
         # Migration: add cae_expediente_id to proyectos (CAE module)
         try:
             if "cae_expediente_id" not in cols:
@@ -664,8 +670,8 @@ def crear_parte(proyecto_id: int, data: dict) -> dict:
         conn.execute("""
             INSERT INTO proyecto_partes (proyecto_id, fecha, hincas_realizadas, horas_maquina,
                 horas_personal, num_operadores, num_ayudantes, incidencias, condiciones_terreno,
-                meteorologia, combustible_litros, notas, created_at, updated_by)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                meteorologia, combustible_litros, notas, imagen_archivo, created_at, updated_by)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             proyecto_id,
             (data.get("fecha") or ahora[:10]).strip(),
@@ -679,6 +685,7 @@ def crear_parte(proyecto_id: int, data: dict) -> dict:
             (data.get("meteorologia") or "").strip() or None,
             data.get("combustible_litros") or None,
             (data.get("notas") or "").strip() or None,
+            (data.get("imagen_archivo") or "").strip() or None,
             ahora, None,
         ))
         new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]

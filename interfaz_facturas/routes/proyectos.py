@@ -104,6 +104,17 @@ def api_actualizar_parte(parte_id: int):
   return jsonify(parte)
 
 
+@proyectos_bp.get("/api/proyectos/partes/<int:parte_id>")
+def api_obtener_parte(parte_id: int):
+  proyectos_db.init_proyectos_db()
+  from core.db import conectar as _conectar
+  with _conectar() as conn:
+    row = conn.execute("SELECT * FROM proyecto_partes WHERE id = ?", (parte_id,)).fetchone()
+    if not row:
+      return jsonify({"error": "Parte no encontrado"}), 404
+    return jsonify(dict(row))
+
+
 @proyectos_bp.delete("/api/proyectos/partes/<int:parte_id>")
 def api_eliminar_parte(parte_id: int):
   ok = proyectos_db.eliminar_parte(parte_id)
@@ -378,6 +389,7 @@ def api_guardar_parte_ocr():
     "num_ayudantes": len(ayudantes),
     "incidencias": data.get("incidencias", ""),
     "notas": json.dumps(lineas, ensure_ascii=False),
+    "imagen_archivo": data.get("imagen_archivo", ""),
   }
 
   parte = proyectos_db.crear_parte(int(proyecto_id), parte_data)

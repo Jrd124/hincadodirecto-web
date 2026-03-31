@@ -237,10 +237,14 @@
               '<td style="padding:8px 6px;text-align:right;">' + (pt.num_ayudantes || 0) + '</td>' +
               '<td style="padding:8px 6px;text-align:right;">' + (pt.combustible_litros || "\u2014") + '</td>' +
               '<td style="padding:8px 6px;font-size:12px;color:' + (pt.incidencias ? 'var(--color-danger)' : 'var(--color-text-secondary)') + ';">' + (pt.incidencias ? _esc(pt.incidencias).substring(0, 50) : "\u2014") + '</td>' +
-              '<td style="padding:8px 6px;text-align:center;white-space:nowrap;">' +
-                '<button onclick="parteEditar(' + pt.id + ',' + p.id + ')" style="background:none;border:none;color:var(--color-primary);cursor:pointer;font-size:12px;padding:2px 6px;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">Editar</button>' +
-                '<button onclick="parteEliminar(' + pt.id + ',' + p.id + ')" style="background:none;border:none;color:var(--color-text-secondary);cursor:pointer;font-size:12px;padding:2px 6px;" onmouseover="this.style.color=\'#DC2626\'" onmouseout="this.style.color=\'var(--color-text-secondary)\'">Eliminar</button>' +
-              '</td></tr>';
+              '<td style="padding:8px 6px;text-align:center;"><div style="display:flex;gap:2px;justify-content:center;">' +
+                '<button onclick="parteVer(' + pt.id + ',' + p.id + ')" title="Ver parte" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--color-text-secondary);" onmouseover="this.style.color=\'var(--color-primary)\'" onmouseout="this.style.color=\'var(--color-text-secondary)\'">' +
+                  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>' +
+                '<button onclick="parteEditar(' + pt.id + ',' + p.id + ')" title="Editar" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--color-text-secondary);" onmouseover="this.style.color=\'var(--color-primary)\'" onmouseout="this.style.color=\'var(--color-text-secondary)\'">' +
+                  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>' +
+                '<button onclick="parteEliminar(' + pt.id + ',' + p.id + ')" title="Eliminar" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--color-text-secondary);" onmouseover="this.style.color=\'#DC2626\'" onmouseout="this.style.color=\'var(--color-text-secondary)\'">' +
+                  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>' +
+              '</div></td></tr>';
           }).join("");
           partesHtml = '<div style="height:200px;margin-bottom:12px;"><canvas id="chart-avance-proyecto"></canvas></div>' +
             '<div style="max-height:400px;overflow-y:auto;"><table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="border-bottom:2px solid var(--color-border);position:sticky;top:0;background:var(--color-white);">' +
@@ -1164,6 +1168,89 @@
         mostrarToast("Parte registrado.", "success");
       })
       .catch(function () { mostrarToast("Error de conexion.", "error"); });
+  };
+
+  // ── Ver parte (detalle) ──
+
+  window.parteVer = function (parteId, proyectoId) {
+    fetch("/api/proyectos/partes/" + parteId)
+      .then(function (r) { return r.json(); })
+      .then(function (pt) {
+        if (pt.error) { mostrarToast(pt.error, "error"); return; }
+        var existing = document.getElementById("modal-parte-ver");
+        if (existing) existing.remove();
+        var modal = document.createElement("div");
+        modal.className = "modal-overlay visible";
+        modal.id = "modal-parte-ver";
+        modal.style.zIndex = "110";
+        modal.addEventListener("click", function (e) { if (e.target === modal) modal.remove(); });
+
+        // Parse lineas from notas if JSON
+        var lineasHtml = "";
+        try {
+          var lineas = JSON.parse(pt.notas || "[]");
+          if (Array.isArray(lineas) && lineas.length) {
+            lineasHtml = '<div style="margin-top:10px;"><div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:6px;">Detalle operadores</div>' +
+              '<table style="width:100%;font-size:13px;border-collapse:collapse;">' +
+              '<thead><tr style="border-bottom:1px solid var(--color-border);">' +
+                '<th style="text-align:left;padding:4px 8px;font-size:11px;color:var(--color-text-secondary);">Operador</th>' +
+                '<th style="text-align:left;padding:4px 8px;font-size:11px;color:var(--color-text-secondary);">Maquina</th>' +
+                '<th style="text-align:right;padding:4px 8px;font-size:11px;color:var(--color-text-secondary);">Horas</th>' +
+                '<th style="text-align:left;padding:4px 8px;font-size:11px;color:var(--color-text-secondary);">Rol</th>' +
+              '</tr></thead><tbody>' +
+              lineas.map(function (l) {
+                return '<tr style="border-bottom:1px solid var(--color-border);">' +
+                  '<td style="padding:4px 8px;">' + _esc(l.operador || "") + '</td>' +
+                  '<td style="padding:4px 8px;">' + _esc(l.maquina || "") + '</td>' +
+                  '<td style="padding:4px 8px;text-align:right;">' + (l.horas || 0) + '</td>' +
+                  '<td style="padding:4px 8px;">' + _esc(l.rol || "") + '</td></tr>';
+              }).join("") +
+              '</tbody></table></div>';
+          }
+        } catch (e) {}
+
+        var imgHtml = "";
+        if (pt.imagen_archivo) {
+          var imgUrl = "/api/archivo?ruta=" + encodeURIComponent(pt.imagen_archivo);
+          imgHtml = '<div style="text-align:center;margin-bottom:16px;">' +
+            '<img src="' + imgUrl + '" style="max-width:100%;max-height:300px;border-radius:8px;border:1px solid var(--color-border);" onerror="this.parentElement.style.display=\'none\'">' +
+            '<div style="margin-top:8px;"><button onclick="window.open(\'' + imgUrl + '\',\'_blank\')" style="padding:6px 14px;font-size:13px;font-weight:500;color:var(--color-primary);background:transparent;border:1px solid var(--color-primary);border-radius:6px;cursor:pointer;">Ver parte original</button></div>' +
+          '</div>';
+        } else {
+          imgHtml = '<div style="text-align:center;margin-bottom:16px;padding:12px;color:var(--color-text-secondary);font-size:13px;font-style:italic;">Parte cargado manualmente \u2014 sin imagen adjunta</div>';
+        }
+
+        function _vFmt(v) { return v != null && v !== "" ? v : "\u2014"; }
+
+        modal.innerHTML =
+          '<div class="modal-content" style="max-width:600px;max-height:90vh;overflow-y:auto;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
+              '<h2 style="margin:0;">Parte de trabajo #' + pt.id + '</h2>' +
+              '<span style="font-size:13px;color:var(--color-text-secondary);">' + _esc((pt.fecha || "").substring(0, 10)) + '</span>' +
+            '</div>' +
+            imgHtml +
+            '<div style="border-left:3px solid #16A34A;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+              '<div style="font-size:14px;font-weight:600;color:#16A34A;margin-bottom:12px;">Produccion</div>' +
+              '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">' +
+                '<div><div style="font-size:11px;color:var(--color-text-secondary);">Hincas</div><div style="font-size:18px;font-weight:600;">' + _vFmt(pt.hincas_realizadas) + '</div></div>' +
+                '<div><div style="font-size:11px;color:var(--color-text-secondary);">H. Maquina</div><div style="font-size:18px;font-weight:600;">' + _vFmt(pt.horas_maquina) + '</div></div>' +
+                '<div><div style="font-size:11px;color:var(--color-text-secondary);">H. Personal</div><div style="font-size:18px;font-weight:600;">' + _vFmt(pt.horas_personal) + '</div></div>' +
+                '<div><div style="font-size:11px;color:var(--color-text-secondary);">Operadores</div><div style="font-size:18px;font-weight:600;">' + _vFmt(pt.num_operadores) + '</div></div>' +
+                '<div><div style="font-size:11px;color:var(--color-text-secondary);">Ayudantes</div><div style="font-size:18px;font-weight:600;">' + _vFmt(pt.num_ayudantes) + '</div></div>' +
+                '<div><div style="font-size:11px;color:var(--color-text-secondary);">Gasoil (L)</div><div style="font-size:18px;font-weight:600;">' + _vFmt(pt.combustible_litros) + '</div></div>' +
+              '</div>' +
+              lineasHtml +
+            '</div>' +
+            (pt.incidencias ? '<div style="border-left:3px solid #CA8A04;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+              '<div style="font-size:14px;font-weight:600;color:#CA8A04;margin-bottom:8px;">Incidencias</div>' +
+              '<div style="font-size:13px;">' + _esc(pt.incidencias) + '</div></div>' : '') +
+            '<div style="display:flex;gap:8px;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--color-border);">' +
+              '<button class="secondary" style="padding:8px 20px;" onclick="document.getElementById(\'modal-parte-ver\').remove()">Cerrar</button>' +
+              '<button class="primary" style="width:auto;padding:8px 20px;" onclick="document.getElementById(\'modal-parte-ver\').remove();parteEditar(' + parteId + ',' + proyectoId + ')">Editar</button>' +
+            '</div>' +
+          '</div>';
+        document.body.appendChild(modal);
+      });
   };
 
   // ── Editar / Eliminar partes ──
