@@ -258,6 +258,65 @@ def api_certificacion_pdf(cid):
   )
 
 
+@proyectos_bp.get("/api/certificaciones/<int:cid>/partes-zip")
+def api_certificacion_partes_zip(cid):
+  """Genera un ZIP con las imagenes y resumenes de los partes del periodo de la certificacion."""
+  import zipfile
+
+  proyectos_db.init_proyectos_db()
+  from core.db import conectar as _conectar
+  from config import DATOS_DIR
+
+  with _conectar() as conn:
+    cert = conn.execute("SELECT * FROM certificaciones WHERE id = ?", [cid]).fetchone()
+    if not cert:
+      return jsonify({"error": "Certificacion no encontrada"}), 404
+    cert = dict(cert)
+
+    partes = [dict(r) for r in conn.execute("""
+      SELECT * FROM proyecto_partes
+      WHERE proyecto_id = ? AND fecha >= ? AND fecha <= ?
+      ORDER BY fecha
+    """, [cert["proyecto_id"], cert["fecha_desde"], cert["fecha_hasta"]]).fetchall()]
+
+    proy = conn.execute("SELECT nombre FROM proyectos WHERE id = ?", [cert["proyecto_id"]]).fetchone()
+    nombre_proy = (proy["nombre"] if proy else "proyecto").replace(" ", "_")
+
+  buf = io.BytesIO()
+  with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+    if not partes:
+      zf.writestr("sin_partes.txt", f"No hay partes de trabajo en el periodo {cert['fecha_desde']} a {cert['fecha_hasta']}.")
+    for pt in partes:
+      prefix = f"parte_{pt['fecha']}_{pt['id']}"
+      # Include image if exists
+      if pt.get("imagen_archivo"):
+        ruta_img = DATOS_DIR / pt["imagen_archivo"]
+        if ruta_img.exists():
+          ext = ruta_img.suffix
+          zf.write(str(ruta_img), f"{prefix}{ext}")
+      # Always include text summary
+      resumen = (
+        f"Parte de trabajo - {pt['fecha']}\n"
+        f"Hincas: {pt.get('hincas_realizadas', 0)}\n"
+        f"Horas maquina: {pt.get('horas_maquina', 0)}\n"
+        f"Horas personal: {pt.get('horas_personal', 0)}\n"
+        f"Operadores: {pt.get('num_operadores', 0)}\n"
+        f"Ayudantes: {pt.get('num_ayudantes', 0)}\n"
+        f"Gasoil: {pt.get('combustible_litros') or 0} L\n"
+        f"Incidencias: {pt.get('incidencias') or 'Ninguna'}\n"
+        f"Notas: {pt.get('notas') or ''}\n"
+      )
+      zf.writestr(f"{prefix}.txt", resumen)
+
+  buf.seek(0)
+  return send_file(
+    buf,
+    mimetype="application/zip",
+    as_attachment=True,
+    download_name=f"Partes_{nombre_proy}_{cert['fecha_desde']}_a_{cert['fecha_hasta']}.zip",
+  )
+
+
 # ─── OCR de partes de trabajo ────────────────────────────────────────────────
 
 _PROMPT_PARTE_OCR = """Eres un experto en leer partes de trabajo manuscritos de una empresa de hincado de pilotes para parques solares fotovoltaicos.

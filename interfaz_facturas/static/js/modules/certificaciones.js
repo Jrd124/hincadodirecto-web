@@ -138,8 +138,9 @@ window.certVer = function(certId, proyectoId) {
           '</div>' +
 
           '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">' +
-            '<button class="btn-outline" style="padding:8px 16px;color:var(--color-danger);border-color:var(--color-danger);" onclick="certEliminar(' + certId + ',' + proyectoId + ')">Eliminar</button>' +
-            '<button class="btn-primary" style="width:auto;padding:8px 16px;" onclick="window.open(\'/api/certificaciones/' + certId + '/pdf\', \'_blank\')">Descargar PDF</button>' +
+            '<button style="padding:6px 14px;font-size:13px;font-weight:500;color:var(--color-primary);background:transparent;border:1px solid var(--color-primary);border-radius:6px;cursor:pointer;" onclick="window.open(\'/api/certificaciones/' + certId + '/pdf\', \'_blank\')">Descargar PDF</button>' +
+            '<button style="padding:6px 14px;font-size:13px;font-weight:500;color:#16A34A;background:transparent;border:1px solid #16A34A;border-radius:6px;cursor:pointer;" onclick="window.open(\'/api/certificaciones/' + certId + '/partes-zip\', \'_blank\')">Descargar partes (ZIP)</button>' +
+            '<button style="padding:6px 14px;font-size:13px;color:#DC2626;background:transparent;border:1px solid #DC2626;border-radius:6px;cursor:pointer;" onclick="certEliminar(' + certId + ',' + proyectoId + ')">Eliminar</button>' +
             '<button class="btn-outline" onclick="document.getElementById(\'modal-ver-cert\').remove()">Cerrar</button>' +
           '</div>' +
         '</div>';
