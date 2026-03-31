@@ -983,6 +983,8 @@
                 '<input type="number" id="parte-operadores" min="0" value="1" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
               '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">N\u00BA ayudantes</label>' +
                 '<input type="number" id="parte-ayudantes" min="0" value="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Horas admin</label>' +
+                '<input type="number" id="parte-horas-admin" step="0.5" min="0" value="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
             '</div>' +
           '</div>' +
 
@@ -1144,6 +1146,7 @@
       horas_personal: parseFloat((document.getElementById("parte-horas-pers") || {}).value) || 0,
       num_operadores: parseInt((document.getElementById("parte-operadores") || {}).value) || 1,
       num_ayudantes: parseInt((document.getElementById("parte-ayudantes") || {}).value) || 0,
+      horas_admin: parseFloat((document.getElementById("parte-horas-admin") || {}).value) || 0,
       condiciones_terreno: (document.getElementById("parte-terreno") || {}).value || "",
       meteorologia: (document.getElementById("parte-meteo") || {}).value || "",
       combustible_litros: parseFloat((document.getElementById("parte-combustible") || {}).value) || null,
@@ -1307,6 +1310,8 @@
                   '<input type="number" id="pe-operadores" value="' + (pt.num_operadores || 0) + '" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
                 '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Ayudantes</label>' +
                   '<input type="number" id="pe-ayudantes" value="' + (pt.num_ayudantes || 0) + '" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Horas admin</label>' +
+                  '<input type="number" id="pe-horas-admin" value="' + (pt.horas_admin || 0) + '" step="0.5" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
                 '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Gasoil (litros)</label>' +
                   '<input type="number" id="pe-gasoil" value="' + (pt.combustible_litros || "") + '" step="0.1" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
               '</div>' +
@@ -1340,6 +1345,7 @@
       horas_personal: parseFloat((document.getElementById("pe-horas-pers") || {}).value) || 0,
       num_operadores: parseInt((document.getElementById("pe-operadores") || {}).value) || 0,
       num_ayudantes: parseInt((document.getElementById("pe-ayudantes") || {}).value) || 0,
+      horas_admin: parseFloat((document.getElementById("pe-horas-admin") || {}).value) || 0,
       combustible_litros: parseFloat((document.getElementById("pe-gasoil") || {}).value) || null,
       incidencias: (document.getElementById("pe-incidencias") || {}).value || "",
       notas: (function () {

@@ -446,6 +446,7 @@ def api_guardar_parte_ocr():
     "horas_personal": sum(l.get("horas", 0) for l in lineas),
     "num_operadores": len(operadores),
     "num_ayudantes": len(ayudantes),
+    "horas_admin": data.get("horas_admin", 0),
     "incidencias": data.get("incidencias", ""),
     "notas": json.dumps(lineas, ensure_ascii=False),
     "imagen_archivo": data.get("imagen_archivo", ""),

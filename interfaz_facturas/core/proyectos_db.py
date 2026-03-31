@@ -669,9 +669,10 @@ def crear_parte(proyecto_id: int, data: dict) -> dict:
     with _conectar() as conn:
         conn.execute("""
             INSERT INTO proyecto_partes (proyecto_id, fecha, hincas_realizadas, horas_maquina,
-                horas_personal, num_operadores, num_ayudantes, incidencias, condiciones_terreno,
-                meteorologia, combustible_litros, notas, imagen_archivo, created_at, updated_by)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                horas_personal, num_operadores, num_ayudantes, horas_admin, incidencias,
+                condiciones_terreno, meteorologia, combustible_litros, notas, imagen_archivo,
+                created_at, updated_by)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             proyecto_id,
             (data.get("fecha") or ahora[:10]).strip(),
@@ -680,6 +681,7 @@ def crear_parte(proyecto_id: int, data: dict) -> dict:
             data.get("horas_personal") or 0,
             data.get("num_operadores") or 1,
             data.get("num_ayudantes") or 0,
+            data.get("horas_admin") or 0,
             (data.get("incidencias") or "").strip() or None,
             (data.get("condiciones_terreno") or "").strip() or None,
             (data.get("meteorologia") or "").strip() or None,
@@ -709,8 +711,9 @@ def actualizar_parte(parte_id: int, data: dict) -> dict | None:
         new_hincas = int(data.get("hincas_realizadas") or 0)
         conn.execute("""
             UPDATE proyecto_partes SET fecha=?, hincas_realizadas=?, horas_maquina=?,
-                horas_personal=?, num_operadores=?, num_ayudantes=?, incidencias=?,
-                condiciones_terreno=?, meteorologia=?, combustible_litros=?, notas=?, updated_by=?
+                horas_personal=?, num_operadores=?, num_ayudantes=?, horas_admin=?,
+                incidencias=?, condiciones_terreno=?, meteorologia=?, combustible_litros=?,
+                notas=?, updated_by=?
             WHERE id=?
         """, (
             (data.get("fecha") or "").strip(),
@@ -719,6 +722,7 @@ def actualizar_parte(parte_id: int, data: dict) -> dict | None:
             data.get("horas_personal") or 0,
             data.get("num_operadores") or 1,
             data.get("num_ayudantes") or 0,
+            data.get("horas_admin") or 0,
             (data.get("incidencias") or "").strip() or None,
             (data.get("condiciones_terreno") or "").strip() or None,
             (data.get("meteorologia") or "").strip() or None,
