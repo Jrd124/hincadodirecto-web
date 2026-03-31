@@ -1,8 +1,9 @@
-"""Modulo Maquinaria: CRUD de maquinas, checks semanales, revisiones e incidencias."""
+"""Modulo Maquinaria: CRUD de maquinas, checks semanales, revisiones, incidencias y tokens operario."""
 from __future__ import annotations
 
 import json
-from datetime import date
+import secrets
+from datetime import date, datetime, timedelta
 
 from core.db import conectar as _conectar, now_iso as _now
 
@@ -96,8 +97,104 @@ def init_maquinaria_db() -> None:
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_inc_maq ON maquinaria_incidencias(maquina_id)")
+
+        # ── Tokens de acceso operario (sin login) ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS maquinaria_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token TEXT NOT NULL UNIQUE,
+                maquina_id INTEGER NOT NULL REFERENCES maquinas(id) ON DELETE CASCADE,
+                operario_nombre TEXT,
+                created_by INTEGER REFERENCES usuarios(id),
+                expires_at TEXT,
+                activo INTEGER DEFAULT 1,
+                created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_tok_token ON maquinaria_tokens(token)")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_tok_maq ON maquinaria_tokens(maquina_id)")
+
+        # ── Fotos adjuntas a checks/incidencias/revisiones ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS maquinaria_fotos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                entidad_tipo TEXT NOT NULL CHECK(entidad_tipo IN ('check','incidencia','revision')),
+                entidad_id INTEGER NOT NULL,
+                filename TEXT NOT NULL,
+                filepath TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_fotos_ent ON maquinaria_fotos(entidad_tipo, entidad_id)")
+
+        # ── Tareas de mantenimiento programado (manual Orteco HD800-1000) ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS maquinaria_maintenance_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL UNIQUE,
+                nombre TEXT NOT NULL,
+                descripcion TEXT,
+                intervalo_horas INTEGER NOT NULL,
+                rol TEXT NOT NULL CHECK(rol IN ('mantenedor','tecnico_especializado')),
+                requires_workshop INTEGER DEFAULT 0,
+                checklist_json TEXT,
+                activo INTEGER DEFAULT 1
+            )
+        """)
+
+        # ── Logs de mantenimiento completado por tarea ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS maquinaria_maintenance_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                maquina_id INTEGER NOT NULL REFERENCES maquinas(id) ON DELETE CASCADE,
+                task_code TEXT NOT NULL,
+                horometro_at REAL NOT NULL,
+                due_hours REAL NOT NULL,
+                operario_nombre TEXT,
+                token_id INTEGER REFERENCES maquinaria_tokens(id),
+                observaciones TEXT,
+                checklist_result TEXT,
+                completed_at TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_maint_log_maq ON maquinaria_maintenance_logs(maquina_id, task_code)")
+
+        # ── Contacto operario (teléfono para WhatsApp/SMS) ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS maquinaria_operario_contacto (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token_id INTEGER NOT NULL UNIQUE REFERENCES maquinaria_tokens(id) ON DELETE CASCADE,
+                telefono TEXT,
+                canal_preferido TEXT DEFAULT 'whatsapp' CHECK(canal_preferido IN ('whatsapp','sms','email')),
+                email TEXT,
+                notificaciones_activas INTEGER DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT
+            )
+        """)
+
+        # ── Log de notificaciones (anti-spam) ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS maquinaria_notification_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                maquina_id INTEGER NOT NULL REFERENCES maquinas(id) ON DELETE CASCADE,
+                task_code TEXT NOT NULL,
+                week_iso TEXT NOT NULL,
+                token_id INTEGER REFERENCES maquinaria_tokens(id),
+                canal TEXT,
+                mensaje TEXT,
+                estado TEXT DEFAULT 'enviado' CHECK(estado IN ('enviado','fallido','cancelado')),
+                external_id TEXT,
+                created_at TEXT NOT NULL,
+                UNIQUE(maquina_id, task_code, week_iso)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_notif_log_maq ON maquinaria_notification_log(maquina_id, task_code)")
+
         _seed_maquinas(conn)
         _seed_checklist_templates(conn)
+        _seed_maintenance_tasks(conn)
     _initialized = True
 
 
@@ -126,47 +223,345 @@ def _seed_maquinas(conn):
 
 
 def _seed_checklist_templates(conn):
+    """Seed de templates de checklist según manual Orteco HD 800-1000 (págs. 76-77)."""
     if conn.execute("SELECT COUNT(*) FROM maquinaria_checklist_templates").fetchone()[0] > 0:
         return
     items = [
-        # Semanal
-        ("semanal", 1, "Nivel aceite hidraulico", "Verificar nivel y rellenar si necesario", 0),
+        # ── Semanal (check general del operario) ──
+        ("semanal", 1, "Nivel aceite hidráulico", "Verificar nivel y rellenar si necesario", 0),
         ("semanal", 2, "Nivel aceite reductores", "Verificar nivel en ambos reductores", 0),
-        ("semanal", 3, "Tornilleria", "Revisar apriete de tornilleria general", 0),
+        ("semanal", 3, "Tornillería", "Revisar apriete de tornillería general", 0),
         ("semanal", 4, "Filtro aire", "Limpiar o sustituir filtro de aire", 0),
-        ("semanal", 5, "Tension orugas", "Verificar tension de las orugas", 0),
-        ("semanal", 6, "Limpieza general", "Limpieza general de la maquina", 0),
-        # 100h
-        ("100h", 1, "Reductores", "Revision de reductores cada 100h", 0),
-        ("100h", 2, "Cadena", "Revision de cadena cada 100h", 0),
-        ("100h", 3, "Patin", "Revision del patin cada 100h", 0),
-        ("100h", 4, "Columna", "Revision de la columna cada 100h", 0),
-        ("100h", 5, "Barrena", "Revision de la barrena cada 100h", 0),
-        ("100h", 6, "Sacamuestras", "Revision del sacamuestras cada 100h", 0),
-        ("100h", 7, "Perforador", "Revision del perforador cada 100h", 0),
-        # 250h
-        ("250h", 1, "Orugas", "Revision de orugas cada 250h", 0),
-        ("250h", 2, "Membrana acumulador", "Revision membrana acumulador — REQUIERE TALLER", 1),
-        ("250h", 3, "Tirantes/pernos", "Revision tirantes y pernos — REQUIERE TALLER", 1),
-        # 500h
-        ("500h", 1, "Deposito hidraulico", "Revision deposito hidraulico cada 500h", 0),
-        ("500h", 2, "Pinza extraccion", "Revision pinza de extraccion cada 500h", 0),
-        ("500h", 3, "Levantador guardarrailes", "Revision levantador guardarrailes cada 500h", 0),
-        # 1000h
-        ("1000h", 1, "Reductor aceite", "Cambio aceite reductor cada 1000h", 0),
-        ("1000h", 2, "Filtros envio", "Cambio filtros de envio cada 1000h", 0),
-        ("1000h", 3, "Filtros descarga", "Cambio filtros de descarga cada 1000h", 0),
-        ("1000h", 4, "Barrena/perforador aceite", "Cambio aceite barrena/perforador cada 1000h", 0),
-        ("1000h", 5, "Cadena", "Revision cadena cada 1000h — REQUIERE TALLER", 1),
-        ("1000h", 6, "Revision general 1000h", "Revision general completa cada 1000h", 0),
-        # 2000h
-        ("2000h", 1, "Deposito hidraulico sustitucion", "Sustitucion deposito hidraulico — REQUIERE TALLER", 1),
+        ("semanal", 5, "Tensión orugas", "Verificar tensión de las orugas", 0),
+        ("semanal", 6, "Limpieza general", "Limpieza general de la máquina", 0),
+        # ── 100h — Mantenedor ──
+        ("100h", 1, "Reductores orugas — Control nivel aceite", "Control nivel del aceite de los reductores de orugas", 0),
+        ("100h", 2, "Reductores orugas — Sustitución aceite (1ª vez)", "Sustitución aceite (solo la primera vez a 100h)", 0),
+        ("100h", 3, "Cadena elevación martillo — Limpieza y lubricación", "Limpieza y lubricación (frecuencia mayor si uso intensivo)", 0),
+        ("100h", 4, "Cadena elevación martillo — Control", "Control visual del estado de la cadena", 0),
+        ("100h", 5, "Patín — Lubricación", "Lubricación del patín (ref. esquema de lubricación)", 0),
+        ("100h", 6, "Interior columna — Lubricación", "Lubricación interior columna (ref. esquema de lubricación)", 0),
+        ("100h", 7, "Barrena — Sustitución aceite (1ª vez)", "Sustitución aceite barrena (solo la primera vez a 100h)", 0),
+        ("100h", 8, "Sacamuestras — Engrasar", "Engrasar sacamuestras (ref. mantenimiento del sacamuestras)", 0),
+        ("100h", 9, "Perforador (RP500) — Control nivel aceite reductor", "Control nivel aceite del reductor del perforador", 0),
+        ("100h", 10, "Perforador (RP500) — Regulación de resortes", "Regulación de resortes del perforador", 0),
+        # ── 250h — Mantenedor ──
+        ("250h", 1, "Orugas — Control tensión", "Control de la tensión de las orugas", 0),
+        # ── 250h — Técnico especializado ──
+        ("250h", 2, "Membrana acumulador martillo percusión — Control estado", "Control estado en taller autorizado — REQUIERE TALLER", 1),
+        ("250h", 3, "Tirantes y pernos — Control estado y apriete", "Control de estado y apriete de tirantes y pernos", 0),
+        # ── 500h — Mantenedor ──
+        ("500h", 1, "Depósito aceite hidráulico — Control nivel del aceite", "Control nivel del aceite hidráulico", 0),
+        ("500h", 2, "Pinza de extracción postes — Limpieza", "Limpieza de la pinza de extracción de postes", 0),
+        ("500h", 3, "Pinza de extracción postes — Engrasar", "Engrasar la pinza de extracción de postes", 0),
+        ("500h", 4, "Levantador de guardarraíles — Engrasar", "Engrasar el levantador de guardarraíles", 0),
+        # ── 1000h — Mantenedor ──
+        ("1000h", 1, "Reductor orugas — Sustitución aceite", "Sustitución aceite de los reductores de orugas", 0),
+        ("1000h", 2, "Filtro aceite hidráulico en envío — Control atascamiento", "Control atascamiento del cartucho filtrante (alta presión)", 0),
+        ("1000h", 3, "Filtro aceite hidráulico en descarga — Sustitución cartucho", "Sustitución cartucho filtrante filtro en descarga (baja presión)", 0),
+        ("1000h", 4, "Filtro aceite hidráulico en envío — Sustitución cartucho", "Sustitución cartucho filtrante filtro en envío (alta presión)", 0),
+        ("1000h", 5, "Barrena — Sustitución aceite del reductor", "Sustitución aceite del reductor de la barrena", 0),
+        ("1000h", 6, "Perforador — Sustitución aceite del reductor", "Sustitución aceite del reductor del perforador", 0),
+        # ── 1000h — Técnico especializado ──
+        ("1000h", 7, "Cadena elevación martillo — Sustitución", "Sustitución de la cadena de elevación — REQUIERE TALLER", 1),
+        # ── 2000h — Técnico especializado ──
+        ("2000h", 1, "Depósito aceite hidráulico — Sustitución aceite", "Sustitución aceite depósito hidráulico — REQUIERE TALLER AUTORIZADO", 1),
     ]
     for item in items:
         conn.execute(
             "INSERT INTO maquinaria_checklist_templates (tipo, orden, nombre, descripcion, requiere_taller) "
             "VALUES (?, ?, ?, ?, ?)",
             item,
+        )
+
+
+def _seed_maintenance_tasks(conn):
+    """Seed de tareas de mantenimiento programado según manual Orteco HD 800-1000 (págs. 76-77).
+
+    Estructura exacta del manual:
+      - Mantenedor cada 100h: reductores orugas, cadena elevación, patín, columna, barrena, sacamuestras, perforador
+      - Mantenedor cada 250h: orugas tensión
+      - Mantenedor cada 500h: depósito hidráulico, pinza extracción, levantador guardarraíles
+      - Mantenedor cada 1000h: reductor orugas aceite, filtros hidráulicos (envío+descarga), barrena aceite, perforador aceite
+      - Técnico cada 250h: membrana acumulador, tirantes y pernos
+      - Técnico cada 1000h: cadena elevación sustitución
+      - Técnico cada 2000h: depósito hidráulico sustitución aceite
+    Notas del manual:
+      (1) La sustitución del aceite con frecuencia 100h se refiere sólo a la primera sustitución.
+      (2) Cadena elevación 100h: efectuar con frecuencia mayor en caso de uso intensivo.
+    """
+    if conn.execute("SELECT COUNT(*) FROM maquinaria_maintenance_tasks").fetchone()[0] > 0:
+        return
+    tasks = [
+        # (code, nombre, descripcion, intervalo_horas, rol, requires_workshop, checklist_json)
+
+        # ═══════════════════════════════════════════════════════════════════════════
+        # MANTENEDOR — cada 100 horas
+        # ═══════════════════════════════════════════════════════════════════════════
+        ("REDUCTORES_ORUGAS_100H",
+         "Reductores orugas — Control nivel aceite + Sustitución aceite (1ª vez)",
+         "Control nivel del aceite de los reductores de orugas. La sustitución del aceite a 100h se refiere sólo a la primera sustitución. Ref: 'Control nivel del aceite reductores orugas' / 'Sustitución del aceite reductores orugas'.",
+         100, "mantenedor", 0,
+         json.dumps([
+             {"item": "Control nivel aceite reductor oruga izquierda", "tipo": "check"},
+             {"item": "Control nivel aceite reductor oruga derecha", "tipo": "check"},
+             {"item": "Rellenar si nivel bajo (ref. manual)", "tipo": "check"},
+             {"item": "Sustitución aceite reductor izquierdo (solo 1ª vez)", "tipo": "check"},
+             {"item": "Sustitución aceite reductor derecho (solo 1ª vez)", "tipo": "check"},
+             {"item": "Verificar ausencia de fugas tras sustitución", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        ("CADENA_ELEVACION_100H",
+         "Cadena elevación martillo — Limpieza, lubricación y control",
+         "Limpieza y lubricación de la cadena de elevación del martillo de percusión. Efectuar el control con frecuencia mayor en caso de uso intensivo. Ref: 'Limpieza y lubricación cadena de elevación martillo' / 'Sustitución de la cadena'.",
+         100, "mantenedor", 0,
+         json.dumps([
+             {"item": "Limpieza de la cadena de elevación", "tipo": "check"},
+             {"item": "Lubricación de la cadena de elevación", "tipo": "check"},
+             {"item": "Control visual del estado de la cadena", "tipo": "check"},
+             {"item": "Control de eslabones — desgaste o deformación", "tipo": "check"},
+             {"item": "Control de anclajes de la cadena", "tipo": "check"},
+             {"item": "¿Uso intensivo? Programar control adicional antes de 100h", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        ("PATIN_LUBRICACION_100H",
+         "Patín — Lubricación",
+         "Lubricación del patín según esquema de lubricación del manual. Ref: 'Esquema de lubricación'.",
+         100, "mantenedor", 0,
+         json.dumps([
+             {"item": "Lubricar patín según esquema de lubricación", "tipo": "check"},
+             {"item": "Verificar estado visual del patín", "tipo": "check"},
+             {"item": "Verificar desgaste superficial", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        ("INTERIOR_COLUMNA_100H",
+         "Interior columna — Lubricación",
+         "Lubricación del interior de la columna según esquema de lubricación del manual. Ref: 'Esquema de lubricación'.",
+         100, "mantenedor", 0,
+         json.dumps([
+             {"item": "Lubricar interior de la columna según esquema", "tipo": "check"},
+             {"item": "Verificar estado visual interior columna", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        ("BARRENA_ACEITE_100H",
+         "Barrena — Sustitución aceite (1ª vez)",
+         "Sustitución del aceite de la barrena. A 100h se refiere sólo a la primera sustitución. Ref: 'Mantenimiento barrena'.",
+         100, "mantenedor", 0,
+         json.dumps([
+             {"item": "Drenar aceite de la barrena", "tipo": "check"},
+             {"item": "Rellenar con aceite nuevo (ref. manual 'Mantenimiento barrena')", "tipo": "check"},
+             {"item": "Verificar nivel correcto", "tipo": "check"},
+             {"item": "Verificar ausencia de fugas", "tipo": "check"},
+             {"item": "Nota: esta sustitución a 100h es solo la 1ª vez", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        ("SACAMUESTRAS_ENGRASAR_100H",
+         "Sacamuestras — Engrasar",
+         "Engrasar el sacamuestras. Ref: 'Mantenimiento del sacamuestras'.",
+         100, "mantenedor", 0,
+         json.dumps([
+             {"item": "Engrasar sacamuestras según manual", "tipo": "check"},
+             {"item": "Verificar funcionamiento del sacamuestras", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        ("PERFORADOR_RP500_100H",
+         "Perforador (RP500) — Control nivel aceite reductor + Regulación resortes",
+         "Control del nivel de aceite del reductor del perforador y regulación de resortes. Ref: 'Mantenimiento del perforador'.",
+         100, "mantenedor", 0,
+         json.dumps([
+             {"item": "Control nivel aceite del reductor del perforador", "tipo": "check"},
+             {"item": "Rellenar aceite reductor si nivel bajo", "tipo": "check"},
+             {"item": "Regulación de resortes del perforador", "tipo": "check"},
+             {"item": "Verificar funcionamiento del perforador", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        # ═══════════════════════════════════════════════════════════════════════════
+        # MANTENEDOR — cada 250 horas
+        # ═══════════════════════════════════════════════════════════════════════════
+        ("ORUGAS_TENSION_250H",
+         "Orugas — Control tensión",
+         "Controlar la tensión de las orugas y ajustar si es necesario. Ref: 'Control tensión de las orugas'.",
+         250, "mantenedor", 0,
+         json.dumps([
+             {"item": "Verificar tensión oruga izquierda", "tipo": "check"},
+             {"item": "Verificar tensión oruga derecha", "tipo": "check"},
+             {"item": "Ajustar tensión si necesario", "tipo": "check"},
+             {"item": "Estado visual de las zapatas", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        # ═══════════════════════════════════════════════════════════════════════════
+        # MANTENEDOR — cada 500 horas
+        # ═══════════════════════════════════════════════════════════════════════════
+        ("HIDRAULICO_NIVEL_500H",
+         "Depósito aceite hidráulico — Control nivel del aceite",
+         "Controlar el nivel del aceite del depósito hidráulico y rellenar si es necesario. Ref: 'Control nivel del aceite hidráulico'.",
+         500, "mantenedor", 0,
+         json.dumps([
+             {"item": "Comprobar nivel aceite hidráulico con varilla/visor", "tipo": "check"},
+             {"item": "Verificar color y estado del aceite", "tipo": "check"},
+             {"item": "Rellenar si nivel bajo (ref. manual 'Control nivel del aceite hidráulico')", "tipo": "check"},
+             {"item": "Inspeccionar depósito: fugas o daños visibles", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        ("PINZA_EXTRACCION_500H",
+         "Pinza de extracción postes — Limpieza + Engrasar",
+         "Limpieza y engrase de la pinza de extracción de postes según manual.",
+         500, "mantenedor", 0,
+         json.dumps([
+             {"item": "Limpieza general de la pinza de extracción", "tipo": "check"},
+             {"item": "Engrasar puntos de articulación de la pinza", "tipo": "check"},
+             {"item": "Verificar desgaste de las mordazas", "tipo": "check"},
+             {"item": "Comprobar funcionamiento apertura/cierre", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        ("LEVANTADOR_GUARDARRAILES_500H",
+         "Levantador de guardarraíles — Engrasar",
+         "Engrasar el mecanismo del levantador de guardarraíles según manual.",
+         500, "mantenedor", 0,
+         json.dumps([
+             {"item": "Engrasar articulaciones del levantador de guardarraíles", "tipo": "check"},
+             {"item": "Verificar estado de pasadores y articulaciones", "tipo": "check"},
+             {"item": "Comprobar funcionamiento del levantador", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        # ═══════════════════════════════════════════════════════════════════════════
+        # MANTENEDOR — cada 1000 horas
+        # ═══════════════════════════════════════════════════════════════════════════
+        ("REDUCTOR_ORUGAS_ACEITE_1000H",
+         "Reductor orugas — Sustitución aceite",
+         "Sustituir el aceite del reductor de orugas. Ref: 'Sustitución del aceite reductores orugas'.",
+         1000, "mantenedor", 0,
+         json.dumps([
+             {"item": "Drenar aceite reductor oruga izquierda", "tipo": "check"},
+             {"item": "Drenar aceite reductor oruga derecha", "tipo": "check"},
+             {"item": "Rellenar con aceite nuevo (ref. manual 'Sustitución del aceite reductores orugas')", "tipo": "check"},
+             {"item": "Verificar nivel correcto en ambos reductores", "tipo": "check"},
+             {"item": "Comprobar ausencia de fugas", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        ("FILTRO_HIDRAULICO_ENVIO_1000H",
+         "Filtro aceite hidráulico en envío — Control atascamiento + Sustitución cartucho",
+         "Control de atascamiento del cartucho filtrante del filtro en envío (alta presión) y sustitución del cartucho. Ref: 'Sustitución cartucho filtrante filtro en envío (alta presión)'.",
+         1000, "mantenedor", 0,
+         json.dumps([
+             {"item": "Control atascamiento del cartucho filtrante en envío", "tipo": "check"},
+             {"item": "Sustitución del cartucho filtrante en envío (alta presión)", "tipo": "check"},
+             {"item": "Verificar juntas y sellos del filtro en envío", "tipo": "check"},
+             {"item": "Comprobar presión del sistema tras sustitución", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        ("FILTRO_HIDRAULICO_DESCARGA_1000H",
+         "Filtro aceite hidráulico en descarga — Sustitución cartucho filtrante",
+         "Sustitución del cartucho filtrante del filtro en descarga (baja presión). Ref: 'Sustitución cartucho filtrante filtro en descarga (baja presión)'.",
+         1000, "mantenedor", 0,
+         json.dumps([
+             {"item": "Sustitución del cartucho filtrante en descarga (baja presión)", "tipo": "check"},
+             {"item": "Verificar juntas y sellos del filtro en descarga", "tipo": "check"},
+             {"item": "Comprobar presión del sistema tras sustitución", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        ("BARRENA_ACEITE_REDUCTOR_1000H",
+         "Barrena — Sustitución aceite del reductor",
+         "Sustituir el aceite del reductor de la barrena. Ref: 'Mantenimiento barrena'.",
+         1000, "mantenedor", 0,
+         json.dumps([
+             {"item": "Drenar aceite del reductor de la barrena", "tipo": "check"},
+             {"item": "Rellenar con aceite nuevo (ref. manual 'Mantenimiento barrena')", "tipo": "check"},
+             {"item": "Verificar nivel correcto", "tipo": "check"},
+             {"item": "Verificar ausencia de fugas", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        ("PERFORADOR_ACEITE_REDUCTOR_1000H",
+         "Perforador — Sustitución aceite del reductor",
+         "Sustituir el aceite del reductor del perforador. Ref: 'Mantenimiento del perforador'.",
+         1000, "mantenedor", 0,
+         json.dumps([
+             {"item": "Drenar aceite del reductor del perforador", "tipo": "check"},
+             {"item": "Rellenar con aceite nuevo (ref. manual 'Mantenimiento del perforador')", "tipo": "check"},
+             {"item": "Verificar nivel correcto", "tipo": "check"},
+             {"item": "Verificar ausencia de fugas", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        # ═══════════════════════════════════════════════════════════════════════════
+        # TÉCNICO ESPECIALIZADO — cada 250 horas
+        # ═══════════════════════════════════════════════════════════════════════════
+        ("MEMBRANA_ACUMULADOR_250H",
+         "Membrana acumulador martillo de percusión — Control estado",
+         "Controlar el estado de la membrana del acumulador del martillo de percusión. Efectuar el control en un taller autorizado. Ref: manual pág. 77.",
+         250, "tecnico_especializado", 1,
+         json.dumps([
+             {"item": "Inspección visual de la membrana del acumulador", "tipo": "check"},
+             {"item": "Test de presión del acumulador", "tipo": "check"},
+             {"item": "Sustituir membrana si deteriorada", "tipo": "check"},
+             {"item": "Registrar presión final", "tipo": "texto"},
+             {"item": "Realizado en taller autorizado: nombre del taller", "tipo": "texto"},
+         ])),
+
+        ("TIRANTES_PERNOS_250H",
+         "Tirantes y pernos — Control de estado y apriete",
+         "Controlar el estado y apriete de tirantes y pernos. Ref: manual pág. 77.",
+         250, "tecnico_especializado", 0,
+         json.dumps([
+             {"item": "Control estado tirantes superiores", "tipo": "check"},
+             {"item": "Control estado tirantes inferiores", "tipo": "check"},
+             {"item": "Verificar apriete de pernos de fijación", "tipo": "check"},
+             {"item": "Reapretar si necesario (par según manual)", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        # ═══════════════════════════════════════════════════════════════════════════
+        # TÉCNICO ESPECIALIZADO — cada 1000 horas
+        # ═══════════════════════════════════════════════════════════════════════════
+        ("CADENA_ELEVACION_1000H",
+         "Cadena de elevación martillo de percusión — Sustitución",
+         "Sustituir la cadena de elevación del martillo de percusión. Ref: 'Sustitución de la cadena'.",
+         1000, "tecnico_especializado", 1,
+         json.dumps([
+             {"item": "Retirar cadena usada", "tipo": "check"},
+             {"item": "Instalar cadena nueva (ref. manual 'Sustitución de la cadena')", "tipo": "check"},
+             {"item": "Ajustar tensión de la cadena nueva", "tipo": "check"},
+             {"item": "Test de funcionamiento del martillo de percusión", "tipo": "check"},
+             {"item": "Observaciones", "tipo": "texto"},
+         ])),
+
+        # ═══════════════════════════════════════════════════════════════════════════
+        # TÉCNICO ESPECIALIZADO — cada 2000 horas
+        # ═══════════════════════════════════════════════════════════════════════════
+        ("DEPOSITO_HIDRAULICO_2000H",
+         "Depósito aceite hidráulico — Sustitución aceite",
+         "Sustituir completamente el aceite del depósito hidráulico. Dirigirse a un taller autorizado. Ref: manual pág. 77.",
+         2000, "tecnico_especializado", 1,
+         json.dumps([
+             {"item": "Drenar depósito completo", "tipo": "check"},
+             {"item": "Limpiar interior del depósito", "tipo": "check"},
+             {"item": "Rellenar con aceite nuevo (ref. manual)", "tipo": "check"},
+             {"item": "Purgar circuito hidráulico", "tipo": "check"},
+             {"item": "Verificar nivel y ausencia de fugas", "tipo": "check"},
+             {"item": "Test de presión del sistema", "tipo": "check"},
+             {"item": "Realizado en taller autorizado: nombre del taller", "tipo": "texto"},
+         ])),
+    ]
+    for t in tasks:
+        conn.execute(
+            "INSERT INTO maquinaria_maintenance_tasks "
+            "(code, nombre, descripcion, intervalo_horas, rol, requires_workshop, checklist_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)", t,
         )
 
 
@@ -368,3 +763,216 @@ def actualizar_incidencia(inc_id: int, data: dict) -> dict:
                  data.get("severidad", "media"), inc_id],
             )
         return dict(conn.execute("SELECT * FROM maquinaria_incidencias WHERE id = ?", [inc_id]).fetchone())
+
+
+# ── Tokens de acceso operario ────────────────────────────────────────────────
+
+
+def crear_token(maquina_id: int, operario_nombre: str = "",
+                created_by: int | None = None, dias_validez: int = 90) -> dict:
+    """Crea un token de acceso para un operario a una máquina específica."""
+    init_maquinaria_db()
+    token = secrets.token_urlsafe(16)  # 22 chars, URL-safe
+    expires = (datetime.utcnow() + timedelta(days=dias_validez)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO maquinaria_tokens (token, maquina_id, operario_nombre, "
+            "created_by, expires_at, activo, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)",
+            [token, maquina_id, operario_nombre, created_by, expires, _now()],
+        )
+        tid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        return dict(conn.execute("SELECT * FROM maquinaria_tokens WHERE id = ?", [tid]).fetchone())
+
+
+def listar_tokens(maquina_id: int | None = None, solo_activos: bool = True) -> list:
+    """Lista tokens, opcionalmente filtrados por máquina."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        q = ("SELECT t.*, m.nombre AS maquina_nombre, u.nombre AS creado_por_nombre "
+             "FROM maquinaria_tokens t "
+             "LEFT JOIN maquinas m ON m.id = t.maquina_id "
+             "LEFT JOIN usuarios u ON u.id = t.created_by "
+             "WHERE 1=1")
+        params: list = []
+        if maquina_id:
+            q += " AND t.maquina_id = ?"
+            params.append(maquina_id)
+        if solo_activos:
+            q += " AND t.activo = 1"
+        q += " ORDER BY t.created_at DESC"
+        return [dict(r) for r in conn.execute(q, params).fetchall()]
+
+
+def validar_token(token: str) -> dict | None:
+    """Valida un token y devuelve info de la máquina si es válido."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        row = conn.execute(
+            "SELECT t.*, m.nombre AS maquina_nombre, m.modelo, m.internal_id, "
+            "m.horometro_actual, m.estado AS maquina_estado "
+            "FROM maquinaria_tokens t "
+            "JOIN maquinas m ON m.id = t.maquina_id "
+            "WHERE t.token = ? AND t.activo = 1",
+            [token],
+        ).fetchone()
+        if not row:
+            return None
+        t = dict(row)
+        # Verificar expiración
+        if t.get("expires_at"):
+            try:
+                exp = datetime.strptime(t["expires_at"], "%Y-%m-%dT%H:%M:%SZ")
+                if datetime.utcnow() > exp:
+                    return None
+            except ValueError:
+                pass
+        return t
+
+
+def desactivar_token(token_id: int) -> bool:
+    """Desactiva un token."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        conn.execute("UPDATE maquinaria_tokens SET activo = 0 WHERE id = ?", [token_id])
+        return True
+
+
+def reactivar_token(token_id: int, dias_extra: int = 90) -> dict:
+    """Reactiva un token y extiende su validez."""
+    init_maquinaria_db()
+    expires = (datetime.utcnow() + timedelta(days=dias_extra)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with _conectar() as conn:
+        conn.execute(
+            "UPDATE maquinaria_tokens SET activo = 1, expires_at = ? WHERE id = ?",
+            [expires, token_id],
+        )
+        return dict(conn.execute("SELECT * FROM maquinaria_tokens WHERE id = ?", [token_id]).fetchone())
+
+
+# ── Fotos adjuntas ───────────────────────────────────────────────────────────
+
+
+def guardar_foto(entidad_tipo: str, entidad_id: int, filename: str, filepath: str) -> dict:
+    """Guarda referencia a una foto subida."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO maquinaria_fotos (entidad_tipo, entidad_id, filename, filepath, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            [entidad_tipo, entidad_id, filename, filepath, _now()],
+        )
+        fid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        return dict(conn.execute("SELECT * FROM maquinaria_fotos WHERE id = ?", [fid]).fetchone())
+
+
+def listar_fotos(entidad_tipo: str, entidad_id: int) -> list:
+    """Lista fotos de una entidad."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM maquinaria_fotos WHERE entidad_tipo = ? AND entidad_id = ? ORDER BY created_at",
+            [entidad_tipo, entidad_id],
+        ).fetchall()]
+
+
+# ── Revisiones CRUD ──────────────────────────────────────────────────────────
+
+
+def crear_revision(data: dict) -> dict:
+    """Crea una revisión horométrica."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        checklist = data.get("checklist") or {}
+        conn.execute(
+            "INSERT INTO maquinaria_revisiones (maquina_id, tipo, usuario_id, fecha, "
+            "horometro_al_revision, tipo_ejecucion, coste, checklist, observaciones, estado, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'abierto', ?)",
+            [data["maquina_id"], data["tipo"], data.get("usuario_id"),
+             data.get("fecha", date.today().isoformat()),
+             data.get("horometro_al_revision", 0),
+             data.get("tipo_ejecucion", "interno"),
+             data.get("coste", 0),
+             json.dumps(checklist),
+             data.get("observaciones", ""), _now()],
+        )
+        rid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        # Actualizar horómetro si es mayor
+        if data.get("horometro_al_revision"):
+            conn.execute(
+                "UPDATE maquinas SET horometro_actual = ?, updated_at = ? "
+                "WHERE id = ? AND horometro_actual < ?",
+                [data["horometro_al_revision"], _now(),
+                 data["maquina_id"], data["horometro_al_revision"]],
+            )
+        return dict(conn.execute("SELECT * FROM maquinaria_revisiones WHERE id = ?", [rid]).fetchone())
+
+
+def cerrar_revision(rev_id: int) -> dict:
+    """Cierra una revisión."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        conn.execute(
+            "UPDATE maquinaria_revisiones SET estado = 'cerrado', cerrado_at = ? WHERE id = ?",
+            [_now(), rev_id],
+        )
+        return dict(conn.execute("SELECT * FROM maquinaria_revisiones WHERE id = ?", [rev_id]).fetchone())
+
+
+# ── Dashboard de mantenimiento ───────────────────────────────────────────────
+
+
+def dashboard_mantenimiento() -> dict:
+    """Devuelve resumen de mantenimiento para el dashboard."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        maquinas = [dict(r) for r in conn.execute(
+            "SELECT * FROM maquinas WHERE activa = 1 ORDER BY nombre"
+        ).fetchall()]
+
+        # Incidencias abiertas
+        inc_abiertas = conn.execute(
+            "SELECT COUNT(*) FROM maquinaria_incidencias WHERE estado != 'cerrada'"
+        ).fetchone()[0]
+
+        # Incidencias de seguridad abiertas
+        inc_seguridad = conn.execute(
+            "SELECT COUNT(*) FROM maquinaria_incidencias "
+            "WHERE estado != 'cerrada' AND severidad = 'seguridad'"
+        ).fetchone()[0]
+
+        # Checks esta semana
+        hoy = date.today()
+        inicio_semana = (hoy - timedelta(days=hoy.weekday())).isoformat()
+        checks_semana = conn.execute(
+            "SELECT COUNT(*) FROM maquinaria_checks WHERE fecha >= ?", [inicio_semana]
+        ).fetchone()[0]
+
+        # Revisiones pendientes por máquina
+        rev_pendientes_total = 0
+        maquinas_con_revision = []
+        for m in maquinas:
+            pend = _calcular_revisiones_pendientes(conn, m["id"], m["horometro_actual"])
+            if pend:
+                rev_pendientes_total += len(pend)
+                maquinas_con_revision.append({
+                    "maquina_id": m["id"],
+                    "maquina_nombre": m["nombre"],
+                    "revisiones": pend,
+                })
+
+        # Tokens activos
+        tokens_activos = conn.execute(
+            "SELECT COUNT(*) FROM maquinaria_tokens WHERE activo = 1"
+        ).fetchone()[0]
+
+        return {
+            "total_maquinas": len(maquinas),
+            "maquinas_en_taller": sum(1 for m in maquinas if m["estado"] == "en_taller"),
+            "maquinas_baja": sum(1 for m in maquinas if m["estado"] == "baja"),
+            "incidencias_abiertas": inc_abiertas,
+            "incidencias_seguridad": inc_seguridad,
+            "checks_esta_semana": checks_semana,
+            "revisiones_pendientes": rev_pendientes_total,
+            "maquinas_con_revision_pendiente": maquinas_con_revision,
+            "tokens_activos": tokens_activos,
+        }

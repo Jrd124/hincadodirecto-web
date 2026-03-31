@@ -94,7 +94,7 @@ const MODULOS = {
   maquinaria: {
     linkId: "nav-maquinaria-modulo",
     paneles: { listado: "panel-maquinaria", detalle: "panel-maquinaria-detalle" },
-    subNavLinks: {},
+    subNavLinks: { listado: "nav-maquinaria-listado", mantenimiento: "nav-maquinaria-mantenimiento" },
     defecto: "listado",
   },
   cae: {
@@ -773,6 +773,29 @@ var navMaquinaria = document.getElementById("nav-maquinaria-modulo");
 if (navMaquinaria) navMaquinaria.addEventListener("click", function (e) {
   e.preventDefault();
   activarModulo("maquinaria");
+  if (typeof cargarMaquinaria === "function") cargarMaquinaria();
+});
+var navMaqListado = document.getElementById("nav-maquinaria-listado");
+if (navMaqListado) navMaqListado.addEventListener("click", function (e) {
+  e.preventDefault();
+  activarModulo("maquinaria");
+  // Hide detalle, show list
+  var det = document.getElementById("panel-maquinaria-detalle");
+  if (det) det.classList.remove("visible");
+  var lst = document.getElementById("panel-maquinaria");
+  if (lst) lst.classList.add("visible");
+  if (typeof cargarMaquinaria === "function") cargarMaquinaria();
+});
+var navMaqMant = document.getElementById("nav-maquinaria-mantenimiento");
+if (navMaqMant) navMaqMant.addEventListener("click", function (e) {
+  e.preventDefault();
+  activarModulo("maquinaria");
+  // Hide detalle, show list panel (dashboard renders into maquinaria-content)
+  var det = document.getElementById("panel-maquinaria-detalle");
+  if (det) det.classList.remove("visible");
+  var lst = document.getElementById("panel-maquinaria");
+  if (lst) lst.classList.add("visible");
+  if (typeof cargarDashboardMantenimiento === "function") cargarDashboardMantenimiento();
 });
 
 var navCae = document.getElementById("nav-cae-modulo");

@@ -216,12 +216,27 @@ function caeCargarPlantillas() {
     var pls = d.plantillas || [];
     if (pls.length === 0) { div.innerHTML = '<div class="card"><p style="text-align:center;">Sin plantillas. Crea una para definir requisitos documentales.</p></div>'; return; }
     div.innerHTML = pls.map(function (p) {
-      var itemsHtml = (p.items || []).map(function (i) {
-        return '<tr><td>' + i.nombre + '</td><td>' + i.target_entity_type + '</td><td>' + i.doc_type + '</td><td>' + (i.is_mandatory ? 'Si' : 'No') + '</td></tr>';
-      }).join('');
+      var sections = { EMPRESA: [], OPERARIO: [], MAQUINA: [], VEHICULO: [] };
+      (p.items || []).forEach(function (i) {
+        var sec = i.target_entity_type || "EMPRESA";
+        if (!sections[sec]) sections[sec] = [];
+        sections[sec].push(i);
+      });
+      var secLabels = { EMPRESA: "Empresa", OPERARIO: "Trabajadores", MAQUINA: "Maquinaria", VEHICULO: "Vehículos" };
+      var secColors = { EMPRESA: "#2563eb", OPERARIO: "#059669", MAQUINA: "#d97706", VEHICULO: "#7c3aed" };
+      var secHtml = "";
+      ["EMPRESA", "OPERARIO", "MAQUINA", "VEHICULO"].forEach(function (sec) {
+        var items = sections[sec];
+        if (!items || items.length === 0) return;
+        secHtml += '<div style="margin-top:0.75rem;"><h4 style="font-size:0.85rem;color:' + secColors[sec] + ';margin:0 0 0.3rem;border-bottom:2px solid ' + secColors[sec] + '30;padding-bottom:0.2rem;">' + secLabels[sec] + '</h4>' +
+          '<table class="tabla-generica" style="font-size:0.85rem;"><thead><tr><th>Requisito</th><th>Tipo doc</th><th>Oblig.</th></tr></thead><tbody>' +
+          items.map(function (i) {
+            return '<tr><td>' + i.nombre + '</td><td style="font-family:monospace;font-size:0.8rem;">' + i.doc_type + '</td><td>' + (i.is_mandatory ? 'Sí' : 'No') + '</td></tr>';
+          }).join('') + '</tbody></table></div>';
+      });
       return '<div class="card" style="margin-bottom:1rem;"><div style="display:flex;justify-content:space-between;align-items:center;"><h3>' + p.nombre + '</h3><div><button class="btn-link" onclick="caeEditarPlantilla(' + p.id + ')">Editar</button> <button class="btn-link" style="color:#dc3545;" onclick="caeEliminarPlantilla(' + p.id + ')">Eliminar</button></div></div>' +
         '<p style="color:var(--text-secondary);font-size:0.9rem;">' + (p.cliente_nombre || 'Sin cliente') + (p.descripcion ? ' — ' + p.descripcion : '') + '</p>' +
-        '<table class="tabla-generica" style="margin-top:0.5rem;"><thead><tr><th>Requisito</th><th>Entidad</th><th>Tipo doc</th><th>Obligatorio</th></tr></thead><tbody>' + itemsHtml + '</tbody></table></div>';
+        secHtml + '</div>';
     }).join('');
   });
 }
@@ -261,6 +276,9 @@ function caeCargarTareas() {
 // ── Config CAE ──
 
 function caeCargarConfig() {
+  // Cargar tipos de documento personalizados
+  _caeCargarDocTypesCustom();
+
   _caeFetch("/api/cae/sync/carpetas").then(function (d) {
     var div = document.getElementById("cae-carpetas-lista");
     if (!div) return;
@@ -361,20 +379,103 @@ function _caeAddPlantillaItemRow(container, item, idx) {
     row.style.cssText = "display:flex;gap:0.5rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap;";
     row.dataset.idx = idx;
 
-    var dtOptions = (c.doc_types || []).map(function (t) {
-      return '<option value="' + t + '"' + (t === (item.doc_type || '') ? ' selected' : '') + '>' + t + '</option>';
-    }).join('');
+    var secMap = c.doc_types_by_section || {};
+    var currentEntity = item.target_entity_type || "EMPRESA";
+
+    function buildDocTypeOptions(entity) {
+      var types = secMap[entity] || c.doc_types || [];
+      return types.map(function (t) {
+        return '<option value="' + t + '"' + (t === (item.doc_type || '') ? ' selected' : '') + '>' + t + '</option>';
+      }).join('') + '<option value="OTRO"' + ((item.doc_type || '') === 'OTRO' ? ' selected' : '') + '>OTRO</option>';
+    }
 
     row.innerHTML =
-      '<input type="text" placeholder="Nombre" value="' + (item.nombre || '') + '" class="cae-pi-nombre" style="flex:2;min-width:150px;" />' +
-      '<select class="cae-pi-entity-type" style="width:auto;"><option value="EMPRESA"' + ((item.target_entity_type || '') === 'EMPRESA' ? ' selected' : '') + '>Empresa</option><option value="OPERARIO"' + ((item.target_entity_type || '') === 'OPERARIO' ? ' selected' : '') + '>Operario</option><option value="MAQUINA"' + ((item.target_entity_type || '') === 'MAQUINA' ? ' selected' : '') + '>Maquina</option><option value="VEHICULO"' + ((item.target_entity_type || '') === 'VEHICULO' ? ' selected' : '') + '>Vehiculo</option></select>' +
-      '<select class="cae-pi-doc-type" style="width:auto;">' + dtOptions + '</select>' +
+      '<input type="text" placeholder="Nombre requisito" value="' + (item.nombre || '') + '" class="cae-pi-nombre" style="flex:2;min-width:150px;" />' +
+      '<select class="cae-pi-entity-type" style="width:auto;"><option value="EMPRESA"' + (currentEntity === 'EMPRESA' ? ' selected' : '') + '>Empresa</option><option value="OPERARIO"' + (currentEntity === 'OPERARIO' ? ' selected' : '') + '>Trabajador</option><option value="MAQUINA"' + (currentEntity === 'MAQUINA' ? ' selected' : '') + '>Maquinaria</option><option value="VEHICULO"' + (currentEntity === 'VEHICULO' ? ' selected' : '') + '>Vehículo</option></select>' +
+      '<select class="cae-pi-doc-type" style="width:auto;">' + buildDocTypeOptions(currentEntity) + '</select>' +
       '<label style="font-size:0.85rem;"><input type="checkbox" class="cae-pi-mandatory"' + (item.is_mandatory !== 0 ? ' checked' : '') + ' /> Oblig.</label>' +
       '<button type="button" style="border:none;background:none;color:#dc3545;cursor:pointer;font-size:1.2rem;" onclick="this.parentElement.remove()">&times;</button>';
+
+    // Al cambiar entity_type, actualizar opciones de doc_type
+    var entitySelect = row.querySelector(".cae-pi-entity-type");
+    var docSelect = row.querySelector(".cae-pi-doc-type");
+    entitySelect.addEventListener("change", function () {
+      docSelect.innerHTML = buildDocTypeOptions(this.value);
+    });
 
     container.appendChild(row);
   });
 }
+
+// ── Tipos de documento personalizados ──
+
+function _caeCargarDocTypesCustom() {
+  _caeLoadConstantes().then(function (c) {
+    var div = document.getElementById("cae-doc-types-lista");
+    if (!div) return;
+    var secMap = c.doc_types_by_section || {};
+    var custom = c.doc_types_custom || [];
+    var secLabels = { EMPRESA: "Empresa", OPERARIO: "Trabajador", MAQUINA: "Maquinaria", VEHICULO: "Vehículo" };
+    var secColors = { EMPRESA: "#2563eb", OPERARIO: "#059669", MAQUINA: "#d97706", VEHICULO: "#7c3aed" };
+
+    var html = "";
+    ["EMPRESA", "OPERARIO", "MAQUINA", "VEHICULO"].forEach(function (sec) {
+      var builtIn = (secMap[sec] || []);
+      var customInSec = custom.filter(function (ct) { return ct.section === sec; });
+      html += '<div style="margin-bottom:0.75rem;"><h4 style="font-size:0.82rem;color:' + secColors[sec] + ';margin:0 0 0.3rem;">' + secLabels[sec] + ' (' + (builtIn.length) + ' tipos)</h4>';
+      html += '<div style="display:flex;flex-wrap:wrap;gap:0.3rem;">';
+      builtIn.forEach(function (t) {
+        html += '<span style="display:inline-block;padding:2px 8px;background:var(--bg-secondary,#f0f0f0);border-radius:4px;font-size:0.78rem;font-family:monospace;">' + t + '</span>';
+      });
+      html += '</div>';
+      if (customInSec.length > 0) {
+        html += '<div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-top:0.3rem;">';
+        customInSec.forEach(function (ct) {
+          html += '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;background:#dbeafe;border-radius:4px;font-size:0.78rem;font-family:monospace;">' +
+            ct.code + ' <button onclick="_caeEliminarDocTypeCustom(' + ct.id + ')" style="border:none;background:none;color:#dc3545;cursor:pointer;font-size:0.9rem;line-height:1;">&times;</button></span>';
+        });
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+    div.innerHTML = html;
+  });
+}
+
+function _caeAgregarDocTypeCustom() {
+  var code = document.getElementById("cae-dt-code").value.trim().toUpperCase().replace(/\s+/g, "_");
+  var label = document.getElementById("cae-dt-label").value.trim();
+  var section = document.getElementById("cae-dt-section").value;
+  if (!code || !label) { alert("Código y nombre son obligatorios"); return; }
+
+  fetch("/api/cae/doc-types-custom", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code: code, label: label, section: section })
+  })
+    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, data: j }; }); })
+    .then(function (res) {
+      if (!res.ok) { alert(res.data.error || "Error"); return; }
+      document.getElementById("cae-dt-code").value = "";
+      document.getElementById("cae-dt-label").value = "";
+      // Invalidar cache de constantes para que se recarguen
+      _caeConstantes = null;
+      _caeCargarDocTypesCustom();
+      mostrarToast("Tipo '" + code + "' añadido", "success");
+    });
+}
+
+function _caeEliminarDocTypeCustom(dtid) {
+  if (!confirm("¿Eliminar este tipo de documento personalizado?")) return;
+  fetch("/api/cae/doc-types-custom/" + dtid, { method: "DELETE" })
+    .then(function () {
+      _caeConstantes = null;
+      _caeCargarDocTypesCustom();
+      mostrarToast("Tipo eliminado", "success");
+    });
+}
+
+window._caeEliminarDocTypeCustom = _caeEliminarDocTypeCustom;
 
 // ── Folder explorer ──
 
@@ -576,6 +677,10 @@ document.addEventListener("DOMContentLoaded", function () {
         caeVerExpediente(d.id);
       });
   });
+
+  // Doc types custom
+  var btnAddDocType = document.getElementById("btn-cae-add-doc-type");
+  if (btnAddDocType) btnAddDocType.addEventListener("click", _caeAgregarDocTypeCustom);
 
   // Folder explorer
   var btnAddCarpeta = document.getElementById("btn-cae-add-carpeta");

@@ -765,9 +765,18 @@ def requiere_rol(*roles_permitidos):
 
 @app.before_request
 def _require_login():
-  """Protege todas las rutas excepto login y archivos estáticos del login."""
+  """Protege todas las rutas excepto login, estáticos y acceso operario por token."""
   rutas_publicas = ("usuarios.login_page", "usuarios.login_post", "static", "api_general.api_health")
   if request.endpoint in rutas_publicas:
+    return
+  # Rutas públicas de operario via token (sin login)
+  if request.path.startswith("/m/") or request.path.startswith("/api/m/"):
+    return
+  # Rutas públicas de mantenimiento por tarea via token (sin login)
+  if request.path.startswith("/w/") or request.path.startswith("/api/w/"):
+    return
+  # Servir fotos de maquinaria sin auth (protegidas por filename opaco)
+  if request.path.startswith("/fotos_maquinaria/"):
     return
   if not current_user.is_authenticated:
     if request.path.startswith("/api/"):
@@ -780,7 +789,16 @@ def _log_api_request(response):
   if request.path.startswith("/api/"):
     user = current_user.username if current_user.is_authenticated else "anon"
     logger.info("%s %s -> %s [%s]", request.method, request.path, response.status_code, user)
+  # Seguridad: rutas /w/ y /m/ no indexables
+  if request.path.startswith("/w/") or request.path.startswith("/m/"):
+    response.headers["X-Robots-Tag"] = "noindex, nofollow"
   return response
+
+
+@app.route("/robots.txt")
+def robots_txt():
+  return Response("User-agent: *\nDisallow: /m/\nDisallow: /w/\nDisallow: /api/\n",
+                  mimetype="text/plain")
 
 
 # Auth + usuarios endpoints → routes/usuarios.py

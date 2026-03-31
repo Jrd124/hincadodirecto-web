@@ -73,7 +73,12 @@ def api_cae_crear_plantilla():
 @cae_bp.put("/api/cae/plantillas/<int:pid>")
 def api_cae_actualizar_plantilla(pid):
   data = request.get_json(silent=True) or {}
-  return jsonify(cae_db.actualizar_plantilla(pid, data))
+  result = cae_db.actualizar_plantilla(pid, data)
+  # Si el frontend envía items, reescribirlos
+  if "items" in data:
+    cae_db.reemplazar_plantilla_items(pid, data["items"])
+    result = cae_db.obtener_plantilla(pid)
+  return jsonify(result)
 
 
 @cae_bp.delete("/api/cae/plantillas/<int:pid>")
@@ -268,7 +273,9 @@ def api_cae_estado_proyecto(pid):
 @cae_bp.get("/api/cae/constantes")
 def api_cae_constantes():
   return jsonify({
-      "doc_types": cae_db.DOC_TYPES,
+      "doc_types": cae_db.get_all_doc_types_flat(),
+      "doc_types_by_section": cae_db.get_all_doc_types_by_section(),
+      "doc_types_custom": cae_db.listar_doc_types_custom(),
       "entity_types": cae_db.ENTITY_TYPES,
       "expediente_estados": cae_db.EXPEDIENTE_ESTADOS,
       "resultado_estados": cae_db.RESULTADO_ESTADOS,
@@ -276,3 +283,33 @@ def api_cae_constantes():
       "tarea_prioridades": cae_db.TAREA_PRIORIDADES,
       "tarea_estados": cae_db.TAREA_ESTADOS,
   })
+
+
+@cae_bp.get("/api/cae/doc-types-custom")
+def api_cae_listar_doc_types_custom():
+  return jsonify({"items": cae_db.listar_doc_types_custom()})
+
+
+@cae_bp.post("/api/cae/doc-types-custom")
+def api_cae_crear_doc_type_custom():
+  data = request.get_json(silent=True) or {}
+  code = (data.get("code") or "").strip().upper()
+  label = (data.get("label") or "").strip()
+  section = (data.get("section") or "").strip().upper()
+  if not code or not label or section not in ("EMPRESA", "OPERARIO", "MAQUINA", "VEHICULO"):
+    return jsonify({"error": "code, label y section (EMPRESA/OPERARIO/MAQUINA/VEHICULO) son obligatorios"}), 400
+  try:
+    item = cae_db.crear_doc_type_custom(code, label, section, data.get("has_expiry", True))
+    return jsonify(item), 201
+  except Exception as e:
+    if "UNIQUE" in str(e):
+      return jsonify({"error": f"Ya existe un tipo con código '{code}'"}), 400
+    raise
+
+
+@cae_bp.delete("/api/cae/doc-types-custom/<int:dtid>")
+def api_cae_eliminar_doc_type_custom(dtid):
+  ok = cae_db.eliminar_doc_type_custom(dtid)
+  if not ok:
+    return jsonify({"error": "No encontrado"}), 404
+  return jsonify({"ok": True})
