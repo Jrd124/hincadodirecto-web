@@ -126,6 +126,13 @@
             <a href="#" class="sidebar-child" id="nav-presupuestos-plantillas">Plantillas T&C</a>
           </div>
         </div>
+        <!-- Impuestos -->
+        <div class="sidebar-group">
+          <a href="#" class="sidebar-item" id="nav-impuestos-modulo" data-group="impuestos">
+            <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 14V4h12v10H2z"/><path d="M2 4l6-3 6 3"/><path d="M5 7v4M8 7v4M11 7v4"/></svg>
+            <span class="sidebar-label">Impuestos</span>
+          </a>
+        </div>
         <!-- CRM -->
         <div class="sidebar-group">
           <a href="#" class="sidebar-item sidebar-parent" id="nav-crm-modulo" data-group="crm">
@@ -1399,6 +1406,33 @@
         <div class="card card-placeholder">
           <h1>Onboarding</h1>
           <p class="subtitle subtitle-lg">Próximamente</p>
+        </div>
+      </div>
+
+      <!-- ═══ IMPUESTOS ═══════════════════════════════════════════════════ -->
+      <div id="panel-impuestos-inicio" class="content-panel">
+        <div style="max-width:1100px;margin:0 auto;padding:24px 20px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <div>
+              <h1 style="font-size:1.6rem;margin-bottom:2px;">Impuestos</h1>
+              <p style="color:var(--color-text-secondary);font-size:14px;margin:0;">Seguimiento de obligaciones fiscales y calendario de presentacion</p>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;">
+              <select id="imp-filtro-sociedad" onchange="cargarImpuestos()" style="padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;">
+                <option value="">Todas las sociedades</option>
+                <option value="hincado_directo">Hincado Directo</option>
+                <option value="global_nutria">Global Nutria</option>
+                <option value="nutria_capital">Nutria Capital</option>
+                <option value="summitbridge_capital">Summitbridge Capital</option>
+              </select>
+              <select id="imp-filtro-ano" onchange="cargarImpuestos()" style="padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;">
+                <option value="2025">2025</option>
+                <option value="2026" selected>2026</option>
+                <option value="2027">2027</option>
+              </select>
+            </div>
+          </div>
+          <div id="impuestos-dashboard-content"></div>
         </div>
       </div>
 
@@ -3070,6 +3104,7 @@
     <script src="/static/js/modules/transporte.js?v=27"></script>
     <script src="/static/js/modules/cae.js?v=28"></script>
     <script src="/static/js/modules/rrhh.js?v=28"></script>
+    <script src="/static/js/modules/impuestos.js?v=1"></script>
     <script src="/static/js/app.js?v=29"></script>
   </body>
 </html>

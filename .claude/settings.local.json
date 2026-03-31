@@ -61,7 +61,9 @@
       "Bash(git checkout:*)",
       "Bash(git merge:*)",
       "Bash(node -e \"require\\(''fs''\\).readFileSync\\(''static/js/modules/proyectos.js'',''utf8''\\)\")",
-      "Bash(node -e \"require\\(''fs''\\).readFileSync\\(''static/js/modules/certificaciones.js'',''utf8''\\)\")"
+      "Bash(node -e \"require\\(''fs''\\).readFileSync\\(''static/js/modules/certificaciones.js'',''utf8''\\)\")",
+      "Bash(node -e \"require\\(''fs''\\).readFileSync\\(''static/js/modules/impuestos.js'',''utf8''\\)\")",
+      "Bash(node -e \"require\\(''fs''\\).readFileSync\\(''static/js/app.js'',''utf8''\\)\")"
     ]
   }
 }

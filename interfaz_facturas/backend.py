@@ -4898,6 +4898,12 @@ app.register_blueprint(cae_routes_bp)
 app.register_blueprint(vehiculos_routes_bp)
 app.register_blueprint(empleados_routes_bp)
 
+from routes.impuestos import impuestos_bp as impuestos_routes_bp
+app.register_blueprint(impuestos_routes_bp)
+
+from core import impuestos_db
+impuestos_db.init_impuestos_db()
+
 logger.info("ERP arrancado — blueprints registrados")
 
 

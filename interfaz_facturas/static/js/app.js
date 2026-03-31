@@ -78,6 +78,12 @@ const MODULOS = {
     subNavLinks: { inicio: "nav-crm-inicio", empresas: "nav-crm-empresas", contactos: "nav-crm-contactos", oportunidades: "nav-crm-oportunidades", interacciones: "nav-crm-interacciones" },
     defecto: "inicio",
   },
+  impuestos: {
+    linkId: "nav-impuestos-modulo",
+    paneles: { inicio: "panel-impuestos-inicio" },
+    subNavLinks: {},
+    defecto: "inicio",
+  },
   presupuestos: {
     linkId: "nav-presupuestos-modulo",
     submenuId: "submenu-presupuestos",
@@ -767,6 +773,13 @@ var navUsuarios = document.getElementById("nav-usuarios-modulo");
 if (navUsuarios) navUsuarios.addEventListener("click", function (e) {
   e.preventDefault();
   activarModulo("usuarios");
+});
+
+var navImpuestos = document.getElementById("nav-impuestos-modulo");
+if (navImpuestos) navImpuestos.addEventListener("click", function (e) {
+  e.preventDefault();
+  activarModulo("impuestos");
+  if (typeof cargarImpuestos === "function") cargarImpuestos();
 });
 
 var navMaquinaria = document.getElementById("nav-maquinaria-modulo");
