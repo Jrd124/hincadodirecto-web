@@ -238,8 +238,8 @@
               '<td style="padding:8px 6px;text-align:right;">' + (pt.combustible_litros || "\u2014") + '</td>' +
               '<td style="padding:8px 6px;font-size:12px;color:' + (pt.incidencias ? 'var(--color-danger)' : 'var(--color-text-secondary)') + ';">' + (pt.incidencias ? _esc(pt.incidencias).substring(0, 50) : "\u2014") + '</td>' +
               '<td style="padding:8px 6px;text-align:center;white-space:nowrap;">' +
-                '<button onclick="parteEditar(' + pt.id + ',' + p.id + ')" class="btn-outline" style="font-size:11px;padding:2px 8px;">Editar</button> ' +
-                '<button onclick="parteEliminar(' + pt.id + ',' + p.id + ')" class="btn-outline" style="font-size:11px;padding:2px 8px;color:var(--color-danger);border-color:var(--color-danger);">Eliminar</button>' +
+                '<button onclick="parteEditar(' + pt.id + ',' + p.id + ')" style="background:none;border:none;color:var(--color-primary);cursor:pointer;font-size:12px;padding:2px 6px;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">Editar</button>' +
+                '<button onclick="parteEliminar(' + pt.id + ',' + p.id + ')" style="background:none;border:none;color:var(--color-text-secondary);cursor:pointer;font-size:12px;padding:2px 6px;" onmouseover="this.style.color=\'#DC2626\'" onmouseout="this.style.color=\'var(--color-text-secondary)\'">Eliminar</button>' +
               '</td></tr>';
           }).join("");
           partesHtml = '<div style="height:200px;margin-bottom:12px;"><canvas id="chart-avance-proyecto"></canvas></div>' +
@@ -262,7 +262,7 @@
             '<div class="presup-section-header"><div class="presup-section-number" style="background:#16A34A;">\uD83D\uDCCA</div><div class="presup-section-title">Partes de trabajo</div>' +
             '<div style="margin-left:auto;display:flex;gap:8px;align-items:center;">' +
               '<span style="font-size:13px;color:var(--color-text-secondary);">' + (p.partes ? p.partes.length : 0) + ' partes</span>' +
-              '<button class="btn-outline" style="font-size:12px;padding:4px 12px;" onclick="partesProcesarFoto(' + p.id + ')">📷 Procesar foto</button>' +
+              '<button style="padding:5px 14px;font-size:12px;font-weight:500;color:var(--color-primary);background:transparent;border:1px solid var(--color-primary);border-radius:6px;cursor:pointer;transition:all 0.15s;" onmouseover="this.style.background=\'var(--color-primary)\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'var(--color-primary)\'" onclick="partesProcesarFoto(' + p.id + ')">+ Alta parte</button>' +
             '</div></div>' +
             '<div class="presup-section-body" style="border-left-color:#16A34A;">' + partesHtml + '</div></div>';
 
@@ -347,7 +347,7 @@
               '<div class="presup-section-title">Certificaciones</div>' +
               '<div style="margin-left:auto;display:flex;gap:8px;align-items:center;">' +
                 '<span style="font-size:13px;color:var(--color-text-secondary);">' + (p.certificaciones ? p.certificaciones.length : 0) + ' certificaciones</span>' +
-                '<button class="btn-outline" style="font-size:12px;padding:4px 12px;" onclick="certNueva(' + p.id + ')">+ Nueva certificaci\u00f3n</button>' +
+                '<button style="padding:5px 14px;font-size:12px;font-weight:500;color:var(--color-primary);background:transparent;border:1px solid var(--color-primary);border-radius:6px;cursor:pointer;transition:all 0.15s;" onmouseover="this.style.background=\'var(--color-primary)\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'var(--color-primary)\'" onclick="certNueva(' + p.id + ')">+ Nueva certificaci\u00f3n</button>' +
               '</div>' +
             '</div>' +
             '<div class="presup-section-body" style="border-left-color:#7C3AED;">' + certCards + '</div>' +
@@ -415,7 +415,7 @@
                 '<span style="font-size:14px;">\uD83D\uDD27</span>' +
                 '<span style="font-size:14px;font-weight:600;">Recursos asignados</span>' +
               '</div>' +
-              '<button class="btn-outline" style="font-size:12px;padding:4px 12px;" onclick="proyectoAddRecurso(' + p.id + ')">+ Asignar recurso</button>' +
+              '<button style="padding:5px 14px;font-size:12px;font-weight:500;color:var(--color-primary);background:transparent;border:1px solid var(--color-primary);border-radius:6px;cursor:pointer;transition:all 0.15s;" onmouseover="this.style.background=\'var(--color-primary)\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'var(--color-primary)\'" onclick="proyectoAddRecurso(' + p.id + ')">+ Asignar recurso</button>' +
             '</div>' +
             '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;min-height:80px;">' +
               '<div style="padding:12px 16px;border-right:1px solid var(--color-border);">' +
@@ -963,7 +963,7 @@
         // Tabs
         '<div style="display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid var(--color-border);">' +
           '<button id="tab-parte-manual" onclick="parteTabSwitch(\'manual\')" style="padding:10px 20px;font-size:14px;font-weight:500;border:none;background:none;cursor:pointer;margin-bottom:-2px;border-bottom:2px solid #2563EB;color:#2563EB;">\uD83D\uDCDD Manual</button>' +
-          '<button id="tab-parte-foto" onclick="parteTabSwitch(\'foto\')" style="padding:10px 20px;font-size:14px;font-weight:500;border:none;background:none;cursor:pointer;margin-bottom:-2px;border-bottom:2px solid transparent;color:var(--color-text-secondary);">\uD83D\uDCF7 Procesar foto</button>' +
+          '<button id="tab-parte-foto" onclick="parteTabSwitch(\'foto\')" style="padding:10px 20px;font-size:14px;font-weight:500;border:none;background:none;cursor:pointer;margin-bottom:-2px;border-bottom:2px solid transparent;color:var(--color-text-secondary);">\uD83D\uDCF7 Desde foto</button>' +
         '</div>' +
 
         // Tab Manual
