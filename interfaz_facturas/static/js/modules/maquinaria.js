@@ -149,6 +149,7 @@ window.maqDetalle = function (maqId) {
           '<div style="display:flex;gap:8px;">' +
             '<button class="btn-primary" style="width:auto;padding:8px 16px;" onclick="maqNuevoCheck(' + m.id + ')">\uD83D\uDCCB Check semanal</button>' +
             '<button class="btn-outline" style="padding:8px 16px;" onclick="maqNuevaIncidencia(' + m.id + ')">\u26A0\uFE0F Incidencia</button>' +
+            '<button class="btn-outline" style="padding:8px 16px;" onclick="maqTokensModal(' + m.id + ')">\uD83D\uDD11 Tokens</button>' +
             '<button class="btn-outline" style="padding:8px 16px;" onclick="maqEditarModal(' + m.id + ')">Editar</button>' +
           '</div>' +
         '</div>' +
@@ -332,49 +333,52 @@ window.maqCerrarIncidencia = function (incId, maqId) {
 // ── Editar máquina ──
 
 window.maqEditarModal = function (maqId) {
-  fetch("/api/maquinaria/maquinas/" + maqId)
-    .then(function (r) { return r.json(); })
-    .then(function (m) {
-      fetch("/api/proyectos")
-        .then(function (r) { return r.json(); })
-        .then(function (pData) {
-          var proyectos = pData.proyectos || [];
-          var proyOpts = '<option value="">Sin proyecto</option>' +
-            proyectos.map(function (p) {
-              return '<option value="' + p.id + '"' + (p.id === m.proyecto_id ? ' selected' : '') + '>' + _esc(p.nombre) + '</option>';
-            }).join("");
+  Promise.all([
+    fetch("/api/maquinaria/maquinas/" + maqId).then(function (r) { return r.json(); }),
+    fetch("/api/proyectos").then(function (r) { return r.json(); }).catch(function () { return { proyectos: [] }; })
+  ]).then(function (results) {
+    var m = results[0];
+    var proyectos = results[1].proyectos || [];
+    if (!m || m.error) { mostrarToast("Error al cargar m\u00e1quina", "error"); return; }
 
-          var modal = document.createElement("div");
-          modal.className = "modal-overlay visible";
-          modal.id = "modal-maq-editar";
-          modal.onclick = function (e) { if (e.target === modal) modal.remove(); };
-          modal.innerHTML =
-            '<div class="modal-content" style="max-width:500px;">' +
-              '<h2 style="margin:0 0 16px;">Editar ' + _esc(m.nombre) + '</h2>' +
-              '<div style="display:grid;gap:12px;">' +
-                '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
-                  '<div><label class="form-label">Nombre</label><input type="text" id="maq-ed-nombre" class="form-input" value="' + _esc(m.nombre) + '"></div>' +
-                  '<div><label class="form-label">Modelo</label><input type="text" id="maq-ed-modelo" class="form-input" value="' + _esc(m.modelo) + '"></div></div>' +
-                '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
-                  '<div><label class="form-label">N\u00ba Serie</label><input type="text" id="maq-ed-serie" class="form-input" value="' + _esc(m.numero_serie || '') + '"></div>' +
-                  '<div><label class="form-label">Hor\u00f3metro actual</label><input type="number" id="maq-ed-horometro" class="form-input" step="any" value="' + (m.horometro_actual || 0) + '"></div></div>' +
-                '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
-                  '<div><label class="form-label">Estado</label><select id="maq-ed-estado" class="form-input">' +
-                    '<option value="disponible"' + (m.estado === 'disponible' ? ' selected' : '') + '>Disponible</option>' +
-                    '<option value="en_proyecto"' + (m.estado === 'en_proyecto' ? ' selected' : '') + '>En proyecto</option>' +
-                    '<option value="en_taller"' + (m.estado === 'en_taller' ? ' selected' : '') + '>En taller</option>' +
-                    '<option value="baja"' + (m.estado === 'baja' ? ' selected' : '') + '>De baja</option></select></div>' +
-                  '<div><label class="form-label">Proyecto</label><select id="maq-ed-proyecto" class="form-input">' + proyOpts + '</select></div></div>' +
-                '<div><label class="form-label">Ubicaci\u00f3n</label><input type="text" id="maq-ed-ubicacion" class="form-input" value="' + _esc(m.ubicacion || '') + '" placeholder="Ej: Parque PV Cuenca"></div>' +
-                '<div><label class="form-label">Notas</label><textarea id="maq-ed-notas" class="form-input" rows="2">' + _esc(m.notas || '') + '</textarea></div>' +
-              '</div>' +
-              '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">' +
-                '<button class="btn-outline" onclick="document.getElementById(\'modal-maq-editar\').remove()">Cancelar</button>' +
-                '<button class="btn-primary" style="width:auto;padding:8px 20px;" onclick="maqGuardarEdicion(' + maqId + ')">Guardar</button>' +
-              '</div></div>';
-          document.body.appendChild(modal);
-        });
-    });
+    var proyOpts = '<option value="">Sin proyecto</option>' +
+      proyectos.map(function (p) {
+        return '<option value="' + p.id + '"' + (p.id === m.proyecto_id ? ' selected' : '') + '>' + _esc(p.nombre) + '</option>';
+      }).join("");
+
+    var modal = document.createElement("div");
+    modal.className = "modal-overlay visible";
+    modal.id = "modal-maq-editar";
+    modal.onclick = function (e) { if (e.target === modal) modal.remove(); };
+    modal.innerHTML =
+      '<div class="modal-content" style="max-width:500px;">' +
+        '<h2 style="margin:0 0 16px;">Editar ' + _esc(m.nombre) + '</h2>' +
+        '<div style="display:grid;gap:12px;">' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+            '<div><label class="form-label">Nombre</label><input type="text" id="maq-ed-nombre" class="form-input" value="' + _esc(m.nombre) + '"></div>' +
+            '<div><label class="form-label">Modelo</label><input type="text" id="maq-ed-modelo" class="form-input" value="' + _esc(m.modelo) + '"></div></div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+            '<div><label class="form-label">N\u00ba Serie</label><input type="text" id="maq-ed-serie" class="form-input" value="' + _esc(m.numero_serie || '') + '"></div>' +
+            '<div><label class="form-label">Hor\u00f3metro actual</label><input type="number" id="maq-ed-horometro" class="form-input" step="any" value="' + (m.horometro_actual || 0) + '"></div></div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+            '<div><label class="form-label">Estado</label><select id="maq-ed-estado" class="form-input">' +
+              '<option value="disponible"' + (m.estado === 'disponible' ? ' selected' : '') + '>Disponible</option>' +
+              '<option value="en_proyecto"' + (m.estado === 'en_proyecto' ? ' selected' : '') + '>En proyecto</option>' +
+              '<option value="en_taller"' + (m.estado === 'en_taller' ? ' selected' : '') + '>En taller</option>' +
+              '<option value="baja"' + (m.estado === 'baja' ? ' selected' : '') + '>De baja</option></select></div>' +
+            '<div><label class="form-label">Proyecto</label><select id="maq-ed-proyecto" class="form-input">' + proyOpts + '</select></div></div>' +
+          '<div><label class="form-label">Ubicaci\u00f3n</label><input type="text" id="maq-ed-ubicacion" class="form-input" value="' + _esc(m.ubicacion || '') + '" placeholder="Ej: Parque PV Cuenca"></div>' +
+          '<div><label class="form-label">Notas</label><textarea id="maq-ed-notas" class="form-input" rows="2">' + _esc(m.notas || '') + '</textarea></div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">' +
+          '<button class="btn-outline" onclick="document.getElementById(\'modal-maq-editar\').remove()">Cancelar</button>' +
+          '<button class="btn-primary" style="width:auto;padding:8px 20px;" onclick="maqGuardarEdicion(' + maqId + ')">Guardar</button>' +
+        '</div></div>';
+    document.body.appendChild(modal);
+  }).catch(function (err) {
+    console.error("maqEditarModal error:", err);
+    mostrarToast("Error al abrir editor: " + err.message, "error");
+  });
 };
 
 window.maqGuardarEdicion = function (maqId) {
@@ -397,4 +401,206 @@ window.maqGuardarEdicion = function (maqId) {
       maqDetalle(maqId);
     } else { mostrarToast("Error", "error"); }
   });
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  Tokens de acceso operario                                             ██
+// ═══════════════════════════════════════════════════════════════════════════════
+
+window.maqTokensModal = function (maqId) {
+  fetch("/api/maquinaria/tokens?maquina_id=" + maqId)
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var tokens = data.tokens || [];
+      var baseUrl = window.location.origin + "/m/";
+
+      var tokenRows = tokens.length
+        ? tokens.map(function (t) {
+            var exp = t.expires_at ? t.expires_at.substring(0, 10) : "—";
+            var activo = t.activo ? '<span style="color:#16A34A;font-weight:600;">Activo</span>' : '<span style="color:#DC2626;">Inactivo</span>';
+            var url = baseUrl + t.token;
+            return '<div style="border:1px solid var(--color-border);border-radius:var(--radius-md);padding:12px;margin-bottom:8px;">' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+                '<div>' +
+                  '<div style="font-weight:600;font-size:14px;">' + _esc(t.operario_nombre || "Sin nombre") + '</div>' +
+                  '<div style="font-size:12px;color:var(--color-text-secondary);">Expira: ' + exp + ' &middot; ' + activo + '</div>' +
+                '</div>' +
+                '<div style="display:flex;gap:6px;">' +
+                  '<button class="btn-outline" style="font-size:11px;padding:4px 10px;" onclick="maqCopiarToken(\'' + t.token + '\')">Copiar link</button>' +
+                  '<button class="btn-outline" style="font-size:11px;padding:4px 10px;" onclick="maqQrToken(\'' + t.token + '\',\'' + _esc(t.operario_nombre || "Operario") + '\')">QR</button>' +
+                  (t.activo
+                    ? '<button class="btn-outline" style="font-size:11px;padding:4px 10px;color:#DC2626;" onclick="maqDesactivarToken(' + t.id + ',' + maqId + ')">Desactivar</button>'
+                    : '<button class="btn-outline" style="font-size:11px;padding:4px 10px;color:#16A34A;" onclick="maqReactivarToken(' + t.id + ',' + maqId + ')">Reactivar</button>'
+                  ) +
+                '</div>' +
+              '</div>' +
+              '<div style="margin-top:6px;">' +
+                '<input type="text" readonly value="' + url + '" style="width:100%;font-size:11px;padding:4px 8px;border:1px solid var(--color-border);border-radius:4px;background:#f8f9fa;color:var(--color-text-secondary);" onclick="this.select()">' +
+              '</div>' +
+            '</div>';
+          }).join("")
+        : '<p style="text-align:center;color:var(--color-text-secondary);padding:20px;">Sin tokens creados para esta m\u00e1quina.</p>';
+
+      var modal = document.createElement("div");
+      modal.className = "modal-overlay visible";
+      modal.id = "modal-maq-tokens";
+      modal.onclick = function (e) { if (e.target === modal) modal.remove(); };
+      modal.innerHTML =
+        '<div class="modal-content" style="max-width:600px;">' +
+          '<h2 style="margin:0 0 16px;">Tokens de acceso operario</h2>' +
+          '<p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px;">Cada token da acceso a un operario para hacer checks y reportar incidencias desde su m\u00f3vil, sin necesidad de login.</p>' +
+          '<div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;margin-bottom:16px;align-items:end;">' +
+            '<div><label class="form-label">Nombre del operario</label><input type="text" id="tok-nombre" class="form-input" placeholder="Ej: Juan P\u00e9rez"></div>' +
+            '<div><label class="form-label">Validez (d\u00edas)</label><input type="number" id="tok-dias" class="form-input" value="90" style="width:80px;"></div>' +
+            '<button class="btn-primary" style="width:auto;padding:8px 16px;height:38px;" onclick="maqCrearToken(' + maqId + ')">Crear token</button>' +
+          '</div>' +
+          '<div id="tokens-lista">' + tokenRows + '</div>' +
+          '<div style="display:flex;justify-content:flex-end;margin-top:12px;">' +
+            '<button class="btn-outline" onclick="document.getElementById(\'modal-maq-tokens\').remove()">Cerrar</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(modal);
+    });
+};
+
+window.maqCrearToken = function (maqId) {
+  var nombre = (document.getElementById("tok-nombre") || {}).value || "";
+  var dias = parseInt((document.getElementById("tok-dias") || {}).value) || 90;
+  fetch("/api/maquinaria/tokens", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ maquina_id: maqId, operario_nombre: nombre, dias_validez: dias })
+  }).then(function (r) {
+    if (r.ok) {
+      var m = document.getElementById("modal-maq-tokens");
+      if (m) m.remove();
+      mostrarToast("Token creado", "success");
+      maqTokensModal(maqId);
+    } else { mostrarToast("Error al crear token", "error"); }
+  });
+};
+
+window.maqCopiarToken = function (token) {
+  var url = window.location.origin + "/m/" + token;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(function () {
+      mostrarToast("Link copiado al portapapeles", "success");
+    });
+  } else {
+    prompt("Copia este enlace:", url);
+  }
+};
+
+window.maqQrToken = function (token, operario) {
+  // Genera QR usando API pública de qrserver.com (alternativa: librería local)
+  var url = encodeURIComponent(window.location.origin + "/m/" + token);
+  var qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" + url;
+
+  var modal = document.createElement("div");
+  modal.className = "modal-overlay visible";
+  modal.id = "modal-maq-qr";
+  modal.onclick = function (e) { if (e.target === modal) modal.remove(); };
+  modal.innerHTML =
+    '<div class="modal-content" style="max-width:380px;text-align:center;">' +
+      '<h2 style="margin:0 0 4px;">QR de acceso</h2>' +
+      '<p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:16px;">' + _esc(operario) + '</p>' +
+      '<img src="' + qrUrl + '" alt="QR Code" style="width:250px;height:250px;border:1px solid var(--color-border);border-radius:8px;">' +
+      '<p style="font-size:12px;color:var(--color-text-secondary);margin-top:12px;">El operario escanea este c\u00f3digo con la c\u00e1mara del m\u00f3vil para acceder directamente.</p>' +
+      '<div style="display:flex;gap:8px;justify-content:center;margin-top:16px;">' +
+        '<button class="btn-outline" onclick="window.open(\'' + qrUrl + '\',\'_blank\')">Descargar QR</button>' +
+        '<button class="btn-outline" onclick="window.print()">Imprimir</button>' +
+        '<button class="btn-outline" onclick="document.getElementById(\'modal-maq-qr\').remove()">Cerrar</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(modal);
+};
+
+window.maqDesactivarToken = function (tokenId, maqId) {
+  if (!confirm("¿Desactivar este token? El operario perder\u00e1 acceso.")) return;
+  fetch("/api/maquinaria/tokens/" + tokenId, { method: "DELETE" })
+    .then(function () {
+      var m = document.getElementById("modal-maq-tokens");
+      if (m) m.remove();
+      mostrarToast("Token desactivado", "success");
+      maqTokensModal(maqId);
+    });
+};
+
+window.maqReactivarToken = function (tokenId, maqId) {
+  fetch("/api/maquinaria/tokens/" + tokenId + "/reactivar", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dias_validez: 90 })
+  }).then(function () {
+    var m = document.getElementById("modal-maq-tokens");
+    if (m) m.remove();
+    mostrarToast("Token reactivado (90 d\u00edas)", "success");
+    maqTokensModal(maqId);
+  });
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  Dashboard de mantenimiento                                            ██
+// ═══════════════════════════════════════════════════════════════════════════════
+
+window.cargarDashboardMantenimiento = function () {
+  var container = document.getElementById("maquinaria-content");
+  if (!container) return;
+
+  fetch("/api/maquinaria/dashboard")
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      function _kpi(label, n, color, icon) {
+        return '<div style="background:var(--color-white);border:1px solid var(--color-border);border-left:3px solid ' + color + ';border-radius:var(--radius-md);padding:12px 16px;">' +
+          '<div style="font-size:10px;color:var(--color-text-secondary);text-transform:uppercase;">' + (icon || '') + ' ' + label + '</div>' +
+          '<div style="font-size:22px;font-weight:700;color:' + color + ';">' + n + '</div></div>';
+      }
+
+      // Revisiones pendientes detalle
+      var revHtml = "";
+      if (d.maquinas_con_revision_pendiente && d.maquinas_con_revision_pendiente.length) {
+        revHtml = d.maquinas_con_revision_pendiente.map(function (m) {
+          var badges = m.revisiones.map(function (r) {
+            var urg = r.urgente;
+            return '<span style="padding:3px 8px;border-radius:99px;font-size:11px;font-weight:500;' +
+              'background:' + (urg ? '#DC262615' : '#CA8A0415') + ';color:' + (urg ? '#DC2626' : '#CA8A04') + ';">' +
+              r.tipo + (urg ? ' (x' + r.veces_pendiente + ')' : '') + '</span>';
+          }).join(" ");
+          return '<div style="padding:10px 12px;border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;align-items:center;">' +
+            '<span style="font-weight:600;font-size:14px;cursor:pointer;color:var(--color-primary);" onclick="maqDetalle(' + m.maquina_id + ')">' + _esc(m.maquina_nombre) + '</span>' +
+            '<div style="display:flex;gap:4px;flex-wrap:wrap;">' + badges + '</div></div>';
+        }).join("");
+      } else {
+        revHtml = '<p style="text-align:center;color:#16A34A;padding:16px;">Todas las revisiones al d\u00eda</p>';
+      }
+
+      container.innerHTML =
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
+          '<div><h1 style="margin:0;font-size:22px;">Dashboard Mantenimiento</h1>' +
+            '<p style="margin:4px 0 0;font-size:14px;color:var(--color-text-secondary);">Visi\u00f3n general del estado de maquinaria</p></div>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button class="btn-outline" style="padding:8px 16px;" onclick="cargarMaquinaria()">Ver m\u00e1quinas</button>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;">' +
+          _kpi("M\u00e1quinas", d.total_maquinas, "#2563EB") +
+          _kpi("En taller", d.maquinas_en_taller, "#CA8A04") +
+          _kpi("Incidencias", d.incidencias_abiertas, d.incidencias_abiertas > 0 ? "#DC2626" : "#16A34A") +
+          _kpi("Checks semana", d.checks_esta_semana, "#16A34A") +
+          _kpi("Tokens activos", d.tokens_activos, "#7C3AED") +
+        '</div>' +
+        (d.incidencias_seguridad > 0
+          ? '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:var(--radius-md);padding:12px 16px;margin-bottom:16px;color:#DC2626;font-weight:600;">' +
+              '\u26A0\uFE0F ' + d.incidencias_seguridad + ' incidencia(s) de SEGURIDAD abierta(s) — requieren atenci\u00f3n inmediata</div>'
+          : '') +
+        '<div style="border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;">' +
+          '<div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);font-size:14px;font-weight:600;">' +
+            'Revisiones pendientes (' + d.revisiones_pendientes + ')</div>' +
+          '<div>' + revHtml + '</div></div>';
+    })
+    .catch(function (err) {
+      container.innerHTML = '<p style="color:#DC2626;padding:20px;">Error al cargar dashboard: ' + err.message + '</p>';
+    });
 };

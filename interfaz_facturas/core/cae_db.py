@@ -13,42 +13,58 @@ _initialized = False
 
 # ── Constantes del dominio ──────────────────────────────────────────────────
 
-DOC_TYPES = [
-    # Empresa
-    "ESCRITURA_CONSTITUCION",
-    "CIF",
-    "SEGURO_RC",
-    "SEGURO_RC_PATRONAL",
-    "TC1_TC2",
-    "CERTIFICADO_ESTAR_AL_CORRIENTE_SS",
-    "CERTIFICADO_ESTAR_AL_CORRIENTE_HACIENDA",
-    "PREVENCION_RIESGOS",
-    "ADHESION_MANCOMUNADA",
-    # Operarios
-    "DNI",
-    "NIE",
-    "ALTA_SEGURIDAD_SOCIAL",
-    "CONTRATO_TRABAJO",
-    "TC2_OPERARIO",
-    "APTO_MEDICO",
-    "CURSO_PRL_BASICO",
-    "CURSO_PRL_ESPECIFICO",
-    "FORMACION_ESPECIFICA",
-    "CARNET_CONDUCIR",
-    # Maquinas
-    "FICHA_TECNICA",
-    "SEGURO_MAQUINA",
-    "CERTIFICADO_CE",
-    "MANUAL_INSTRUCCIONES",
-    "INSPECCION_PERIODICA",
-    "PLAN_MANTENIMIENTO",
-    # Vehiculos
-    "PERMISO_CIRCULACION",
-    "ITV",
-    "SEGURO_VEHICULO",
-    # Generico
-    "OTRO",
-]
+# Tipos de documento organizados por sección / entity_type
+DOC_TYPES_BY_SECTION = {
+    "EMPRESA": [
+        "ESCRITURA_CONSTITUCION",
+        "CIF",
+        "ITA",             # Informe Trabajadores en Alta
+        "RNT",             # Relación Nominal de Trabajadores
+        "RLC",             # Recibo de Liquidación de Cotizaciones
+        "SEGURO_RC",
+        "SEGURO_RC_PATRONAL",
+        "TC1_TC2",
+        "CERTIFICADO_ESTAR_AL_CORRIENTE_SS",
+        "CERTIFICADO_ESTAR_AL_CORRIENTE_HACIENDA",
+        "PREVENCION_RIESGOS",
+        "ADHESION_MANCOMUNADA",
+    ],
+    "OPERARIO": [
+        "DNI",
+        "NIE",
+        "FOTO",
+        "ALTA_SEGURIDAD_SOCIAL",
+        "CONTRATO_TRABAJO",
+        "TC2_OPERARIO",
+        "APTO_MEDICO",
+        "CURSO_PRL_BASICO",
+        "CURSO_PRL_ESPECIFICO",
+        "FORMACION_ESPECIFICA",
+        "CARNET_CONDUCIR",
+        "AUTORIZACION_USO_EQUIPOS",
+    ],
+    "MAQUINA": [
+        "FICHA_TECNICA",
+        "SEGURO_MAQUINA",
+        "CERTIFICADO_CE",
+        "MANUAL_INSTRUCCIONES",
+        "INSPECCION_PERIODICA",
+        "PLAN_MANTENIMIENTO",
+        "NUMERO_SERIE",
+    ],
+    "VEHICULO": [
+        "PERMISO_CIRCULACION",
+        "ITV",
+        "SEGURO_VEHICULO",
+        "MATRICULA",
+    ],
+}
+
+# Lista plana para compatibilidad con código existente
+DOC_TYPES = []
+for _sec in DOC_TYPES_BY_SECTION.values():
+    DOC_TYPES.extend(_sec)
+DOC_TYPES.append("OTRO")
 
 ENTITY_TYPES = ["EMPRESA", "OPERARIO", "MAQUINA", "VEHICULO"]
 
@@ -219,7 +235,73 @@ def init_cae_db() -> None:
             )
         """)
 
+        # Tipos de documento personalizados (añadidos por el usuario desde la UI)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS cae_doc_types_custom (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL UNIQUE,
+                label TEXT NOT NULL,
+                section TEXT NOT NULL CHECK(section IN ('EMPRESA','OPERARIO','MAQUINA','VEHICULO')),
+                has_expiry INTEGER DEFAULT 1,
+                created_at TEXT NOT NULL
+            )
+        """)
+
     _initialized = True
+
+
+# ── Tipos de documento personalizados ─────────────────────────────────────
+
+
+def listar_doc_types_custom() -> list:
+    init_cae_db()
+    with _conectar() as conn:
+        rows = conn.execute(
+            "SELECT * FROM cae_doc_types_custom ORDER BY section, label"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def crear_doc_type_custom(code: str, label: str, section: str, has_expiry: bool = True) -> dict:
+    init_cae_db()
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO cae_doc_types_custom (code, label, section, has_expiry, created_at) VALUES (?,?,?,?,?)",
+            [code.upper(), label, section, int(has_expiry), _now()],
+        )
+        row = conn.execute(
+            "SELECT * FROM cae_doc_types_custom WHERE code = ?", [code.upper()]
+        ).fetchone()
+    return dict(row)
+
+
+def eliminar_doc_type_custom(dtid: int) -> bool:
+    init_cae_db()
+    with _conectar() as conn:
+        cur = conn.execute("DELETE FROM cae_doc_types_custom WHERE id = ?", [dtid])
+    return cur.rowcount > 0
+
+
+def get_all_doc_types_by_section() -> dict:
+    """Devuelve DOC_TYPES_BY_SECTION + tipos personalizados fusionados."""
+    custom = listar_doc_types_custom()
+    result = {k: list(v) for k, v in DOC_TYPES_BY_SECTION.items()}
+    for c in custom:
+        sec = c["section"]
+        if sec in result and c["code"] not in result[sec]:
+            result[sec].append(c["code"])
+    return result
+
+
+def get_all_doc_types_flat() -> list:
+    """DOC_TYPES + custom types como lista plana."""
+    sections = get_all_doc_types_by_section()
+    flat = []
+    for v in sections.values():
+        flat.extend(v)
+    if "OTRO" not in flat:
+        flat.append("OTRO")
+    return flat
 
 
 # ── CRUD Documentos CAE ─────────────────────────────────────────────────────
@@ -398,6 +480,26 @@ def actualizar_plantilla(pid: int, data: dict) -> dict:
             [data.get("nombre"), data.get("descripcion"), data.get("cliente_empresa_id"), now, pid],
         )
     return obtener_plantilla(pid) or {}
+
+
+def reemplazar_plantilla_items(pid: int, items: list) -> None:
+    """Borra todos los items existentes y los recrea desde la lista proporcionada."""
+    init_cae_db()
+    now = _now()
+    with _conectar() as conn:
+        conn.execute("DELETE FROM cae_plantilla_items WHERE plantilla_id = ?", [pid])
+        for i, item in enumerate(items):
+            conn.execute(
+                "INSERT INTO cae_plantilla_items (plantilla_id, nombre, target_entity_type, "
+                "doc_type, has_expiry, expiry_warning_days, is_mandatory, sort_order, notas, created_at, updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                [
+                    pid, item.get("nombre", ""), item.get("target_entity_type", "EMPRESA"),
+                    item.get("doc_type", "OTRO"), item.get("has_expiry", 1),
+                    item.get("expiry_warning_days", 30), item.get("is_mandatory", 1),
+                    item.get("sort_order", i), item.get("notas"), now, now,
+                ],
+            )
 
 
 def eliminar_plantilla(pid: int) -> bool:
