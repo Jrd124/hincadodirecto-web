@@ -217,7 +217,7 @@ def api_finanzas_dashboard():
       )
 
       proyectos = [dict(r) for r in conn.execute("""
-        SELECT p.id, p.nombre, p.estado, p.importe_presupuestado,
+        SELECT p.id, p.nombre, p.codigo, p.estado, p.importe_presupuestado,
                t.nombre_canonico AS cliente
         FROM proyectos p
         LEFT JOIN terceros t ON t.id = p.cliente_tercero_id

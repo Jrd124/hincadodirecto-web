@@ -229,7 +229,7 @@
               if (proys.length) {
                 proySecEl.innerHTML = proys.map(function (pr) {
                   return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--color-border);">' +
-                    '<div><a href="#" onclick="navegarAProyecto(' + pr.id + ');return false;" style="font-size:13px;font-weight:500;color:var(--color-primary);text-decoration:none;">' + _esc(pr.nombre || "") + '</a>' +
+                    '<div><a href="#" onclick="navegarAProyecto(' + pr.id + ');return false;" style="font-size:13px;font-weight:500;color:var(--color-primary);text-decoration:none;">' + (pr.codigo ? '<span style="font-weight:600;">' + _esc(pr.codigo) + '</span> \u00b7 ' : '') + _esc(pr.nombre || "") + '</a>' +
                     '<span style="font-size:12px;color:var(--color-text-secondary);margin-left:6px;">' + _esc(pr.ubicacion_texto || pr.nombre_parque || "") + '</span></div>' +
                     '<div style="display:flex;align-items:center;gap:6px;">' +
                     '<span class="status-badge status-badge--' + _esc(pr.estado || "") + '">' + _esc(pr.estado || "") + '</span></div></div>';

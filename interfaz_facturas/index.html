@@ -782,79 +782,125 @@
 
       <!-- Modal proyecto -->
       <div id="modal-proyecto" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true">
-        <div class="modal-content" style="max-width:700px;">
-          <h2 id="modal-proyecto-titulo">Nuevo proyecto</h2>
+        <div class="modal-content" style="max-width:720px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
+            <h2 id="modal-proyecto-titulo" style="margin:0;font-size:20px;">Nuevo proyecto</h2>
+            <span id="modal-proyecto-codigo-badge" style="display:none;font-size:12px;font-weight:600;color:#2563EB;background:#2563EB10;padding:3px 10px;border-radius:99px;border:1px solid #2563EB30;"></span>
+          </div>
           <form id="form-proyecto" novalidate>
             <input type="hidden" id="proy-edit-id" />
-            <div class="form-group"><label for="proy-nombre">Nombre del proyecto <span class="required">*</span></label><input type="text" id="proy-nombre" required /></div>
-            <div class="form-row">
-              <div class="form-group"><label for="proy-codigo">Codigo</label><input type="text" id="proy-codigo" /></div>
-              <div class="form-group"><label for="proy-cliente">Cliente</label><select id="proy-cliente"><option value="">Seleccionar</option></select></div>
+
+            <!-- Seccion 1: Identificacion -->
+            <div style="border-left:3px solid #2563EB;padding:12px 16px;margin-bottom:16px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">
+              <div style="font-size:14px;font-weight:600;color:#2563EB;margin-bottom:12px;">Identificacion</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                  <label for="proy-codigo" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Codigo</label>
+                  <input type="text" id="proy-codigo" readonly style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:#f3f4f6;color:#6b7280;cursor:not-allowed;" placeholder="Se asignara automaticamente (PRY-2026-XXX)" />
+                </div>
+                <div>
+                  <label for="proy-estado" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Estado</label>
+                  <select id="proy-estado" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"><option value="cotizado">Cotizado</option><option value="vivo">Vivo</option><option value="pausado">Pausado</option><option value="terminado">Terminado</option></select>
+                </div>
+                <div style="grid-column:1/-1;">
+                  <label for="proy-nombre" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Nombre del proyecto <span style="color:#DC2626;">*</span></label>
+                  <input type="text" id="proy-nombre" required style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
+                </div>
+                <div>
+                  <label for="proy-cliente" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Cliente</label>
+                  <select id="proy-cliente" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"><option value="">Seleccionar</option></select>
+                </div>
+                <div>
+                  <label for="proy-tipo" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Tipo trabajo</label>
+                  <select id="proy-tipo" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"><option value="">--</option><option value="hincado">Hincado</option><option value="perforado">Perforado</option><option value="pull_out_test">Pull out test</option><option value="mixto">Mixto</option><option value="otro">Otro</option></select>
+                </div>
+                <div>
+                  <label for="proy-modalidad" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Modalidad facturacion</label>
+                  <select id="proy-modalidad" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"><option value="">--</option><option value="produccion">Produccion</option><option value="administracion">Administracion</option><option value="cerrado">Cerrado</option><option value="mixto">Mixto</option></select>
+                </div>
+                <div>
+                  <label for="proy-parque" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Nombre parque</label>
+                  <input type="text" id="proy-parque" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
+                </div>
+              </div>
             </div>
-            <div class="form-row">
-              <div class="form-group"><label for="proy-tipo">Tipo trabajo</label><select id="proy-tipo"><option value="">--</option><option value="hincado">Hincado</option><option value="perforado">Perforado</option><option value="pull_out_test">Pull out test</option><option value="mixto">Mixto</option><option value="otro">Otro</option></select></div>
-              <div class="form-group"><label for="proy-modalidad">Modalidad facturacion</label><select id="proy-modalidad"><option value="">--</option><option value="produccion">Produccion</option><option value="administracion">Administracion</option><option value="cerrado">Cerrado</option><option value="mixto">Mixto</option></select></div>
+
+            <!-- Seccion 2: Ubicacion -->
+            <div style="border-left:3px solid #16A34A;padding:12px 16px;margin-bottom:16px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">
+              <div style="font-size:14px;font-weight:600;color:#16A34A;margin-bottom:12px;">Ubicacion</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                  <label for="proy-provincia" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Provincia</label>
+                  <input type="text" id="proy-provincia" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
+                </div>
+                <div>
+                  <label for="proy-ubicacion" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Ubicacion</label>
+                  <input type="text" id="proy-ubicacion" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
+                </div>
+                <div>
+                  <label for="proy-mw" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">MW parque</label>
+                  <input type="number" id="proy-mw" step="0.1" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
+                </div>
+              </div>
             </div>
-            <div class="form-row">
-              <div class="form-group"><label for="proy-parque">Nombre parque</label><input type="text" id="proy-parque" /></div>
-              <div class="form-group"><label for="proy-provincia">Provincia</label><input type="text" id="proy-provincia" /></div>
+
+            <!-- Seccion 3: Economico -->
+            <div style="border-left:3px solid #CA8A04;padding:12px 16px;margin-bottom:16px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">
+              <div style="font-size:14px;font-weight:600;color:#CA8A04;margin-bottom:12px;">Economico</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                  <label for="proy-hincas-est" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Hincas estimadas</label>
+                  <input type="number" id="proy-hincas-est" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
+                </div>
+                <div>
+                  <label for="proy-precio-hinca" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Precio/hinca</label>
+                  <input type="number" id="proy-precio-hinca" step="0.01" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
+                </div>
+                <div>
+                  <label for="proy-precio-hora-maq" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Precio/hora maquina</label>
+                  <input type="number" id="proy-precio-hora-maq" step="0.01" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
+                </div>
+                <div>
+                  <label for="proy-precio-hora-ay" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Precio/hora ayudante</label>
+                  <input type="number" id="proy-precio-hora-ay" step="0.01" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
+                </div>
+                <div>
+                  <label for="proy-importe" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Importe presupuestado</label>
+                  <input type="number" id="proy-importe" step="0.01" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
+                </div>
+              </div>
             </div>
-            <div class="form-row">
-              <div class="form-group"><label for="proy-ubicacion">Ubicacion</label><input type="text" id="proy-ubicacion" /></div>
-              <div class="form-group"><label for="proy-mw">MW parque</label><input type="number" id="proy-mw" step="0.1" min="0" /></div>
+
+            <!-- Seccion 4: Planificacion -->
+            <div style="border-left:3px solid #64748B;padding:12px 16px;margin-bottom:16px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">
+              <div style="font-size:14px;font-weight:600;color:#64748B;margin-bottom:12px;">Planificacion</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                  <label for="proy-fecha-inicio" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Fecha inicio est.</label>
+                  <input type="date" id="proy-fecha-inicio" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
+                </div>
+                <div>
+                  <label for="proy-fecha-fin" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Fecha fin est.</label>
+                  <input type="date" id="proy-fecha-fin" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
+                </div>
+                <div style="grid-column:1/-1;">
+                  <label for="proy-notas" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Notas</label>
+                  <textarea id="proy-notas" rows="3" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;"></textarea>
+                </div>
+              </div>
             </div>
-            <div class="form-row">
-              <div class="form-group"><label for="proy-hincas-est">Hincas estimadas</label><input type="number" id="proy-hincas-est" min="0" /></div>
-              <div class="form-group"><label for="proy-precio-hinca">Precio/hinca</label><input type="number" id="proy-precio-hinca" step="0.01" min="0" /></div>
+
+            <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--color-border);">
+              <button type="button" class="secondary" id="btn-cancelar-proyecto" style="padding:8px 20px;">Cancelar</button>
+              <button type="submit" class="primary" style="width:auto;padding:8px 20px;">Guardar</button>
             </div>
-            <div class="form-row">
-              <div class="form-group"><label for="proy-precio-hora-maq">Precio/hora maquina</label><input type="number" id="proy-precio-hora-maq" step="0.01" min="0" /></div>
-              <div class="form-group"><label for="proy-precio-hora-ay">Precio/hora ayudante</label><input type="number" id="proy-precio-hora-ay" step="0.01" min="0" /></div>
-            </div>
-            <div class="form-row">
-              <div class="form-group"><label for="proy-importe">Importe presupuestado</label><input type="number" id="proy-importe" step="0.01" min="0" /></div>
-              <div class="form-group"><label for="proy-estado">Estado</label><select id="proy-estado"><option value="cotizado">Cotizado</option><option value="vivo">Vivo</option><option value="pausado">Pausado</option><option value="terminado">Terminado</option></select></div>
-            </div>
-            <div class="form-row">
-              <div class="form-group"><label for="proy-fecha-inicio">Fecha inicio est.</label><input type="date" id="proy-fecha-inicio" /></div>
-              <div class="form-group"><label for="proy-fecha-fin">Fecha fin est.</label><input type="date" id="proy-fecha-fin" /></div>
-            </div>
-            <div class="form-group"><label for="proy-notas">Notas</label><textarea id="proy-notas" rows="3" style="width:100%;"></textarea></div>
-            <div class="form-actions"><button type="submit" class="primary">Guardar</button><button type="button" class="secondary" id="btn-cancelar-proyecto">Cancelar</button></div>
           </form>
         </div>
       </div>
 
       <!-- Modal parte de trabajo -->
-      <div id="modal-parte" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true">
-        <div class="modal-content" style="max-width:600px;">
-          <h2 id="modal-parte-titulo">Registrar parte de trabajo</h2>
-          <form id="form-parte" novalidate>
-            <input type="hidden" id="parte-proyecto-id" />
-            <input type="hidden" id="parte-edit-id" />
-            <div class="form-row">
-              <div class="form-group"><label for="parte-fecha">Fecha</label><input type="date" id="parte-fecha" /></div>
-              <div class="form-group"><label for="parte-hincas">Hincas realizadas</label><input type="number" id="parte-hincas" min="0" /></div>
-            </div>
-            <div class="form-row">
-              <div class="form-group"><label for="parte-horas-maq">Horas maquina</label><input type="number" id="parte-horas-maq" step="0.5" min="0" /></div>
-              <div class="form-group"><label for="parte-horas-pers">Horas personal</label><input type="number" id="parte-horas-pers" step="0.5" min="0" /></div>
-            </div>
-            <div class="form-row">
-              <div class="form-group"><label for="parte-operadores">N operadores</label><input type="number" id="parte-operadores" min="1" value="1" /></div>
-              <div class="form-group"><label for="parte-ayudantes">N ayudantes</label><input type="number" id="parte-ayudantes" min="0" value="0" /></div>
-            </div>
-            <div class="form-row">
-              <div class="form-group"><label for="parte-terreno">Terreno</label><select id="parte-terreno"><option value="">--</option><option value="normal">Normal</option><option value="rocoso">Rocoso</option><option value="arcilloso">Arcilloso</option><option value="arenoso">Arenoso</option></select></div>
-              <div class="form-group"><label for="parte-meteo">Meteorologia</label><select id="parte-meteo"><option value="">--</option><option value="bueno">Bueno</option><option value="lluvia">Lluvia</option><option value="viento">Viento</option><option value="calor_extremo">Calor extremo</option></select></div>
-            </div>
-            <div class="form-group"><label for="parte-combustible">Combustible (litros)</label><input type="number" id="parte-combustible" step="0.1" min="0" /></div>
-            <div class="form-group"><label for="parte-incidencias">Incidencias</label><textarea id="parte-incidencias" rows="2" style="width:100%;"></textarea></div>
-            <div class="form-group"><label for="parte-notas">Notas</label><textarea id="parte-notas" rows="2" style="width:100%;"></textarea></div>
-            <div class="form-actions"><button type="submit" class="primary">Guardar</button><button type="button" class="secondary" id="btn-cancelar-parte">Cancelar</button></div>
-          </form>
-        </div>
-      </div>
+      <!-- Modal parte unificado: se genera dinámicamente en proyectos.js -->
+      <div id="modal-parte" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true"></div>
 
       <div id="panel-proyectos-transporte" class="panel-proyectos panel-proyectos-transporte">
         <div class="layout transporte-layout">

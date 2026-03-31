@@ -333,19 +333,17 @@ window.maqCerrarIncidencia = function (incId, maqId) {
 // ── Editar máquina ──
 
 window.maqEditarModal = function (maqId) {
-  Promise.all([
+Promise.all([
     fetch("/api/maquinaria/maquinas/" + maqId).then(function (r) { return r.json(); }),
     fetch("/api/proyectos").then(function (r) { return r.json(); }).catch(function () { return { proyectos: [] }; })
   ]).then(function (results) {
     var m = results[0];
     var proyectos = results[1].proyectos || [];
     if (!m || m.error) { mostrarToast("Error al cargar m\u00e1quina", "error"); return; }
-
     var proyOpts = '<option value="">Sin proyecto</option>' +
       proyectos.map(function (p) {
-        return '<option value="' + p.id + '"' + (p.id === m.proyecto_id ? ' selected' : '') + '>' + _esc(p.nombre) + '</option>';
+        return '<option value="' + p.id + '"' + (p.id === m.proyecto_id ? ' selected' : '') + '>' + (p.codigo ? p.codigo + ' \u00b7 ' : '') + _esc(p.nombre) + '</option>';
       }).join("");
-
     var modal = document.createElement("div");
     modal.className = "modal-overlay visible";
     modal.id = "modal-maq-editar";

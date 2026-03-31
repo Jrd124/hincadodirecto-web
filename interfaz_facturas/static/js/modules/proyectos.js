@@ -3,7 +3,6 @@
   var proyModalEl = document.getElementById("modal-proyecto");
   var proyFormEl = document.getElementById("form-proyecto");
   var parteModalEl = document.getElementById("modal-parte");
-  var parteFormEl = document.getElementById("form-parte");
 
   function _fE(n) { return n ? Number(n).toLocaleString("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 0, maximumFractionDigits: 0 }) : ""; }
 
@@ -135,6 +134,7 @@
             '<div>' +
               '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">' +
                 '<button onclick="proyectoDashboardVolver()" style="background:none;border:none;cursor:pointer;font-size:18px;padding:0;color:var(--color-text-secondary);">\u2190</button>' +
+                (p.codigo ? '<span style="font-size:13px;font-weight:600;color:var(--color-primary);background:var(--color-primary)10;padding:2px 10px;border-radius:99px;border:1px solid var(--color-primary)30;">' + _esc(p.codigo) + '</span>' : '') +
                 '<h1 style="margin:0;font-size:24px;">' + _esc(p.nombre) + '</h1>' +
                 '<span class="status-badge status-badge--' + _esc(p.estado) + '">' + _esc(p.estado) + '</span>' +
               '</div>' +
@@ -234,9 +234,15 @@
               '<td style="padding:8px 6px;text-align:right;">' + (pt.horas_maquina || 0) + '</td>' +
               '<td style="padding:8px 6px;text-align:right;">' + (pt.horas_personal || 0) + '</td>' +
               '<td style="padding:8px 6px;text-align:right;">' + (pt.num_operadores || 0) + '</td>' +
-              '<td style="padding:8px 6px;text-align:right;">' + (pt.num_ayudantes || 0) + '</td>' +
-              '<td style="padding:8px 6px;text-align:right;">' + (pt.combustible_litros || "\u2014") + '</td>' +
-              '<td style="padding:8px 6px;font-size:12px;color:' + (pt.incidencias ? 'var(--color-danger)' : 'var(--color-text-secondary)') + ';">' + (pt.incidencias ? _esc(pt.incidencias).substring(0, 50) : "\u2014") + '</td></tr>';
+              '<td style="padding:8px 6px;font-size:12px;color:' + (pt.incidencias ? 'var(--color-danger)' : 'var(--color-text-secondary)') + ';">' + (pt.incidencias ? _esc(pt.incidencias).substring(0, 50) : "\u2014") + '</td>' +
+              '<td style="padding:8px 6px;text-align:center;"><div style="display:flex;gap:2px;justify-content:center;">' +
+                '<button onclick="parteVer(' + pt.id + ',' + p.id + ')" title="Ver parte" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--color-text-secondary);" onmouseover="this.style.color=\'var(--color-primary)\'" onmouseout="this.style.color=\'var(--color-text-secondary)\'">' +
+                  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>' +
+                '<button onclick="parteEditar(' + pt.id + ',' + p.id + ')" title="Editar" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--color-text-secondary);" onmouseover="this.style.color=\'var(--color-primary)\'" onmouseout="this.style.color=\'var(--color-text-secondary)\'">' +
+                  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>' +
+                '<button onclick="parteEliminar(' + pt.id + ',' + p.id + ')" title="Eliminar" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--color-text-secondary);" onmouseover="this.style.color=\'#DC2626\'" onmouseout="this.style.color=\'var(--color-text-secondary)\'">' +
+                  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>' +
+              '</div></td></tr>';
           }).join("");
           partesHtml = '<div style="height:200px;margin-bottom:12px;"><canvas id="chart-avance-proyecto"></canvas></div>' +
             '<div style="max-height:400px;overflow-y:auto;"><table style="width:100%;font-size:13px;border-collapse:collapse;"><thead><tr style="border-bottom:2px solid var(--color-border);position:sticky;top:0;background:var(--color-white);">' +
@@ -245,9 +251,8 @@
             '<th style="text-align:right;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">H. M\u00e1q.</th>' +
             '<th style="text-align:right;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">H. Pers.</th>' +
             '<th style="text-align:right;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Oper.</th>' +
-            '<th style="text-align:right;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Ayud.</th>' +
-            '<th style="text-align:right;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Gasoil (L)</th>' +
             '<th style="text-align:left;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Incidencias</th>' +
+            '<th style="text-align:center;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Acciones</th>' +
             '</tr></thead><tbody>' + filas + '</tbody></table></div>';
         } else {
           partesHtml = '<p style="color:var(--color-text-secondary);font-size:13px;text-align:center;padding:24px;">Sin partes de trabajo registrados.</p>';
@@ -255,19 +260,38 @@
         document.getElementById("proy-dash-partes-section").innerHTML =
           '<div class="presup-section" style="margin-bottom:16px;">' +
             '<div class="presup-section-header"><div class="presup-section-number" style="background:#16A34A;">\uD83D\uDCCA</div><div class="presup-section-title">Partes de trabajo</div>' +
-            '<div style="margin-left:auto;font-size:13px;color:var(--color-text-secondary);">' + (p.partes ? p.partes.length : 0) + ' partes</div></div>' +
+            '<div style="margin-left:auto;display:flex;gap:8px;align-items:center;">' +
+              '<span style="font-size:13px;color:var(--color-text-secondary);">' + (p.partes ? p.partes.length : 0) + ' partes</span>' +
+              '<button style="padding:5px 14px;font-size:12px;font-weight:500;color:var(--color-primary);background:transparent;border:1px solid var(--color-primary);border-radius:6px;cursor:pointer;transition:all 0.15s;" onmouseover="this.style.background=\'var(--color-primary)\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'var(--color-primary)\'" onclick="partesProcesarFoto(' + p.id + ')">+ Alta parte</button>' +
+            '</div></div>' +
             '<div class="presup-section-body" style="border-left-color:#16A34A;">' + partesHtml + '</div></div>';
 
         if (p.partes && p.partes.length) _renderChartAvanceProyecto(p);
 
         // ═══ Sección: Facturación ═══
         var fc = p.facturas_cliente || [];
+        function _dashParseMoney(v) {
+          var s = String(v || "").replace(/\s/g, "");
+          if (s.indexOf(",") !== -1) s = s.replace(/\./g, "").replace(",", ".");
+          var n = parseFloat(s); return isNaN(n) ? 0 : n;
+        }
+        function _dashFmtMoney(v) {
+          var n = _dashParseMoney(v);
+          return n ? Math.round(n).toLocaleString("es-ES") + " \u20AC" : "\u2014";
+        }
+        function _dashCobroBadge(estado) {
+          var val = (estado || "pendiente").toString().trim().toLowerCase();
+          var colores = { cobrada: "#16A34A", parcial: "#2563EB", pendiente: "#CA8A04" };
+          var color = colores[val] || colores.pendiente;
+          var label = val.charAt(0).toUpperCase() + val.slice(1);
+          return '<span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:500;background:' + color + '15;color:' + color + ';border:1px solid ' + color + '30;">' + label + '</span>';
+        }
         var factFilas = fc.map(function (f) {
           return '<tr style="border-bottom:1px solid var(--color-border);">' +
             '<td style="padding:8px 6px;font-weight:500;">' + _esc(f.numero_factura || "\u2014") + '</td>' +
             '<td style="padding:8px 6px;">' + _esc((f.fecha_factura || "").substring(0, 10)) + '</td>' +
-            '<td style="padding:8px 6px;text-align:right;font-weight:500;">' + _esc(f.total_a_pagar || "\u2014") + '</td>' +
-            '<td style="padding:8px 6px;text-align:center;"><span class="status-badge status-badge--' + ((f.estado_cobro || "pendiente") === "cobrada" ? "adjudicada" : "negociacion") + '">' + _esc(f.estado_cobro || "pendiente") + '</span></td></tr>';
+            '<td style="padding:8px 6px;text-align:right;font-weight:500;">' + _dashFmtMoney(f.total_a_pagar) + '</td>' +
+            '<td style="padding:8px 6px;text-align:center;">' + _dashCobroBadge(f.estado_cobro) + '</td></tr>';
         }).join("");
         var factTotal = 0;
         fc.forEach(function (f) {
@@ -323,7 +347,7 @@
               '<div class="presup-section-title">Certificaciones</div>' +
               '<div style="margin-left:auto;display:flex;gap:8px;align-items:center;">' +
                 '<span style="font-size:13px;color:var(--color-text-secondary);">' + (p.certificaciones ? p.certificaciones.length : 0) + ' certificaciones</span>' +
-                '<button class="btn-outline" style="font-size:12px;padding:4px 12px;" onclick="certNueva(' + p.id + ')">+ Nueva certificaci\u00f3n</button>' +
+                '<button style="padding:5px 14px;font-size:12px;font-weight:500;color:var(--color-primary);background:transparent;border:1px solid var(--color-primary);border-radius:6px;cursor:pointer;transition:all 0.15s;" onmouseover="this.style.background=\'var(--color-primary)\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'var(--color-primary)\'" onclick="certNueva(' + p.id + ')">+ Nueva certificaci\u00f3n</button>' +
               '</div>' +
             '</div>' +
             '<div class="presup-section-body" style="border-left-color:#7C3AED;">' + certCards + '</div>' +
@@ -391,7 +415,7 @@
                 '<span style="font-size:14px;">\uD83D\uDD27</span>' +
                 '<span style="font-size:14px;font-weight:600;">Recursos asignados</span>' +
               '</div>' +
-              '<button class="btn-outline" style="font-size:12px;padding:4px 12px;" onclick="proyectoAddRecurso(' + p.id + ')">+ Asignar recurso</button>' +
+              '<button style="padding:5px 14px;font-size:12px;font-weight:500;color:var(--color-primary);background:transparent;border:1px solid var(--color-primary);border-radius:6px;cursor:pointer;transition:all 0.15s;" onmouseover="this.style.background=\'var(--color-primary)\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'var(--color-primary)\'" onclick="proyectoAddRecurso(' + p.id + ')">+ Asignar recurso</button>' +
             '</div>' +
             '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;min-height:80px;">' +
               '<div style="padding:12px 16px;border-right:1px solid var(--color-border);">' +
@@ -665,10 +689,11 @@
         var proys = d.proyectos || [];
         var c = document.getElementById("proy-cotizados-tabla");
         if (!proys.length) { c.innerHTML = '<p class="crm-placeholder">Sin proyectos cotizados.</p>'; return; }
-        var html = '<table class="tabla-facturas"><thead><tr><th>Nombre</th><th>Cliente</th><th>Presupuesto</th><th>Parque</th><th>MW</th><th>Hincas</th><th>Tipo</th><th>Importe</th><th>Inicio est.</th><th>Acciones</th></tr></thead><tbody>';
+        var html = '<table class="tabla-facturas"><thead><tr><th>Codigo</th><th>Nombre</th><th>Cliente</th><th>Presupuesto</th><th>Parque</th><th>MW</th><th>Hincas</th><th>Tipo</th><th>Importe</th><th>Inicio est.</th><th>Acciones</th></tr></thead><tbody>';
         proys.forEach(function (p) {
           var presCol = p.presupuesto_id && p.presupuesto_ref ? '<a href="#" onclick="navegarAPresupuesto(' + p.presupuesto_id + ');return false;" style="color:#2563EB;text-decoration:none;font-size:12px;">' + _esc(p.presupuesto_ref) + '</a>' : '';
-          html += '<tr><td style="font-weight:600;"><a href="#" onclick="proyectoDashboard(' + p.id + ');return false;" style="color:var(--color-primary);text-decoration:none;">' + _esc(p.nombre) + '</a></td>' +
+          html += '<tr><td style="font-size:12px;font-weight:600;color:var(--color-primary);white-space:nowrap;">' + _esc(p.codigo || "") + '</td>' +
+            '<td style="font-weight:600;"><a href="#" onclick="proyectoDashboard(' + p.id + ');return false;" style="color:var(--color-primary);text-decoration:none;">' + _esc(p.nombre) + '</a></td>' +
             '<td>' + _esc(p.nombre_cliente || "") + '</td>' +
             '<td>' + presCol + '</td>' +
             '<td>' + _esc(p.nombre_parque || "") + '</td>' +
@@ -722,7 +747,9 @@
       }
       var _lb='';if(p.presupuesto_id&&p.presupuesto_ref)_lb+='<a href="#" onclick="navegarAPresupuesto('+p.presupuesto_id+');return false;" style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;background:#2563EB10;color:#2563EB;border-radius:99px;font-size:12px;text-decoration:none;border:1px solid #2563EB30;">\uD83D\uDCC4 '+_esc(p.presupuesto_ref)+'</a>';if(p.oportunidad_id&&p.oportunidad_nombre)_lb+='<a href="#" onclick="navegarAOportunidad('+p.oportunidad_id+');return false;" style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;background:#16A34A10;color:#16A34A;border-radius:99px;font-size:12px;text-decoration:none;border:1px solid #16A34A30;">\u2B50 '+_esc(p.oportunidad_nombre)+'</a>';
       return '<div class="' + cardClass + '">' +
-        '<div class="proy-card-header"><div><h3 style="cursor:pointer;color:var(--color-primary);" onclick="proyectoDashboard(' + p.id + ')">' + _esc(p.nombre) + '</h3>' +
+        '<div class="proy-card-header"><div>' +
+          (p.codigo ? '<span style="font-size:11px;font-weight:600;color:var(--color-primary);margin-bottom:2px;display:block;">' + _esc(p.codigo) + '</span>' : '') +
+          '<h3 style="cursor:pointer;color:var(--color-primary);" onclick="proyectoDashboard(' + p.id + ')">' + _esc(p.nombre) + '</h3>' +
           '<div class="proy-card-header-meta">' + _esc(p.nombre_cliente || "") +
           (p.ubicacion_texto ? ' &middot; ' + _esc(p.ubicacion_texto) : '') +
           (p.nombre_parque ? ' &middot; ' + _esc(p.nombre_parque) : '') + '</div></div>' +
@@ -791,7 +818,7 @@
         var proys = d.proyectos || [];
         var c = document.getElementById("proy-terminados-tabla");
         if (!proys.length) { c.innerHTML = '<p class="crm-placeholder">Sin proyectos terminados.</p>'; return; }
-        var html = '<table class="tabla-facturas"><thead><tr><th>Nombre</th><th>Cliente</th><th>Presupuesto</th><th>Tipo</th><th>Estado</th><th>Hincas</th><th>Dias</th><th>Facturado</th><th>Costes</th><th>Rentabilidad</th></tr></thead><tbody>';
+        var html = '<table class="tabla-facturas"><thead><tr><th>Codigo</th><th>Nombre</th><th>Cliente</th><th>Presupuesto</th><th>Tipo</th><th>Estado</th><th>Hincas</th><th>Dias</th><th>Facturado</th><th>Costes</th><th>Rentabilidad</th></tr></thead><tbody>';
         proys.forEach(function (p) {
           var rent = 0;
           if (p.importe_facturado && p.importe_costes) rent = Math.round((p.importe_facturado - p.importe_costes) / p.importe_facturado * 100);
@@ -802,6 +829,7 @@
             : '<span class="status-badge status-badge--terminado">Terminado</span>';
           var presColT = p.presupuesto_id && p.presupuesto_ref ? '<a href="#" onclick="event.stopPropagation();navegarAPresupuesto(' + p.presupuesto_id + ');return false;" style="color:#2563EB;text-decoration:none;font-size:12px;">' + _esc(p.presupuesto_ref) + '</a>' : '';
           html += '<tr style="cursor:pointer;' + (esCancelado ? 'opacity:0.7;' : '') + '" onclick="proyectoDashboard(' + p.id + ')">' +
+            '<td style="font-size:12px;font-weight:600;color:var(--color-primary);white-space:nowrap;">' + _esc(p.codigo || "") + '</td>' +
             '<td style="font-weight:600;">' + _esc(p.nombre) + '</td>' +
             '<td>' + _esc(p.nombre_cliente || "") + '</td>' +
             '<td>' + presColT + '</td>' +
@@ -823,9 +851,18 @@
   // ── Modal proyecto ──
   function _proyAbrirModal(p) {
     document.getElementById("modal-proyecto-titulo").textContent = p ? "Editar proyecto" : "Nuevo proyecto";
+    var badgeEl = document.getElementById("modal-proyecto-codigo-badge");
+    if (p && p.codigo) {
+      badgeEl.textContent = p.codigo;
+      badgeEl.style.display = "";
+    } else {
+      badgeEl.style.display = "none";
+    }
     document.getElementById("proy-edit-id").value = p ? p.id : "";
     document.getElementById("proy-nombre").value = p ? p.nombre || "" : "";
-    document.getElementById("proy-codigo").value = p ? p.codigo || "" : "";
+    var codigoEl = document.getElementById("proy-codigo");
+    codigoEl.value = p ? p.codigo || "" : "";
+    codigoEl.placeholder = p ? "" : "Se asignara automaticamente (PRY-2026-XXX)";
     document.getElementById("proy-tipo").value = p ? p.tipo_trabajo || "" : "";
     document.getElementById("proy-modalidad").value = p ? p.modalidad_facturacion || "" : "";
     document.getElementById("proy-parque").value = p ? p.nombre_parque || "" : "";
@@ -908,58 +945,594 @@
       .catch(function () { mostrarToast("Error de conexion.", "error"); });
   });
 
-  // ── Modal parte ──
-  window._proyRegistrarParte = function (proyId) {
-    document.getElementById("modal-parte-titulo").textContent = "Registrar parte de trabajo";
-    document.getElementById("parte-proyecto-id").value = proyId;
-    document.getElementById("parte-edit-id").value = "";
-    document.getElementById("parte-fecha").value = new Date().toISOString().substring(0, 10);
-    document.getElementById("parte-hincas").value = "";
-    document.getElementById("parte-horas-maq").value = "";
-    document.getElementById("parte-horas-pers").value = "";
-    document.getElementById("parte-operadores").value = "1";
-    document.getElementById("parte-ayudantes").value = "0";
-    document.getElementById("parte-terreno").value = "";
-    document.getElementById("parte-meteo").value = "";
-    document.getElementById("parte-combustible").value = "";
-    document.getElementById("parte-incidencias").value = "";
-    document.getElementById("parte-notas").value = "";
+  // ── Modal parte unificado (Manual + OCR) ──
+
+  function _parteCerrarModal() {
+    parteModalEl.classList.remove("visible");
+    parteModalEl.setAttribute("aria-hidden", "true");
+    parteModalEl.innerHTML = "";
+  }
+  parteModalEl.addEventListener("click", function (e) { if (e.target === parteModalEl) _parteCerrarModal(); });
+
+  window.parteNuevoUnificado = function (proyectoId, tabInicial) {
+    var hoy = new Date().toISOString().substring(0, 10);
+    parteModalEl.innerHTML =
+      '<div class="modal-content" style="max-width:700px;max-height:90vh;overflow-y:auto;">' +
+        '<h2 style="margin:0 0 16px;">Registrar parte de trabajo</h2>' +
+
+        // Tabs
+        '<div style="display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid var(--color-border);">' +
+          '<button id="tab-parte-manual" onclick="parteTabSwitch(\'manual\')" style="padding:10px 20px;font-size:14px;font-weight:500;border:none;background:none;cursor:pointer;margin-bottom:-2px;border-bottom:2px solid #2563EB;color:#2563EB;">\uD83D\uDCDD Manual</button>' +
+          '<button id="tab-parte-foto" onclick="parteTabSwitch(\'foto\')" style="padding:10px 20px;font-size:14px;font-weight:500;border:none;background:none;cursor:pointer;margin-bottom:-2px;border-bottom:2px solid transparent;color:var(--color-text-secondary);">\uD83D\uDCF7 Desde foto</button>' +
+        '</div>' +
+
+        // Tab Manual
+        '<div id="parte-contenido-manual">' +
+          '<div style="border-left:3px solid #16A34A;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+            '<div style="font-size:14px;font-weight:600;color:#16A34A;margin-bottom:12px;">Produccion</div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Fecha</label>' +
+                '<input type="date" id="parte-fecha" value="' + hoy + '" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Hincas realizadas</label>' +
+                '<input type="number" id="parte-hincas" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Horas maquina</label>' +
+                '<input type="number" id="parte-horas-maq" step="0.5" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Horas personal</label>' +
+                '<input type="number" id="parte-horas-pers" step="0.5" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">N\u00BA operadores</label>' +
+                '<input type="number" id="parte-operadores" min="0" value="1" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">N\u00BA ayudantes</label>' +
+                '<input type="number" id="parte-ayudantes" min="0" value="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+            '</div>' +
+          '</div>' +
+
+          '<div style="border-left:3px solid #2563EB;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+            '<div style="font-size:14px;font-weight:600;color:#2563EB;margin-bottom:12px;">Condiciones</div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Terreno</label>' +
+                '<select id="parte-terreno" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"><option value="">--</option><option value="normal">Normal</option><option value="rocoso">Rocoso</option><option value="arcilloso">Arcilloso</option><option value="arenoso">Arenoso</option></select></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Meteorologia</label>' +
+                '<select id="parte-meteo" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"><option value="">--</option><option value="bueno">Bueno</option><option value="lluvia">Lluvia</option><option value="viento">Viento</option><option value="calor_extremo">Calor extremo</option></select></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Combustible (litros)</label>' +
+                '<input type="number" id="parte-combustible" step="0.1" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+            '</div>' +
+          '</div>' +
+
+          '<div style="border-left:3px solid #CA8A04;padding:12px 16px;margin-bottom:16px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+            '<div style="font-size:14px;font-weight:600;color:#CA8A04;margin-bottom:12px;">Observaciones</div>' +
+            '<div style="display:grid;gap:10px;">' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Incidencias</label>' +
+                '<textarea id="parte-incidencias" rows="2" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;" placeholder="Sin incidencias"></textarea></div>' +
+              '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Notas</label>' +
+                '<textarea id="parte-notas" rows="2" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;"></textarea></div>' +
+            '</div>' +
+          '</div>' +
+
+          '<div style="display:flex;gap:8px;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--color-border);">' +
+            '<button class="secondary" style="padding:8px 20px;" onclick="_parteCerrarModalGlobal()">Cancelar</button>' +
+            '<button class="primary" style="width:auto;padding:8px 20px;" onclick="_parteGuardarManual(' + proyectoId + ')">Guardar parte</button>' +
+          '</div>' +
+        '</div>' +
+
+        // Tab Foto
+        '<div id="parte-contenido-foto" style="display:none;">' +
+          '<div id="ocr-paso-1">' +
+            '<div id="ocr-dropzone" style="border:2px dashed var(--color-border);border-radius:12px;padding:40px;text-align:center;cursor:pointer;margin-bottom:16px;" onclick="document.getElementById(\'ocr-input-foto\').click()">' +
+              '<div style="font-size:32px;margin-bottom:8px;">\uD83D\uDCF7</div>' +
+              '<div style="font-size:14px;color:var(--color-text-secondary);">Haz click o arrastra una foto del parte</div>' +
+              '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px;">JPG, PNG o WEBP</div>' +
+            '</div>' +
+            '<input type="file" id="ocr-input-foto" accept="image/*" capture="environment" style="display:none;">' +
+            '<div id="ocr-preview" style="display:none;text-align:center;margin-bottom:16px;">' +
+              '<img id="ocr-preview-img" style="max-width:100%;max-height:300px;border-radius:8px;">' +
+            '</div>' +
+            '<div id="ocr-loading" style="display:none;text-align:center;padding:20px;">' +
+              '<div style="font-size:14px;color:var(--color-text-secondary);">Procesando parte con IA...</div>' +
+              '<div style="margin-top:8px;font-size:12px;color:var(--color-text-secondary);">Esto puede tardar 5-10 segundos</div>' +
+            '</div>' +
+          '</div>' +
+
+          '<div id="ocr-paso-2" style="display:none;">' +
+            '<div style="background:#EFF6FF;border:1px solid #2563EB30;border-radius:8px;padding:12px;margin-bottom:16px;">' +
+              '<span style="font-size:13px;color:#2563EB;">Datos extraidos automaticamente. Revisa y corrige si es necesario.</span>' +
+            '</div>' +
+
+            '<div style="border-left:3px solid #2563EB;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+              '<div style="font-size:14px;font-weight:600;color:#2563EB;margin-bottom:12px;">Identificacion</div>' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">N\u00BA Parte</label>' +
+                  '<input type="text" id="ocr-numero" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Fecha</label>' +
+                  '<input type="date" id="ocr-fecha" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Proyecto</label>' +
+                  '<select id="ocr-proyecto" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></select></div>' +
+              '</div>' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Cliente</label>' +
+                  '<input type="text" id="ocr-cliente" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Obra / Poblacion</label>' +
+                  '<input type="text" id="ocr-obra" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '</div>' +
+            '</div>' +
+
+            '<div style="border-left:3px solid #16A34A;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+              '<div style="font-size:14px;font-weight:600;color:#16A34A;margin-bottom:12px;">Produccion</div>' +
+              '<div id="ocr-lineas-container"></div>' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Total hincas</label>' +
+                  '<input type="number" id="ocr-hincas" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Horas administracion</label>' +
+                  '<input type="number" id="ocr-horas-admin" step="0.5" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '</div>' +
+            '</div>' +
+
+            '<div style="border-left:3px solid #CA8A04;padding:12px 16px;margin-bottom:16px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+              '<div style="font-size:14px;font-weight:600;color:#CA8A04;margin-bottom:12px;">Incidencias</div>' +
+              '<textarea id="ocr-incidencias" rows="2" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;" placeholder="Sin incidencias"></textarea>' +
+            '</div>' +
+
+            '<div style="display:flex;gap:8px;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--color-border);">' +
+              '<button class="secondary" style="padding:8px 20px;" onclick="_parteCerrarModalGlobal()">Cancelar</button>' +
+              '<button class="primary" style="width:auto;padding:8px 20px;" onclick="partesGuardarOCR(' + proyectoId + ')">Guardar parte</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    // Wire file input
+    setTimeout(function () {
+      var fi = document.getElementById("ocr-input-foto");
+      if (fi) fi.addEventListener("change", function () { _partesEnviarOCR(this, proyectoId); });
+    }, 0);
+
+    // Load projects in OCR select
+    fetch("/api/proyectos").then(function (r) { return r.json(); }).then(function (data) {
+      var sel = document.getElementById("ocr-proyecto");
+      if (!sel) return;
+      sel.innerHTML = '<option value="">Seleccionar...</option>';
+      (data.proyectos || []).forEach(function (pr) {
+        var opt = document.createElement("option");
+        opt.value = pr.id;
+        opt.textContent = (pr.codigo ? pr.codigo + " \u00B7 " : "") + pr.nombre;
+        if (pr.id === proyectoId) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    });
+
     parteModalEl.classList.add("visible");
     parteModalEl.setAttribute("aria-hidden", "false");
+
+    // Switch to requested tab
+    if (tabInicial === "foto") parteTabSwitch("foto");
   };
 
-  document.getElementById("btn-cancelar-parte").addEventListener("click", function () {
-    parteModalEl.classList.remove("visible"); parteModalEl.setAttribute("aria-hidden", "true");
-  });
-  parteModalEl.addEventListener("click", function (e) { if (e.target === parteModalEl) { parteModalEl.classList.remove("visible"); parteModalEl.setAttribute("aria-hidden", "true"); } });
+  window._parteCerrarModalGlobal = _parteCerrarModal;
 
-  parteFormEl.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var proyId = document.getElementById("parte-proyecto-id").value;
-    var parteId = document.getElementById("parte-edit-id").value;
+  window.parteTabSwitch = function (tab) {
+    var manual = document.getElementById("parte-contenido-manual");
+    var foto = document.getElementById("parte-contenido-foto");
+    var btnManual = document.getElementById("tab-parte-manual");
+    var btnFoto = document.getElementById("tab-parte-foto");
+    if (!manual || !foto) return;
+    if (tab === "foto") {
+      manual.style.display = "none";
+      foto.style.display = "block";
+      btnManual.style.borderBottomColor = "transparent";
+      btnManual.style.color = "var(--color-text-secondary)";
+      btnFoto.style.borderBottomColor = "#2563EB";
+      btnFoto.style.color = "#2563EB";
+    } else {
+      manual.style.display = "block";
+      foto.style.display = "none";
+      btnManual.style.borderBottomColor = "#2563EB";
+      btnManual.style.color = "#2563EB";
+      btnFoto.style.borderBottomColor = "transparent";
+      btnFoto.style.color = "var(--color-text-secondary)";
+    }
+  };
+
+  // Alias old functions to unified modal
+  window._proyRegistrarParte = function (proyId) { parteNuevoUnificado(proyId, "manual"); };
+  window.partesProcesarFoto = function (proyId) { parteNuevoUnificado(proyId, "foto"); };
+
+  // Manual save
+  window._parteGuardarManual = function (proyectoId) {
     var body = {
-      fecha: document.getElementById("parte-fecha").value,
-      hincas_realizadas: document.getElementById("parte-hincas").value ? parseInt(document.getElementById("parte-hincas").value) : 0,
-      horas_maquina: document.getElementById("parte-horas-maq").value ? parseFloat(document.getElementById("parte-horas-maq").value) : 0,
-      horas_personal: document.getElementById("parte-horas-pers").value ? parseFloat(document.getElementById("parte-horas-pers").value) : 0,
-      num_operadores: document.getElementById("parte-operadores").value ? parseInt(document.getElementById("parte-operadores").value) : 1,
-      num_ayudantes: document.getElementById("parte-ayudantes").value ? parseInt(document.getElementById("parte-ayudantes").value) : 0,
-      condiciones_terreno: document.getElementById("parte-terreno").value,
-      meteorologia: document.getElementById("parte-meteo").value,
-      combustible_litros: document.getElementById("parte-combustible").value ? parseFloat(document.getElementById("parte-combustible").value) : null,
-      incidencias: document.getElementById("parte-incidencias").value,
-      notas: document.getElementById("parte-notas").value,
+      fecha: (document.getElementById("parte-fecha") || {}).value,
+      hincas_realizadas: parseInt((document.getElementById("parte-hincas") || {}).value) || 0,
+      horas_maquina: parseFloat((document.getElementById("parte-horas-maq") || {}).value) || 0,
+      horas_personal: parseFloat((document.getElementById("parte-horas-pers") || {}).value) || 0,
+      num_operadores: parseInt((document.getElementById("parte-operadores") || {}).value) || 1,
+      num_ayudantes: parseInt((document.getElementById("parte-ayudantes") || {}).value) || 0,
+      condiciones_terreno: (document.getElementById("parte-terreno") || {}).value || "",
+      meteorologia: (document.getElementById("parte-meteo") || {}).value || "",
+      combustible_litros: parseFloat((document.getElementById("parte-combustible") || {}).value) || null,
+      incidencias: (document.getElementById("parte-incidencias") || {}).value || "",
+      notas: (document.getElementById("parte-notas") || {}).value || "",
     };
-    var url = parteId ? "/api/proyectos/partes/" + parteId : "/api/proyectos/" + proyId + "/partes";
-    var method = parteId ? "PUT" : "POST";
-    fetch(url, { method: method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    fetch("/api/proyectos/" + proyectoId + "/partes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         if (!res.ok) { mostrarToast(res.data.error || "Error", "error"); return; }
-        parteModalEl.classList.remove("visible"); parteModalEl.setAttribute("aria-hidden", "true");
+        _parteCerrarModal();
         _proyVivos();
+        if (window.proyectoDashboard) proyectoDashboard(proyectoId);
         mostrarToast("Parte registrado.", "success");
       })
       .catch(function () { mostrarToast("Error de conexion.", "error"); });
-  });
+  };
+
+  // ── Ver parte (detalle) ──
+
+  window.parteVer = function (parteId, proyectoId) {
+    fetch("/api/proyectos/partes/" + parteId)
+      .then(function (r) { return r.json(); })
+      .then(function (pt) {
+        if (pt.error) { mostrarToast(pt.error, "error"); return; }
+        var existing = document.getElementById("modal-parte-ver");
+        if (existing) existing.remove();
+        var modal = document.createElement("div");
+        modal.className = "modal-overlay visible";
+        modal.id = "modal-parte-ver";
+        modal.style.zIndex = "110";
+        modal.addEventListener("click", function (e) { if (e.target === modal) modal.remove(); });
+
+        // Parse lineas from notas if JSON
+        var lineasHtml = "";
+        try {
+          var lineas = JSON.parse(pt.notas || "[]");
+          if (Array.isArray(lineas) && lineas.length) {
+            lineasHtml = '<div style="margin-top:10px;"><div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:6px;">Detalle operadores</div>' +
+              '<table style="width:100%;font-size:13px;border-collapse:collapse;">' +
+              '<thead><tr style="border-bottom:1px solid var(--color-border);">' +
+                '<th style="text-align:left;padding:4px 8px;font-size:11px;color:var(--color-text-secondary);">Operador</th>' +
+                '<th style="text-align:left;padding:4px 8px;font-size:11px;color:var(--color-text-secondary);">Maquina</th>' +
+                '<th style="text-align:right;padding:4px 8px;font-size:11px;color:var(--color-text-secondary);">Horas</th>' +
+                '<th style="text-align:left;padding:4px 8px;font-size:11px;color:var(--color-text-secondary);">Rol</th>' +
+              '</tr></thead><tbody>' +
+              lineas.map(function (l) {
+                return '<tr style="border-bottom:1px solid var(--color-border);">' +
+                  '<td style="padding:4px 8px;">' + _esc(l.operador || "") + '</td>' +
+                  '<td style="padding:4px 8px;">' + _esc(l.maquina || "") + '</td>' +
+                  '<td style="padding:4px 8px;text-align:right;">' + (l.horas || 0) + '</td>' +
+                  '<td style="padding:4px 8px;">' + _esc(l.rol || "") + '</td></tr>';
+              }).join("") +
+              '</tbody></table></div>';
+          }
+        } catch (e) {}
+
+        var imgHtml = "";
+        if (pt.imagen_archivo) {
+          var imgUrl = "/api/archivo?ruta=" + encodeURIComponent(pt.imagen_archivo);
+          imgHtml = '<div style="text-align:center;margin-bottom:16px;">' +
+            '<img src="' + imgUrl + '" style="max-width:100%;max-height:300px;border-radius:8px;border:1px solid var(--color-border);" onerror="this.style.display=\'none\'">' +
+            '<div style="margin-top:8px;"><button onclick="window.open(\'' + imgUrl + '\',\'_blank\')" style="padding:6px 14px;font-size:13px;font-weight:500;color:var(--color-primary);background:transparent;border:1px solid var(--color-primary);border-radius:6px;cursor:pointer;">Ver parte original</button></div>' +
+          '</div>';
+        } else {
+          imgHtml = '<div style="text-align:center;margin-bottom:16px;padding:12px;color:var(--color-text-secondary);font-size:13px;font-style:italic;">Parte cargado manualmente \u2014 sin imagen adjunta</div>';
+        }
+
+        function _vFmt(v) { return v != null && v !== "" ? v : "\u2014"; }
+
+        modal.innerHTML =
+          '<div class="modal-content" style="max-width:600px;max-height:90vh;overflow-y:auto;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
+              '<h2 style="margin:0;">Parte de trabajo #' + pt.id + '</h2>' +
+              '<span style="font-size:13px;color:var(--color-text-secondary);">' + _esc((pt.fecha || "").substring(0, 10)) + '</span>' +
+            '</div>' +
+            imgHtml +
+            '<div style="border-left:3px solid #16A34A;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+              '<div style="font-size:14px;font-weight:600;color:#16A34A;margin-bottom:12px;">Produccion</div>' +
+              '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">' +
+                '<div><div style="font-size:11px;color:var(--color-text-secondary);">Hincas</div><div style="font-size:18px;font-weight:600;">' + _vFmt(pt.hincas_realizadas) + '</div></div>' +
+                '<div><div style="font-size:11px;color:var(--color-text-secondary);">H. Maquina</div><div style="font-size:18px;font-weight:600;">' + _vFmt(pt.horas_maquina) + '</div></div>' +
+                '<div><div style="font-size:11px;color:var(--color-text-secondary);">H. Personal</div><div style="font-size:18px;font-weight:600;">' + _vFmt(pt.horas_personal) + '</div></div>' +
+                '<div><div style="font-size:11px;color:var(--color-text-secondary);">Operadores</div><div style="font-size:18px;font-weight:600;">' + _vFmt(pt.num_operadores) + '</div></div>' +
+                '<div><div style="font-size:11px;color:var(--color-text-secondary);">Ayudantes</div><div style="font-size:18px;font-weight:600;">' + _vFmt(pt.num_ayudantes) + '</div></div>' +
+                '<div><div style="font-size:11px;color:var(--color-text-secondary);">Gasoil (L)</div><div style="font-size:18px;font-weight:600;">' + _vFmt(pt.combustible_litros) + '</div></div>' +
+              '</div>' +
+              lineasHtml +
+            '</div>' +
+            (pt.incidencias ? '<div style="border-left:3px solid #CA8A04;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+              '<div style="font-size:14px;font-weight:600;color:#CA8A04;margin-bottom:8px;">Incidencias</div>' +
+              '<div style="font-size:13px;">' + _esc(pt.incidencias) + '</div></div>' : '') +
+            '<div style="display:flex;gap:8px;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--color-border);">' +
+              '<button class="secondary" style="padding:8px 20px;" onclick="document.getElementById(\'modal-parte-ver\').remove()">Cerrar</button>' +
+              '<button class="primary" style="width:auto;padding:8px 20px;" onclick="document.getElementById(\'modal-parte-ver\').remove();parteEditar(' + parteId + ',' + proyectoId + ')">Editar</button>' +
+            '</div>' +
+          '</div>';
+        document.body.appendChild(modal);
+      });
+  };
+
+  // ── Editar / Eliminar partes ──
+
+  window.parteEditar = function (parteId, proyectoId) {
+    // Fetch parte data from the cached dashboard data — parte is already loaded in p.partes
+    // We'll fetch fresh from the partes list
+    fetch("/api/proyectos/" + proyectoId + "/dashboard")
+      .then(function (r) { return r.json(); })
+      .then(function (dashData) {
+        var pt = null;
+        (dashData.partes || []).forEach(function (p) { if (p.id === parteId) pt = p; });
+        if (!pt) { mostrarToast("Parte no encontrado", "error"); return; }
+
+        // Parse notas: if JSON array of lineas, show readable text
+        var _peNotasRaw = pt.notas || "";
+        var _peNotasDisplay = _peNotasRaw;
+        try {
+          var _peLineas = JSON.parse(_peNotasRaw);
+          if (Array.isArray(_peLineas) && _peLineas.length && _peLineas[0].operador) {
+            _peNotasDisplay = _peLineas.map(function (l) {
+              return (l.operador || "") + " con " + (l.maquina || "") + " " + (l.horas || 0) + "h (" + (l.rol || "operador") + ")";
+            }).join("\n");
+          }
+        } catch (e) {}
+
+        var existing = document.getElementById("modal-parte-editar");
+        if (existing) existing.remove();
+        var modal = document.createElement("div");
+        modal.className = "modal-overlay visible";
+        modal.id = "modal-parte-editar";
+        modal.style.zIndex = "110";
+        modal.addEventListener("click", function (e) { if (e.target === modal) modal.remove(); });
+        modal.innerHTML =
+          '<div class="modal-content" style="max-width:600px;max-height:90vh;overflow-y:auto;">' +
+            '<h2 style="margin:0 0 16px;">Editar parte de trabajo</h2>' +
+
+            '<div style="border-left:3px solid #2563EB;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+              '<div style="font-size:14px;font-weight:600;color:#2563EB;margin-bottom:12px;">Identificacion</div>' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Fecha</label>' +
+                  '<input type="date" id="pe-fecha" value="' + _esc((pt.fecha || "").substring(0, 10)) + '" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">ID Parte</label>' +
+                  '<input type="text" value="#' + pt.id + '" readonly style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:#f3f4f6;color:#6b7280;cursor:not-allowed;"></div>' +
+              '</div>' +
+            '</div>' +
+
+            '<div style="border-left:3px solid #16A34A;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+              '<div style="font-size:14px;font-weight:600;color:#16A34A;margin-bottom:12px;">Produccion</div>' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Hincas realizadas</label>' +
+                  '<input type="number" id="pe-hincas" value="' + (pt.hincas_realizadas || 0) + '" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Horas maquina</label>' +
+                  '<input type="number" id="pe-horas-maq" value="' + (pt.horas_maquina || 0) + '" step="0.5" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Horas personal</label>' +
+                  '<input type="number" id="pe-horas-pers" value="' + (pt.horas_personal || 0) + '" step="0.5" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Operadores</label>' +
+                  '<input type="number" id="pe-operadores" value="' + (pt.num_operadores || 0) + '" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Ayudantes</label>' +
+                  '<input type="number" id="pe-ayudantes" value="' + (pt.num_ayudantes || 0) + '" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Gasoil (litros)</label>' +
+                  '<input type="number" id="pe-gasoil" value="' + (pt.combustible_litros || "") + '" step="0.1" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"></div>' +
+              '</div>' +
+            '</div>' +
+
+            '<div style="border-left:3px solid #CA8A04;padding:12px 16px;margin-bottom:16px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+              '<div style="font-size:14px;font-weight:600;color:#CA8A04;margin-bottom:12px;">Incidencias y notas</div>' +
+              '<div style="display:grid;gap:10px;">' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Incidencias</label>' +
+                  '<textarea id="pe-incidencias" rows="2" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;" placeholder="Sin incidencias">' + _esc(pt.incidencias || "") + '</textarea></div>' +
+                '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Notas</label>' +
+                  '<textarea id="pe-notas" rows="2" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;">' + _esc(_peNotasDisplay) + '</textarea>' +
+                  '<input type="hidden" id="pe-notas-json" value="' + _esc(_peNotasRaw) + '"></div>' +
+              '</div>' +
+            '</div>' +
+
+            '<div style="display:flex;gap:8px;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--color-border);">' +
+              '<button class="secondary" style="padding:8px 20px;" onclick="document.getElementById(\'modal-parte-editar\').remove()">Cancelar</button>' +
+              '<button class="primary" style="width:auto;padding:8px 20px;" onclick="_parteGuardarEdicion(' + parteId + ',' + proyectoId + ')">Guardar cambios</button>' +
+            '</div>' +
+          '</div>';
+        document.body.appendChild(modal);
+      });
+  };
+
+  window._parteGuardarEdicion = function (parteId, proyectoId) {
+    var body = {
+      fecha: (document.getElementById("pe-fecha") || {}).value,
+      hincas_realizadas: parseInt((document.getElementById("pe-hincas") || {}).value) || 0,
+      horas_maquina: parseFloat((document.getElementById("pe-horas-maq") || {}).value) || 0,
+      horas_personal: parseFloat((document.getElementById("pe-horas-pers") || {}).value) || 0,
+      num_operadores: parseInt((document.getElementById("pe-operadores") || {}).value) || 0,
+      num_ayudantes: parseInt((document.getElementById("pe-ayudantes") || {}).value) || 0,
+      combustible_litros: parseFloat((document.getElementById("pe-gasoil") || {}).value) || null,
+      incidencias: (document.getElementById("pe-incidencias") || {}).value || "",
+      notas: (function () {
+        var userText = (document.getElementById("pe-notas") || {}).value || "";
+        var jsonOrig = (document.getElementById("pe-notas-json") || {}).value || "";
+        // If user didn't change the readable text, preserve original JSON
+        if (jsonOrig) {
+          try {
+            var lineas = JSON.parse(jsonOrig);
+            if (Array.isArray(lineas) && lineas.length && lineas[0].operador) {
+              var readable = lineas.map(function (l) {
+                return (l.operador || "") + " con " + (l.maquina || "") + " " + (l.horas || 0) + "h (" + (l.rol || "operador") + ")";
+              }).join("\n");
+              if (userText === readable) return jsonOrig;
+            }
+          } catch (e) {}
+        }
+        return userText;
+      })(),
+    };
+    fetch("/api/proyectos/partes/" + parteId, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          var m = document.getElementById("modal-parte-editar");
+          if (m) m.remove();
+          mostrarToast("Parte actualizado.", "success");
+          proyectoDashboard(proyectoId);
+        } else {
+          mostrarToast(res.data.error || "Error al guardar", "error");
+        }
+      })
+      .catch(function () { mostrarToast("Error de conexion.", "error"); });
+  };
+
+  window.parteEliminar = function (parteId, proyectoId) {
+    if (!confirm("Eliminar este parte de trabajo? Esta accion no se puede deshacer.")) return;
+    fetch("/api/proyectos/partes/" + parteId, { method: "DELETE" })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          mostrarToast("Parte eliminado.", "success");
+          proyectoDashboard(proyectoId);
+        } else {
+          mostrarToast(res.data.error || "Error al eliminar", "error");
+        }
+      })
+      .catch(function () { mostrarToast("Error de conexion.", "error"); });
+  };
+
+  // ── OCR send/save (used by unified modal) ──
+
+  function _partesEnviarOCR(input, proyectoId) {
+    var file = input.files[0];
+    if (!file) return;
+
+    // Preview
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      document.getElementById("ocr-preview-img").src = e.target.result;
+      document.getElementById("ocr-preview").style.display = "block";
+    };
+    reader.readAsDataURL(file);
+
+    // Loading
+    document.getElementById("ocr-dropzone").style.display = "none";
+    document.getElementById("ocr-loading").style.display = "block";
+
+    var formData = new FormData();
+    formData.append("imagen", file);
+
+    fetch("/api/partes/procesar-imagen", { method: "POST", body: formData })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        document.getElementById("ocr-loading").style.display = "none";
+        if (!res.ok || res.data.error) {
+          mostrarToast(res.data.error || "Error procesando la imagen", "error");
+          document.getElementById("ocr-dropzone").style.display = "";
+          return;
+        }
+        var datos = res.data;
+
+        // Fill step 2
+        document.getElementById("ocr-numero").value = datos.numero_parte || "";
+        document.getElementById("ocr-fecha").value = datos.fecha || "";
+        document.getElementById("ocr-cliente").value = datos.cliente || "";
+        document.getElementById("ocr-obra").value = (datos.obra || "") + (datos.poblacion ? " \u00B7 " + datos.poblacion : "");
+        document.getElementById("ocr-hincas").value = datos.total_hincas || 0;
+        document.getElementById("ocr-horas-admin").value = datos.horas_admin || 0;
+        document.getElementById("ocr-incidencias").value = datos.incidencias || "";
+
+        // Render detail lines
+        var container = document.getElementById("ocr-lineas-container");
+        var lineas = datos.lineas || [];
+        container.innerHTML = lineas.map(function (l, i) {
+          return '<div style="display:grid;grid-template-columns:2fr 2fr 1fr 1fr;gap:8px;margin-bottom:6px;align-items:end;">' +
+            '<div>' + (i === 0 ? '<label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">Operador</label>' : '') +
+              '<input type="text" class="ocr-linea-operador" value="' + _esc(l.operador || "") + '" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;"></div>' +
+            '<div>' + (i === 0 ? '<label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">Maquina</label>' : '') +
+              '<input type="text" class="ocr-linea-maquina" value="' + _esc(l.maquina || "") + '" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;"></div>' +
+            '<div>' + (i === 0 ? '<label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">Horas</label>' : '') +
+              '<input type="number" class="ocr-linea-horas" value="' + (l.horas || 0) + '" step="0.5" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;"></div>' +
+            '<div>' + (i === 0 ? '<label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">Rol</label>' : '') +
+              '<select class="ocr-linea-rol" style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;">' +
+                '<option value="operador"' + (l.rol !== "ayudante" ? " selected" : "") + '>Operador</option>' +
+                '<option value="ayudante"' + (l.rol === "ayudante" ? " selected" : "") + '>Ayudante</option>' +
+              '</select></div>' +
+          '</div>';
+        }).join("");
+
+        // Auto-select project if obra matches
+        if (datos.obra) {
+          var sel = document.getElementById("ocr-proyecto");
+          var obraLower = datos.obra.toLowerCase();
+          for (var oi = 0; oi < sel.options.length; oi++) {
+            if (sel.options[oi].text.toLowerCase().indexOf(obraLower) !== -1) {
+              sel.selectedIndex = oi;
+              break;
+            }
+          }
+        }
+
+        // Store original data
+        parteModalEl._ocrDatos = datos;
+
+        // Show step 2
+        document.getElementById("ocr-paso-1").style.display = "none";
+        document.getElementById("ocr-paso-2").style.display = "block";
+      })
+      .catch(function () {
+        document.getElementById("ocr-loading").style.display = "none";
+        document.getElementById("ocr-dropzone").style.display = "";
+        mostrarToast("Error de conexion", "error");
+      });
+  }
+
+  window.partesGuardarOCR = function (proyectoIdDefault) {
+    var selProy = document.getElementById("ocr-proyecto");
+    var proyectoId = (selProy && selProy.value) || proyectoIdDefault;
+    if (!proyectoId) {
+      mostrarToast("Selecciona un proyecto", "error");
+      return;
+    }
+
+    // Collect edited lines
+    var operadores = document.querySelectorAll(".ocr-linea-operador");
+    var maquinas = document.querySelectorAll(".ocr-linea-maquina");
+    var horas = document.querySelectorAll(".ocr-linea-horas");
+    var roles = document.querySelectorAll(".ocr-linea-rol");
+    var lineas = [];
+    for (var i = 0; i < operadores.length; i++) {
+      lineas.push({
+        operador: operadores[i].value,
+        maquina: maquinas[i] ? maquinas[i].value : "",
+        horas: parseFloat(horas[i] ? horas[i].value : 0) || 0,
+        rol: roles[i] ? roles[i].value : "operador",
+      });
+    }
+
+    var ocrDatos = (parteModalEl || {})._ocrDatos || {};
+    var datos = {
+      proyecto_id: parseInt(proyectoId),
+      numero_parte: (document.getElementById("ocr-numero") || {}).value,
+      fecha: (document.getElementById("ocr-fecha") || {}).value,
+      cliente: (document.getElementById("ocr-cliente") || {}).value,
+      obra: (document.getElementById("ocr-obra") || {}).value,
+      total_hincas: parseInt((document.getElementById("ocr-hincas") || {}).value) || 0,
+      horas_admin: parseFloat((document.getElementById("ocr-horas-admin") || {}).value) || 0,
+      incidencias: (document.getElementById("ocr-incidencias") || {}).value,
+      lineas: lineas,
+      imagen_archivo: ocrDatos.imagen_archivo,
+    };
+
+    fetch("/api/partes/guardar-ocr", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(datos),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          _parteCerrarModal();
+          mostrarToast("Parte registrado correctamente", "success");
+          _proyVivos();
+          proyectoDashboard(parseInt(proyectoId));
+        } else {
+          mostrarToast(res.data.error || "Error al guardar", "error");
+        }
+      })
+      .catch(function () { mostrarToast("Error de conexion", "error"); });
+  };
 })();
