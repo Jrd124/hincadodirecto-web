@@ -1213,7 +1213,7 @@
         if (pt.imagen_archivo) {
           var imgUrl = "/api/archivo?ruta=" + encodeURIComponent(pt.imagen_archivo);
           imgHtml = '<div style="text-align:center;margin-bottom:16px;">' +
-            '<img src="' + imgUrl + '" style="max-width:100%;max-height:300px;border-radius:8px;border:1px solid var(--color-border);" onerror="this.parentElement.style.display=\'none\'">' +
+            '<img src="' + imgUrl + '" style="max-width:100%;max-height:300px;border-radius:8px;border:1px solid var(--color-border);" onerror="this.style.display=\'none\'">' +
             '<div style="margin-top:8px;"><button onclick="window.open(\'' + imgUrl + '\',\'_blank\')" style="padding:6px 14px;font-size:13px;font-weight:500;color:var(--color-primary);background:transparent;border:1px solid var(--color-primary);border-radius:6px;cursor:pointer;">Ver parte original</button></div>' +
           '</div>';
         } else {
