@@ -234,8 +234,6 @@
               '<td style="padding:8px 6px;text-align:right;">' + (pt.horas_maquina || 0) + '</td>' +
               '<td style="padding:8px 6px;text-align:right;">' + (pt.horas_personal || 0) + '</td>' +
               '<td style="padding:8px 6px;text-align:right;">' + (pt.num_operadores || 0) + '</td>' +
-              '<td style="padding:8px 6px;text-align:right;">' + (pt.num_ayudantes || 0) + '</td>' +
-              '<td style="padding:8px 6px;text-align:right;">' + (pt.combustible_litros || "\u2014") + '</td>' +
               '<td style="padding:8px 6px;font-size:12px;color:' + (pt.incidencias ? 'var(--color-danger)' : 'var(--color-text-secondary)') + ';">' + (pt.incidencias ? _esc(pt.incidencias).substring(0, 50) : "\u2014") + '</td>' +
               '<td style="padding:8px 6px;text-align:center;"><div style="display:flex;gap:2px;justify-content:center;">' +
                 '<button onclick="parteVer(' + pt.id + ',' + p.id + ')" title="Ver parte" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--color-text-secondary);" onmouseover="this.style.color=\'var(--color-primary)\'" onmouseout="this.style.color=\'var(--color-text-secondary)\'">' +
@@ -253,8 +251,6 @@
             '<th style="text-align:right;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">H. M\u00e1q.</th>' +
             '<th style="text-align:right;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">H. Pers.</th>' +
             '<th style="text-align:right;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Oper.</th>' +
-            '<th style="text-align:right;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Ayud.</th>' +
-            '<th style="text-align:right;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Gasoil (L)</th>' +
             '<th style="text-align:left;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Incidencias</th>' +
             '<th style="text-align:center;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Acciones</th>' +
             '</tr></thead><tbody>' + filas + '</tbody></table></div>';
@@ -1265,6 +1261,18 @@
         (dashData.partes || []).forEach(function (p) { if (p.id === parteId) pt = p; });
         if (!pt) { mostrarToast("Parte no encontrado", "error"); return; }
 
+        // Parse notas: if JSON array of lineas, show readable text
+        var _peNotasRaw = pt.notas || "";
+        var _peNotasDisplay = _peNotasRaw;
+        try {
+          var _peLineas = JSON.parse(_peNotasRaw);
+          if (Array.isArray(_peLineas) && _peLineas.length && _peLineas[0].operador) {
+            _peNotasDisplay = _peLineas.map(function (l) {
+              return (l.operador || "") + " con " + (l.maquina || "") + " " + (l.horas || 0) + "h (" + (l.rol || "operador") + ")";
+            }).join("\n");
+          }
+        } catch (e) {}
+
         var existing = document.getElementById("modal-parte-editar");
         if (existing) existing.remove();
         var modal = document.createElement("div");
@@ -1310,7 +1318,8 @@
                 '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Incidencias</label>' +
                   '<textarea id="pe-incidencias" rows="2" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;" placeholder="Sin incidencias">' + _esc(pt.incidencias || "") + '</textarea></div>' +
                 '<div><label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Notas</label>' +
-                  '<textarea id="pe-notas" rows="2" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;">' + _esc(pt.notas || "") + '</textarea></div>' +
+                  '<textarea id="pe-notas" rows="2" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);resize:vertical;">' + _esc(_peNotasDisplay) + '</textarea>' +
+                  '<input type="hidden" id="pe-notas-json" value="' + _esc(_peNotasRaw) + '"></div>' +
               '</div>' +
             '</div>' +
 
@@ -1333,7 +1342,23 @@
       num_ayudantes: parseInt((document.getElementById("pe-ayudantes") || {}).value) || 0,
       combustible_litros: parseFloat((document.getElementById("pe-gasoil") || {}).value) || null,
       incidencias: (document.getElementById("pe-incidencias") || {}).value || "",
-      notas: (document.getElementById("pe-notas") || {}).value || "",
+      notas: (function () {
+        var userText = (document.getElementById("pe-notas") || {}).value || "";
+        var jsonOrig = (document.getElementById("pe-notas-json") || {}).value || "";
+        // If user didn't change the readable text, preserve original JSON
+        if (jsonOrig) {
+          try {
+            var lineas = JSON.parse(jsonOrig);
+            if (Array.isArray(lineas) && lineas.length && lineas[0].operador) {
+              var readable = lineas.map(function (l) {
+                return (l.operador || "") + " con " + (l.maquina || "") + " " + (l.horas || 0) + "h (" + (l.rol || "operador") + ")";
+              }).join("\n");
+              if (userText === readable) return jsonOrig;
+            }
+          } catch (e) {}
+        }
+        return userText;
+      })(),
     };
     fetch("/api/proyectos/partes/" + parteId, {
       method: "PUT",
