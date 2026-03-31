@@ -264,12 +264,18 @@ def update_factura_cliente(empresa_id: str, factura: dict, clave_original: dict)
     if not row:
       return False
     vid = row[0]
+    # Preserve ruta_archivo and hash_archivo if not explicitly provided
+    _preserve = {"ruta_archivo", "hash_archivo"}
+    existing = dict(conn.execute("SELECT * FROM facturas_cliente WHERE id = ?", (vid,)).fetchone())
     valores = []
     for c in CAMPOS_FACTURAS_CLIENTE:
       if c == "empresa_id":
         continue
       v = factura.get(c)
-      valores.append((v if isinstance(v, str) else str(v or "")).strip())
+      v_str = (v if isinstance(v, str) else str(v or "")).strip()
+      if c in _preserve and not v_str:
+        v_str = existing.get(c) or ""
+      valores.append(v_str)
     conn.execute(
       "UPDATE facturas_cliente SET " + ", ".join(f"{c} = ?" for c in CAMPOS_FACTURAS_CLIENTE if c != "empresa_id") + " WHERE id = ?",
       valores + [vid],
