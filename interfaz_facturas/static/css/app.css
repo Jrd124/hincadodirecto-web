@@ -459,7 +459,8 @@
       .panel-presupuestos,
       .panel-usuarios,
       .panel-maquinaria,
-      .panel-cae {
+      .panel-cae,
+      .content-panel {
         display: none;
       }
       .panel-facturas.visible,
@@ -477,7 +478,8 @@
       .panel-presupuestos.visible,
       .panel-usuarios.visible,
       .panel-maquinaria.visible,
-      .panel-cae.visible {
+      .panel-cae.visible,
+      .content-panel.visible {
         display: block;
       }
       .panel-proyectos > .layout {
