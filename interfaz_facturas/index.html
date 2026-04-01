@@ -49,6 +49,7 @@
             <a href="#" class="sidebar-child" id="nav-finanzas-control-calidad">Control de calidad</a>
             <a href="#" class="sidebar-child" id="nav-finanzas-bancos">Bancos</a>
             <a href="#" class="sidebar-child" id="nav-finanzas-tesoreria">Tesoreria</a>
+            <a href="#" class="sidebar-child" id="nav-finanzas-eeff">EEFF</a>
           </div>
         </div>
         <!-- Proyectos -->
@@ -2300,6 +2301,169 @@
         </section>
       </div>
 
+      <!-- ═══ EEFF ═══ -->
+      <div id="panel-eeff-inicio" class="panel-eeff">
+        <section style="max-width:1400px;margin:0 auto;padding:24px 20px;">
+          <div class="breadcrumb-visual">Finanzas &rsaquo; EEFF</div>
+
+          <!-- Cabecera rediseñada -->
+          <div class="eeff-header">
+            <div>
+              <h2 style="margin:0;font-size:20px;font-weight:600;">Estados Financieros</h2>
+              <span style="font-size:13px;color:var(--color-text-secondary);">Análisis financiero basado en sumas y saldos</span>
+            </div>
+            <div class="eeff-header-controls">
+              <select id="eeff-sociedad" class="select-empresa" style="min-width:180px;font-size:13px;"><option value="">Sociedad</option></select>
+              <select id="eeff-anio" class="select-empresa" style="min-width:90px;font-size:13px;"></select>
+              <select id="eeff-mes" class="select-empresa" style="min-width:120px;font-size:13px;">
+                <option value="">Año completo</option>
+                <option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option>
+                <option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option>
+                <option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option>
+                <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+              </select>
+              <button class="btn-small primary" id="btn-eeff-subir">Subir EEFF</button>
+            </div>
+          </div>
+
+          <div class="eeff-tabs">
+            <button class="eeff-tab active" data-tab="balance">Balance</button>
+            <button class="eeff-tab" data-tab="pyg">P&amp;G</button>
+            <button class="eeff-tab" data-tab="metricas">Métricas</button>
+            <button class="eeff-tab" data-tab="config">Configuración</button>
+          </div>
+
+          <div class="eeff-tab-content active" id="eeff-tab-balance">
+            <div class="card" style="padding:20px;">
+              <div id="eeff-balance-body"><p class="sin-datos">Selecciona sociedad y año</p></div>
+            </div>
+          </div>
+          <div class="eeff-tab-content" id="eeff-tab-pyg">
+            <div class="card" style="padding:20px;">
+              <div id="eeff-pyg-body"><p class="sin-datos">Selecciona sociedad y año</p></div>
+            </div>
+          </div>
+          <div class="eeff-tab-content" id="eeff-tab-metricas">
+            <div id="eeff-metricas-grid" class="eeff-metricas-grid"><p class="sin-datos">Selecciona sociedad y año</p></div>
+          </div>
+
+          <!-- Tab: Configuración — 4 cards (rendered by JS) -->
+          <div class="eeff-tab-content" id="eeff-tab-config">
+            <div class="eeff-cfg-grid" id="eeff-cfg-grid"></div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Modal subir EEFF -->
+      <div class="modal-overlay" id="modal-eeff-subir" style="display:none;">
+        <div class="modal-box" style="max-width:520px;">
+          <div class="modal-header">
+            <h2 class="modal-title">Importar Estados Financieros</h2>
+            <button class="modal-close" onclick="document.getElementById('modal-eeff-subir').style.display='none'">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="eeff-dropzone" id="eeff-dropzone">
+              <p>Arrastra un fichero Excel (.xlsx / .xls) aquí</p>
+              <p style="font-size:12px;color:#94A3B8;">o haz click para seleccionar</p>
+              <input type="file" id="eeff-file-input" accept=".xlsx,.xls" style="display:none;">
+            </div>
+            <div id="eeff-import-status" style="display:none;margin-top:12px;">
+              <p id="eeff-import-msg" class="sin-datos"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal plan de cuentas -->
+      <div class="modal-overlay" id="modal-eeff-plan" style="display:none;">
+        <div class="modal-box" style="max-width:900px;">
+          <div class="modal-header">
+            <h2 class="modal-title">Plan de cuentas</h2>
+            <button class="modal-close" onclick="document.getElementById('modal-eeff-plan').style.display='none'">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+              <select id="eeff-plan-filtro-n1" class="select-empresa" style="font-size:13px;min-width:140px;">
+                <option value="">Todos los niveles</option>
+                <option value="Activo">Activo</option>
+                <option value="Pasivo y PN">Pasivo y PN</option>
+                <option value="P&G">P&amp;G</option>
+                <option value="Sin clasificar">Sin clasificar</option>
+              </select>
+              <select id="eeff-plan-filtro-n2" class="select-empresa" style="font-size:13px;min-width:160px;">
+                <option value="">Todos los subniveles</option>
+              </select>
+              <input type="text" placeholder="Buscar código o nombre..." style="flex:1;min-width:150px;padding:6px 10px;font-size:13px;border:1px solid var(--color-border);border-radius:var(--radius-sm);" id="eeff-plan-buscar">
+            </div>
+            <div class="tabla-wrapper" style="max-height:450px;overflow-y:auto;">
+              <table class="tabla-generica" style="font-size:12px;">
+                <thead><tr><th>Código</th><th>Nombre</th><th>Nivel 1</th><th>Nivel 2</th><th>Nivel 3</th><th>Signo</th><th style="width:55px;"></th></tr></thead>
+                <tbody id="eeff-tbody-plan"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal cuentas sin clasificar -->
+      <div class="modal-overlay" id="modal-eeff-sin-clasificar" style="display:none;">
+        <div class="modal-box" style="max-width:650px;">
+          <div class="modal-header">
+            <h2 class="modal-title">Cuentas sin clasificar</h2>
+            <button class="modal-close" onclick="document.getElementById('modal-eeff-sin-clasificar').style.display='none'">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p style="margin-bottom:12px;color:var(--color-text-secondary);font-size:13px;">Asigna cada cuenta a su categoría contable para que aparezca en los informes.</p>
+            <div id="eeff-sc-list"></div>
+            <div style="text-align:right;margin-top:12px;">
+              <button class="btn-small primary" id="btn-eeff-sc-guardar">Guardar todos</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal periodos -->
+      <div class="modal-overlay" id="modal-eeff-periodos" style="display:none;">
+        <div class="modal-box" style="max-width:850px;">
+          <div class="modal-header">
+            <h2 class="modal-title">Periodos importados</h2>
+            <button class="modal-close" onclick="document.getElementById('modal-eeff-periodos').style.display='none'">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div style="text-align:right;margin-bottom:12px;">
+              <button class="btn-small primary" onclick="eeffImportarModal()">Subir EEFF</button>
+            </div>
+            <div class="tabla-wrapper" style="max-height:450px;overflow-y:auto;">
+              <table class="tabla-generica" style="font-size:12px;">
+                <thead><tr><th>Periodo</th><th>Tipo</th><th>Desde</th><th>Hasta</th><th>Fichero</th><th>Estado</th><th style="width:55px;"></th></tr></thead>
+                <tbody id="eeff-tbody-periodos"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal fórmulas -->
+      <div class="modal-overlay" id="modal-eeff-formulas" style="display:none;">
+        <div class="modal-box" style="max-width:900px;">
+          <div class="modal-header">
+            <h2 class="modal-title">Formulaciones</h2>
+            <button class="modal-close" onclick="document.getElementById('modal-eeff-formulas').style.display='none'">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p style="margin-bottom:12px;font-size:12px;color:var(--color-text-secondary);">
+              Sintaxis: <code>SUM_NIVEL2:nombre</code> / <code>SUM_NIVEL3:nombre</code> / <code>{Nombre Fórmula}</code> / operadores: + - * /
+            </p>
+            <div class="tabla-wrapper" style="max-height:450px;overflow-y:auto;">
+              <table class="tabla-generica" style="font-size:12px;">
+                <thead><tr><th>Nombre</th><th>Fórmula</th><th>Formato</th><th>Grupo</th></tr></thead>
+                <tbody id="eeff-tbody-formulas"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="panel-control-calidad-inicio" class="panel-control-calidad">
         <div class="breadcrumb-visual">Finanzas &rsaquo; Control de calidad</div>
         <h1 class="cc-titulo">Control de calidad</h1>
@@ -3109,6 +3273,7 @@
     <script src="/static/js/modules/cae.js?v=28"></script>
     <script src="/static/js/modules/rrhh.js?v=28"></script>
     <script src="/static/js/modules/impuestos.js?v=1"></script>
-    <script src="/static/js/app.js?v=29"></script>
+    <script src="/static/js/modules/eeff.js?v=1"></script>
+    <script src="/static/js/app.js?v=30"></script>
   </body>
 </html>

@@ -3837,6 +3837,235 @@
         }
       }
 
+      /* ===== EEFF (Estados Financieros) ===== */
+      .panel-eeff { display: none; }
+      .panel-eeff.visible { display: block; }
+
+      .eeff-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      .eeff-header h1 {
+        font-size: 1.4rem;
+        margin: 0;
+      }
+      .eeff-header-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      /* Tabs */
+      .eeff-tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid var(--color-border);
+        margin-bottom: 20px;
+      }
+      .eeff-tab {
+        padding: 8px 20px;
+        font-size: 13px;
+        font-weight: 600;
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        color: var(--color-text-secondary);
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .eeff-tab:hover {
+        color: var(--color-primary);
+      }
+      .eeff-tab.active {
+        color: var(--color-primary);
+        border-bottom-color: var(--color-primary);
+      }
+      .eeff-tab-content {
+        display: none;
+      }
+      .eeff-tab-content.active {
+        display: block;
+      }
+
+      /* Hierarchical table */
+      .eeff-tabla-jerarquica {
+        font-size: 13px;
+      }
+      .eeff-tabla-jerarquica td {
+        padding: 5px 8px;
+        white-space: nowrap;
+      }
+      .eeff-tabla-jerarquica .eeff-celda-codigo {
+        font-family: 'SF Mono', 'Consolas', monospace;
+        font-size: 11px;
+        color: var(--color-text-secondary);
+      }
+      .eeff-row-total {
+        background: #EFF6FF !important;
+        font-weight: 700;
+      }
+      .eeff-row-total td {
+        border-top: 2px solid var(--color-primary);
+        border-bottom: 2px solid var(--color-primary);
+      }
+      .eeff-row-seccion {
+        background: var(--color-bg-alt);
+        font-weight: 700;
+      }
+      .eeff-row-grupo {
+        font-weight: 600;
+      }
+      .eeff-row-detalle {
+        color: var(--color-text-secondary);
+      }
+      .eeff-negativo {
+        color: var(--color-danger) !important;
+      }
+      .eeff-variacion {
+        font-size: 11px;
+        color: var(--color-text-secondary);
+      }
+
+      /* Metricas grid reuses dir-kpi from dashboard */
+      .eeff-metricas-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+      }
+      @media (max-width: 1024px) {
+        .eeff-metricas-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+      @media (max-width: 640px) {
+        .eeff-metricas-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* Dropzone */
+      .eeff-dropzone {
+        border: 2px dashed var(--color-border);
+        border-radius: var(--radius-lg);
+        padding: 32px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .eeff-dropzone:hover, .eeff-dropzone.dragover {
+        border-color: var(--color-primary);
+        background: #EFF6FF;
+      }
+      .eeff-dropzone p {
+        margin: 4px 0;
+        color: var(--color-text-secondary);
+      }
+
+      /* P&G cascada */
+      .eeff-pyg-cascada td {
+        padding: 6px 8px;
+      }
+      .eeff-pyg-subtotal {
+        font-weight: 700;
+        background: var(--color-bg-alt);
+      }
+      .eeff-pyg-subtotal td {
+        border-top: 1px solid var(--color-text-secondary);
+      }
+      .eeff-pyg-resultado {
+        background: #EFF6FF !important;
+      }
+      .eeff-pyg-resultado td {
+        border-top: 2px solid var(--color-primary) !important;
+        border-bottom: 2px solid var(--color-primary);
+      }
+      .eeff-margin-bar {
+        height: 8px;
+        background: #E2E8F0;
+        border-radius: 4px;
+        overflow: hidden;
+      }
+      .eeff-margin-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #10B981, #34D399);
+        border-radius: 4px;
+      }
+      .eeff-margin-fill.eeff-margin-neg {
+        background: linear-gradient(90deg, #F87171, #FCA5A5);
+      }
+
+      /* Sin clasificar */
+      .eeff-row-sin-clasificar {
+        background: #FEF2F2 !important;
+      }
+      .eeff-sc-row {
+        padding: 10px 0;
+        border-bottom: 1px solid var(--color-border);
+      }
+      .eeff-sc-row:last-child { border-bottom: none; }
+      .eeff-sc-info {
+        margin-bottom: 6px;
+        font-size: 13px;
+      }
+      .eeff-sc-selects {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .eeff-sc-selects select, .eeff-sc-selects input {
+        padding: 4px 8px;
+        font-size: 12px;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+      }
+
+      /* Config cards grid */
+      .eeff-cfg-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-top: 16px;
+      }
+      .eeff-cfg-card {
+        background: var(--color-bg-alt);
+        border: 1px solid var(--color-border);
+        border-left: 4px solid var(--color-border);
+        border-radius: 12px;
+        padding: 20px;
+        cursor: pointer;
+        transition: box-shadow 0.15s;
+      }
+      .eeff-cfg-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+      .eeff-cfg-card--warning {
+        border-left-color: #DC2626;
+        background: #FEF2F2;
+      }
+      .eeff-cfg-card__label { font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--color-text); }
+      .eeff-cfg-card__value { font-size: 28px; font-weight: 600; color: var(--color-text); }
+      .eeff-cfg-card__sub { font-size: 12px; color: var(--color-text-secondary); }
+      @media (max-width: 640px) {
+        .eeff-cfg-grid { grid-template-columns: 1fr; }
+      }
+
+      /* Status pills */
+      .eeff-pill {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .eeff-pill--ok { background: #DCFCE7; color: #166534; }
+      .eeff-pill--warn { background: #FEF3C7; color: #92400E; }
+      .eeff-pill--error { background: #FEE2E2; color: #991B1B; }
+      .eeff-row-faltante { background: #FFFBEB !important; opacity: 0.7; }
+
       /* ===== SEPARADOR FILTROS ===== */
       .filtro-separator {
         width: 1px;

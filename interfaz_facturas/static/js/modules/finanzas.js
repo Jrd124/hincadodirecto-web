@@ -3875,8 +3875,18 @@ document.getElementById("form-editar-factura").addEventListener("submit", async 
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || "Error al guardar");
     }
+    // Update proveedor name if it changed (so the filtered view uses the new name)
+    var nuevoNombreProv = factura.proveedor || "";
     cerrarModalEdicion();
+    // Refresh the active view: main list AND proveedor-specific list if active
     cargarListado(emp);
+    if (proveedorSeleccionadoNombre) {
+      // If name changed, update the selected proveedor and reload its panel
+      if (nuevoNombreProv && nuevoNombreProv !== proveedorSeleccionadoNombre) {
+        proveedorSeleccionadoNombre = nuevoNombreProv;
+      }
+      cargarFacturasProveedor(emp, proveedorSeleccionadoNombre);
+    }
     mostrarToast("Factura guardada correctamente.", "success");
   } catch (err) {
     mostrarToast(err.message || "No se pudo guardar la factura.", "error");

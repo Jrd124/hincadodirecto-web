@@ -4904,6 +4904,9 @@ app.register_blueprint(impuestos_routes_bp)
 from core import impuestos_db
 impuestos_db.init_impuestos_db()
 
+from routes.eeff import eeff_bp as eeff_routes_bp
+app.register_blueprint(eeff_routes_bp)
+
 logger.info("ERP arrancado — blueprints registrados")
 
 

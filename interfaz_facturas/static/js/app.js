@@ -18,8 +18,8 @@ const MODULOS = {
   finanzas: {
     linkId: "nav-finanzas-modulo",
     submenuId: "submenu-finanzas",
-    paneles: { inicio: "panel-finanzas-inicio", bancos: "panel-bancos-inicio", control_calidad: "panel-control-calidad-inicio", tesoreria: "panel-tesoreria-inicio" },
-    subNavLinks: { proveedores: "nav-finanzas-proveedores", clientes: "nav-finanzas-clientes", control_calidad: "nav-finanzas-control-calidad", bancos: "nav-finanzas-bancos", tesoreria: "nav-finanzas-tesoreria" },
+    paneles: { inicio: "panel-finanzas-inicio", bancos: "panel-bancos-inicio", control_calidad: "panel-control-calidad-inicio", tesoreria: "panel-tesoreria-inicio", eeff: "panel-eeff-inicio" },
+    subNavLinks: { proveedores: "nav-finanzas-proveedores", clientes: "nav-finanzas-clientes", control_calidad: "nav-finanzas-control-calidad", bancos: "nav-finanzas-bancos", tesoreria: "nav-finanzas-tesoreria", eeff: "nav-finanzas-eeff" },
     defecto: "inicio",
   },
   proveedores: {
@@ -339,7 +339,7 @@ function restaurarDesdeHash() {
   if (mod === "finanzas") {
     if (partes.length >= 2) {
       var child = partes[1];
-      if (child === "bancos" || child === "control_calidad" || child === "proveedores" || child === "clientes" || child === "tesoreria") {
+      if (child === "bancos" || child === "control_calidad" || child === "proveedores" || child === "clientes" || child === "tesoreria" || child === "eeff") {
         finanzasChild = child;
         activarModulo("finanzas");
         activarFinanzasChild(child);
@@ -517,6 +517,9 @@ function activarFinanzasChild(child) {
     document.getElementById("panel-bancos-inicio").classList.add("visible");
   } else if (child === "tesoreria") {
     document.getElementById("panel-tesoreria-inicio").classList.add("visible");
+  } else if (child === "eeff") {
+    document.getElementById("panel-eeff-inicio").classList.add("visible");
+    if (typeof cargarEEFF === "function") cargarEEFF();
   }
   actualizarHash();
 }
@@ -586,6 +589,10 @@ document.getElementById("nav-finanzas-tesoreria").addEventListener("click", (e) 
   e.preventDefault();
   activarFinanzasChild("tesoreria");
   if (window._tesCargarTodo) _tesCargarTodo();
+});
+document.getElementById("nav-finanzas-eeff").addEventListener("click", (e) => {
+  e.preventDefault();
+  activarFinanzasChild("eeff");
 });
 
 // Apply container margin-left EARLY — before any navigation that might loop
