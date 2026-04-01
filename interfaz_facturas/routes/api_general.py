@@ -127,6 +127,301 @@ def api_dashboard():
   return jsonify(result)
 
 
+@api_general_bp.get("/api/dashboard/director")
+def api_dashboard_director():
+  """Dashboard de director: visión global de toda la empresa."""
+  from datetime import datetime as _dt, timedelta as _td, date as _date
+  from core.db import conectar as _conectar_db
+
+  hoy = _date.today()
+  mes_prefix = hoy.strftime("%Y-%m")
+  anio_prefix = hoy.strftime("%Y")
+
+  result = {
+    "usuario": current_user.nombre if current_user.is_authenticated else "",
+    "proyectos": {"vivos": 0, "cotizados": 0, "hincas_hoy": 0, "hincas_semana": 0, "lista_vivos": []},
+    "finanzas": {"facturado_mes": 0, "facturado_año": 0, "pendiente_cobro": 0, "pendiente_cobro_count": 0, "pendiente_pago": 0, "pendiente_pago_count": 0, "cobrado_mes": 0},
+    "alertas": [],
+    "maquinaria": {"total": 0, "asignadas": 0, "en_taller": 0, "revisiones_pendientes": 0},
+    "actividad_reciente": [],
+  }
+  try:
+    with _conectar_db() as conn:
+      # ── Proyectos ──
+      row = conn.execute("SELECT estado, COUNT(*) as c FROM proyectos GROUP BY estado").fetchall()
+      for r in row:
+        if r["estado"] == "vivo":
+          result["proyectos"]["vivos"] = r["c"]
+        elif r["estado"] == "cotizado":
+          result["proyectos"]["cotizados"] = r["c"]
+
+      # Hincas hoy
+      r = conn.execute(
+        "SELECT COALESCE(SUM(hincas_realizadas),0) as h FROM proyecto_partes WHERE fecha = ?",
+        (hoy.isoformat(),)
+      ).fetchone()
+      result["proyectos"]["hincas_hoy"] = r["h"] if r else 0
+
+      # Hincas semana (lunes a hoy)
+      lunes = hoy - _td(days=hoy.weekday())
+      r = conn.execute(
+        "SELECT COALESCE(SUM(hincas_realizadas),0) as h FROM proyecto_partes WHERE fecha >= ? AND fecha <= ?",
+        (lunes.isoformat(), hoy.isoformat())
+      ).fetchone()
+      result["proyectos"]["hincas_semana"] = r["h"] if r else 0
+
+      # Lista proyectos vivos
+      vivos = conn.execute(
+        "SELECT p.id, p.nombre, p.codigo, p.provincia, p.ubicacion_texto,"
+        " p.hincas_estimadas, p.hincas_realizadas,"
+        " t.nombre_canonico as cliente"
+        " FROM proyectos p LEFT JOIN terceros t ON p.cliente_tercero_id = t.id"
+        " WHERE p.estado = 'vivo' ORDER BY p.nombre"
+      ).fetchall()
+      lista_vivos = []
+      for v in vivos:
+        # Hincas hoy para este proyecto
+        ph = conn.execute(
+          "SELECT COALESCE(SUM(hincas_realizadas),0) as h FROM proyecto_partes WHERE proyecto_id = ? AND fecha = ?",
+          (v["id"], hoy.isoformat())
+        ).fetchone()
+        lista_vivos.append({
+          "id": v["id"], "nombre": v["nombre"], "codigo": v["codigo"] or "",
+          "cliente": v["cliente"] or "—",
+          "hincas_acumuladas": v["hincas_realizadas"] or 0,
+          "hincas_estimadas": v["hincas_estimadas"] or 0,
+          "hincas_hoy": ph["h"] if ph else 0,
+          "ubicacion": v["ubicacion_texto"] or "", "provincia": v["provincia"] or "",
+        })
+      result["proyectos"]["lista_vivos"] = lista_vivos
+
+      # ── Finanzas ──
+      _PARSE_IMPORTE = "CAST(REPLACE(REPLACE(total_a_pagar,'.',''),',','.') AS REAL)"
+
+      # Facturado mes (clientes)
+      r = conn.execute(
+        f"SELECT COALESCE(SUM({_PARSE_IMPORTE}),0) as t FROM facturas_cliente WHERE fecha_factura LIKE ?",
+        (mes_prefix + "%",)
+      ).fetchone()
+      result["finanzas"]["facturado_mes"] = round(r["t"], 2) if r else 0
+
+      # Facturado año (clientes)
+      r = conn.execute(
+        f"SELECT COALESCE(SUM({_PARSE_IMPORTE}),0) as t FROM facturas_cliente WHERE fecha_factura LIKE ?",
+        (anio_prefix + "%",)
+      ).fetchone()
+      result["finanzas"]["facturado_año"] = round(r["t"], 2) if r else 0
+
+      # Pendiente cobro (clientes)
+      r = conn.execute(
+        f"SELECT COUNT(*) as c, COALESCE(SUM({_PARSE_IMPORTE}),0) as t"
+        " FROM facturas_cliente WHERE LOWER(TRIM(COALESCE(estado_cobro,''))) IN ('pendiente','','parcial')"
+      ).fetchone()
+      if r:
+        result["finanzas"]["pendiente_cobro"] = round(r["t"], 2)
+        result["finanzas"]["pendiente_cobro_count"] = r["c"]
+
+      # Cobrado mes (clientes)
+      r = conn.execute(
+        f"SELECT COALESCE(SUM({_PARSE_IMPORTE}),0) as t"
+        " FROM facturas_cliente WHERE LOWER(TRIM(COALESCE(estado_cobro,''))) = 'cobrada' AND fecha_factura LIKE ?",
+        (mes_prefix + "%",)
+      ).fetchone()
+      result["finanzas"]["cobrado_mes"] = round(r["t"], 2) if r else 0
+
+      # Pendiente pago (proveedores)
+      _PARSE_PROV = "CAST(REPLACE(REPLACE(total_a_pagar,'.',''),',','.') AS REAL)"
+      r = conn.execute(
+        f"SELECT COUNT(*) as c, COALESCE(SUM({_PARSE_PROV}),0) as t"
+        " FROM facturas_proveedor WHERE LOWER(TRIM(estado_pago)) = 'pendiente'"
+      ).fetchone()
+      if r:
+        result["finanzas"]["pendiente_pago"] = round(r["t"], 2)
+        result["finanzas"]["pendiente_pago_count"] = r["c"]
+
+      # ── Maquinaria ──
+      r = conn.execute("SELECT COUNT(*) as total FROM maquinas WHERE activa = 1").fetchone()
+      result["maquinaria"]["total"] = r["total"] if r else 0
+
+      r = conn.execute("SELECT COUNT(*) as c FROM maquinas WHERE activa = 1 AND proyecto_id IS NOT NULL").fetchone()
+      result["maquinaria"]["asignadas"] = r["c"] if r else 0
+
+      r = conn.execute("SELECT COUNT(*) as c FROM maquinas WHERE activa = 1 AND estado = 'taller'").fetchone()
+      result["maquinaria"]["en_taller"] = r["c"] if r else 0
+
+      r = conn.execute("SELECT COUNT(*) as c FROM maquinaria_revisiones WHERE estado = 'abierto'").fetchone()
+      result["maquinaria"]["revisiones_pendientes"] = r["c"] if r else 0
+
+      # ── Alertas ──
+      alertas = []
+
+      # 1. Facturas cliente vencidas > 30 días → alta
+      rows = conn.execute(
+        "SELECT numero_factura, cliente, fecha_vencimiento, fecha_factura"
+        " FROM facturas_cliente"
+        " WHERE LOWER(TRIM(COALESCE(estado_cobro,''))) IN ('pendiente','','')"
+        " AND COALESCE(fecha_vencimiento, fecha_factura) != ''"
+      ).fetchall()
+      for f in rows:
+        ref_date = f["fecha_vencimiento"] or f["fecha_factura"]
+        if not ref_date:
+          continue
+        try:
+          d = _date.fromisoformat(ref_date)
+        except (ValueError, TypeError):
+          continue
+        dias = (hoy - d).days
+        if dias > 30:
+          alertas.append({
+            "tipo": "factura_vencida",
+            "mensaje": f"Factura {f['numero_factura']} de {f['cliente'][:30]} vencida hace {dias} días",
+            "severidad": "alta", "orden": 1,
+            "link": "#finanzas/clientes",
+          })
+        elif dias > 15:
+          alertas.append({
+            "tipo": "factura_vencida",
+            "mensaje": f"Factura {f['numero_factura']} de {f['cliente'][:30]} vencida hace {dias} días",
+            "severidad": "media", "orden": 2,
+            "link": "#finanzas/clientes",
+          })
+
+      # 2. Obligaciones fiscales
+      oblig = conn.execute(
+        "SELECT modelo, descripcion, periodo, año, fecha_limite, sociedad"
+        " FROM obligaciones_fiscales WHERE LOWER(TRIM(COALESCE(estado,''))) = 'pendiente'"
+      ).fetchall()
+      for o in oblig:
+        try:
+          dl = _date.fromisoformat(o["fecha_limite"])
+        except (ValueError, TypeError):
+          continue
+        dias = (dl - hoy).days
+        if dias < 0:
+          alertas.append({
+            "tipo": "impuesto_vencido",
+            "mensaje": f"Modelo {o['modelo']} {o['periodo']} {o['año']} ({o['sociedad'][:20]}) vencido hace {abs(dias)} días",
+            "severidad": "alta", "orden": 0,
+            "link": "#impuestos",
+          })
+        elif dias <= 15:
+          alertas.append({
+            "tipo": "impuesto_proximo",
+            "mensaje": f"Modelo {o['modelo']} {o['periodo']} {o['año']} ({o['sociedad'][:20]}) vence en {dias} días",
+            "severidad": "media", "orden": 2,
+            "link": "#impuestos",
+          })
+
+      # 3. Proyectos vivos sin partes en últimos 3 días laborables
+      dias_atras = 0
+      dias_lab = 0
+      fecha_check = hoy
+      while dias_lab < 3:
+        fecha_check = hoy - _td(days=dias_atras)
+        if fecha_check.weekday() < 5:
+          dias_lab += 1
+        dias_atras += 1
+      for v in lista_vivos:
+        r = conn.execute(
+          "SELECT COUNT(*) as c FROM proyecto_partes WHERE proyecto_id = ? AND fecha >= ?",
+          (v["id"], fecha_check.isoformat())
+        ).fetchone()
+        if r and r["c"] == 0:
+          alertas.append({
+            "tipo": "sin_partes",
+            "mensaje": f"{v['nombre']}: sin partes en los últimos 3 días laborables",
+            "severidad": "info", "orden": 3,
+            "link": f"#proyectos/dashboard/{v['id']}",
+          })
+
+      # Ordenar por severidad y limitar
+      alertas.sort(key=lambda a: a["orden"])
+      result["alertas"] = alertas[:10]
+      result["alertas_total"] = len(alertas)
+
+      # ── Actividad reciente ──
+      actividad = []
+
+      # Partes recientes
+      partes_rec = conn.execute(
+        "SELECT pp.fecha, pp.hincas_realizadas, pp.created_at, p.nombre as proyecto"
+        " FROM proyecto_partes pp JOIN proyectos p ON pp.proyecto_id = p.id"
+        " ORDER BY pp.created_at DESC LIMIT 5"
+      ).fetchall()
+      for p in partes_rec:
+        actividad.append({
+          "fecha": p["created_at"][:16] if p["created_at"] else p["fecha"],
+          "texto": f"Parte registrado: {p['proyecto']} — {p['hincas_realizadas'] or 0} hincas",
+          "tipo": "parte",
+          "categoria": "proyectos",
+        })
+
+      # Facturas cliente recientes
+      fac_cli = conn.execute(
+        "SELECT numero_factura, cliente, total_a_pagar, fecha_factura"
+        " FROM facturas_cliente ORDER BY ROWID DESC LIMIT 5"
+      ).fetchall()
+      for f in fac_cli:
+        actividad.append({
+          "fecha": f["fecha_factura"] or "",
+          "texto": f"Factura {f['numero_factura']} emitida a {f['cliente'][:25]} — {f['total_a_pagar']} €",
+          "tipo": "factura",
+          "categoria": "finanzas",
+        })
+
+      # Facturas proveedor recientes
+      fac_prov = conn.execute(
+        "SELECT proveedor, total_a_pagar, fecha_factura"
+        " FROM facturas_proveedor ORDER BY ROWID DESC LIMIT 5"
+      ).fetchall()
+      for f in fac_prov:
+        actividad.append({
+          "fecha": f["fecha_factura"] or "",
+          "texto": f"Factura recibida de {f['proveedor'][:25]} — {f['total_a_pagar']} €",
+          "tipo": "factura_prov",
+          "categoria": "finanzas",
+        })
+
+      # Interacciones CRM recientes
+      crm_rows = conn.execute(
+        "SELECT i.asunto, i.tipo, i.fecha, i.fecha_creacion,"
+        " COALESCE(e.nombre, '') as empresa"
+        " FROM crm_interacciones i"
+        " LEFT JOIN crm_empresas e ON i.empresa_id = e.id"
+        " ORDER BY COALESCE(i.fecha_creacion, i.fecha) DESC LIMIT 5"
+      ).fetchall()
+      for r in crm_rows:
+        actividad.append({
+          "fecha": r["fecha_creacion"] or r["fecha"] or "",
+          "texto": f"CRM: {r['tipo'] or 'Interacción'} — {r['asunto'][:40]}" + (f" ({r['empresa'][:20]})" if r["empresa"] else ""),
+          "tipo": "crm",
+          "categoria": "crm",
+        })
+
+      # Checks de maquinaria recientes
+      maq_rows = conn.execute(
+        "SELECT c.fecha, c.created_at, c.estado, m.nombre as maquina"
+        " FROM maquinaria_checks c"
+        " JOIN maquinas m ON c.maquina_id = m.id"
+        " ORDER BY c.created_at DESC LIMIT 5"
+      ).fetchall()
+      for r in maq_rows:
+        actividad.append({
+          "fecha": r["created_at"] or r["fecha"] or "",
+          "texto": f"Check {r['maquina']}: {r['estado'] or 'realizado'}",
+          "tipo": "maquinaria_check",
+          "categoria": "maquinaria",
+        })
+
+      # Ordenar por fecha desc y limitar a 20
+      actividad.sort(key=lambda a: a["fecha"] or "", reverse=True)
+      result["actividad_reciente"] = actividad[:20]
+
+  except Exception as e:
+    logger.warning("Error en /api/dashboard/director: %s", e)
+  return jsonify(result)
+
+
 @api_general_bp.get("/api/finanzas/resumen")
 def api_finanzas_resumen():
   """Resumen rápido para el dashboard del módulo Finanzas."""

@@ -162,7 +162,7 @@ function actualizarHash() {
 
 // ═══ DASHBOARD INICIO ═══════════════════════════════════════════════════════
 
-function cargarDashboard() {
+function cargarDashboardDirector() {
   var elFecha = document.getElementById("dashboard-fecha");
   if (elFecha) {
     var hoy = new Date();
@@ -170,9 +170,11 @@ function cargarDashboard() {
     var fechaStr = hoy.toLocaleDateString("es-ES", opciones);
     elFecha.textContent = fechaStr.charAt(0).toUpperCase() + fechaStr.slice(1);
   }
-  fetch("/api/dashboard?t=" + Date.now())
+
+  fetch("/api/dashboard/director?t=" + Date.now())
     .then(function (r) { return r.json(); })
     .then(function (data) {
+      // — Saludo —
       var hora = new Date().getHours();
       var saludo = hora < 14 ? "Buenos días" : hora < 20 ? "Buenas tardes" : "Buenas noches";
       if (data.usuario) {
@@ -181,198 +183,146 @@ function cargarDashboard() {
       }
       var elSaludo = document.getElementById("dashboard-saludo");
       if (elSaludo) elSaludo.textContent = saludo;
-      var elPend = document.getElementById("dash-pendientes-count");
-      if (elPend) elPend.textContent = data.facturas_pendientes_count != null ? data.facturas_pendientes_count : "—";
-      var elImporte = document.getElementById("dash-importe-pendiente");
-      if (elImporte) elImporte.textContent = data.importe_pendiente_total != null ? formatearNumeroES(data.importe_pendiente_total) + " €" : "—";
-      var elMes = document.getElementById("dash-mes-count");
-      if (elMes) elMes.textContent = data.facturas_mes_count != null ? data.facturas_mes_count : "—";
-      var elMesLabel = document.getElementById("dash-mes-label");
-      if (elMesLabel) {
-        var meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-        elMesLabel.textContent = meses[new Date().getMonth()] + " " + new Date().getFullYear();
-      }
-      var elEmpresas = document.getElementById("dash-empresas-count");
-      if (elEmpresas) elEmpresas.textContent = data.empresas_activas != null ? data.empresas_activas : "—";
 
-      var tablaUltimas = document.getElementById("tabla-dash-ultimas");
-      if (tablaUltimas && data.ultimas_facturas) {
-        var tbody = tablaUltimas.querySelector("tbody");
-        if (!tbody) { tbody = document.createElement("tbody"); tablaUltimas.appendChild(tbody); }
+      var p = data.proyectos || {};
+      var f = data.finanzas || {};
+      var m = data.maquinaria || {};
+
+      // — KPIs —
+      _setDir("dir-proyectos-vivos", p.vivos);
+      _setDir("dir-proyectos-cotizados", p.cotizados + " cotizados en pipeline");
+      _setDir("dir-hincas-hoy", p.hincas_hoy);
+      _setDir("dir-hincas-semana", p.hincas_semana + " esta semana");
+      _setDir("dir-facturado-mes", _fmtEur(f.facturado_mes));
+      _setDir("dir-facturado-anio", _fmtEur(f["facturado_año"]) + " en el año");
+      _setDir("dir-pendiente-cobro", _fmtEur(f.pendiente_cobro));
+      _setDir("dir-pendiente-cobro-n", f.pendiente_cobro_count + " facturas");
+      _setDir("dir-pendiente-pago", _fmtEur(f.pendiente_pago));
+      _setDir("dir-pendiente-pago-n", f.pendiente_pago_count + " facturas");
+      _setDir("dir-maquinas", m.asignadas + " / " + m.total + " asignadas");
+      _setDir("dir-maquinas-rev", m.revisiones_pendientes + " revisiones pendientes");
+
+      // — Obras activas —
+      var tbody = document.getElementById("dir-tbody-obras");
+      if (tbody) {
         tbody.innerHTML = "";
-        if (data.ultimas_facturas.length === 0) {
-          tbody.innerHTML = "<tr><td colspan=\"4\" style=\"text-align:center;color:#94A3B8;padding:24px;\">Sin facturas recientes</td></tr>";
+        var lista = p.lista_vivos || [];
+        if (lista.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="sin-datos">Sin obras activas</td></tr>';
         } else {
-          data.ultimas_facturas.forEach(function (f) {
+          lista.forEach(function (ob) {
+            var pct = ob.hincas_estimadas > 0 ? Math.round((ob.hincas_acumuladas / ob.hincas_estimadas) * 100) : 0;
             var tr = document.createElement("tr");
-            tr.innerHTML = "<td>" + (f.fecha || "—") + "</td><td>" + (f.proveedor || "—") + "</td><td class=\"numero\">" + formatearNumeroES(f.total) + " €</td><td>" + (f.empresa || "—") + "</td>";
+            tr.style.cursor = "pointer";
+            tr.onclick = function () { location.hash = "proyectos/dashboard/" + ob.id; };
+            tr.innerHTML =
+              '<td><strong>' + _esc(ob.codigo || ob.nombre) + '</strong><br><span class="dir-obra-sub">' + _esc(ob.provincia) + '</span></td>' +
+              '<td>' + _esc(ob.cliente) + '</td>' +
+              '<td><div class="dir-progress-wrap">' +
+                '<div class="dir-progress-bar"><div class="dir-progress-fill" style="width:' + pct + '%"></div></div>' +
+                '<span class="dir-progress-text">' + ob.hincas_acumuladas + ' / ' + (ob.hincas_estimadas || "—") + ' (' + pct + '%)</span>' +
+              '</div></td>' +
+              '<td class="numero">' + (ob.hincas_hoy || 0) + '</td>';
             tbody.appendChild(tr);
           });
         }
       }
 
-      var tablaPend = document.getElementById("tabla-dash-pendientes");
-      if (tablaPend && data.pendientes_por_empresa) {
-        var tbody2 = tablaPend.querySelector("tbody");
-        if (!tbody2) { tbody2 = document.createElement("tbody"); tablaPend.appendChild(tbody2); }
-        tbody2.innerHTML = "";
-        if (data.pendientes_por_empresa.length === 0) {
-          tbody2.innerHTML = "<tr><td colspan=\"3\" style=\"text-align:center;color:#94A3B8;padding:24px;\">Sin facturas pendientes</td></tr>";
+      // — Alertas —
+      var alertasList = document.getElementById("dir-alertas-list");
+      if (alertasList) {
+        alertasList.innerHTML = "";
+        var alertas = data.alertas || [];
+        if (alertas.length === 0) {
+          alertasList.innerHTML = '<p class="sin-datos" style="padding:16px;text-align:center;">Sin alertas</p>';
         } else {
-          data.pendientes_por_empresa.forEach(function (e) {
-            var tr = document.createElement("tr");
-            tr.innerHTML = "<td>" + (e.empresa || "—") + "</td><td class=\"numero\">" + (e.count || 0) + "</td><td class=\"numero\">" + formatearNumeroES(e.importe) + " €</td>";
-            tbody2.appendChild(tr);
+          alertas.forEach(function (a) {
+            var iconMap = { alta: "\uD83D\uDD34", media: "\uD83D\uDFE1", info: "\uD83D\uDD35" };
+            var div = document.createElement("div");
+            div.className = "dir-alerta dir-alerta--" + a.severidad;
+            if (a.link) {
+              div.style.cursor = "pointer";
+              div.onclick = function () { location.hash = a.link.replace(/^#/, ""); };
+            }
+            div.innerHTML = '<span class="dir-alerta__icon">' + (iconMap[a.severidad] || "") + '</span><span class="dir-alerta__msg">' + _esc(a.mensaje) + '</span>';
+            alertasList.appendChild(div);
           });
+        }
+        var btnAll = document.getElementById("dir-alertas-ver-todas");
+        if (btnAll) {
+          btnAll.style.display = (data.alertas_total || 0) > 10 ? "" : "none";
         }
       }
 
-      // --- Gráficos del dashboard ---
-      renderizarGraficosDashboard(data);
+      // — Actividad reciente —
+      var timeline = document.getElementById("dir-timeline");
+      if (timeline) {
+        timeline.innerHTML = "";
+        var acts = data.actividad_reciente || [];
+        if (acts.length === 0) {
+          timeline.innerHTML = '<p class="sin-datos" style="padding:16px;text-align:center;">Sin actividad reciente</p>';
+        } else {
+          acts.forEach(function (a) {
+            var iconMap = { parte: "\uD83D\uDCCB", factura: "\uD83D\uDCE4", factura_prov: "\uD83D\uDCE5", certificacion: "\uD83D\uDCC4", proyecto: "\uD83D\uDCC1", crm: "\uD83E\uDD1D", maquinaria_check: "\uD83D\uDD27" };
+            var div = document.createElement("div");
+            div.className = "dir-timeline-item";
+            div.dataset.categoria = a.categoria || "";
+            div.innerHTML =
+              '<span class="dir-timeline-icon">' + (iconMap[a.tipo] || "\u2022") + '</span>' +
+              '<div class="dir-timeline-body">' +
+                '<span class="dir-timeline-texto">' + _esc(a.texto) + '</span>' +
+                '<span class="dir-timeline-fecha">' + _fmtRelativa(a.fecha) + '</span>' +
+              '</div>';
+            timeline.appendChild(div);
+          });
+        }
+      }
     })
-    .catch(function (err) { console.error("Error cargando dashboard:", err); });
+    .catch(function (err) { console.error("Error cargando dashboard director:", err); });
 }
 
-var _chartInstances = {};
-function _destroyChart(key) {
-  if (_chartInstances[key]) { _chartInstances[key].destroy(); _chartInstances[key] = null; }
+// Helpers del dashboard director
+function _setDir(id, val) {
+  var el = document.getElementById(id);
+  if (el) el.textContent = val != null ? val : "—";
+}
+function _fmtEur(v) {
+  if (v == null || isNaN(v)) return "—";
+  return Number(v).toLocaleString("es-ES", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + " \u20AC";
+}
+function _esc(s) {
+  if (!s) return "";
+  var d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+function _fmtRelativa(fecha) {
+  if (!fecha) return "";
+  try {
+    var d = new Date(fecha.replace(" ", "T"));
+    var ahora = new Date();
+    var diff = Math.floor((ahora - d) / 1000);
+    if (diff < 60) return "hace unos segundos";
+    if (diff < 3600) return "hace " + Math.floor(diff / 60) + " min";
+    if (diff < 86400) return "hace " + Math.floor(diff / 3600) + " h";
+    var dias = Math.floor(diff / 86400);
+    if (dias === 1) return "ayer";
+    if (dias < 7) return "hace " + dias + " días";
+    return d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+  } catch (e) {
+    return fecha;
+  }
 }
 
-function renderizarGraficosDashboard(data) {
-  if (typeof Chart === "undefined") return;
-
-  // Defaults globales
-  Chart.defaults.font.family = "'Inter', sans-serif";
-  Chart.defaults.font.size = 12;
-  Chart.defaults.color = "#64748B";
-  Chart.defaults.elements.bar.borderWidth = 0;
-  Chart.defaults.elements.arc.borderWidth = 0;
-  Chart.defaults.responsive = true;
-  Chart.defaults.maintainAspectRatio = false;
-
-  // 1) Facturación mensual (bar + line)
-  if (data.facturas_por_mes && data.facturas_por_mes.length) {
-    _destroyChart("facturasMes");
-    var ctx1 = document.getElementById("chart-facturas-mes");
-    if (ctx1) {
-      _chartInstances["facturasMes"] = new Chart(ctx1, {
-        type: "bar",
-        data: {
-          labels: data.facturas_por_mes.map(function(d) { return d.mes; }),
-          datasets: [
-            {
-              label: "Importe (€)",
-              data: data.facturas_por_mes.map(function(d) { return d.importe; }),
-              backgroundColor: "rgba(37,99,235,0.8)",
-              borderRadius: 6,
-              yAxisID: "y",
-              order: 2
-            },
-            {
-              label: "Nº facturas",
-              data: data.facturas_por_mes.map(function(d) { return d.count; }),
-              type: "line",
-              borderColor: "#F59E0B",
-              backgroundColor: "#F59E0B",
-              pointRadius: 4,
-              pointBackgroundColor: "#F59E0B",
-              tension: 0.3,
-              yAxisID: "y1",
-              order: 1
-            }
-          ]
-        },
-        options: {
-          plugins: { legend: { display: false }, tooltip: { enabled: true } },
-          scales: {
-            x: { grid: { display: false } },
-            y: { grid: { color: "#E2E8F0" }, beginAtZero: true, ticks: { callback: function(v) { return v.toLocaleString("es-ES") + " €"; } } },
-            y1: { position: "right", grid: { drawOnChartArea: false }, beginAtZero: true, ticks: { stepSize: 1, precision: 0 } }
-          }
-        }
-      });
-    }
-  }
-
-  // 2) Estado de facturas (doughnut)
-  if (data.facturas_por_estado) {
-    _destroyChart("estadoFacturas");
-    var ctx2 = document.getElementById("chart-estado-facturas");
-    if (ctx2) {
-      var est = data.facturas_por_estado;
-      var totalFacturas = (est.pendiente || 0) + (est.pagada || 0) + (est.parcial || 0);
-      _chartInstances["estadoFacturas"] = new Chart(ctx2, {
-        type: "doughnut",
-        data: {
-          labels: ["Pendiente", "Pagada", "Parcial"],
-          datasets: [{
-            data: [est.pendiente || 0, est.pagada || 0, est.parcial || 0],
-            backgroundColor: ["#F59E0B", "#10B981", "#3B82F6"],
-            hoverOffset: 6
-          }]
-        },
-        options: {
-          cutout: "70%",
-          plugins: {
-            legend: { position: "bottom", labels: { padding: 16 } },
-            tooltip: { enabled: true }
-          }
-        },
-        plugins: [{
-          id: "centerText",
-          afterDraw: function(chart) {
-            var ctx = chart.ctx;
-            var w = chart.width, h = chart.chartArea.bottom - chart.chartArea.top;
-            var cy = chart.chartArea.top + h / 2;
-            ctx.save();
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.font = "600 28px 'Inter', sans-serif";
-            ctx.fillStyle = "#1E293B";
-            ctx.fillText(totalFacturas, w / 2, cy - 8);
-            ctx.font = "12px 'Inter', sans-serif";
-            ctx.fillStyle = "#64748B";
-            ctx.fillText("facturas", w / 2, cy + 16);
-            ctx.restore();
-          }
-        }]
-      });
-    }
-  }
-
-  // 3) Top 5 proveedores (horizontal bar)
-  if (data.top_proveedores && data.top_proveedores.length) {
-    _destroyChart("topProveedores");
-    var ctx3 = document.getElementById("chart-top-proveedores");
-    if (ctx3) {
-      var gradient = ctx3.getContext("2d").createLinearGradient(0, 0, ctx3.parentElement.offsetWidth, 0);
-      gradient.addColorStop(0, "#2563EB");
-      gradient.addColorStop(1, "#60A5FA");
-      _chartInstances["topProveedores"] = new Chart(ctx3, {
-        type: "bar",
-        data: {
-          labels: data.top_proveedores.map(function(d) { return d.nombre; }),
-          datasets: [{
-            data: data.top_proveedores.map(function(d) { return d.importe; }),
-            backgroundColor: gradient,
-            borderRadius: 6
-          }]
-        },
-        options: {
-          indexAxis: "y",
-          plugins: {
-            legend: { display: false },
-            tooltip: { callbacks: { label: function(ctx) { return ctx.parsed.x.toLocaleString("es-ES", { minimumFractionDigits: 2 }) + " €"; } } }
-          },
-          scales: {
-            x: { grid: { color: "#E2E8F0" }, beginAtZero: true, ticks: { callback: function(v) { return v.toLocaleString("es-ES") + " €"; } } },
-            y: { grid: { display: false } }
-          }
-        }
-      });
-    }
-  }
-}
+// Filtro de actividad reciente por categoría
+window.filtrarActividad = function(filtro) {
+  document.querySelectorAll(".dir-filtro-pill").forEach(function (p) { p.classList.remove("active"); });
+  var sel = document.querySelector('.dir-filtro-pill[data-filtro="' + filtro + '"]');
+  if (sel) sel.classList.add("active");
+  document.querySelectorAll(".dir-timeline-item").forEach(function (item) {
+    item.style.display = (filtro === "todos" || item.dataset.categoria === filtro) ? "" : "none";
+  });
+};
 
 // ═══ NAVEGACIÓN Y HASH ══════════════════════════════════════════════════════
 
@@ -522,7 +472,7 @@ function activarModulo(nombre) {
   }
 
   if (nombre === "inicio") {
-    cargarDashboard();
+    cargarDashboardDirector();
   } else if (nombre === "finanzas") {
     cargarFinanzasInicio();
   } else if (nombre === "usuarios") {

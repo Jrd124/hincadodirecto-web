@@ -186,83 +186,87 @@
 
       <!-- ===== DASHBOARD INICIO ===== -->
       <div id="seccion-inicio" class="seccion-inicio visible">
+        <!-- Fila 1: Saludo + fecha -->
         <div class="dashboard-header">
           <h1 id="dashboard-saludo"></h1>
           <p class="dashboard-fecha" id="dashboard-fecha"></p>
         </div>
-        <div class="dashboard-cards">
-          <div class="dashboard-card dashboard-card-blue">
-            <span class="dashboard-card-label">Facturas pendientes</span>
-            <span class="dashboard-card-value" id="dash-pendientes-count">—</span>
-            <span class="dashboard-card-sub">Todas las empresas</span>
+
+        <!-- Fila 2: KPIs principales (6 cards) -->
+        <div class="dir-kpis">
+          <div class="dir-kpi dir-kpi--teal">
+            <span class="dir-kpi__label">Proyectos vivos</span>
+            <span class="dir-kpi__value" id="dir-proyectos-vivos">—</span>
+            <span class="dir-kpi__sub" id="dir-proyectos-cotizados">— cotizados en pipeline</span>
           </div>
-          <div class="dashboard-card dashboard-card-yellow">
-            <span class="dashboard-card-label">Importe pendiente</span>
-            <span class="dashboard-card-value" id="dash-importe-pendiente">—</span>
-            <span class="dashboard-card-sub">Total por cobrar</span>
+          <div class="dir-kpi dir-kpi--blue">
+            <span class="dir-kpi__label">Hincas hoy</span>
+            <span class="dir-kpi__value" id="dir-hincas-hoy">—</span>
+            <span class="dir-kpi__sub" id="dir-hincas-semana">— esta semana</span>
           </div>
-          <div class="dashboard-card dashboard-card-green">
-            <span class="dashboard-card-label">Facturas este mes</span>
-            <span class="dashboard-card-value" id="dash-mes-count">—</span>
-            <span class="dashboard-card-sub" id="dash-mes-label">Mes actual</span>
+          <div class="dir-kpi dir-kpi--green">
+            <span class="dir-kpi__label">Facturado mes</span>
+            <span class="dir-kpi__value" id="dir-facturado-mes">—</span>
+            <span class="dir-kpi__sub" id="dir-facturado-anio">— en el año</span>
           </div>
-          <div class="dashboard-card dashboard-card-gray">
-            <span class="dashboard-card-label">Empresas activas</span>
-            <span class="dashboard-card-value" id="dash-empresas-count">—</span>
-            <span class="dashboard-card-sub">Configuradas</span>
+          <div class="dir-kpi dir-kpi--amber">
+            <span class="dir-kpi__label">Pendiente cobro</span>
+            <span class="dir-kpi__value" id="dir-pendiente-cobro">—</span>
+            <span class="dir-kpi__sub" id="dir-pendiente-cobro-n">— facturas</span>
+          </div>
+          <div class="dir-kpi dir-kpi--coral">
+            <span class="dir-kpi__label">Pendiente pago</span>
+            <span class="dir-kpi__value" id="dir-pendiente-pago">—</span>
+            <span class="dir-kpi__sub" id="dir-pendiente-pago-n">— facturas</span>
+          </div>
+          <div class="dir-kpi dir-kpi--gray">
+            <span class="dir-kpi__label">Máquinas</span>
+            <span class="dir-kpi__value" id="dir-maquinas">—</span>
+            <span class="dir-kpi__sub" id="dir-maquinas-rev">— revisiones pendientes</span>
           </div>
         </div>
-        <div class="dashboard-panels">
-          <div class="card dashboard-panel">
-            <h2 class="dashboard-panel-title">Últimas facturas recibidas</h2>
+
+        <!-- Fila 3: Obras activas + Alertas -->
+        <div class="dir-grid-main">
+          <div class="card dir-panel dir-panel--obras">
+            <h2 class="dir-panel__title">Obras activas</h2>
             <div class="tabla-wrapper">
-              <table id="tabla-dash-ultimas">
+              <table class="tabla-generica dir-tabla-obras">
                 <thead>
                   <tr>
-                    <th>Fecha</th>
-                    <th>Proveedor</th>
-                    <th class="numero">Total</th>
-                    <th>Empresa</th>
+                    <th>Proyecto</th>
+                    <th>Cliente</th>
+                    <th>Progreso</th>
+                    <th class="numero">Hincas hoy</th>
                   </tr>
                 </thead>
-                <tbody id="tbody-dash-ultimas">
+                <tbody id="dir-tbody-obras">
                   <tr><td colspan="4" class="sin-datos">Cargando...</td></tr>
                 </tbody>
               </table>
             </div>
           </div>
-          <div class="card dashboard-panel">
-            <h2 class="dashboard-panel-title">Facturas pendientes por empresa</h2>
-            <div class="tabla-wrapper">
-              <table id="tabla-dash-pendientes">
-                <thead>
-                  <tr>
-                    <th>Empresa</th>
-                    <th class="numero">Pendientes</th>
-                    <th class="numero">Importe</th>
-                  </tr>
-                </thead>
-                <tbody id="tbody-dash-pendientes">
-                  <tr><td colspan="3" class="sin-datos">Cargando...</td></tr>
-                </tbody>
-              </table>
+          <div class="card dir-panel dir-panel--alertas">
+            <h2 class="dir-panel__title">Alertas</h2>
+            <div id="dir-alertas-list" class="dir-alertas-list">
+              <p class="sin-datos">Cargando...</p>
             </div>
+            <button id="dir-alertas-ver-todas" class="btn-small dir-alertas-ver-todas" style="display:none;">Ver todas</button>
           </div>
         </div>
-        <div class="dashboard-panels dashboard-charts-row">
-          <div class="card dashboard-panel">
-            <h2 class="dashboard-panel-title">Facturación mensual</h2>
-            <div style="height:280px;position:relative;"><canvas id="chart-facturas-mes"></canvas></div>
+
+        <!-- Fila 4: Actividad reciente -->
+        <div class="card dir-panel dir-panel--actividad">
+          <h2 class="dir-panel__title">Actividad reciente</h2>
+          <div class="dir-filtro-pills">
+            <button class="dir-filtro-pill active" data-filtro="todos" onclick="filtrarActividad('todos')">Todos</button>
+            <button class="dir-filtro-pill" data-filtro="proyectos" onclick="filtrarActividad('proyectos')">Proyectos</button>
+            <button class="dir-filtro-pill" data-filtro="finanzas" onclick="filtrarActividad('finanzas')">Finanzas</button>
+            <button class="dir-filtro-pill" data-filtro="crm" onclick="filtrarActividad('crm')">CRM</button>
+            <button class="dir-filtro-pill" data-filtro="maquinaria" onclick="filtrarActividad('maquinaria')">Maquinaria</button>
           </div>
-          <div class="card dashboard-panel">
-            <h2 class="dashboard-panel-title">Estado de facturas</h2>
-            <div style="height:280px;position:relative;"><canvas id="chart-estado-facturas"></canvas></div>
-          </div>
-        </div>
-        <div class="dashboard-panels dashboard-charts-row dashboard-charts-full">
-          <div class="card dashboard-panel" style="grid-column:1/-1;">
-            <h2 class="dashboard-panel-title">Top 5 proveedores por importe</h2>
-            <div style="height:250px;position:relative;"><canvas id="chart-top-proveedores"></canvas></div>
+          <div id="dir-timeline" class="dir-timeline">
+            <p class="sin-datos">Cargando...</p>
           </div>
         </div>
       </div>
