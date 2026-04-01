@@ -207,12 +207,13 @@ def _seed_maquinas(conn):
     now = _now()
     maquinas = [
         ("HD1000-01", "Nicoletta", "ORTECO HD1000", 6086, 6086, "2019-01-01"),
-        ("HD1000-02", "Antonella", "ORTECO HD1000", 4534, 4534, "2020-01-01"),
-        ("HD1000-03", "Enmanuela", "ORTECO HD1000", 5389, 5389, "2020-01-01"),
+        ("HD1000-02", "Antonella", "ORTECO HD1000", 4791, 4534, "2020-01-01"),
+        ("HD1000-03", "Enmanuela", "ORTECO HD1000", 5657, 5389, "2020-01-01"),
         ("HD1000-04", "Lauretta", "ORTECO HD1000", 4483, 4483, "2021-01-01"),
         ("HD1000-05", "Marietta", "ORTECO HD1000", 4450, 4450, "2021-01-01"),
         ("HD1000-06", "Carmela", "ORTECO HD1000", 1671, 1671, "2023-01-01"),
-        ("HD1000-07", "Nieves", "ORTECO HD1000", 423, 423, "2024-01-01"),
+        ("HD1000-07", "Nieves", "ORTECO HD1000", 1065, 423, "2024-01-01"),
+        ("MHPW-01", "Olivia", "ORTECO MHPW-1000", 39, 0, "2026-01-01"),
     ]
     for m in maquinas:
         conn.execute(
