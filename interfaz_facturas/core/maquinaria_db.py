@@ -658,16 +658,53 @@ def actualizar_maquina(maq_id: int, data: dict) -> dict:
 
 
 def _calcular_revisiones_pendientes(conn, maquina_id: int, horometro_actual: float) -> list:
-    intervalos = {"100h": 100, "250h": 250, "500h": 500, "1000h": 1000, "2000h": 2000}
+    """Calcula revisiones pendientes consultando tanto maquinaria_revisiones (legacy)
+    como maquinaria_maintenance_logs (histórico importado + nuevas revisiones).
+
+    Para cada intervalo, busca el hito más alto cerrado en ambas tablas y calcula
+    si toca la siguiente revisión.
+    """
+    INTERVALOS = {"100h": 100, "250h": 250, "500h": 500, "1000h": 1000, "2000h": 2000}
+
+    # Task codes agrupados por intervalo (para consultar maintenance_logs)
+    TASK_CODES_BY_INTERVAL = {
+        100: ["REDUCTORES_ORUGAS_100H", "CADENA_ELEVACION_100H", "PATIN_LUBRICACION_100H",
+              "INTERIOR_COLUMNA_100H", "BARRENA_ACEITE_100H", "SACAMUESTRAS_ENGRASAR_100H",
+              "PERFORADOR_RP500_100H"],
+        250: ["ORUGAS_TENSION_250H", "MEMBRANA_ACUMULADOR_250H", "TIRANTES_PERNOS_250H"],
+        500: ["HIDRAULICO_NIVEL_500H", "PINZA_EXTRACCION_500H", "LEVANTADOR_GUARDARRAILES_500H"],
+        1000: ["REDUCTOR_ORUGAS_ACEITE_1000H", "FILTRO_HIDRAULICO_ENVIO_1000H",
+               "FILTRO_HIDRAULICO_DESCARGA_1000H", "BARRENA_ACEITE_REDUCTOR_1000H",
+               "PERFORADOR_ACEITE_REDUCTOR_1000H", "CADENA_ELEVACION_1000H"],
+        2000: ["DEPOSITO_HIDRAULICO_2000H"],
+    }
+
     pendientes = []
-    for tipo, intervalo in intervalos.items():
-        ultima = conn.execute(
+    for tipo, intervalo in INTERVALOS.items():
+        # 1) Buscar en maquinaria_revisiones (legacy)
+        legacy = conn.execute(
             "SELECT horometro_al_revision FROM maquinaria_revisiones "
             "WHERE maquina_id = ? AND tipo = ? AND estado = 'cerrado' "
             "ORDER BY horometro_al_revision DESC LIMIT 1",
             [maquina_id, tipo],
         ).fetchone()
-        ultimo_h = ultima["horometro_al_revision"] if ultima else 0
+        legacy_h = legacy["horometro_al_revision"] if legacy else 0
+
+        # 2) Buscar en maquinaria_maintenance_logs (histórico importado)
+        codes = TASK_CODES_BY_INTERVAL.get(intervalo, [])
+        logs_h = 0
+        if codes:
+            placeholders = ",".join("?" for _ in codes)
+            log_row = conn.execute(
+                f"SELECT MAX(due_hours) as max_due FROM maquinaria_maintenance_logs "
+                f"WHERE maquina_id = ? AND task_code IN ({placeholders})",
+                [maquina_id] + codes,
+            ).fetchone()
+            logs_h = log_row["max_due"] if log_row and log_row["max_due"] else 0
+
+        # Tomar el mayor de ambas fuentes
+        ultimo_h = max(legacy_h, logs_h)
+
         horas_desde = horometro_actual - ultimo_h
         if horas_desde >= intervalo:
             veces = int(horas_desde / intervalo)
