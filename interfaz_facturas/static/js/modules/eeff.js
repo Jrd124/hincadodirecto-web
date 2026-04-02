@@ -51,8 +51,8 @@ function _initEEFF() {
   dz.addEventListener("click", function () { fi.click(); });
   dz.addEventListener("dragover", function (e) { e.preventDefault(); dz.classList.add("dragover"); });
   dz.addEventListener("dragleave", function () { dz.classList.remove("dragover"); });
-  dz.addEventListener("drop", function (e) { e.preventDefault(); dz.classList.remove("dragover"); if (e.dataTransfer.files.length) _subirFicheroEEFF(e.dataTransfer.files[0]); });
-  fi.addEventListener("change", function () { if (fi.files.length) _subirFicheroEEFF(fi.files[0]); });
+  dz.addEventListener("drop", function (e) { e.preventDefault(); dz.classList.remove("dragover"); if (e.dataTransfer.files.length) _subirFicherosEEFF(e.dataTransfer.files); });
+  fi.addEventListener("change", function () { if (fi.files.length) _subirFicherosEEFF(fi.files); fi.value = ""; });
 
   // Plan filters
   document.getElementById("eeff-plan-filtro-n1").addEventListener("change", _filtrarPlanCuentas);
@@ -67,25 +67,50 @@ window.eeffImportarModal = function () {
   document.getElementById("eeff-import-status").style.display = "none";
 };
 
-function _subirFicheroEEFF(file) {
+function _subirFicherosEEFF(files) {
   var status = document.getElementById("eeff-import-status");
   var msg = document.getElementById("eeff-import-msg");
   status.style.display = "";
-  msg.textContent = "Importando " + file.name + "...";
   msg.style.color = "";
-  var fd = new FormData();
-  fd.append("file", file);
-  fetch("/api/eeff/importar", { method: "POST", body: fd })
-    .then(function (r) { return r.json(); })
-    .then(function (data) {
-      if (data.error) { msg.textContent = "Error: " + data.error; msg.style.color = "#DC2626"; return; }
-      var txt = "Importados " + data.importados + " periodos:";
-      (data.detalle || []).forEach(function (d) { txt += "\n  " + d.tipo.toUpperCase() + " " + d.periodo + " \u2014 " + d.lineas + " lineas"; });
+  var fileList = Array.from(files);
+  var total = fileList.length;
+  var done = 0;
+  var resultados = [];
+  msg.textContent = "Importando " + total + " fichero" + (total > 1 ? "s" : "") + "...";
+
+  function _procesarSiguiente() {
+    if (done >= total) {
+      // All done — show summary
+      var txt = "Ficheros procesados: " + done + " de " + total;
+      resultados.forEach(function (r) { txt += "\n" + r; });
       msg.textContent = txt;
       msg.style.color = "#16A34A";
       _cargarPeriodosEEFF();
-    })
-    .catch(function (e) { msg.textContent = "Error: " + e; msg.style.color = "#DC2626"; });
+      return;
+    }
+    var file = fileList[done];
+    msg.textContent = "Importando " + (done + 1) + " de " + total + ": " + file.name + "...";
+    var fd = new FormData();
+    fd.append("file", file);
+    fetch("/api/eeff/importar", { method: "POST", body: fd })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) {
+          resultados.push("\u2716 " + file.name + " \u2014 Error: " + data.error);
+        } else {
+          var detalles = (data.detalle || []).map(function (d) { return d.periodo; }).join(", ");
+          resultados.push("\u2714 " + file.name + " \u2014 " + (data.importados || 0) + " periodos (" + detalles + ")");
+        }
+      })
+      .catch(function (e) {
+        resultados.push("\u2716 " + file.name + " \u2014 " + e);
+      })
+      .finally(function () {
+        done++;
+        _procesarSiguiente();
+      });
+  }
+  _procesarSiguiente();
 }
 
 // ── Selectors ───────────────────────────────────────────────────────────────

@@ -376,6 +376,27 @@ def parse_fichero_eeff(filepath):
 
 # ── Importador ───────────────────────────────────────────────────────────────
 
+def _generar_nombre_periodo(desde, hasta, año, trimestre, tipo, meses_es):
+    """Genera nombre legible para el periodo: 'Febrero 2025', 'Q1 2025', 'Anual 2024'."""
+    if desde and hasta:
+        mes_desde = desde[5:7] if len(desde) >= 7 else ""
+        mes_hasta = hasta[5:7] if len(hasta) >= 7 else ""
+        # Mensual: mismo mes en desde y hasta
+        if mes_desde == mes_hasta and mes_desde:
+            try:
+                idx = int(mes_hasta) - 1
+                return f"{meses_es[idx]} {año}"
+            except (ValueError, IndexError):
+                pass
+        # Anual: enero a diciembre
+        if mes_desde == "01" and mes_hasta == "12":
+            return f"Anual {año}"
+    # Trimestral
+    if trimestre:
+        return f"Q{trimestre} {año}"
+    return str(año)
+
+
 def importar_eeff(filepath, conn):
     """Parsea el fichero y guarda en BD. Si el periodo ya existe, lo reemplaza."""
     crear_tablas(conn)
@@ -384,6 +405,9 @@ def importar_eeff(filepath, conn):
     filename = os.path.basename(filepath)
     resultados = []
 
+    _MESES_ES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+
     for inf in informes:
         sociedad = inf["empresa"]
         tipo = inf["tipo"]
@@ -391,11 +415,7 @@ def importar_eeff(filepath, conn):
         hasta = inf["hasta"]
         año = int(hasta[:4]) if hasta else 0
         trimestre = _trimestre_de_fecha(hasta)
-        periodo = f"{año}"
-        if trimestre and tipo == "sumas_saldos":
-            periodo = f"{año} Q{trimestre}"
-        elif trimestre and trimestre < 4:
-            periodo = f"{año} Q{trimestre}"
+        periodo = _generar_nombre_periodo(desde, hasta, año, trimestre, tipo, _MESES_ES)
 
         # Delete existing period if any (upsert)
         existing = conn.execute(
@@ -450,7 +470,21 @@ def importar_eeff(filepath, conn):
         })
 
     conn.commit()
+    # Fix names of existing periods
+    _corregir_nombres_periodos(conn)
     return {"importados": len(resultados), "detalle": resultados}
+
+
+def _corregir_nombres_periodos(conn):
+    """Corrige nombres de periodos existentes (ej: '2025 Q1' → 'Febrero 2025' si es mensual)."""
+    _MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+              "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+    rows = conn.execute("SELECT id, fecha_desde, fecha_hasta, año, trimestre, tipo, periodo FROM eeff_periodos").fetchall()
+    for r in rows:
+        nuevo = _generar_nombre_periodo(r["fecha_desde"], r["fecha_hasta"], r["año"], r["trimestre"], r["tipo"], _MESES)
+        if nuevo != r["periodo"]:
+            conn.execute("UPDATE eeff_periodos SET periodo = ? WHERE id = ?", (nuevo, r["id"]))
+    conn.commit()
 
 
 # ── Consultas ────────────────────────────────────────────────────────────────
