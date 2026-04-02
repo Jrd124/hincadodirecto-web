@@ -239,31 +239,166 @@ function _renderBalanceEEFF() {
   body.innerHTML = html;
 }
 
-// ── P&G ─────────────────────────────────────────────────────────────────────
+// ── P&G Comparativa ─────────────────────────────────────────────────────────
+
+var _eeffPygVista = "mensual";
+var _eeffPygData = null;
 
 function _renderPYGEEFF() {
   var body = document.getElementById("eeff-pyg-body");
-  if (!_eeffInforme) { body.innerHTML = '<p class="sin-datos">Selecciona sociedad y año</p>'; return; }
-  var lines = _eeffInforme.pyg || [];
-  var ingresos = 1;
-  lines.forEach(function (l) { if (l.nombre === "Ingresos") ingresos = Math.abs(l.valor) || 1; });
+  var soc = document.getElementById("eeff-sociedad").value;
+  var anio = document.getElementById("eeff-anio").value;
+  var mes = document.getElementById("eeff-mes").value;
+  if (!soc || !anio || !mes) {
+    body.innerHTML = '<p class="sin-datos">Selecciona sociedad, año y mes para ver comparativas</p>';
+    return;
+  }
+  _cargarPygComparativa();
+}
+
+function _cargarPygComparativa() {
+  var soc = document.getElementById("eeff-sociedad").value;
+  var anio = document.getElementById("eeff-anio").value;
+  var mes = document.getElementById("eeff-mes").value;
+  var body = document.getElementById("eeff-pyg-body");
+  if (!soc || !anio || !mes) return;
+
+  var url = "/api/eeff/pyg-comparativa?sociedad=" + encodeURIComponent(soc) +
+    "&anio=" + anio + "&mes=" + mes + "&vista=" + _eeffPygVista + "&t=" + Date.now();
+
+  fetch(url)
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (data) {
+      if (data.error) { body.innerHTML = '<p class="sin-datos">' + _escH(data.error) + '</p>'; return; }
+      _eeffPygData = data;
+      _pintarPygComparativa();
+    })
+    .catch(function () { body.innerHTML = '<p class="sin-datos">Error cargando comparativa</p>'; });
+}
+
+window.eeffPygVista = function (vista) {
+  _eeffPygVista = vista;
+  document.querySelectorAll(".eeff-pyg-pill").forEach(function (b) {
+    b.classList.toggle("active", b.dataset.vista === vista);
+  });
+  _cargarPygComparativa();
+};
+
+function _pintarPygComparativa() {
+  var body = document.getElementById("eeff-pyg-body");
+  var d = _eeffPygData;
+  if (!d) { body.innerHTML = '<p class="sin-datos">Sin datos</p>'; return; }
+
+  // Pills
+  var html = '<div class="eeff-pyg-pills">' +
+    '<button class="eeff-pyg-pill' + (_eeffPygVista === "mensual" ? " active" : "") + '" data-vista="mensual" onclick="eeffPygVista(\'mensual\')">Mensual</button>' +
+    '<button class="eeff-pyg-pill' + (_eeffPygVista === "ytd" ? " active" : "") + '" data-vista="ytd" onclick="eeffPygVista(\'ytd\')">Acumulado YTD</button>' +
+    '<button class="eeff-pyg-pill' + (_eeffPygVista === "ltm" ? " active" : "") + '" data-vista="ltm" onclick="eeffPygVista(\'ltm\')">Últimos 12 meses</button>' +
+    '</div>';
+
+  var pa = d.periodo_actual || {};
+  var pn1 = d.periodo_n1 || {};
+  var pn2 = d.periodo_n2 || {};
+  var hasN1 = d.disponible_n1;
+  var hasN2 = d.disponible_n2;
+
+  // Build lookup maps
+  var mapA = {}, mapN1 = {}, mapN2 = {};
+  (pa.lineas || []).forEach(function (l) { mapA[l.nombre] = l.valor; });
+  (pn1.lineas || []).forEach(function (l) { mapN1[l.nombre] = l.valor; });
+  (pn2.lineas || []).forEach(function (l) { mapN2[l.nombre] = l.valor; });
 
   var subtotals = ["Margen Bruto", "EBITDA", "EBIT", "Resultado Financiero", "Resultado Antes Impuestos", "Resultado Neto"];
-  var html = '<table class="tabla-generica eeff-pyg-cascada"><thead><tr><th>Concepto</th><th class="numero" style="width:150px;">Importe</th><th class="numero" style="width:80px;">% Ing.</th><th style="width:120px;">Margen</th></tr></thead><tbody>';
+  var gastoKeys = ["Aprovisionamientos", "Gastos Personal", "Otros Gastos", "Amortización", "Deterioro",
+    "Gastos Excepcionales", "Gastos Financieros", "Impuesto Sociedades"];
 
-  lines.forEach(function (l) {
-    var pct = l.valor / ingresos * 100;
-    var pctStr = (pct >= 0 ? "+" : "") + pct.toFixed(1) + "%";
-    var isSub = subtotals.indexOf(l.nombre) >= 0;
-    var cls = isSub ? (l.nombre === "Resultado Neto" ? ' class="eeff-pyg-resultado"' : ' class="eeff-pyg-subtotal"') : "";
-    var barW = Math.min(Math.abs(pct), 100);
-    var neg = l.valor < 0;
-    html += '<tr' + cls + '><td>' + _escH(l.nombre) + '</td>' +
-      '<td class="numero' + (neg ? ' eeff-negativo' : '') + '">' + _fmtN(l.valor) + '</td>' +
-      '<td class="numero" style="font-size:11px;">' + pctStr + '</td>' +
-      '<td><div class="eeff-margin-bar"><div class="eeff-margin-fill' + (neg ? ' eeff-margin-neg' : '') + '" style="width:' + barW + '%"></div></div></td></tr>';
+  function fmtImporte(v) {
+    if (v == null || isNaN(v)) return "\u2014";
+    return Number(v).toLocaleString("es-ES", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + " \u20AC";
+  }
+
+  function fmtVar(actual, anterior, nombre) {
+    if (anterior == null || anterior === 0) {
+      if (actual && actual !== 0) return '<span class="eeff-var-neutral">nuevo</span>';
+      return '<span class="eeff-var-neutral">\u2014</span>';
+    }
+    var pct = ((actual - anterior) / Math.abs(anterior)) * 100;
+    var isGasto = gastoKeys.indexOf(nombre) >= 0;
+    // For expenses (negative items): decrease = green, increase = red
+    var isPositive = isGasto ? (pct <= 0) : (pct >= 0);
+    var cls = pct === 0 ? "eeff-var-neutral" : (isPositive ? "eeff-var-pos" : "eeff-var-neg");
+    var sign = pct > 0 ? "+" : "";
+    return '<span class="' + cls + '">' + sign + pct.toFixed(1).replace(".", ",") + '%</span>';
+  }
+
+  // Table header
+  html += '<table class="tabla-generica eeff-pyg-cascada" style="width:100%;border-collapse:collapse;">' +
+    '<thead><tr style="border-bottom:2px solid var(--color-border-tertiary, #E2E8F0);">' +
+    '<th style="text-align:left;padding:8px;font-size:13px;">Concepto</th>' +
+    '<th style="text-align:right;padding:8px;font-size:13px;min-width:100px;">' + _escH(pa.nombre || "") + '</th>';
+  if (hasN1) {
+    html += '<th style="text-align:right;padding:8px;font-size:13px;min-width:100px;">' + _escH(pn1.nombre || "") + '</th>' +
+      '<th style="text-align:right;padding:8px;font-size:13px;width:70px;">Var %</th>';
+  }
+  if (hasN2) {
+    html += '<th style="text-align:right;padding:8px;font-size:13px;min-width:100px;">' + _escH(pn2.nombre || "") + '</th>' +
+      '<th style="text-align:right;padding:8px;font-size:13px;width:70px;">Var %</th>';
+  }
+  html += '</tr></thead><tbody>';
+
+  // Use current period lines as the canonical list
+  var lineas = pa.lineas || [];
+  if (!lineas.length && pn1.lineas) lineas = pn1.lineas;
+
+  lineas.forEach(function (l) {
+    var nombre = l.nombre;
+    var valA = mapA[nombre] != null ? mapA[nombre] : null;
+    var valN1 = mapN1[nombre] != null ? mapN1[nombre] : null;
+    var valN2 = mapN2[nombre] != null ? mapN2[nombre] : null;
+
+    var isSub = subtotals.indexOf(nombre) >= 0;
+    var cls = isSub ? (nombre === "Resultado Neto" ? ' class="eeff-pyg-resultado"' : ' class="eeff-pyg-subtotal"') : "";
+    var negA = valA != null && valA < 0;
+
+    html += '<tr' + cls + '>' +
+      '<td style="padding:6px 8px;">' + _escH(nombre) + '</td>' +
+      '<td class="numero" style="padding:6px 8px;' + (negA ? 'color:var(--color-danger);' : '') + '">' + fmtImporte(valA) + '</td>';
+
+    if (hasN1) {
+      var negN1 = valN1 != null && valN1 < 0;
+      html += '<td class="numero" style="padding:6px 8px;color:var(--color-text-secondary);' + (negN1 ? 'color:var(--color-danger);' : '') + '">' + fmtImporte(valN1) + '</td>' +
+        '<td style="text-align:right;padding:6px 8px;font-size:12px;">' + fmtVar(valA, valN1, nombre) + '</td>';
+    }
+    if (hasN2) {
+      var negN2 = valN2 != null && valN2 < 0;
+      html += '<td class="numero" style="padding:6px 8px;color:var(--color-text-secondary);' + (negN2 ? 'color:var(--color-danger);' : '') + '">' + fmtImporte(valN2) + '</td>' +
+        '<td style="text-align:right;padding:6px 8px;font-size:12px;">' + fmtVar(valA, valN2, nombre) + '</td>';
+    }
+    html += '</tr>';
   });
   html += '</tbody></table>';
+
+  // EBITDA margin bar
+  var ingA = Math.abs(mapA["Ingresos"] || 0) || 1;
+  var ebitdaA = mapA["EBITDA"] || 0;
+  var marginA = (ebitdaA / ingA * 100);
+  var barsHtml = '<div class="eeff-ebitda-bars"><strong style="white-space:nowrap;">Margen EBITDA:</strong>';
+
+  function marginBar(label, ebitda, ingresos, color) {
+    var ing = Math.abs(ingresos) || 1;
+    var m = (ebitda / ing * 100);
+    var w = Math.min(Math.max(Math.abs(m), 2), 100);
+    return '<div class="eeff-ebitda-bar-item">' +
+      '<div class="eeff-ebitda-bar-fill" style="width:' + w + 'px;background:' + color + ';"></div>' +
+      '<span>' + m.toFixed(1).replace(".", ",") + '% (' + _escH(label) + ')</span></div>';
+  }
+
+  barsHtml += marginBar(pa.nombre || "", ebitdaA, mapA["Ingresos"] || 0, "#3B82F6");
+  if (hasN1) barsHtml += marginBar(pn1.nombre || "", mapN1["EBITDA"] || 0, mapN1["Ingresos"] || 0, "#94A3B8");
+  if (hasN2) barsHtml += marginBar(pn2.nombre || "", mapN2["EBITDA"] || 0, mapN2["Ingresos"] || 0, "#CBD5E1");
+  barsHtml += '</div>';
+  html += barsHtml;
+
   body.innerHTML = html;
 }
 

@@ -4000,6 +4000,58 @@
         background: linear-gradient(90deg, #F87171, #FCA5A5);
       }
 
+      /* P&G pills comparativa */
+      .eeff-pyg-pills {
+        display: flex;
+        gap: 0;
+        margin-bottom: 16px;
+        border-bottom: 2px solid var(--color-border-tertiary, #E2E8F0);
+      }
+      .eeff-pyg-pill {
+        padding: 8px 18px;
+        font-size: 13px;
+        font-weight: 500;
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        color: var(--color-text-secondary);
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .eeff-pyg-pill:hover {
+        color: var(--color-text-primary);
+        background: var(--color-bg-alt);
+      }
+      .eeff-pyg-pill.active {
+        color: var(--color-primary);
+        border-bottom-color: var(--color-primary);
+        font-weight: 600;
+      }
+      .eeff-var-pos { color: #16A34A; font-weight: 500; }
+      .eeff-var-neg { color: #DC2626; font-weight: 500; }
+      .eeff-var-neutral { color: var(--color-text-secondary); }
+      .eeff-ebitda-bars {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-top: 16px;
+        padding: 12px 16px;
+        background: var(--color-bg-alt);
+        border-radius: var(--radius-lg, 8px);
+        font-size: 13px;
+      }
+      .eeff-ebitda-bar-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .eeff-ebitda-bar-fill {
+        height: 12px;
+        border-radius: 6px;
+        min-width: 4px;
+      }
+
       /* Sin clasificar */
       .eeff-row-sin-clasificar {
         background: #FEF2F2 !important;

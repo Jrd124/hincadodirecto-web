@@ -1125,6 +1125,41 @@ def fusionar_terceros(principal_id: int, absorbido_id: int) -> dict[str, Any]:
         ).rowcount
         resultado["facturas_cli_reasignadas"] = max(resultado["facturas_cli_reasignadas"], n)
 
+        # 3b. Actualizar campos de texto en facturas ya reasignadas al principal
+        # para que muestren el nombre/CIF del tercero conservado
+        prin_nif = (principal.get("nif") or "").strip()
+        prin_nombre = principal["nombre_canonico"]
+        abs_nombre = absorbido["nombre_canonico"]
+
+        # facturas_proveedor: actualizar proveedor y nif_proveedor
+        conn.execute(
+            "UPDATE facturas_proveedor SET proveedor = ?, nif_proveedor = ?"
+            " WHERE tercero_id = ? AND (proveedor = ? OR nif_proveedor = ?)",
+            (prin_nombre, prin_nif, principal_id, abs_nombre,
+             absorbido.get("nif") or ""),
+        )
+        # También por CIF normalizado del absorbido (cubre variantes con/sin guiones)
+        if abs_cif:
+            conn.execute(
+                "UPDATE facturas_proveedor SET proveedor = ?, nif_proveedor = ?"
+                " WHERE tercero_id = ? AND UPPER(REPLACE(REPLACE(REPLACE(nif_proveedor,' ',''),'.',''),'-','')) = ?",
+                (prin_nombre, prin_nif, principal_id, abs_cif),
+            )
+
+        # facturas_cliente: actualizar cliente y cif_nif
+        conn.execute(
+            "UPDATE facturas_cliente SET cliente = ?, cif_nif = ?"
+            " WHERE tercero_id = ? AND (cliente = ? OR cif_nif = ?)",
+            (prin_nombre, prin_nif, principal_id, abs_nombre,
+             absorbido.get("nif") or ""),
+        )
+        if abs_cif:
+            conn.execute(
+                "UPDATE facturas_cliente SET cliente = ?, cif_nif = ?"
+                " WHERE tercero_id = ? AND UPPER(REPLACE(REPLACE(REPLACE(cif_nif,' ',''),'.',''),'-','')) = ?",
+                (prin_nombre, prin_nif, principal_id, abs_cif),
+            )
+
         # 4. Reasignar empresa_tercero
         # Delete duplicates first, then update
         conn.execute("""

@@ -933,6 +933,141 @@ def calcular_informe(conn, periodo_id):
     }
 
 
+# ── P&G multi-periodo (comparativas) ──────────────────────────────────────
+#
+# Los SS de la gestoría son ACUMULADOS desde enero:
+#   - debe_saldo / haber_saldo = acumulado YTD (unambiguamente)
+#   - debe_periodo / haber_periodo = puede ser mensual o acumulado según fichero
+#
+# Para evitar ambigüedad usamos siempre debe_saldo/haber_saldo y derivamos
+# el mensual por sustracción: P&G(mes M) = YTD(M) - YTD(M-1).
+
+def _evaluar_formulas_pyg(conn, by_nivel2, by_nivel3):
+    """Evalúa las fórmulas P&G sobre los dicts de nivel2/nivel3 ya calculados."""
+    formulas = conn.execute(
+        "SELECT nombre, formula, formato, orden, grupo FROM eeff_formulas"
+        " WHERE activo = 1 AND grupo = 'pyg' ORDER BY orden"
+    ).fetchall()
+
+    formula_cache = {}
+
+    def _eval(formula_str):
+        s = formula_str.strip()
+        s = re.sub(
+            r"SUM_NIVEL2:([^+\-*/{}]+)",
+            lambda m: str(by_nivel2.get(m.group(1).strip(), 0)), s,
+        )
+        s = re.sub(
+            r"SUM_NIVEL3:([^+\-*/{}]+)",
+            lambda m: str(by_nivel3.get(m.group(1).strip(), 0)), s,
+        )
+        s = re.sub(
+            r"\{([^}]+)\}",
+            lambda m: str(formula_cache.get(m.group(1).strip(), 0)), s,
+        )
+        try:
+            return round(float(eval(s, {"__builtins__": {}}, {})), 2)
+        except Exception:
+            return 0
+
+    result = []
+    for f in formulas:
+        val = _eval(f["formula"])
+        formula_cache[f["nombre"]] = val
+        result.append({"nombre": f["nombre"], "valor": val, "formato": f["formato"], "orden": f["orden"]})
+    return result
+
+
+def _agregar_saldos_ytd(conn, periodo_id):
+    """Lee debe_saldo/haber_saldo de un periodo SS y devuelve (by_nivel2, by_nivel3).
+
+    Estos saldos son ACUMULADOS desde inicio de año — exactamente lo que
+    necesitamos para YTD.
+    """
+    plan = {}
+    for r in conn.execute(
+        "SELECT codigo, nivel1, nivel2, nivel3, signo FROM eeff_plan_cuentas WHERE activo = 1"
+    ).fetchall():
+        plan[r["codigo"]] = dict(r)
+
+    lineas = conn.execute(
+        "SELECT codigo_cuenta, COALESCE(debe_saldo,0) as debe, COALESCE(haber_saldo,0) as haber"
+        " FROM eeff_lineas WHERE periodo_id = ? AND codigo_cuenta GLOB '[0-9]*'",
+        (periodo_id,),
+    ).fetchall()
+
+    by_nivel2 = {}
+    by_nivel3 = {}
+    for ln in lineas:
+        cod4 = str(ln["codigo_cuenta"]).strip()[:4]
+        mapping = plan.get(cod4)
+        if not mapping or mapping["nivel1"] == "Sin clasificar":
+            continue
+        saldo = (ln["debe"] or 0) - (ln["haber"] or 0)
+        saldo_signed = round(saldo * mapping["signo"], 2)
+        n2, n3 = mapping["nivel2"], mapping["nivel3"]
+        by_nivel2[n2] = round(by_nivel2.get(n2, 0) + saldo_signed, 2)
+        by_nivel3[n3] = round(by_nivel3.get(n3, 0) + saldo_signed, 2)
+    return by_nivel2, by_nivel3
+
+
+def _restar_niveles(a_n2, a_n3, b_n2, b_n3):
+    """Devuelve a - b para los dicts de nivel2 y nivel3."""
+    all_n2 = set(a_n2) | set(b_n2)
+    all_n3 = set(a_n3) | set(b_n3)
+    r_n2 = {k: round(a_n2.get(k, 0) - b_n2.get(k, 0), 2) for k in all_n2}
+    r_n3 = {k: round(a_n3.get(k, 0) - b_n3.get(k, 0), 2) for k in all_n3}
+    return r_n2, r_n3
+
+
+def calcular_pyg_ytd(conn, periodo_id):
+    """P&G acumulada YTD usando debe_saldo/haber_saldo de un solo periodo."""
+    crear_tablas(conn)
+    n2, n3 = _agregar_saldos_ytd(conn, periodo_id)
+    return _evaluar_formulas_pyg(conn, n2, n3)
+
+
+def calcular_pyg_mensual(conn, periodo_id, periodo_id_anterior=None):
+    """P&G de un solo mes = YTD(mes) - YTD(mes-1).
+
+    Para enero, periodo_id_anterior es None y se usa el YTD directamente.
+    """
+    crear_tablas(conn)
+    n2_m, n3_m = _agregar_saldos_ytd(conn, periodo_id)
+    if periodo_id_anterior:
+        n2_prev, n3_prev = _agregar_saldos_ytd(conn, periodo_id_anterior)
+        n2_m, n3_m = _restar_niveles(n2_m, n3_m, n2_prev, n3_prev)
+    return _evaluar_formulas_pyg(conn, n2_m, n3_m)
+
+
+def calcular_pyg_ltm(conn, periodo_id_mes_actual, periodo_id_dic_anterior, periodo_id_mes_anterior=None):
+    """P&G últimos 12 meses = YTD(mes M, año Y) + Anual(Y-1) - YTD(mes M, año Y-1).
+
+    Si no hay YTD del mismo mes del año anterior, se usa solo YTD actual + Dic anterior.
+    """
+    crear_tablas(conn)
+    # YTD actual (ene..M del año Y)
+    n2_ytd, n3_ytd = _agregar_saldos_ytd(conn, periodo_id_mes_actual)
+    # Anual año anterior (ene..dic Y-1)
+    n2_dic, n3_dic = _agregar_saldos_ytd(conn, periodo_id_dic_anterior)
+    # Sumar YTD + Dic anterior
+    all_n2 = set(n2_ytd) | set(n2_dic)
+    all_n3 = set(n3_ytd) | set(n3_dic)
+    n2_sum = {k: round(n2_ytd.get(k, 0) + n2_dic.get(k, 0), 2) for k in all_n2}
+    n3_sum = {k: round(n3_ytd.get(k, 0) + n3_dic.get(k, 0), 2) for k in all_n3}
+    # Restar YTD del mismo mes del año anterior (para no contar doble ene..M de Y-1)
+    if periodo_id_mes_anterior:
+        n2_prev, n3_prev = _agregar_saldos_ytd(conn, periodo_id_mes_anterior)
+        n2_sum, n3_sum = _restar_niveles(n2_sum, n3_sum, n2_prev, n3_prev)
+    return _evaluar_formulas_pyg(conn, n2_sum, n3_sum)
+
+
+# Keep old name for backwards compatibility
+def calcular_pyg_multiples_periodos(conn, periodo_ids):
+    """Deprecated — usa calcular_pyg_ytd / calcular_pyg_mensual / calcular_pyg_ltm."""
+    return calcular_pyg_ytd(conn, periodo_ids[0]) if periodo_ids else []
+
+
 # ── Plan de cuentas CRUD ────────────────────────────────────────────────────
 
 def obtener_plan_cuentas(conn):
