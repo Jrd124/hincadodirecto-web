@@ -1,5 +1,14 @@
 // ═══ EEFF — Estados Financieros (Motor v2) ════════════════════════════════
 
+// Card click dispatcher — must be available immediately at parse time
+window._eeffCard = function (tipo) {
+  console.log("[EEFF] Card clicked:", tipo);
+  if (tipo === "plan") window.eeffModalPlanCuentas();
+  else if (tipo === "warning") window.eeffModalSinClasificar();
+  else if (tipo === "periodos") window.eeffModalPeriodos();
+  else if (tipo === "formulas") window.eeffModalFormulas();
+};
+
 var _eeffInit = false;
 var _eeffPeriodos = [];
 var _eeffInforme = null;
@@ -25,9 +34,9 @@ function _initEEFF() {
     });
   });
 
-  // Selectors
-  document.getElementById("eeff-sociedad").addEventListener("change", function () { _actualizarAniosEEFF(); _cargarInformeEEFF(); });
-  document.getElementById("eeff-anio").addEventListener("change", function () { _cargarInformeEEFF(); });
+  // Selectors — cascading: sociedad → años → meses → informe
+  document.getElementById("eeff-sociedad").addEventListener("change", function () { _actualizarAniosEEFF(); _actualizarMesesEEFF(); _cargarInformeEEFF(); });
+  document.getElementById("eeff-anio").addEventListener("change", function () { _actualizarMesesEEFF(); _cargarInformeEEFF(); });
   document.getElementById("eeff-mes").addEventListener("change", function () { _cargarInformeEEFF(); });
 
   // Subir modal
@@ -54,7 +63,7 @@ function _initEEFF() {
 // ── Import ──────────────────────────────────────────────────────────────────
 
 window.eeffImportarModal = function () {
-  document.getElementById("modal-eeff-subir").style.display = "";
+  document.getElementById("modal-eeff-subir").classList.add("visible");
   document.getElementById("eeff-import-status").style.display = "none";
 };
 
@@ -100,6 +109,7 @@ function _actualizarSociedadesEEFF() {
   if (socs.length === 1) sel.value = socs[0];
   else if (cur) sel.value = cur;
   _actualizarAniosEEFF();
+  _actualizarMesesEEFF();
   _cargarInformeEEFF();
 }
 
@@ -117,6 +127,39 @@ function _actualizarAniosEEFF() {
   anios.forEach(function (a) { sel.innerHTML += '<option value="' + a + '">' + a + '</option>'; });
   if (anios.length > 0 && !cur) sel.value = anios[0];
   else if (cur) sel.value = cur;
+}
+
+function _actualizarMesesEEFF() {
+  var soc = document.getElementById("eeff-sociedad").value;
+  var anio = document.getElementById("eeff-anio").value;
+  var sel = document.getElementById("eeff-mes");
+  var cur = sel.value;
+
+  // Find which months have SS data for this sociedad+año
+  var mesesConDatos = {};
+  _eeffPeriodos.forEach(function (p) {
+    if (p.tipo !== "sumas_saldos") return;
+    if (soc && p.sociedad !== soc) return;
+    if (anio && p["año"] !== parseInt(anio)) return;
+    // Extract month from fecha_hasta
+    var m = (p.fecha_hasta || "").substring(5, 7);
+    if (m) mesesConDatos[m] = true;
+  });
+
+  var nombres = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+    "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+  sel.innerHTML = '<option value="">Año completo</option>';
+  for (var i = 1; i <= 12; i++) {
+    var mm = (i < 10 ? "0" : "") + i;
+    var tiene = mesesConDatos[mm];
+    sel.innerHTML += '<option value="' + mm + '"' + (tiene ? '' : ' disabled style="color:#CBD5E1;"') + '>'
+      + nombres[i - 1] + (tiene ? '' : '') + '</option>';
+  }
+  if (cur && !sel.querySelector('option[value="' + cur + '"]:not(:disabled)')) {
+    sel.value = "";
+  } else if (cur) {
+    sel.value = cur;
+  }
 }
 
 function _cargarInformeEEFF() {
@@ -222,52 +265,46 @@ function _renderMetricasEEFF() {
 // ── Config resumen ──────────────────────────────────────────────────────────
 
 function _cargarConfigResumen() {
-  var grid = document.getElementById("eeff-cfg-grid");
-  if (!grid) return;
   fetch("/api/eeff/config-resumen?t=" + Date.now())
     .then(function (r) { return r.json(); })
     .then(function (d) {
+      // Only update numbers — cards are static HTML in index.html
+      var el;
+      el = document.getElementById("eeff-cfg-mapeadas");
+      if (el) el.textContent = d.cuentas_mapeadas || 0;
+      el = document.getElementById("eeff-cfg-sin-mapear");
+      if (el) el.textContent = d.cuentas_sin_mapear || 0;
+      el = document.getElementById("eeff-cfg-periodos");
+      if (el) el.textContent = d.periodos_importados || 0;
+      el = document.getElementById("eeff-cfg-ultimo-periodo");
+      if (el) el.textContent = "\u00daltimo: " + (d.ultimo_periodo || "\u2014");
+      el = document.getElementById("eeff-cfg-formulas");
+      if (el) el.textContent = d.formulas_activas || 0;
+
+      // Warning card style
       var sinMapear = d.cuentas_sin_mapear || 0;
-      var warningCls = sinMapear > 0 ? " eeff-cfg-card--warning" : "";
-      var warningLabel = sinMapear > 0 ? "Cuentas por mapear" : "Cuentas por mapear";
-      var warningSub = sinMapear > 0 ? "requieren asignaci\u00f3n" : "Todo mapeado";
-      var warningLabelStyle = sinMapear > 0 ? ' style="color:#DC2626;"' : "";
-      var warningSubStyle = sinMapear > 0 ? "" : ' style="color:var(--color-success);"';
-
-      grid.innerHTML =
-        '<div class="eeff-cfg-card" id="eeff-cfg-card-plan">' +
-          '<div class="eeff-cfg-card__label">Plan de cuentas</div>' +
-          '<div class="eeff-cfg-card__value">' + (d.cuentas_mapeadas || 0) + '</div>' +
-          '<div class="eeff-cfg-card__sub">cuentas mapeadas</div>' +
-        '</div>' +
-        '<div class="eeff-cfg-card' + warningCls + '" id="eeff-cfg-card-warn">' +
-          '<div class="eeff-cfg-card__label"' + warningLabelStyle + '>' + warningLabel + '</div>' +
-          '<div class="eeff-cfg-card__value">' + sinMapear + '</div>' +
-          '<div class="eeff-cfg-card__sub"' + warningSubStyle + '>' + warningSub + '</div>' +
-        '</div>' +
-        '<div class="eeff-cfg-card" id="eeff-cfg-card-periodos">' +
-          '<div class="eeff-cfg-card__label">Periodos importados</div>' +
-          '<div class="eeff-cfg-card__value">' + (d.periodos_importados || 0) + '</div>' +
-          '<div class="eeff-cfg-card__sub">\u00daltimo: ' + _escH(d.ultimo_periodo || "\u2014") + '</div>' +
-        '</div>' +
-        '<div class="eeff-cfg-card" id="eeff-cfg-card-formulas">' +
-          '<div class="eeff-cfg-card__label">Formulaciones</div>' +
-          '<div class="eeff-cfg-card__value">' + (d.formulas_activas || 0) + '</div>' +
-          '<div class="eeff-cfg-card__sub">m\u00e9tricas configuradas</div>' +
-        '</div>';
-
-      // Attach click handlers directly (no inline onclick)
-      document.getElementById("eeff-cfg-card-plan").addEventListener("click", function () { eeffModalPlanCuentas(); });
-      document.getElementById("eeff-cfg-card-warn").addEventListener("click", function () { eeffModalSinClasificar(); });
-      document.getElementById("eeff-cfg-card-periodos").addEventListener("click", function () { eeffModalPeriodos(); });
-      document.getElementById("eeff-cfg-card-formulas").addEventListener("click", function () { eeffModalFormulas(); });
-    });
+      var warnCard = document.getElementById("eeff-cfg-warning-card");
+      var warnLabel = document.getElementById("eeff-cfg-warning-label");
+      var warnSub = document.getElementById("eeff-cfg-warning-sub");
+      if (warnCard) {
+        if (sinMapear > 0) {
+          warnCard.classList.add("eeff-cfg-card--warning");
+          if (warnLabel) warnLabel.style.color = "#DC2626";
+          if (warnSub) { warnSub.textContent = "requieren asignaci\u00f3n"; warnSub.style.color = ""; }
+        } else {
+          warnCard.classList.remove("eeff-cfg-card--warning");
+          if (warnLabel) warnLabel.style.color = "";
+          if (warnSub) { warnSub.textContent = "Todo mapeado"; warnSub.style.color = "var(--color-success)"; }
+        }
+      }
+    })
+    .catch(function (e) { console.error("[EEFF] Error cargando config-resumen:", e); });
 }
 
 // ── Modal: Plan de cuentas ──────────────────────────────────────────────────
 
 window.eeffModalPlanCuentas = function () {
-  document.getElementById("modal-eeff-plan").style.display = "";
+  document.getElementById("modal-eeff-plan").classList.add("visible");
   _cargarPlanCuentasModal();
 };
 
@@ -383,7 +420,7 @@ function _mostrarModalSC(cuentas) {
       '</div>';
     list.appendChild(div);
   });
-  document.getElementById("modal-eeff-sin-clasificar").style.display = "";
+  document.getElementById("modal-eeff-sin-clasificar").classList.add("visible");
 }
 
 function _guardarMapeoSC() {
@@ -401,7 +438,7 @@ function _guardarMapeoSC() {
     }));
   });
   Promise.all(promises).then(function () {
-    document.getElementById("modal-eeff-sin-clasificar").style.display = "none";
+    document.getElementById("modal-eeff-sin-clasificar").classList.remove("visible");
     _cargarInformeEEFF();
     _cargarConfigResumen();
   });
@@ -410,7 +447,7 @@ function _guardarMapeoSC() {
 // ── Modal: Periodos ─────────────────────────────────────────────────────────
 
 window.eeffModalPeriodos = function () {
-  document.getElementById("modal-eeff-periodos").style.display = "";
+  document.getElementById("modal-eeff-periodos").classList.add("visible");
   fetch("/api/eeff/periodos?t=" + Date.now())
     .then(function (r) { return r.json(); })
     .then(function (data) {
@@ -475,7 +512,7 @@ window._eliminarPeriodoEEFF = function (pid) {
 // ── Modal: Fórmulas ─────────────────────────────────────────────────────────
 
 window.eeffModalFormulas = function () {
-  document.getElementById("modal-eeff-formulas").style.display = "";
+  document.getElementById("modal-eeff-formulas").classList.add("visible");
   fetch("/api/eeff/formulas?t=" + Date.now())
     .then(function (r) { return r.json(); })
     .then(function (data) {

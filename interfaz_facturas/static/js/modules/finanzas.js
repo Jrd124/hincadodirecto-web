@@ -2610,9 +2610,13 @@ function aplicarFiltrosYRender() {
 
   if (!filtradas.length) {
     sinDatos.style.display = "block";
-    sinDatos.textContent = filtroAlertasActivo
-      ? "No hay facturas con alertas para los filtros seleccionados."
-      : "No hay facturas cargadas para esta empresa. Usa el bot\u00f3n \u00ab+ Procesar\u00bb para subir nuevas.";
+    if (filtroAlertasActivo) {
+      sinDatos.textContent = "No hay facturas con alertas para los filtros seleccionados.";
+    } else if (FACTURAS_ACTUALES.length > 0) {
+      sinDatos.textContent = "No hay facturas que coincidan con los filtros seleccionados (" + FACTURAS_ACTUALES.length + " facturas cargadas).";
+    } else {
+      sinDatos.textContent = "No hay facturas cargadas para esta empresa. Usa el bot\u00f3n \u00ab+ Procesar\u00bb para subir nuevas.";
+    }
     return;
   }
 
@@ -2650,11 +2654,17 @@ function aplicarFiltrosYRender() {
   }
 }
 
-async function cargarListado(empresaId) {
+async function cargarListado(empresaId, preservarFiltros) {
   const sinDatos = document.getElementById("sin-datos");
   const btnCargar = document.getElementById("btn-cargar-listado");
+
+  // Preserve current filter values before clearing
+  var prevAnio = document.getElementById("filtro-anio").value;
+  var prevMes = document.getElementById("filtro-mes").value;
+  var prevEstado = (document.getElementById("filtro-estado-pago") || {}).value || "";
+  var prevTarjeta = (document.getElementById("filtro-tarjeta") || {}).value || "";
+
   FACTURAS_ACTUALES = [];
-  // Orden por defecto: fecha más reciente primero
   sortStateFacturas.key = "fecha_factura";
   sortStateFacturas.dir = "desc";
   filtroAlertasActivo = false;
@@ -2671,11 +2681,12 @@ async function cargarListado(empresaId) {
     FACTURAS_ACTUALES = facturas;
     if (!facturas.length) {
       sinDatos.style.display = "block";
+      sinDatos.textContent = "No hay facturas cargadas para esta empresa. Usa el bot\u00f3n \u00ab+ Procesar\u00bb para subir nuevas.";
       return;
     }
     poblarFiltroAnio(facturas);
-    var filtroEstadoPago = document.getElementById("filtro-estado-pago");
-    if (filtroEstadoPago) filtroEstadoPago.value = "";
+
+    // Rebuild tarjeta options
     const selTarjeta = document.getElementById("filtro-tarjeta");
     if (selTarjeta) {
       selTarjeta.innerHTML = "<option value=\"\">Pagado v\u00eda</option><option value=\"__banco__\">Banco (sin tarjeta)</option>";
@@ -2690,6 +2701,27 @@ async function cargarListado(empresaId) {
         });
       } catch (e) { /* ignorar */ }
     }
+
+    // Restore filters if requested (e.g. after edit or navigation)
+    if (preservarFiltros) {
+      if (prevAnio) document.getElementById("filtro-anio").value = prevAnio;
+      if (prevMes) document.getElementById("filtro-mes").value = prevMes;
+      if (prevEstado && document.getElementById("filtro-estado-pago")) document.getElementById("filtro-estado-pago").value = prevEstado;
+      if (prevTarjeta && selTarjeta) selTarjeta.value = prevTarjeta;
+    } else {
+      if (document.getElementById("filtro-estado-pago")) document.getElementById("filtro-estado-pago").value = "";
+    }
+
+    console.log("[FACTURAS] Cargando con filtros:", {
+      empresa: empresaId,
+      anio: document.getElementById("filtro-anio").value,
+      mes: document.getElementById("filtro-mes").value,
+      estado: (document.getElementById("filtro-estado-pago") || {}).value,
+      tarjeta: (document.getElementById("filtro-tarjeta") || {}).value,
+      total: facturas.length,
+      preservarFiltros: !!preservarFiltros,
+    });
+
     aplicarFiltrosYRender();
   } catch (err) {
     console.error("Error cargando listado de facturas:", err);
@@ -3878,8 +3910,8 @@ document.getElementById("form-editar-factura").addEventListener("submit", async 
     // Update proveedor name if it changed (so the filtered view uses the new name)
     var nuevoNombreProv = factura.proveedor || "";
     cerrarModalEdicion();
-    // Refresh the active view: main list AND proveedor-specific list if active
-    cargarListado(emp);
+    // Refresh the active view preserving filters (tarjeta, estado, año, mes)
+    cargarListado(emp, true);
     if (proveedorSeleccionadoNombre) {
       // If name changed, update the selected proveedor and reload its panel
       if (nuevoNombreProv && nuevoNombreProv !== proveedorSeleccionadoNombre) {

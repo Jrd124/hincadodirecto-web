@@ -507,6 +507,12 @@ function activarFinanzasChild(child) {
     proveedoresSubpanel = "facturas";
     document.getElementById("panel-facturas").classList.add("visible");
     document.getElementById("nav-facturas").classList.add("activo");
+    // Reload facturas if table is empty but empresa is selected (e.g. after navigating away)
+    var _empSel = document.getElementById("empresa-listado");
+    var _tbody = document.getElementById("tbody-facturas");
+    if (_empSel && _empSel.value && _tbody && !_tbody.children.length) {
+      if (typeof cargarListado === "function") cargarListado(_empSel.value, true);
+    }
   } else if (child === "clientes") {
     clientesSubpanel = "clientes_facturas";
     document.getElementById("panel-clientes-facturas").classList.add("visible");

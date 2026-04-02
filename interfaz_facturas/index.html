@@ -2349,19 +2349,38 @@
 
           <!-- Tab: Configuración — 4 cards (rendered by JS) -->
           <div class="eeff-tab-content" id="eeff-tab-config">
-            <div class="eeff-cfg-grid" id="eeff-cfg-grid"></div>
+            <div class="eeff-cfg-grid">
+              <div onclick="window._eeffCard('plan')" class="eeff-cfg-card">
+                <div class="eeff-cfg-card__label">Plan de cuentas</div>
+                <div class="eeff-cfg-card__value" id="eeff-cfg-mapeadas">&mdash;</div>
+                <div class="eeff-cfg-card__sub">cuentas mapeadas</div>
+              </div>
+              <div onclick="window._eeffCard('warning')" class="eeff-cfg-card" id="eeff-cfg-warning-card">
+                <div class="eeff-cfg-card__label" id="eeff-cfg-warning-label">Cuentas por mapear</div>
+                <div class="eeff-cfg-card__value" id="eeff-cfg-sin-mapear">&mdash;</div>
+                <div class="eeff-cfg-card__sub" id="eeff-cfg-warning-sub">requieren asignación</div>
+              </div>
+              <div onclick="window._eeffCard('periodos')" class="eeff-cfg-card">
+                <div class="eeff-cfg-card__label">Periodos importados</div>
+                <div class="eeff-cfg-card__value" id="eeff-cfg-periodos">&mdash;</div>
+                <div class="eeff-cfg-card__sub" id="eeff-cfg-ultimo-periodo">&mdash;</div>
+              </div>
+              <div onclick="window._eeffCard('formulas')" class="eeff-cfg-card">
+                <div class="eeff-cfg-card__label">Formulaciones</div>
+                <div class="eeff-cfg-card__value" id="eeff-cfg-formulas">&mdash;</div>
+                <div class="eeff-cfg-card__sub">métricas configuradas</div>
+              </div>
+            </div>
           </div>
         </section>
       </div>
 
       <!-- Modal subir EEFF -->
-      <div class="modal-overlay" id="modal-eeff-subir" style="display:none;">
-        <div class="modal-box" style="max-width:520px;">
-          <div class="modal-header">
-            <h2 class="modal-title">Importar Estados Financieros</h2>
-            <button class="modal-close" onclick="document.getElementById('modal-eeff-subir').style.display='none'">&times;</button>
-          </div>
-          <div class="modal-body">
+      <div class="modal-overlay" id="modal-eeff-subir">
+        <div class="modal-editar" style="max-width:520px;">
+          <h2>Importar Estados Financieros</h2>
+          <button class="modal-close-x" onclick="document.getElementById('modal-eeff-subir').classList.remove('visible')">&times;</button>
+          <div>
             <div class="eeff-dropzone" id="eeff-dropzone">
               <p>Arrastra un fichero Excel (.xlsx / .xls) aquí</p>
               <p style="font-size:12px;color:#94A3B8;">o haz click para seleccionar</p>
@@ -2375,13 +2394,11 @@
       </div>
 
       <!-- Modal plan de cuentas -->
-      <div class="modal-overlay" id="modal-eeff-plan" style="display:none;">
-        <div class="modal-box" style="max-width:900px;">
-          <div class="modal-header">
-            <h2 class="modal-title">Plan de cuentas</h2>
-            <button class="modal-close" onclick="document.getElementById('modal-eeff-plan').style.display='none'">&times;</button>
-          </div>
-          <div class="modal-body">
+      <div class="modal-overlay" id="modal-eeff-plan">
+        <div class="modal-editar" style="max-width:900px;">
+          <h2>Plan de cuentas</h2>
+          <button class="modal-close-x" onclick="document.getElementById('modal-eeff-plan').classList.remove('visible')">&times;</button>
+          <div>
             <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
               <select id="eeff-plan-filtro-n1" class="select-empresa" style="font-size:13px;min-width:140px;">
                 <option value="">Todos los niveles</option>
@@ -2406,13 +2423,11 @@
       </div>
 
       <!-- Modal cuentas sin clasificar -->
-      <div class="modal-overlay" id="modal-eeff-sin-clasificar" style="display:none;">
-        <div class="modal-box" style="max-width:650px;">
-          <div class="modal-header">
-            <h2 class="modal-title">Cuentas sin clasificar</h2>
-            <button class="modal-close" onclick="document.getElementById('modal-eeff-sin-clasificar').style.display='none'">&times;</button>
-          </div>
-          <div class="modal-body">
+      <div class="modal-overlay" id="modal-eeff-sin-clasificar">
+        <div class="modal-editar" style="max-width:650px;">
+          <h2>Cuentas sin clasificar</h2>
+          <button class="modal-close-x" onclick="document.getElementById('modal-eeff-sin-clasificar').classList.remove('visible')">&times;</button>
+          <div>
             <p style="margin-bottom:12px;color:var(--color-text-secondary);font-size:13px;">Asigna cada cuenta a su categoría contable para que aparezca en los informes.</p>
             <div id="eeff-sc-list"></div>
             <div style="text-align:right;margin-top:12px;">
@@ -2423,13 +2438,11 @@
       </div>
 
       <!-- Modal periodos -->
-      <div class="modal-overlay" id="modal-eeff-periodos" style="display:none;">
-        <div class="modal-box" style="max-width:850px;">
-          <div class="modal-header">
-            <h2 class="modal-title">Periodos importados</h2>
-            <button class="modal-close" onclick="document.getElementById('modal-eeff-periodos').style.display='none'">&times;</button>
-          </div>
-          <div class="modal-body">
+      <div class="modal-overlay" id="modal-eeff-periodos">
+        <div class="modal-editar" style="max-width:850px;">
+          <h2>Periodos importados</h2>
+          <button class="modal-close-x" onclick="document.getElementById('modal-eeff-periodos').classList.remove('visible')">&times;</button>
+          <div>
             <div style="text-align:right;margin-bottom:12px;">
               <button class="btn-small primary" onclick="eeffImportarModal()">Subir EEFF</button>
             </div>
@@ -2444,13 +2457,11 @@
       </div>
 
       <!-- Modal fórmulas -->
-      <div class="modal-overlay" id="modal-eeff-formulas" style="display:none;">
-        <div class="modal-box" style="max-width:900px;">
-          <div class="modal-header">
-            <h2 class="modal-title">Formulaciones</h2>
-            <button class="modal-close" onclick="document.getElementById('modal-eeff-formulas').style.display='none'">&times;</button>
-          </div>
-          <div class="modal-body">
+      <div class="modal-overlay" id="modal-eeff-formulas">
+        <div class="modal-editar" style="max-width:900px;">
+          <h2>Formulaciones</h2>
+          <button class="modal-close-x" onclick="document.getElementById('modal-eeff-formulas').classList.remove('visible')">&times;</button>
+          <div>
             <p style="margin-bottom:12px;font-size:12px;color:var(--color-text-secondary);">
               Sintaxis: <code>SUM_NIVEL2:nombre</code> / <code>SUM_NIVEL3:nombre</code> / <code>{Nombre Fórmula}</code> / operadores: + - * /
             </p>

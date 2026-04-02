@@ -4028,8 +4028,8 @@
       /* Config cards grid */
       .eeff-cfg-grid {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 16px;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
         margin-top: 16px;
       }
       .eeff-cfg-card {
@@ -4049,8 +4049,8 @@
       .eeff-cfg-card__label { font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--color-text); }
       .eeff-cfg-card__value { font-size: 28px; font-weight: 600; color: var(--color-text); }
       .eeff-cfg-card__sub { font-size: 12px; color: var(--color-text-secondary); }
-      @media (max-width: 640px) {
-        .eeff-cfg-grid { grid-template-columns: 1fr; }
+      @media (max-width: 768px) {
+        .eeff-cfg-grid { grid-template-columns: repeat(2, 1fr); }
       }
 
       /* Status pills */
