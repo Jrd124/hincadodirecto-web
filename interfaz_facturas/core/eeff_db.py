@@ -643,12 +643,21 @@ _PGC_MAPEO = [
     ("5700", "5729", "Activo", "Activo Corriente", "Bancos", 1),
     # PATRIMONIO NETO
     ("1000", "1099", "Pasivo y PN", "Patrimonio Neto", "Capital", -1),
-    ("1120", "1139", "Pasivo y PN", "Patrimonio Neto", "Reservas", -1),
-    ("1200", "1209", "Pasivo y PN", "Patrimonio Neto", "Resultado ejercicios anteriores", -1),
+    ("1100", "1109", "Pasivo y PN", "Patrimonio Neto", "Reserva legal", -1),
+    ("1110", "1119", "Pasivo y PN", "Patrimonio Neto", "Otros resultados", -1),
+    ("1120", "1149", "Pasivo y PN", "Patrimonio Neto", "Reservas", -1),
+    ("1150", "1199", "Pasivo y PN", "Patrimonio Neto", "Reservas especiales", -1),
+    ("1200", "1289", "Pasivo y PN", "Patrimonio Neto", "Resultado ejercicios anteriores", -1),
     ("1290", "1299", "Pasivo y PN", "Patrimonio Neto", "Resultado del ejercicio", -1),
+    ("1300", "1399", "Pasivo y PN", "Patrimonio Neto", "Subvenciones", -1),
+    ("1400", "1499", "Pasivo y PN", "Pasivo No Corriente", "Provisiones LP", -1),
+    ("1500", "1599", "Pasivo y PN", "Pasivo No Corriente", "Deudas LP con empresas grupo", -1),
+    ("1600", "1699", "Pasivo y PN", "Pasivo No Corriente", "Deudas LP con terceros", -1),
     # PASIVO NO CORRIENTE
     ("1700", "1739", "Pasivo y PN", "Pasivo No Corriente", "Deudas LP", -1),
+    ("1740", "1799", "Pasivo y PN", "Pasivo No Corriente", "Deudas LP con entidades crédito", -1),
     ("1800", "1809", "Pasivo y PN", "Pasivo No Corriente", "Fianzas recibidas LP", -1),
+    ("1810", "1899", "Pasivo y PN", "Pasivo No Corriente", "Pasivos por fianzas LP", -1),
     ("4790", "4799", "Pasivo y PN", "Pasivo No Corriente", "Pasivos diferidos", -1),
     # PASIVO CORRIENTE
     ("4000", "4009", "Pasivo y PN", "Pasivo Corriente", "Proveedores", -1),
@@ -1066,6 +1075,203 @@ def calcular_pyg_ltm(conn, periodo_id_mes_actual, periodo_id_dic_anterior, perio
 def calcular_pyg_multiples_periodos(conn, periodo_ids):
     """Deprecated — usa calcular_pyg_ytd / calcular_pyg_mensual / calcular_pyg_ltm."""
     return calcular_pyg_ytd(conn, periodo_ids[0]) if periodo_ids else []
+
+
+# ── Balance comparativo ───────────────────────────────────────────────────
+
+def construir_balance(conn, periodo_id):
+    """Construye balance jerárquico desde un periodo SS.
+
+    Devuelve:
+      {
+        "activo": { "Activo No Corriente": {"total": N, "detalle": {"Inmov. material": N, ...}}, ...},
+        "pasivo_pn": { ... },
+        "total_activo": N,
+        "total_pasivo_pn": N,
+      }
+    """
+    crear_tablas(conn)
+
+    plan = {}
+    for r in conn.execute(
+        "SELECT codigo, nivel1, nivel2, nivel3, signo FROM eeff_plan_cuentas WHERE activo = 1"
+    ).fetchall():
+        plan[r["codigo"]] = dict(r)
+
+    lineas = conn.execute(
+        "SELECT codigo_cuenta, COALESCE(debe_saldo,0) as debe, COALESCE(haber_saldo,0) as haber"
+        " FROM eeff_lineas WHERE periodo_id = ? AND codigo_cuenta GLOB '[0-9]*'",
+        (periodo_id,),
+    ).fetchall()
+
+    # Aggregate by (nivel1, nivel2, nivel3) for balance accounts,
+    # and separately compute the P&G result (grupos 6 y 7)
+    agrupado = {}
+    resultado_periodo = 0.0
+    for ln in lineas:
+        cod4 = str(ln["codigo_cuenta"]).strip()[:4]
+        mapping = plan.get(cod4)
+        if not mapping or mapping["nivel1"] == "Sin clasificar":
+            continue
+        saldo = (ln["debe"] or 0) - (ln["haber"] or 0)
+        saldo_signed = round(saldo * mapping["signo"], 2)
+        if mapping["nivel1"] == "P&G":
+            # P&G accounts: accumulate result (ingresos positivos, gastos negativos)
+            resultado_periodo = round(resultado_periodo + saldo_signed, 2)
+            continue
+        key = (mapping["nivel1"], mapping["nivel2"], mapping["nivel3"])
+        agrupado[key] = round(agrupado.get(key, 0) + saldo_signed, 2)
+
+    # Add the P&G result to Patrimonio Neto so the balance squares
+    if resultado_periodo != 0:
+        key_rdo = ("Pasivo y PN", "Patrimonio Neto", "Resultado del periodo")
+        agrupado[key_rdo] = round(agrupado.get(key_rdo, 0) + resultado_periodo, 2)
+
+    # Build structured result
+    activo = {}
+    pasivo_pn = {}
+    for (n1, n2, n3), val in sorted(agrupado.items()):
+        target = activo if n1 == "Activo" else pasivo_pn
+        if n2 not in target:
+            target[n2] = {"total": 0, "detalle": {}}
+        target[n2]["detalle"][n3] = round(target[n2]["detalle"].get(n3, 0) + val, 2)
+        target[n2]["total"] = round(target[n2]["total"] + val, 2)
+
+    total_activo = round(sum(v["total"] for v in activo.values()), 2)
+    total_pasivo = round(sum(v["total"] for v in pasivo_pn.values()), 2)
+
+    return {
+        "activo": activo,
+        "pasivo_pn": pasivo_pn,
+        "total_activo": total_activo,
+        "total_pasivo_pn": total_pasivo,
+    }
+
+
+def construir_cashflow_indirecto(conn, periodo_id_actual, periodo_id_anterior, pyg_lineas):
+    """Cash flow indirecto: compara dos balances y usa P&G.
+
+    pyg_lineas = lista de {"nombre": ..., "valor": ...} (resultado de calcular_pyg_*)
+    """
+    bal_act = construir_balance(conn, periodo_id_actual)
+    bal_ant = construir_balance(conn, periodo_id_anterior)
+
+    def _get_n3(bal, n3_name):
+        """Obtiene el total de un nivel3 del balance."""
+        for section in (bal["activo"], bal["pasivo_pn"]):
+            for n2_data in section.values():
+                if n3_name in n2_data["detalle"]:
+                    return n2_data["detalle"][n3_name]
+        return 0
+
+    def _get_n2(bal, n2_name):
+        """Obtiene el total de un nivel2."""
+        for section in (bal["activo"], bal["pasivo_pn"]):
+            if n2_name in section:
+                return section[n2_name]["total"]
+        return 0
+
+    def _delta(n3_name):
+        return round(_get_n3(bal_act, n3_name) - _get_n3(bal_ant, n3_name), 2)
+
+    def _delta_n2(n2_name):
+        return round(_get_n2(bal_act, n2_name) - _get_n2(bal_ant, n2_name), 2)
+
+    # P&G lookup
+    pyg = {l["nombre"]: l["valor"] for l in pyg_lineas}
+    resultado_neto = pyg.get("Resultado Neto", 0)
+    amortizacion = pyg.get("Amortización", 0)
+    deterioro = pyg.get("Deterioro", 0)
+
+    # --- Operaciones ---
+    # Working capital changes (increase in asset = cash out, increase in liability = cash in)
+    delta_clientes = -_delta("Clientes")
+    delta_deudores = -_delta("Deudores varios")
+    delta_existencias = -_delta("Existencias")
+    delta_hp_deudora = -_delta("HP deudora")
+    delta_gastos_antic = -_delta("Gastos anticipados")
+    delta_proveedores = _delta("Proveedores")
+    delta_acreedores = _delta("Acreedores")
+    delta_remun_ptes = _delta("Remuneraciones pendientes")
+    delta_hp_acreedora = _delta("HP acreedora")
+    delta_provisiones = _delta("Provisiones CP")
+    delta_otras_deudas_cp = _delta("Otras deudas CP")
+
+    op_wc = [
+        {"nombre": "Δ Clientes", "valor": delta_clientes},
+        {"nombre": "Δ Deudores varios", "valor": delta_deudores},
+        {"nombre": "Δ Existencias", "valor": delta_existencias},
+        {"nombre": "Δ HP deudora", "valor": delta_hp_deudora},
+        {"nombre": "Δ Gastos anticipados", "valor": delta_gastos_antic},
+        {"nombre": "Δ Proveedores", "valor": delta_proveedores},
+        {"nombre": "Δ Acreedores", "valor": delta_acreedores},
+        {"nombre": "Δ Remuneraciones ptes.", "valor": delta_remun_ptes},
+        {"nombre": "Δ HP acreedora", "valor": delta_hp_acreedora},
+        {"nombre": "Δ Provisiones CP", "valor": delta_provisiones},
+        {"nombre": "Δ Otras deudas CP", "valor": delta_otras_deudas_cp},
+    ]
+    # Filter out zero items
+    op_wc = [x for x in op_wc if x["valor"] != 0]
+    total_wc = round(sum(x["valor"] for x in op_wc), 2)
+
+    cf_operaciones = {
+        "lineas": [
+            {"nombre": "Resultado Neto", "valor": resultado_neto},
+            {"nombre": "Amortización (+)", "valor": abs(amortizacion)},
+            {"nombre": "Deterioro (+)", "valor": abs(deterioro)},
+        ] + op_wc,
+        "total": round(resultado_neto + abs(amortizacion) + abs(deterioro) + total_wc, 2),
+    }
+
+    # --- Inversión ---
+    delta_anc = _delta_n2("Activo No Corriente")
+    # Inversión neta = -(cambio en ANC + amortización del periodo)
+    # porque la amortización reduce el ANC pero no es cash out
+    inv_bruta = round(-(delta_anc + abs(amortizacion) + abs(deterioro)), 2)
+
+    inv_lineas = [
+        {"nombre": "Δ Inmovilizado intangible", "valor": -_delta("Inmovilizado intangible")},
+        {"nombre": "Δ Inmovilizado material", "valor": -_delta("Inmovilizado material")},
+        {"nombre": "Δ Inmovilizado en curso", "valor": -_delta("Inmovilizado en curso")},
+        {"nombre": "Δ Inversiones financieras LP", "valor": -_delta("Inversiones financieras LP")},
+        {"nombre": "Δ Fianzas LP", "valor": -_delta("Fianzas LP")},
+        {"nombre": "Δ Inversiones financieras CP", "valor": -_delta("Inversiones financieras CP")},
+        {"nombre": "Δ Fianzas CP", "valor": -_delta("Fianzas CP")},
+    ]
+    inv_lineas = [x for x in inv_lineas if x["valor"] != 0]
+    cf_inversion = {
+        "lineas": inv_lineas,
+        "total": round(sum(x["valor"] for x in inv_lineas), 2),
+    }
+
+    # --- Financiación ---
+    fin_lineas = [
+        {"nombre": "Δ Capital", "valor": _delta("Capital")},
+        {"nombre": "Δ Reservas", "valor": _delta("Reservas")},
+        {"nombre": "Δ Deudas LP", "valor": _delta("Deudas LP")},
+        {"nombre": "Δ Fianzas recibidas LP", "valor": _delta("Fianzas recibidas LP")},
+        {"nombre": "Δ Deudas CP (financieras)", "valor": _delta("Deudas CP")},
+    ]
+    fin_lineas = [x for x in fin_lineas if x["valor"] != 0]
+    cf_financiacion = {
+        "lineas": fin_lineas,
+        "total": round(sum(x["valor"] for x in fin_lineas), 2),
+    }
+
+    # --- Variación neta de caja ---
+    cf_total = round(cf_operaciones["total"] + cf_inversion["total"] + cf_financiacion["total"], 2)
+    caja_inicio = _get_n3(bal_ant, "Bancos")
+    caja_fin = _get_n3(bal_act, "Bancos")
+
+    return {
+        "operaciones": cf_operaciones,
+        "inversion": cf_inversion,
+        "financiacion": cf_financiacion,
+        "variacion_neta": cf_total,
+        "caja_inicio": caja_inicio,
+        "caja_fin": caja_fin,
+        "cuadre": round(caja_fin - caja_inicio - cf_total, 2),
+    }
 
 
 # ── Plan de cuentas CRUD ────────────────────────────────────────────────────

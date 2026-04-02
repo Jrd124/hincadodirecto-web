@@ -23,6 +23,8 @@ from core.eeff_db import (
     calcular_pyg_mensual,
     calcular_pyg_ytd,
     calcular_pyg_ltm,
+    construir_balance,
+    construir_cashflow_indirecto,
     obtener_plan_cuentas,
     actualizar_cuenta,
     crear_cuenta,
@@ -380,6 +382,249 @@ def api_eeff_pyg_comparativa():
         p_actual, n_actual, ok_actual = calc_fn(anio, mes)
         p_n1, n_n1, ok_n1 = calc_fn(anio - 1, mes)
         p_n2, n_n2, ok_n2 = calc_fn(anio - 2, mes)
+
+    return jsonify({
+        "vista": vista,
+        "periodo_actual": p_actual or {"nombre": n_actual, "lineas": []},
+        "periodo_n1": p_n1 or {"nombre": n_n1, "lineas": []},
+        "periodo_n2": p_n2 or {"nombre": n_n2, "lineas": []},
+        "disponible_actual": ok_actual,
+        "disponible_n1": ok_n1,
+        "disponible_n2": ok_n2,
+    })
+
+
+def _buscar_ultimo_trimestre(conn, sociedad, anio, mes):
+    """Busca el SS del último cierre trimestral anterior al mes dado.
+
+    Ej: mes=5 (Mayo) → busca Marzo (fin Q1).
+        mes=3 (Marzo) → busca Diciembre del año anterior.
+        mes=1 (Enero) → busca Diciembre del año anterior.
+    """
+    # Meses de cierre trimestral: 3, 6, 9, 12
+    cierres_q = [12, 9, 6, 3]
+    for q_mes in cierres_q:
+        if q_mes < mes:
+            pid = _buscar_periodo_mes(conn, sociedad, anio, q_mes)
+            if pid:
+                return pid, _nombre_mes(anio, q_mes)
+    # No hay cierre trimestral anterior en este año → Dic año anterior
+    pid = _buscar_periodo_dic(conn, sociedad, anio - 1)
+    if pid:
+        return pid, _nombre_mes(anio - 1, 12)
+    return None, None
+
+
+@eeff_bp.get("/api/eeff/balance-comparativo")
+@login_required
+def api_eeff_balance_comparativo():
+    """Balance comparativo: mes actual vs último trimestre vs cierre n-1 vs cierre n-2."""
+    sociedad = request.args.get("sociedad", "")
+    anio = int(request.args.get("anio") or request.args.get("año") or 0)
+    mes = int(request.args.get("mes") or 0)
+
+    if not sociedad or not anio or not mes:
+        return jsonify({"error": "sociedad, anio y mes requeridos"}), 400
+
+    with conectar() as conn:
+        crear_tablas(conn)
+        seed_plan_cuentas(conn)
+
+        # Build columns oldest→newest (left→right), current period last
+        columnas = []
+        balances = []
+
+        # Mes actual (will be appended last)
+        pid_actual = _buscar_periodo_mes(conn, sociedad, anio, mes)
+        if not pid_actual:
+            return jsonify({"error": "No hay SS para el mes seleccionado"}), 404
+        bal_actual = construir_balance(conn, pid_actual)
+
+        # Collect comparables oldest first
+        pid_n2 = _buscar_periodo_dic(conn, sociedad, anio - 2)
+        if pid_n2:
+            columnas.append(f"Dic {anio - 2}")
+            balances.append(construir_balance(conn, pid_n2))
+
+        pid_n1 = _buscar_periodo_dic(conn, sociedad, anio - 1)
+        if pid_n1:
+            columnas.append(f"Dic {anio - 1}")
+            balances.append(construir_balance(conn, pid_n1))
+
+        pid_q, nombre_q = _buscar_ultimo_trimestre(conn, sociedad, anio, mes)
+        if pid_q:
+            columnas.append(nombre_q)
+            balances.append(construir_balance(conn, pid_q))
+
+        # Current period last (rightmost)
+        columnas.append(_nombre_mes(anio, mes))
+        balances.append(bal_actual)
+
+    # Merge all balances into columnar format
+    ncols = len(balances)
+
+    def _merge_section(section_key):
+        """Merge a section (activo/pasivo_pn) across all balances into arrays."""
+        all_n2 = []
+        seen = set()
+        for b in balances:
+            for n2 in b[section_key]:
+                if n2 not in seen:
+                    all_n2.append(n2)
+                    seen.add(n2)
+        result = {}
+        for n2 in all_n2:
+            # Collect all n3 keys in order
+            all_n3 = []
+            seen_n3 = set()
+            for b in balances:
+                if n2 in b[section_key]:
+                    for n3 in b[section_key][n2]["detalle"]:
+                        if n3 not in seen_n3:
+                            all_n3.append(n3)
+                            seen_n3.add(n3)
+            detalle = {}
+            for n3 in all_n3:
+                detalle[n3] = [
+                    b[section_key].get(n2, {}).get("detalle", {}).get(n3, 0) for b in balances
+                ]
+            total = [
+                b[section_key].get(n2, {}).get("total", 0) for b in balances
+            ]
+            result[n2] = {"total": total, "detalle": detalle}
+        return result
+
+    return jsonify({
+        "columnas": columnas,
+        "activo": _merge_section("activo"),
+        "pasivo_pn": _merge_section("pasivo_pn"),
+        "total_activo": [b["total_activo"] for b in balances],
+        "total_pasivo_pn": [b["total_pasivo_pn"] for b in balances],
+        "cuadre": [round(b["total_activo"] - b["total_pasivo_pn"], 2) for b in balances],
+    })
+
+
+@eeff_bp.get("/api/eeff/cashflow")
+@login_required
+def api_eeff_cashflow():
+    """Cash flow indirecto: compara balance actual vs anterior + P&G."""
+    sociedad = request.args.get("sociedad", "")
+    anio = int(request.args.get("anio") or request.args.get("año") or 0)
+    mes = int(request.args.get("mes") or 0)
+
+    if not sociedad or not anio or not mes:
+        return jsonify({"error": "sociedad, anio y mes requeridos"}), 400
+
+    with conectar() as conn:
+        crear_tablas(conn)
+        seed_plan_cuentas(conn)
+        seed_formulas(conn)
+
+        # Balance actual = SS del mes seleccionado
+        pid_actual = _buscar_periodo_mes(conn, sociedad, anio, mes)
+        if not pid_actual:
+            return jsonify({"error": "No hay SS para el mes seleccionado"}), 404
+
+        # Balance anterior = Dic del año anterior
+        pid_anterior = _buscar_periodo_dic(conn, sociedad, anio - 1)
+        if not pid_anterior:
+            return jsonify({"error": f"No hay cierre del año {anio - 1} para calcular cash flow"}), 404
+
+        # P&G YTD (acumulada del año, que es lo que corresponde al CF del periodo)
+        pyg = calcular_pyg_ytd(conn, pid_actual)
+
+        cf = construir_cashflow_indirecto(conn, pid_actual, pid_anterior, pyg)
+
+    cf["periodo"] = _nombre_rango(anio, 1, mes)
+    cf["titulo"] = f"Cash Flow {_nombre_mes(anio, mes)}"
+    return jsonify(cf)
+
+
+def _cf_to_lineas(cf):
+    """Flatten a cashflow dict into a list of {concepto, importe, tipo} for the frontend."""
+    lineas = []
+    for section, titulo in [("operaciones", "CF Operaciones"), ("inversion", "CF Inversión"), ("financiacion", "CF Financiación")]:
+        sec = cf.get(section, {})
+        for l in sec.get("lineas", []):
+            lineas.append({"concepto": l["nombre"], "importe": l["valor"], "tipo": "detalle", "seccion": titulo})
+        lineas.append({"concepto": "Total " + titulo, "importe": sec.get("total", 0), "tipo": "total", "seccion": titulo})
+    lineas.append({"concepto": "Variación neta de caja", "importe": cf.get("variacion_neta", 0), "tipo": "gran_total", "seccion": ""})
+    lineas.append({"concepto": "Caja inicio", "importe": cf.get("caja_inicio", 0), "tipo": "detalle", "seccion": "caja"})
+    lineas.append({"concepto": "Caja fin", "importe": cf.get("caja_fin", 0), "tipo": "detalle", "seccion": "caja"})
+    return lineas
+
+
+@eeff_bp.get("/api/eeff/cashflow-comparativo")
+@login_required
+def api_eeff_cashflow_comparativo():
+    """Cash flow comparativo con vistas mensual/ytd/ltm y n-1/n-2."""
+    sociedad = request.args.get("sociedad", "")
+    anio = int(request.args.get("anio") or request.args.get("año") or 0)
+    mes = int(request.args.get("mes") or 0)
+    vista = request.args.get("vista", "ytd")
+
+    if not sociedad or not anio or not mes:
+        return jsonify({"error": "sociedad, anio y mes requeridos"}), 400
+
+    with conectar() as conn:
+        crear_tablas(conn)
+        seed_plan_cuentas(conn)
+        seed_formulas(conn)
+
+        def _calc_cf(a, m):
+            """Build CF for year a, month m, according to vista."""
+            if vista == "mensual":
+                # Balance actual = mes M, balance anterior = mes M-1 (or Dic Y-1)
+                pid_act = _buscar_periodo_mes(conn, sociedad, a, m)
+                if not pid_act:
+                    return None, _nombre_mes(a, m), False
+                if m > 1:
+                    pid_ant = _buscar_periodo_mes(conn, sociedad, a, m - 1)
+                else:
+                    pid_ant = _buscar_periodo_dic(conn, sociedad, a - 1)
+                if not pid_ant:
+                    return None, _nombre_mes(a, m), False
+                pyg = calcular_pyg_mensual(conn, pid_act, pid_ant if m > 1 else None)
+                cf = construir_cashflow_indirecto(conn, pid_act, pid_ant, pyg)
+                nombre = _nombre_mes(a, m)
+            elif vista == "ytd":
+                # Balance actual = mes M, balance anterior = Dic Y-1
+                pid_act = _buscar_periodo_mes(conn, sociedad, a, m)
+                pid_ant = _buscar_periodo_dic(conn, sociedad, a - 1)
+                if not pid_act or not pid_ant:
+                    return None, _nombre_rango(a, 1, m), False
+                pyg = calcular_pyg_ytd(conn, pid_act)
+                cf = construir_cashflow_indirecto(conn, pid_act, pid_ant, pyg)
+                nombre = _nombre_rango(a, 1, m)
+            elif vista == "ltm":
+                # Balance actual = mes M año Y, balance anterior = mes M año Y-1
+                pid_act = _buscar_periodo_mes(conn, sociedad, a, m)
+                pid_ant = _buscar_periodo_mes(conn, sociedad, a - 1, m)
+                if not pid_act or not pid_ant:
+                    m_start = m + 1
+                    a_start = a - 1
+                    if m_start > 12:
+                        m_start = 1
+                        a_start = a
+                    nombre = f"{_MESES_ES[m_start - 1][:3]} {a_start}-{_MESES_ES[m - 1][:3]} {a}"
+                    return None, nombre, False
+                pid_dic = _buscar_periodo_dic(conn, sociedad, a - 1)
+                pyg = calcular_pyg_ltm(conn, pid_act, pid_dic, pid_ant) if pid_dic else calcular_pyg_ytd(conn, pid_act)
+                cf = construir_cashflow_indirecto(conn, pid_act, pid_ant, pyg)
+                m_start = m + 1
+                a_start = a - 1
+                if m_start > 12:
+                    m_start = 1
+                    a_start = a
+                nombre = f"{_MESES_ES[m_start - 1][:3]} {a_start}-{_MESES_ES[m - 1][:3]} {a}"
+            else:
+                return None, "", False
+
+            return {"nombre": nombre, "lineas": _cf_to_lineas(cf)}, nombre, True
+
+        p_actual, n_actual, ok_actual = _calc_cf(anio, mes)
+        p_n1, n_n1, ok_n1 = _calc_cf(anio - 1, mes)
+        p_n2, n_n2, ok_n2 = _calc_cf(anio - 2, mes)
 
     return jsonify({
         "vista": vista,

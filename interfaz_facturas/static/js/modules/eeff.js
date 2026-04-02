@@ -13,6 +13,30 @@ var _eeffInit = false;
 var _eeffPeriodos = [];
 var _eeffInforme = null;
 var _eeffPlanCuentas = [];
+window._eeffUnidad = "unidades";
+
+function _fmtEEFF(n) {
+  if (n == null || isNaN(n)) return "\u2014";
+  var u = window._eeffUnidad || "unidades";
+  var divisor = 1, decimales = 0;
+  if (u === "miles") { divisor = 1000; decimales = 0; }
+  if (u === "millones") { divisor = 1000000; decimales = 2; }
+  var val = n / divisor;
+  // Treat near-zero as dash
+  if (decimales === 0 && Math.abs(val) < 0.5) return "\u2014";
+  if (decimales === 2 && Math.abs(val) < 0.005) return "\u2014";
+  var neg = val < 0;
+  val = Math.abs(val);
+  var str = val.toLocaleString("es-ES", { minimumFractionDigits: decimales, maximumFractionDigits: decimales, useGrouping: true });
+  return neg ? "(" + str + ")" : str;
+}
+
+function _fmtEEFFHtml(n) {
+  if (n == null || isNaN(n)) return "\u2014";
+  var txt = _fmtEEFF(n);
+  if (txt === "\u2014") return txt;
+  return (n < 0) ? '<span class="eeff-negativo">' + txt + '</span>' : txt;
+}
 
 function cargarEEFF() {
   _initEEFF();
@@ -23,14 +47,19 @@ function _initEEFF() {
   if (_eeffInit) return;
   _eeffInit = true;
 
-  // Tabs
+  // Tabs — re-render from cached data on switch (respects current unit)
   document.querySelectorAll(".eeff-tab").forEach(function (tab) {
     tab.addEventListener("click", function () {
       document.querySelectorAll(".eeff-tab").forEach(function (t) { t.classList.remove("active"); });
       document.querySelectorAll(".eeff-tab-content").forEach(function (c) { c.classList.remove("active"); });
       tab.classList.add("active");
       document.getElementById("eeff-tab-" + tab.dataset.tab).classList.add("active");
-      if (tab.dataset.tab === "config") _cargarConfigResumen();
+      var t = tab.dataset.tab;
+      if (t === "config") _cargarConfigResumen();
+      else if (t === "balance" && _eeffBalanceData) _pintarBalanceComparativo(document.getElementById("eeff-balance-body"));
+      else if (t === "pyg" && _eeffPygData) _pintarPygComparativa();
+      else if (t === "cashflow" && _eeffCfData) _pintarCfComparativo();
+      else if (t === "metricas" && _eeffInforme) _renderMetricasEEFF();
     });
   });
 
@@ -39,8 +68,26 @@ function _initEEFF() {
   document.getElementById("eeff-anio").addEventListener("change", function () { _actualizarMesesEEFF(); _cargarInformeEEFF(); });
   document.getElementById("eeff-mes").addEventListener("change", function () { _cargarInformeEEFF(); });
 
-  // Subir modal
-  document.getElementById("btn-eeff-subir").addEventListener("click", function () { eeffImportarModal(); });
+  // Unit selector
+  var unidadSel = document.getElementById("eeff-unidad");
+  if (unidadSel) {
+    unidadSel.addEventListener("change", function () {
+      window._eeffUnidad = this.value;
+      // Re-render active tab without re-fetching
+      var activeTab = document.querySelector(".eeff-tab.active");
+      var tab = activeTab ? activeTab.dataset.tab : "";
+      if (tab === "balance") { if (_eeffBalanceData) _pintarBalanceComparativo(document.getElementById("eeff-balance-body")); }
+      else if (tab === "pyg" && _eeffPygData) _pintarPygComparativa();
+      else if (tab === "cashflow" && _eeffCfData) _pintarCfComparativo();
+      else if (tab === "metricas") _renderMetricasEEFF();
+    });
+  }
+
+  // Subir modal (keep listener for non-onclick fallback)
+  var btnSubir = document.getElementById("btn-eeff-subir");
+  if (btnSubir && !btnSubir.hasAttribute("onclick")) {
+    btnSubir.addEventListener("click", function () { eeffImportarModal(); });
+  }
 
   // Sin clasificar guardar
   document.getElementById("btn-eeff-sc-guardar").addEventListener("click", _guardarMapeoSC);
@@ -195,7 +242,7 @@ function _cargarInformeEEFF() {
   var mes = document.getElementById("eeff-mes").value;
   if (!soc || !anio) {
     _eeffInforme = null;
-    _renderBalanceEEFF(); _renderPYGEEFF(); _renderMetricasEEFF();
+    _renderBalanceEEFF(); _renderPYGEEFF(); _renderMetricasEEFF(); _renderCashFlowEEFF();
     return;
   }
   var url = "/api/eeff/informe?sociedad=" + encodeURIComponent(soc) + "&anio=" + anio;
@@ -205,36 +252,134 @@ function _cargarInformeEEFF() {
     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(function (data) {
       if (data.error) { _eeffInforme = null; } else { _eeffInforme = data; }
-      _renderBalanceEEFF(); _renderPYGEEFF(); _renderMetricasEEFF();
+      _renderBalanceEEFF(); _renderPYGEEFF(); _renderMetricasEEFF(); _renderCashFlowEEFF();
       if (data.sin_clasificar && data.sin_clasificar.length > 0) _mostrarModalSC(data.sin_clasificar);
     })
-    .catch(function () { _eeffInforme = null; _renderBalanceEEFF(); _renderPYGEEFF(); _renderMetricasEEFF(); });
+    .catch(function () { _eeffInforme = null; _renderBalanceEEFF(); _renderPYGEEFF(); _renderMetricasEEFF(); _renderCashFlowEEFF(); });
 }
 
-// ── Balance ─────────────────────────────────────────────────────────────────
+// ── Balance Comparativo ─────────────────────────────────────────────────────
+
+var _eeffBalanceData = null;
 
 function _renderBalanceEEFF() {
   var body = document.getElementById("eeff-balance-body");
-  if (!_eeffInforme) { body.innerHTML = '<p class="sin-datos">Selecciona sociedad y año</p>'; return; }
+  var soc = document.getElementById("eeff-sociedad").value;
+  var anio = document.getElementById("eeff-anio").value;
+  var mes = document.getElementById("eeff-mes").value;
+  if (!soc || !anio || !mes) {
+    // Fallback: si no hay mes, mostrar el balance simple del informe
+    if (_eeffInforme && _eeffInforme.balance) {
+      _renderBalanceSimple(body);
+    } else {
+      body.innerHTML = '<p class="sin-datos">Selecciona sociedad, año y mes</p>';
+    }
+    return;
+  }
+  var url = "/api/eeff/balance-comparativo?sociedad=" + encodeURIComponent(soc) +
+    "&anio=" + anio + "&mes=" + mes + "&t=" + Date.now();
+  fetch(url)
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (data) {
+      if (data.error) { body.innerHTML = '<p class="sin-datos">' + _escH(data.error) + '</p>'; return; }
+      _eeffBalanceData = data;
+      _pintarBalanceComparativo(body);
+    })
+    .catch(function (e) { console.error("[EEFF Balance]", e); body.innerHTML = '<p class="sin-datos">Error cargando balance</p>'; });
+}
+
+function _renderBalanceSimple(body) {
   var bal = _eeffInforme.balance || {};
   var totals = _eeffInforme.balance_totals || [];
   var html = '<table class="tabla-generica eeff-tabla-jerarquica"><thead><tr><th>Concepto</th><th class="numero" style="width:150px;">Importe</th></tr></thead><tbody>';
-
   [{ key: "Activo", label: "ACTIVO", total: "Total Activo" },
    { key: "Pasivo y PN", label: "PASIVO Y PATRIMONIO NETO", total: "Total Pasivo y PN" }
   ].forEach(function (sec) {
     html += '<tr class="eeff-row-seccion"><td colspan="2">' + sec.label + '</td></tr>';
     var data = bal[sec.key] || {};
     for (var n2 in data) {
-      html += '<tr class="eeff-row-grupo"><td style="padding-left:16px;">' + _escH(n2) + '</td><td class="numero">' + _fmtN(data[n2].total) + '</td></tr>';
+      html += '<tr class="eeff-row-grupo"><td style="padding-left:16px;">' + _escH(n2) + '</td><td class="numero">' + _fmtEEFFHtml(data[n2].total) + '</td></tr>';
       for (var n3 in data[n2].detalle) {
         var v = data[n2].detalle[n3];
-        html += '<tr class="eeff-row-detalle"><td style="padding-left:32px;">' + _escH(n3) + '</td><td class="numero' + (v < 0 ? ' eeff-negativo' : '') + '">' + _fmtN(v) + '</td></tr>';
+        html += '<tr class="eeff-row-detalle"><td style="padding-left:32px;">' + _escH(n3) + '</td><td class="numero">' + _fmtEEFFHtml(v) + '</td></tr>';
       }
     }
     var tf = totals.find(function (t) { return t.nombre === sec.total; });
-    if (tf) html += '<tr class="eeff-row-total"><td style="padding-left:16px;">' + _escH(tf.nombre) + '</td><td class="numero">' + _fmtN(tf.valor) + '</td></tr>';
+    if (tf) html += '<tr class="eeff-row-total"><td style="padding-left:16px;">' + _escH(tf.nombre) + '</td><td class="numero">' + _fmtEEFFHtml(tf.valor) + '</td></tr>';
   });
+  html += '</tbody></table>';
+  body.innerHTML = html;
+}
+
+function _colStyle(i, ncols, isHeader) {
+  // Last column = current period = highlighted
+  var isLast = (i === ncols - 1);
+  if (isHeader) {
+    return isLast
+      ? 'text-align:right;padding:8px;font-size:13px;min-width:110px;background:#EFF6FF;color:#1E40AF;font-weight:600;'
+      : 'text-align:right;padding:8px;font-size:13px;min-width:110px;color:var(--color-text-secondary);';
+  }
+  return isLast
+    ? 'padding:4px 8px;background:#F8FAFC;'
+    : 'padding:4px 8px;color:var(--color-text-secondary);';
+}
+
+function _pintarBalanceComparativo(body) {
+  var d = _eeffBalanceData;
+  var cols = d.columnas || [];
+  var ncols = cols.length;
+
+  var html = '<table class="tabla-generica eeff-tabla-jerarquica" style="width:100%;border-collapse:collapse;">';
+  html += '<thead><tr><th style="text-align:left;padding:8px;font-size:13px;">Concepto</th>';
+  for (var ci = 0; ci < ncols; ci++) {
+    html += '<th style="' + _colStyle(ci, ncols, true) + '">' + _escH(cols[ci]) + '</th>';
+  }
+  html += '</tr></thead><tbody>';
+
+  var ordenActivo = ["Activo No Corriente", "Activo Corriente"];
+  var ordenPasivo = ["Patrimonio Neto", "Pasivo No Corriente", "Pasivo Corriente"];
+
+  function renderSection(label, sectionData, totalArr, orden) {
+    html += '<tr class="eeff-row-seccion"><td colspan="' + (ncols + 1) + '">' + label + '</td></tr>';
+    // Use explicit order, then append any extra keys not in the list
+    var keys = (orden || []).filter(function (k) { return sectionData[k]; });
+    for (var k in sectionData) { if (keys.indexOf(k) === -1) keys.push(k); }
+    keys.forEach(function (n2) {
+      var group = sectionData[n2];
+      for (var n3 in group.detalle) {
+        var vals = group.detalle[n3];
+        html += '<tr class="eeff-row-detalle"><td style="padding-left:32px;">' + _escH(n3) + '</td>';
+        for (var i = 0; i < ncols; i++) {
+          html += '<td class="numero" style="' + _colStyle(i, ncols, false) + '">' + _fmtEEFFHtml(vals[i] || 0) + '</td>';
+        }
+        html += '</tr>';
+      }
+      html += '<tr class="eeff-row-grupo"><td style="padding-left:16px;">' + _escH(n2) + '</td>';
+      for (var i = 0; i < ncols; i++) {
+        html += '<td class="numero" style="' + _colStyle(i, ncols, false) + 'font-weight:600;">' + _fmtEEFFHtml(group.total[i] || 0) + '</td>';
+      }
+      html += '</tr>';
+    });
+    html += '<tr class="eeff-row-total"><td style="padding-left:16px;font-weight:700;">TOTAL ' + label + '</td>';
+    for (var i = 0; i < ncols; i++) {
+      html += '<td class="numero" style="' + _colStyle(i, ncols, false) + 'font-weight:700;">' + _fmtEEFFHtml(totalArr[i] || 0) + '</td>';
+    }
+    html += '</tr>';
+  }
+
+  renderSection("ACTIVO", d.activo || {}, d.total_activo || [], ordenActivo);
+  renderSection("PASIVO Y PATRIMONIO NETO", d.pasivo_pn || {}, d.total_pasivo_pn || [], ordenPasivo);
+
+  var cuadre = d.cuadre || [];
+  var hasMismatch = cuadre.some(function (c) { return Math.abs(c) > 0.01; });
+  if (hasMismatch) {
+    html += '<tr style="background:#FEF2F2;"><td style="padding:6px 8px;color:var(--color-danger);font-weight:600;">Descuadre</td>';
+    for (var i = 0; i < ncols; i++) {
+      html += '<td class="numero" style="padding:6px 8px;color:var(--color-danger);font-weight:600;">' + _fmtEEFF(cuadre[i] || 0) + '</td>';
+    }
+    html += '</tr>';
+  }
+
   html += '</tbody></table>';
   body.innerHTML = html;
 }
@@ -302,7 +447,6 @@ function _pintarPygComparativa() {
   var hasN1 = d.disponible_n1;
   var hasN2 = d.disponible_n2;
 
-  // Build lookup maps
   var mapA = {}, mapN1 = {}, mapN2 = {};
   (pa.lineas || []).forEach(function (l) { mapA[l.nombre] = l.valor; });
   (pn1.lineas || []).forEach(function (l) { mapN1[l.nombre] = l.valor; });
@@ -312,11 +456,6 @@ function _pintarPygComparativa() {
   var gastoKeys = ["Aprovisionamientos", "Gastos Personal", "Otros Gastos", "Amortización", "Deterioro",
     "Gastos Excepcionales", "Gastos Financieros", "Impuesto Sociedades"];
 
-  function fmtImporte(v) {
-    if (v == null || isNaN(v)) return "\u2014";
-    return Number(v).toLocaleString("es-ES", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + " \u20AC";
-  }
-
   function fmtVar(actual, anterior, nombre) {
     if (anterior == null || anterior === 0) {
       if (actual && actual !== 0) return '<span class="eeff-var-neutral">nuevo</span>';
@@ -324,66 +463,57 @@ function _pintarPygComparativa() {
     }
     var pct = ((actual - anterior) / Math.abs(anterior)) * 100;
     var isGasto = gastoKeys.indexOf(nombre) >= 0;
-    // For expenses (negative items): decrease = green, increase = red
     var isPositive = isGasto ? (pct <= 0) : (pct >= 0);
     var cls = pct === 0 ? "eeff-var-neutral" : (isPositive ? "eeff-var-pos" : "eeff-var-neg");
     var sign = pct > 0 ? "+" : "";
     return '<span class="' + cls + '">' + sign + pct.toFixed(1).replace(".", ",") + '%</span>';
   }
 
+  // Build column order: n-2, n-1, actual (oldest left, current right)
+  // Each col: {nombre, map, isActual, varAgainst (map to compare for Var%)}
+  var columns = [];
+  if (hasN2) columns.push({ nombre: pn2.nombre, map: mapN2, isActual: false });
+  if (hasN1) columns.push({ nombre: pn1.nombre, map: mapN1, isActual: false });
+  columns.push({ nombre: pa.nombre, map: mapA, isActual: true });
+
   // Table header
+  var thStyle = 'text-align:right;padding:8px;font-size:13px;min-width:100px;';
+  var thActual = thStyle + 'background:#EFF6FF;color:#1E40AF;font-weight:600;';
+  var thComp = thStyle + 'color:var(--color-text-secondary);';
   html += '<table class="tabla-generica eeff-pyg-cascada" style="width:100%;border-collapse:collapse;">' +
     '<thead><tr style="border-bottom:2px solid var(--color-border-tertiary, #E2E8F0);">' +
-    '<th style="text-align:left;padding:8px;font-size:13px;">Concepto</th>' +
-    '<th style="text-align:right;padding:8px;font-size:13px;min-width:100px;">' + _escH(pa.nombre || "") + '</th>';
-  if (hasN1) {
-    html += '<th style="text-align:right;padding:8px;font-size:13px;min-width:100px;">' + _escH(pn1.nombre || "") + '</th>' +
-      '<th style="text-align:right;padding:8px;font-size:13px;width:70px;">Var %</th>';
-  }
-  if (hasN2) {
-    html += '<th style="text-align:right;padding:8px;font-size:13px;min-width:100px;">' + _escH(pn2.nombre || "") + '</th>' +
-      '<th style="text-align:right;padding:8px;font-size:13px;width:70px;">Var %</th>';
-  }
+    '<th style="text-align:left;padding:8px;font-size:13px;">Concepto</th>';
+  columns.forEach(function (col) {
+    html += '<th style="' + (col.isActual ? thActual : thComp) + '">' + _escH(col.nombre || "") + '</th>';
+    if (!col.isActual) html += '<th style="' + thComp + 'width:65px;">Var %</th>';
+  });
   html += '</tr></thead><tbody>';
 
-  // Use current period lines as the canonical list
   var lineas = pa.lineas || [];
   if (!lineas.length && pn1.lineas) lineas = pn1.lineas;
 
   lineas.forEach(function (l) {
     var nombre = l.nombre;
     var valA = mapA[nombre] != null ? mapA[nombre] : null;
-    var valN1 = mapN1[nombre] != null ? mapN1[nombre] : null;
-    var valN2 = mapN2[nombre] != null ? mapN2[nombre] : null;
-
     var isSub = subtotals.indexOf(nombre) >= 0;
     var cls = isSub ? (nombre === "Resultado Neto" ? ' class="eeff-pyg-resultado"' : ' class="eeff-pyg-subtotal"') : "";
-    var negA = valA != null && valA < 0;
 
-    html += '<tr' + cls + '>' +
-      '<td style="padding:6px 8px;">' + _escH(nombre) + '</td>' +
-      '<td class="numero" style="padding:6px 8px;' + (negA ? 'color:var(--color-danger);' : '') + '">' + fmtImporte(valA) + '</td>';
-
-    if (hasN1) {
-      var negN1 = valN1 != null && valN1 < 0;
-      html += '<td class="numero" style="padding:6px 8px;color:var(--color-text-secondary);' + (negN1 ? 'color:var(--color-danger);' : '') + '">' + fmtImporte(valN1) + '</td>' +
-        '<td style="text-align:right;padding:6px 8px;font-size:12px;">' + fmtVar(valA, valN1, nombre) + '</td>';
-    }
-    if (hasN2) {
-      var negN2 = valN2 != null && valN2 < 0;
-      html += '<td class="numero" style="padding:6px 8px;color:var(--color-text-secondary);' + (negN2 ? 'color:var(--color-danger);' : '') + '">' + fmtImporte(valN2) + '</td>' +
-        '<td style="text-align:right;padding:6px 8px;font-size:12px;">' + fmtVar(valA, valN2, nombre) + '</td>';
-    }
+    html += '<tr' + cls + '><td style="padding:6px 8px;">' + _escH(nombre) + '</td>';
+    columns.forEach(function (col) {
+      var v = col.map[nombre] != null ? col.map[nombre] : null;
+      var cellBg = col.isActual ? 'background:#F8FAFC;' : '';
+      var cellColor = col.isActual ? '' : 'color:var(--color-text-secondary);';
+      html += '<td class="numero" style="padding:6px 8px;' + cellBg + cellColor + '">' + _fmtEEFFHtml(v) + '</td>';
+      if (!col.isActual) {
+        html += '<td style="text-align:right;padding:6px 8px;font-size:12px;">' + fmtVar(valA, v, nombre) + '</td>';
+      }
+    });
     html += '</tr>';
   });
   html += '</tbody></table>';
 
-  // EBITDA margin bar
-  var ingA = Math.abs(mapA["Ingresos"] || 0) || 1;
-  var ebitdaA = mapA["EBITDA"] || 0;
-  var marginA = (ebitdaA / ingA * 100);
+  // EBITDA margin bar — order: oldest → current
   var barsHtml = '<div class="eeff-ebitda-bars"><strong style="white-space:nowrap;">Margen EBITDA:</strong>';
-
   function marginBar(label, ebitda, ingresos, color) {
     var ing = Math.abs(ingresos) || 1;
     var m = (ebitda / ing * 100);
@@ -392,10 +522,9 @@ function _pintarPygComparativa() {
       '<div class="eeff-ebitda-bar-fill" style="width:' + w + 'px;background:' + color + ';"></div>' +
       '<span>' + m.toFixed(1).replace(".", ",") + '% (' + _escH(label) + ')</span></div>';
   }
-
-  barsHtml += marginBar(pa.nombre || "", ebitdaA, mapA["Ingresos"] || 0, "#3B82F6");
-  if (hasN1) barsHtml += marginBar(pn1.nombre || "", mapN1["EBITDA"] || 0, mapN1["Ingresos"] || 0, "#94A3B8");
   if (hasN2) barsHtml += marginBar(pn2.nombre || "", mapN2["EBITDA"] || 0, mapN2["Ingresos"] || 0, "#CBD5E1");
+  if (hasN1) barsHtml += marginBar(pn1.nombre || "", mapN1["EBITDA"] || 0, mapN1["Ingresos"] || 0, "#94A3B8");
+  barsHtml += marginBar(pa.nombre || "", mapA["EBITDA"] || 0, mapA["Ingresos"] || 0, "#3B82F6");
   barsHtml += '</div>';
   html += barsHtml;
 
@@ -416,12 +545,137 @@ function _renderMetricasEEFF() {
     if (m.formato === "PCT") v = (m.valor || 0).toFixed(1) + "%";
     else if (m.formato === "RATIO") v = (m.valor || 0).toFixed(2) + "x";
     else if (m.formato === "DIAS") v = Math.round(m.valor || 0) + " dias";
-    else v = _fmtN(m.valor);
+    else v = _fmtEEFF(m.valor);
     var div = document.createElement("div");
     div.className = "dir-kpi dir-kpi--" + (colors[m.nombre] || "blue");
     div.innerHTML = '<span class="dir-kpi__label">' + _escH(m.nombre) + '</span><span class="dir-kpi__value">' + v + '</span>';
     grid.appendChild(div);
   });
+}
+
+// ── Cash Flow Comparativo ──────────────────────────────────────────────────
+
+var _eeffCfVista = "ytd";
+var _eeffCfData = null;
+
+function _renderCashFlowEEFF() {
+  var body = document.getElementById("eeff-cashflow-body");
+  if (!body) return;
+  var soc = document.getElementById("eeff-sociedad").value;
+  var anio = document.getElementById("eeff-anio").value;
+  var mes = document.getElementById("eeff-mes").value;
+  if (!soc || !anio || !mes) {
+    body.innerHTML = '<p class="sin-datos">Selecciona sociedad, año y mes</p>';
+    return;
+  }
+  _cargarCfComparativo();
+}
+
+function _cargarCfComparativo() {
+  var soc = document.getElementById("eeff-sociedad").value;
+  var anio = document.getElementById("eeff-anio").value;
+  var mes = document.getElementById("eeff-mes").value;
+  var body = document.getElementById("eeff-cashflow-body");
+  if (!soc || !anio || !mes) return;
+
+  var url = "/api/eeff/cashflow-comparativo?sociedad=" + encodeURIComponent(soc) +
+    "&anio=" + anio + "&mes=" + mes + "&vista=" + _eeffCfVista + "&t=" + Date.now();
+  fetch(url)
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (data) {
+      if (data.error) { body.innerHTML = '<p class="sin-datos">' + _escH(data.error) + '</p>'; return; }
+      _eeffCfData = data;
+      _pintarCfComparativo();
+    })
+    .catch(function () { body.innerHTML = '<p class="sin-datos">Error cargando cash flow</p>'; });
+}
+
+window.eeffCfVista = function (vista) {
+  _eeffCfVista = vista;
+  document.querySelectorAll(".eeff-cf-pill").forEach(function (b) {
+    b.classList.toggle("active", b.dataset.vista === vista);
+  });
+  _cargarCfComparativo();
+};
+
+function _pintarCfComparativo() {
+  var body = document.getElementById("eeff-cashflow-body");
+  var d = _eeffCfData;
+  if (!d) { body.innerHTML = '<p class="sin-datos">Sin datos</p>'; return; }
+
+  // Pills
+  var html = '<div class="eeff-pyg-pills">' +
+    '<button class="eeff-cf-pill eeff-pyg-pill' + (_eeffCfVista === "mensual" ? " active" : "") + '" data-vista="mensual" onclick="eeffCfVista(\'mensual\')">Mensual</button>' +
+    '<button class="eeff-cf-pill eeff-pyg-pill' + (_eeffCfVista === "ytd" ? " active" : "") + '" data-vista="ytd" onclick="eeffCfVista(\'ytd\')">Acumulado YTD</button>' +
+    '<button class="eeff-cf-pill eeff-pyg-pill' + (_eeffCfVista === "ltm" ? " active" : "") + '" data-vista="ltm" onclick="eeffCfVista(\'ltm\')">Últimos 12 meses</button>' +
+    '</div>';
+
+  var pa = d.periodo_actual || {};
+  var pn1 = d.periodo_n1 || {};
+  var pn2 = d.periodo_n2 || {};
+  var hasN1 = d.disponible_n1;
+  var hasN2 = d.disponible_n2;
+
+  // Build columns: oldest → current (right)
+  var columns = [];
+  if (hasN2) columns.push({ nombre: pn2.nombre, lineas: pn2.lineas || [], isActual: false });
+  if (hasN1) columns.push({ nombre: pn1.nombre, lineas: pn1.lineas || [], isActual: false });
+  columns.push({ nombre: pa.nombre, lineas: pa.lineas || [], isActual: true });
+  var ncols = columns.length;
+
+  // Build lookup maps by concepto for each column
+  var maps = columns.map(function (col) {
+    var m = {};
+    col.lineas.forEach(function (l) { m[l.concepto] = l; });
+    return m;
+  });
+
+  // Use actual period's lineas as canonical row list
+  var rowDefs = pa.lineas || [];
+  if (!rowDefs.length && pn1.lineas) rowDefs = pn1.lineas;
+
+  var thComp = 'text-align:right;padding:8px;font-size:13px;min-width:100px;color:var(--color-text-secondary);';
+  var thActual = 'text-align:right;padding:8px;font-size:13px;min-width:100px;background:#EFF6FF;color:#1E40AF;font-weight:600;';
+
+  html += '<table class="tabla-generica eeff-tabla-jerarquica" style="width:100%;border-collapse:collapse;">';
+  html += '<thead><tr><th style="text-align:left;padding:8px;font-size:13px;">Concepto</th>';
+  columns.forEach(function (col) {
+    html += '<th style="' + (col.isActual ? thActual : thComp) + '">' + _escH(col.nombre || "") + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+
+  var lastSeccion = "";
+  rowDefs.forEach(function (row) {
+    var concepto = row.concepto;
+    var tipo = row.tipo;
+    var seccion = row.seccion;
+
+    // Section header
+    if (seccion !== lastSeccion && seccion && seccion !== "caja") {
+      html += '<tr class="eeff-row-seccion"><td colspan="' + (ncols + 1) + '">' + _escH(seccion) + '</td></tr>';
+      lastSeccion = seccion;
+    }
+
+    var isTotal = (tipo === "total");
+    var isGranTotal = (tipo === "gran_total");
+    var rowCls = isGranTotal ? ' style="background:var(--color-bg-alt);border-top:2px solid var(--color-border-tertiary,#E2E8F0);"' :
+                 isTotal ? ' class="eeff-row-total"' : ' class="eeff-row-detalle"';
+    var tdPad = isTotal || isGranTotal ? 'padding:6px 8px;font-weight:700;' : 'padding:4px 8px;padding-left:24px;';
+
+    html += '<tr' + rowCls + '><td style="' + tdPad + '">' + _escH(concepto) + '</td>';
+    for (var ci = 0; ci < ncols; ci++) {
+      var entry = maps[ci][concepto];
+      var val = entry ? entry.importe : null;
+      var cellBg = columns[ci].isActual ? 'background:#F8FAFC;' : '';
+      var cellColor = columns[ci].isActual ? '' : 'color:var(--color-text-secondary);';
+      var fw = isTotal || isGranTotal ? 'font-weight:700;' : '';
+      html += '<td class="numero" style="padding:4px 8px;' + cellBg + cellColor + fw + '">' + _fmtEEFFHtml(val) + '</td>';
+    }
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  body.innerHTML = html;
 }
 
 // ── Config resumen ──────────────────────────────────────────────────────────
