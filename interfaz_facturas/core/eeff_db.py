@@ -418,6 +418,7 @@ def importar_eeff(filepath, conn):
         periodo = _generar_nombre_periodo(desde, hasta, año, trimestre, tipo, _MESES_ES)
 
         # Delete existing period if any (upsert)
+        reemplazado = False
         existing = conn.execute(
             "SELECT id FROM eeff_periodos WHERE sociedad = ? AND tipo = ? AND fecha_desde = ? AND fecha_hasta = ?",
             (sociedad, tipo, desde, hasta),
@@ -425,6 +426,7 @@ def importar_eeff(filepath, conn):
         if existing:
             conn.execute("DELETE FROM eeff_lineas WHERE periodo_id = ?", (existing["id"],))
             conn.execute("DELETE FROM eeff_periodos WHERE id = ?", (existing["id"],))
+            reemplazado = True
 
         # Insert period
         conn.execute(
@@ -467,6 +469,7 @@ def importar_eeff(filepath, conn):
             "empresa": sociedad,
             "lineas": len(inf["lineas"]),
             "hoja": inf.get("hoja", ""),
+            "reemplazado": reemplazado,
         })
 
     conn.commit()

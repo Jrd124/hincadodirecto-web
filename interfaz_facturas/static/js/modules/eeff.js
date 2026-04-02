@@ -98,7 +98,9 @@ function _subirFicherosEEFF(files) {
         if (data.error) {
           resultados.push("\u2716 " + file.name + " \u2014 Error: " + data.error);
         } else {
-          var detalles = (data.detalle || []).map(function (d) { return d.periodo; }).join(", ");
+          var detalles = (data.detalle || []).map(function (d) {
+            return d.periodo + (d.reemplazado ? " (reemplazado)" : "");
+          }).join(", ");
           resultados.push("\u2714 " + file.name + " \u2014 " + (data.importados || 0) + " periodos (" + detalles + ")");
         }
       })
