@@ -61,5 +61,11 @@ node_modules/
 # Repo clonado solo para comparación / análisis (código del socio; no versionar aquí)
 hincado-mantenimiento/
 
+# Datos runtime de interfaz_facturas (exports, fotos, logs — no son código)
+interfaz_facturas/data/
+
+# Ficheros de ejemplo de revisiones (desarrollo local)
+interfaz_facturas/ejemplo_*.html
+
 # Carpeta static duplicada en raíz (la canónica es interfaz_facturas/static/)
 static/

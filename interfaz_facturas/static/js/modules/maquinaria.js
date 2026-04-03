@@ -26,8 +26,9 @@ function cargarMaquinaria() {
       }
 
       var cards = maq.map(function (m) {
-        var c = estadoColors[m.estado] || "#64748B";
-        var lbl = estadoLabels[m.estado] || m.estado;
+        var est = m.estado_computado || m.estado;
+        var c = estadoColors[est] || "#64748B";
+        var lbl = estadoLabels[est] || est;
         return '<div onclick="maqDetalle(' + m.id + ')" style="background:var(--color-white);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px;cursor:pointer;transition:border-color 0.15s;border-top:3px solid ' + c + ';" ' +
           'onmouseover="this.style.borderColor=\'var(--color-primary)\'" onmouseout="this.style.borderColor=\'var(--color-border)\';this.style.borderTopColor=\'' + c + '\'">' +
           '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:10px;">' +
@@ -47,6 +48,7 @@ function cargarMaquinaria() {
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">' +
           '<div><h1 style="margin:0;font-size:22px;">Maquinaria</h1>' +
             '<p style="margin:4px 0 0;font-size:14px;color:var(--color-text-secondary);">' + maq.length + ' m\u00e1quinas registradas</p></div>' +
+          '<button class="btn-primary" style="width:auto;padding:8px 18px;font-size:14px;" onclick="maqNuevaModal()">+ Nueva m\u00e1quina</button>' +
         '</div>' +
         '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;" id="maq-kpis">' +
           _kpi("Disponibles", nDisp, "#16A34A") +
@@ -65,18 +67,25 @@ window.maqDetalle = function (maqId) {
     .then(function (m) {
       var container = document.getElementById("maquinaria-detalle-content");
       var estadoColors = { disponible: "#16A34A", en_proyecto: "#2563EB", en_taller: "#CA8A04", baja: "#DC2626" };
-      var color = estadoColors[m.estado] || "#64748B";
+      var estadoLabelsD = { disponible: "Disponible", en_proyecto: "En proyecto", en_taller: "En taller", baja: "De baja" };
+      var estComp = m.estado_computado || m.estado;
+      var color = estadoColors[estComp] || "#64748B";
 
       // Revisiones pendientes badges
       var revPend = "";
       if (m.revisiones_pendientes && m.revisiones_pendientes.length) {
-        revPend = '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+        revPend = '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' +
           m.revisiones_pendientes.map(function (r) {
             var urg = r.urgente;
-            return '<span style="padding:4px 10px;border-radius:99px;font-size:12px;font-weight:500;' +
+            var hito = r.proximo_hito ? r.proximo_hito.toLocaleString("es-ES") + 'h' : r.tipo;
+            var label = hito + ' <span style="opacity:0.7;font-size:11px;">(' + r.tipo + ')</span>';
+            return '<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:99px;font-size:12px;font-weight:500;' +
               'background:' + (urg ? '#DC262615' : '#CA8A0415') + ';color:' + (urg ? '#DC2626' : '#CA8A04') + ';' +
               'border:1px solid ' + (urg ? '#DC262630' : '#CA8A0430') + ';">' +
-              r.tipo + (urg ? ' (\u00a1atrasada!)' : '') + '</span>';
+              label + (urg ? ' \u00a1atrasada!' : '') +
+              '<button onclick="event.stopPropagation();maqCompletarRevision(' + m.id + ',' + r.intervalo + ',' + (m.horometro_actual || 0) + ')" ' +
+              'style="background:none;border:none;cursor:pointer;font-size:14px;padding:0 2px;line-height:1;" title="Marcar como realizada">\u2713</button>' +
+              '</span>';
           }).join("") + '</div>';
       } else {
         revPend = '<span style="color:#16A34A;font-size:13px;">\u2713 Todas al d\u00eda</span>';
@@ -86,27 +95,49 @@ window.maqDetalle = function (maqId) {
       var checksHtml = "";
       if (m.checks && m.checks.length) {
         checksHtml = m.checks.map(function (c) {
-          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid var(--color-border);">' +
+          return '<div onclick="maqVerCheck(' + c.id + ',' + m.id + ')" style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid var(--color-border);cursor:pointer;transition:background 0.1s;" onmouseover="this.style.background=\'var(--color-bg-secondary)\'" onmouseout="this.style.background=\'transparent\'">' +
             '<div><span style="font-size:13px;font-weight:500;">' + (c.fecha || "").substring(0, 10) + '</span>' +
               '<span style="font-size:12px;color:var(--color-text-secondary);margin-left:8px;">' + (c.horometro || 0) + 'h</span>' +
               (c.usuario_nombre ? '<span style="font-size:11px;color:var(--color-text-secondary);margin-left:8px;">por ' + _esc(c.usuario_nombre) + '</span>' : '') +
             '</div>' +
-            '<span style="font-size:11px;padding:2px 8px;border-radius:99px;background:' + (c.estado === "cerrado" ? '#16A34A15' : '#CA8A0415') + ';color:' + (c.estado === "cerrado" ? '#16A34A' : '#CA8A04') + ';">' + c.estado + '</span>' +
+            '<div style="display:flex;align-items:center;gap:6px;">' +
+              '<span style="font-size:11px;padding:2px 8px;border-radius:99px;background:' + (c.estado === "cerrado" ? '#16A34A15' : '#CA8A0415') + ';color:' + (c.estado === "cerrado" ? '#16A34A' : '#CA8A04') + ';">' + c.estado + '</span>' +
+              '<span style="font-size:11px;color:var(--color-text-secondary);">\u203A</span>' +
+            '</div>' +
           '</div>';
         }).join("");
       } else {
         checksHtml = '<p style="text-align:center;color:var(--color-text-secondary);font-size:13px;padding:16px;">Sin checks registrados</p>';
       }
 
-      // Revisiones rows
-      var revsHtml = "";
+      // Revisiones rows — combinar legacy + histórico de maintenance_logs
+      var allRevs = [];
       if (m.revisiones && m.revisiones.length) {
-        revsHtml = m.revisiones.map(function (r) {
+        m.revisiones.forEach(function (r) {
+          allRevs.push({ h: r.horometro_al_revision || 0, fecha: (r.fecha || "").substring(0, 10), tipo: r.tipo, estado: r.estado, tareas: null, src: "legacy" });
+        });
+      }
+      if (m.revisiones_historico && m.revisiones_historico.length) {
+        m.revisiones_historico.forEach(function (r) {
+          allRevs.push({ h: r.horometro_al_revision || 0, fecha: (r.fecha || "").substring(0, 10), tipo: "hist\u00f3rico", estado: "cerrado", tareas: r.n_tareas, src: "log" });
+        });
+      }
+      // Ordenar por horómetro desc
+      allRevs.sort(function (a, b) { return b.h - a.h; });
+
+      var revsHtml = "";
+      if (allRevs.length) {
+        revsHtml = allRevs.map(function (r) {
+          var badge = r.src === "log"
+            ? '<span style="font-size:12px;padding:2px 8px;border-radius:99px;background:#2563EB15;color:#2563EB;font-weight:500;">' + r.h + 'h</span>'
+            : '<span style="font-size:12px;padding:2px 8px;border-radius:99px;background:#7C3AED15;color:#7C3AED;font-weight:500;">' + r.tipo + '</span>';
+          var tareasInfo = r.tareas ? '<span style="font-size:11px;color:var(--color-text-secondary);margin-left:6px;">' + r.tareas + ' tareas</span>' : '';
           return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid var(--color-border);">' +
-            '<div><span style="font-size:12px;padding:2px 8px;border-radius:99px;background:#2563EB15;color:#2563EB;font-weight:500;">' + r.tipo + '</span>' +
-              '<span style="font-size:13px;margin-left:8px;">' + (r.fecha || "").substring(0, 10) + '</span>' +
-              '<span style="font-size:12px;color:var(--color-text-secondary);margin-left:6px;">' + (r.horometro_al_revision || 0) + 'h</span></div>' +
-            '<span style="font-size:11px;padding:2px 8px;border-radius:99px;background:' + (r.estado === "cerrado" ? '#16A34A15' : '#CA8A0415') + ';color:' + (r.estado === "cerrado" ? '#16A34A' : '#CA8A04') + ';">' + r.estado + '</span>' +
+            '<div>' + badge +
+              '<span style="font-size:13px;margin-left:8px;">' + r.fecha + '</span>' +
+              (r.src === "legacy" ? '<span style="font-size:12px;color:var(--color-text-secondary);margin-left:6px;">' + r.h + 'h</span>' : '') +
+              tareasInfo + '</div>' +
+            '<span style="font-size:11px;padding:2px 8px;border-radius:99px;background:#16A34A15;color:#16A34A;">\u2713 Realizada</span>' +
           '</div>';
         }).join("");
       } else {
@@ -140,7 +171,7 @@ window.maqDetalle = function (maqId) {
             '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">' +
               '<button onclick="maqVolver()" style="background:none;border:none;cursor:pointer;font-size:18px;padding:0;color:var(--color-text-secondary);">\u2190</button>' +
               '<h1 style="margin:0;font-size:24px;">' + _esc(m.nombre) + '</h1>' +
-              '<span style="font-size:12px;padding:3px 10px;border-radius:99px;background:' + color + '15;color:' + color + ';font-weight:500;">' + m.estado + '</span>' +
+              '<span style="font-size:12px;padding:3px 10px;border-radius:99px;background:' + color + '15;color:' + color + ';font-weight:500;">' + (estadoLabelsD[estComp] || estComp) + '</span>' +
             '</div>' +
             '<div style="font-size:14px;color:var(--color-text-secondary);">' + _esc(m.internal_id) + ' \u00b7 ' + _esc(m.modelo) +
               (m.numero_serie ? ' \u00b7 S/N: ' + _esc(m.numero_serie) : '') +
@@ -150,7 +181,19 @@ window.maqDetalle = function (maqId) {
             '<button class="btn-primary" style="width:auto;padding:8px 16px;" onclick="maqNuevoCheck(' + m.id + ')">\uD83D\uDCCB Check semanal</button>' +
             '<button class="btn-outline" style="padding:8px 16px;" onclick="maqNuevaIncidencia(' + m.id + ')">\u26A0\uFE0F Incidencia</button>' +
             '<button class="btn-outline" style="padding:8px 16px;" onclick="maqTokensModal(' + m.id + ')">\uD83D\uDD11 Tokens</button>' +
+            '<div style="position:relative;display:inline-block;">' +
+              '<button class="btn-outline" style="padding:8px 16px;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'block\'?\'none\':\'block\'">Exportar \u25BE</button>' +
+              '<div style="display:none;position:absolute;right:0;top:100%;margin-top:4px;background:var(--color-white);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:50;min-width:200px;">' +
+                '<div onclick="maqExportHistory(' + m.id + ',\'pdf\')" style="padding:10px 16px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--color-border);" onmouseover="this.style.background=\'var(--color-bg-secondary)\'" onmouseout="this.style.background=\'\'">Historial de servicio (PDF)</div>' +
+                '<div onclick="maqExportHistory(' + m.id + ',\'xlsx\')" style="padding:10px 16px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--color-border);" onmouseover="this.style.background=\'var(--color-bg-secondary)\'" onmouseout="this.style.background=\'\'">Historial de servicio (Excel)</div>' +
+                '<div onclick="maqCertificadoModal(' + m.id + ')" style="padding:10px 16px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--color-border);" onmouseover="this.style.background=\'var(--color-bg-secondary)\'" onmouseout="this.style.background=\'\'">Certificado CAE / PRL</div>' +
+                '<div onclick="maqExportPassport(' + m.id + ')" style="padding:10px 16px;cursor:pointer;font-size:13px;" onmouseover="this.style.background=\'var(--color-bg-secondary)\'" onmouseout="this.style.background=\'\'">Asset Passport</div>' +
+              '</div>' +
+            '</div>' +
             '<button class="btn-outline" style="padding:8px 16px;" onclick="maqEditarModal(' + m.id + ')">Editar</button>' +
+            (estComp !== 'baja'
+              ? '<button class="btn-outline" style="padding:8px 16px;color:#DC2626;border-color:#DC2626;" onclick="maqDecomisionar(' + m.id + ',\'' + _esc(m.nombre) + '\')">Decomisionar</button>'
+              : '<button class="btn-outline" style="padding:8px 16px;color:#16A34A;border-color:#16A34A;" onclick="maqReactivar(' + m.id + ',\'' + _esc(m.nombre) + '\')">Reactivar</button>') +
           '</div>' +
         '</div>' +
 
@@ -180,7 +223,7 @@ window.maqDetalle = function (maqId) {
             '<div style="border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;">' +
               '<div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;">' +
                 '<span style="font-size:14px;font-weight:600;">\uD83D\uDD27 Revisiones por hor\u00f3metro</span>' +
-                '<span style="font-size:12px;color:var(--color-text-secondary);">' + (m.revisiones ? m.revisiones.length : 0) + ' realizadas</span></div>' +
+                '<span style="font-size:12px;color:var(--color-text-secondary);">' + allRevs.length + ' realizadas</span></div>' +
               '<div style="padding:12px;max-height:250px;overflow-y:auto;">' + revsHtml + '</div></div>' +
           '</div>' +
           // Incidencias
@@ -191,13 +234,482 @@ window.maqDetalle = function (maqId) {
                 '<button class="btn-outline" style="font-size:12px;padding:3px 10px;" onclick="maqNuevaIncidencia(' + m.id + ')">+ Nueva</button></div>' +
               '<div style="padding:12px;max-height:500px;overflow-y:auto;">' + incHtml + '</div></div>' +
           '</div>' +
+        '</div>' +
+
+        // Charts section
+        '<div id="maq-charts-section" style="margin-top:20px;">' +
+          '<div style="border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;">' +
+            '<div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;">' +
+              '<span style="font-size:14px;font-weight:600;">Análisis de consumo de horas</span>' +
+              '<span id="maq-charts-stats" style="font-size:12px;color:var(--color-text-secondary);"></span>' +
+            '</div>' +
+            '<div style="padding:16px;">' +
+              '<div id="maq-charts-loading" style="text-align:center;color:var(--color-text-secondary);font-size:13px;padding:24px;">Cargando gráficos...</div>' +
+              '<div id="maq-charts-empty" style="display:none;text-align:center;color:var(--color-text-secondary);font-size:13px;padding:24px;">Datos insuficientes para generar gráficos (se necesitan al menos 2 lecturas de horómetro).</div>' +
+              '<div id="maq-charts-container" style="display:none;">' +
+                '<div style="margin-bottom:20px;"><canvas id="maq-chart-cumulative" height="220"></canvas></div>' +
+                '<div><canvas id="maq-chart-biweekly" height="220"></canvas></div>' +
+                '<div id="maq-charts-summary" style="margin-top:16px;padding:12px 16px;background:var(--color-bg-secondary);border-radius:var(--radius-md);font-size:13px;color:var(--color-text-secondary);"></div>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+
+        // Auditor links section
+        '<div id="maq-auditor-section" style="margin-top:20px;">' +
+          '<div style="border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;">' +
+            '<div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;">' +
+              '<span style="font-size:14px;font-weight:600;">\uD83D\uDD17 Compartir con auditor</span>' +
+              '<button class="btn-primary" style="font-size:12px;padding:4px 12px;width:auto;" onclick="maqCrearAuditorLink(' + m.id + ')">+ Nuevo link</button>' +
+            '</div>' +
+            '<div id="maq-auditor-links" style="padding:12px;">' +
+              '<p style="text-align:center;color:var(--color-text-secondary);font-size:13px;padding:8px;">Cargando...</p>' +
+            '</div>' +
+          '</div>' +
         '</div>';
+
+      // Store revision data for certificate modal
+      window._maqRevHistorico = m.revisiones_historico || [];
 
       // Show detail panel, hide list
       document.getElementById("panel-maquinaria").classList.remove("visible");
       document.getElementById("panel-maquinaria-detalle").classList.add("visible");
+
+      // ═══ CHARTS: Hourometer evolution & biweekly consumption ═══
+      _maqLoadCharts(m.id);
+
+      // ═══ AUDITOR LINKS ═══
+      _maqLoadAuditorLinks(m.id);
     })
     .catch(function () { mostrarToast("Error al cargar m\u00e1quina", "error"); });
+};
+
+window.maqExportHistory = function (maqId, format) {
+  // Close dropdown
+  document.querySelectorAll('[style*="z-index:50"]').forEach(function (d) { d.style.display = "none"; });
+  mostrarToast("Generando " + format.toUpperCase() + "...", "info");
+  var url = "/api/maquinaria/maquinas/" + maqId + "/export/service-history?format=" + format;
+  fetch(url).then(function (res) {
+    if (!res.ok) throw new Error("Error " + res.status);
+    var fname = "historial." + format;
+    var cd = res.headers.get("Content-Disposition");
+    if (cd) {
+      var match = cd.match(/filename=(.+)/);
+      if (match) fname = match[1];
+    }
+    return res.blob().then(function (blob) {
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = fname;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      mostrarToast("Descargado: " + fname, "success");
+    });
+  }).catch(function (err) { mostrarToast("Error: " + err.message, "error"); });
+};
+
+window.maqExportPassport = function (maqId) {
+  // Close dropdown
+  document.querySelectorAll('[style*="z-index:50"]').forEach(function (d) { d.style.display = "none"; });
+  mostrarToast("Generando Asset Passport...", "info");
+  var url = "/api/maquinaria/maquinas/" + maqId + "/asset-passport";
+  fetch(url).then(function (res) {
+    if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || "Error " + res.status); });
+    var fname = "asset_passport.pdf";
+    var cd = res.headers.get("Content-Disposition");
+    if (cd) {
+      var match = cd.match(/filename=(.+)/);
+      if (match) fname = match[1];
+    }
+    return res.blob().then(function (blob) {
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = fname;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      mostrarToast("Descargado: " + fname, "success");
+    });
+  }).catch(function (err) { mostrarToast("Error: " + err.message, "error"); });
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  Charts: Hourometer evolution & biweekly consumption                    ██
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Track chart instances to destroy on re-render
+var _maqChartInstances = [];
+
+function _maqLoadCharts(maqId) {
+  _maqChartInstances.forEach(function (c) { c.destroy(); });
+  _maqChartInstances = [];
+
+  fetch("/api/maquinaria/maquinas/" + maqId + "/chart-data")
+    .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+    .then(function (data) {
+      var loadingEl = document.getElementById("maq-charts-loading");
+      var emptyEl = document.getElementById("maq-charts-empty");
+      var containerEl = document.getElementById("maq-charts-container");
+      if (!loadingEl) return;
+
+      loadingEl.style.display = "none";
+
+      if (!data.readings || data.readings.length < 2) {
+        emptyEl.style.display = "block";
+        return;
+      }
+      containerEl.style.display = "block";
+
+      var AZ = "#2563EB";
+      var VE = "#16A34A";
+
+      // ── Chart 1: Cumulative hourometer (line + area) ──
+      var labels1 = data.readings.map(function (r) { return r.date; });
+      var values1 = data.readings.map(function (r) { return r.horo; });
+
+      var ctx1 = document.getElementById("maq-chart-cumulative").getContext("2d");
+      var chart1 = new Chart(ctx1, {
+        type: "line",
+        data: {
+          labels: labels1,
+          datasets: [{
+            label: "Horómetro (h)",
+            data: values1,
+            borderColor: AZ,
+            backgroundColor: AZ + "25",
+            fill: true,
+            tension: 0.2,
+            pointRadius: 3,
+            pointBackgroundColor: AZ,
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            title: { display: true, text: "Evolución del horómetro", font: { size: 14, weight: "bold" }, color: "#1E293B", padding: { bottom: 10 } },
+            legend: { display: false }
+          },
+          scales: {
+            x: {
+              type: "time",
+              time: { unit: "month", tooltipFormat: "dd/MM/yyyy", displayFormats: { month: "MMM yyyy" } },
+              grid: { display: false },
+              ticks: { font: { size: 10 }, maxRotation: 30 }
+            },
+            y: {
+              title: { display: true, text: "Horómetro (h)", font: { size: 11 } },
+              grid: { color: "#E2E8F020" },
+              ticks: { font: { size: 10 } }
+            }
+          }
+        }
+      });
+      _maqChartInstances.push(chart1);
+
+      // ── Chart 2: Biweekly consumption (bar) ──
+      var labels2 = data.biweekly.map(function (b) { return b.label; });
+      var values2 = data.biweekly.map(function (b) { return b.consumption; });
+      var barColors = values2.map(function (v) { return v > 0 ? AZ + "CC" : "#E2E8F0"; });
+      var avg = values2.length ? values2.reduce(function (a, b) { return a + b; }, 0) / values2.length : 0;
+
+      var avgData = values2.map(function () { return Math.round(avg * 10) / 10; });
+
+      var ctx2 = document.getElementById("maq-chart-biweekly").getContext("2d");
+      var chart2 = new Chart(ctx2, {
+        type: "bar",
+        data: {
+          labels: labels2,
+          datasets: [
+            {
+              label: "Horas consumidas",
+              data: values2,
+              backgroundColor: barColors,
+              borderRadius: 3,
+              barPercentage: 0.7,
+              order: 2
+            },
+            {
+              label: "Media: " + avg.toFixed(0) + "h",
+              data: avgData,
+              type: "line",
+              borderColor: VE,
+              borderWidth: 1.5,
+              borderDash: [6, 3],
+              pointRadius: 0,
+              fill: false,
+              order: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            title: { display: true, text: "Consumo bisemanal de horas", font: { size: 14, weight: "bold" }, color: "#1E293B", padding: { bottom: 10 } },
+            legend: {
+              display: true,
+              labels: { font: { size: 10 }, usePointStyle: true, filter: function (item) { return item.datasetIndex === 1; } }
+            }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { size: 9 }, maxRotation: 30 } },
+            y: {
+              title: { display: true, text: "Horas", font: { size: 11 } },
+              grid: { color: "#E2E8F020" },
+              ticks: { font: { size: 10 }, precision: 0 }
+            }
+          }
+        }
+      });
+      _maqChartInstances.push(chart2);
+
+      // ── Summary stats ──
+      if (data.stats) {
+        var s = data.stats;
+        var statsEl = document.getElementById("maq-charts-stats");
+        var summaryEl = document.getElementById("maq-charts-summary");
+        if (statsEl) statsEl.textContent = s.period_start + " — " + s.period_end;
+        if (summaryEl) {
+          summaryEl.innerHTML =
+            '<strong>Resumen de actividad</strong><br>' +
+            'Período: ' + s.period_start + ' — ' + s.period_end +
+            ' · Horas totales operadas: ' + s.total_hours.toLocaleString("es-ES") + 'h' +
+            ' · Media semanal: ' + s.avg_weekly + 'h' +
+            ' · Media mensual: ' + s.avg_monthly + 'h' +
+            ' · Utilización estimada: ' + s.utilization_pct + '% (sobre 50h/semana)';
+        }
+      }
+    })
+    .catch(function () {
+      var loadingEl = document.getElementById("maq-charts-loading");
+      if (loadingEl) loadingEl.textContent = "Error al cargar gráficos.";
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  Auditor Links: Compartir con auditor (Fase 4)                          ██
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function _maqLoadAuditorLinks(maqId) {
+  fetch("/api/maquinaria/auditor-links?maquina_id=" + maqId)
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var container = document.getElementById("maq-auditor-links");
+      if (!container) return;
+      var links = data.links || [];
+      var now = new Date().toISOString();
+
+      // Filter to non-expired
+      var active = links.filter(function (l) { return l.expires_at > now; });
+
+      if (!active.length) {
+        container.innerHTML = '<p style="text-align:center;color:var(--color-text-secondary);font-size:13px;padding:8px;">No hay links de auditor activos. Crea uno para compartir la ficha de esta máquina con un comprador o banco.</p>';
+        return;
+      }
+
+      container.innerHTML = active.map(function (l) {
+        var url = window.location.origin + "/audit/" + l.token;
+        var expires = (l.expires_at || "").substring(0, 10);
+        var dest = l.nombre_destinatario || "Sin nombre";
+        var accesos = l.accesos_count || 0;
+        var maxAcc = l.max_accesos ? " / " + l.max_accesos : "";
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--color-border);border-radius:var(--radius-md);margin-bottom:8px;">' +
+          '<div>' +
+            '<div style="font-size:13px;font-weight:500;">' + _esc(dest) + '</div>' +
+            '<div style="font-size:11px;color:var(--color-text-secondary);">Expira: ' + expires + ' · Accesos: ' + accesos + maxAcc + '</div>' +
+          '</div>' +
+          '<div style="display:flex;gap:6px;align-items:center;">' +
+            '<button onclick="maqCopyAuditUrl(\'' + l.token + '\')" class="btn-outline" style="font-size:11px;padding:3px 10px;" title="Copiar enlace">Copiar link</button>' +
+            '<button onclick="maqVerAuditLog(' + l.id + ')" class="btn-outline" style="font-size:11px;padding:3px 10px;" title="Ver accesos">Log</button>' +
+            '<button onclick="maqRevocarAuditorLink(' + l.id + ',' + maqId + ')" class="btn-outline" style="font-size:11px;padding:3px 10px;color:#DC2626;border-color:#DC2626;" title="Revocar">Revocar</button>' +
+          '</div>' +
+        '</div>';
+      }).join("");
+    })
+    .catch(function () {
+      var container = document.getElementById("maq-auditor-links");
+      if (container) container.innerHTML = '<p style="text-align:center;color:#DC2626;font-size:13px;">Error al cargar links</p>';
+    });
+}
+
+window.maqCrearAuditorLink = function (maqId) {
+  var nombre = prompt("Nombre del destinatario (ej: Banco Santander, comprador X):");
+  if (nombre === null) return;
+  var dias = prompt("Días de validez (1-90):", "14");
+  if (dias === null) return;
+  dias = parseInt(dias) || 14;
+
+  fetch("/api/maquinaria/auditor-link", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ maquina_id: maqId, nombre_destinatario: nombre, dias_expiracion: dias })
+  })
+    .then(function (r) {
+      if (!r.ok) return r.json().then(function (d) { throw new Error(d.error || "Error"); });
+      return r.json();
+    })
+    .then(function (link) {
+      var url = window.location.origin + "/audit/" + link.token;
+      mostrarToast("Link creado. Copiado al portapapeles.", "success");
+      navigator.clipboard.writeText(url).catch(function () {});
+      _maqLoadAuditorLinks(maqId);
+    })
+    .catch(function (err) { mostrarToast("Error: " + err.message, "error"); });
+};
+
+window.maqCopyAuditUrl = function (token) {
+  var url = window.location.origin + "/audit/" + token;
+  navigator.clipboard.writeText(url).then(function () {
+    mostrarToast("Link copiado al portapapeles", "success");
+  }).catch(function () {
+    prompt("Copia este enlace:", url);
+  });
+};
+
+window.maqRevocarAuditorLink = function (linkId, maqId) {
+  if (!confirm("¿Revocar este link de auditor? El acceso se desactivará inmediatamente.")) return;
+  fetch("/api/maquinaria/auditor-links/" + linkId, { method: "DELETE" })
+    .then(function () {
+      mostrarToast("Link revocado", "success");
+      _maqLoadAuditorLinks(maqId);
+    })
+    .catch(function () { mostrarToast("Error al revocar", "error"); });
+};
+
+window.maqVerAuditLog = function (linkId) {
+  fetch("/api/maquinaria/auditor-links/" + linkId + "/log")
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var logs = data.log || [];
+      if (!logs.length) {
+        alert("Sin accesos registrados todavía.");
+        return;
+      }
+      var text = logs.map(function (l) {
+        return (l.created_at || "").substring(0, 19) + " | " + l.accion + " | IP: " + (l.ip || "?");
+      }).join("\n");
+      alert("Registro de accesos (" + logs.length + "):\n\n" + text);
+    })
+    .catch(function () { mostrarToast("Error al cargar log", "error"); });
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  Certificado CAE / PRL                                                  ██
+// ═══════════════════════════════════════════════════════════════════════════════
+
+window.maqCertificadoModal = function (maqId) {
+  // Close dropdown
+  document.querySelectorAll('[style*="z-index:50"]').forEach(function (d) { d.style.display = "none"; });
+
+  var revs = window._maqRevHistorico || [];
+
+  // Collect unique hito hours from revisiones_historico, sorted desc
+  var hitosSet = {};
+  revs.forEach(function (r) {
+    var h = r.horometro_al_revision || 0;
+    if (h > 0) hitosSet[h] = (r.fecha || "").substring(0, 10);
+  });
+  var hitos = Object.keys(hitosSet).map(Number).sort(function (a, b) { return b - a; });
+
+  var hitoOpts = hitos.map(function (h) {
+    return '<option value="' + h + '">' + h.toLocaleString("es-ES") + 'h — ' + (hitosSet[h] || "") + '</option>';
+  }).join("");
+  if (!hitoOpts) {
+    hitoOpts = '<option value="">Sin revisiones registradas</option>';
+  }
+
+  var modal = document.createElement("div");
+  modal.className = "modal-overlay visible";
+  modal.id = "modal-maq-certificado";
+  modal.onclick = function (e) { if (e.target === modal) modal.remove(); };
+  modal.innerHTML =
+    '<div class="modal-content" style="max-width:480px;">' +
+      '<h2 style="margin:0 0 16px;">Generar certificado CAE / PRL</h2>' +
+
+      // Modo
+      '<div style="margin-bottom:16px;">' +
+        '<label class="form-label">Tipo de certificado</label>' +
+        '<select id="cert-modo" class="form-input" onchange="document.getElementById(\'cert-hito-group\').style.display=this.value===\'hito\'?\'block\':\'none\'">' +
+          '<option value="ultima">Última revisión realizada</option>' +
+          '<option value="hito">Revisión por hito (horómetro específico)</option>' +
+        '</select>' +
+      '</div>' +
+
+      // Hito selector (hidden by default)
+      '<div id="cert-hito-group" style="display:none;margin-bottom:16px;">' +
+        '<label class="form-label">Hito de revisión</label>' +
+        '<select id="cert-hito-horas" class="form-input">' + hitoOpts + '</select>' +
+      '</div>' +
+
+      // Lugar
+      '<div style="margin-bottom:16px;">' +
+        '<label class="form-label">Lugar de emisión</label>' +
+        '<input type="text" id="cert-lugar" class="form-input" value="Badajoz">' +
+      '</div>' +
+
+      // Firmante
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">' +
+        '<div><label class="form-label">Nombre firmante</label>' +
+          '<input type="text" id="cert-firmante-nombre" class="form-input" value="Sergio Garcia Cascallana"></div>' +
+        '<div><label class="form-label">Cargo</label>' +
+          '<input type="text" id="cert-firmante-cargo" class="form-input" value="Administrador"></div>' +
+      '</div>' +
+
+      // Buttons
+      '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+        '<button class="btn-outline" onclick="document.getElementById(\'modal-maq-certificado\').remove()">Cancelar</button>' +
+        '<button class="btn-primary" style="width:auto;padding:8px 20px;" id="cert-btn-generar" onclick="maqGenerarCertificado(' + maqId + ')">Generar PDF</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(modal);
+};
+
+window.maqGenerarCertificado = function (maqId) {
+  var modo = (document.getElementById("cert-modo") || {}).value || "ultima";
+  var hitoHoras = modo === "hito" ? parseInt((document.getElementById("cert-hito-horas") || {}).value) || null : null;
+  var lugar = (document.getElementById("cert-lugar") || {}).value || "Badajoz";
+  var firmNombre = (document.getElementById("cert-firmante-nombre") || {}).value || "";
+  var firmCargo = (document.getElementById("cert-firmante-cargo") || {}).value || "";
+
+  if (modo === "hito" && !hitoHoras) {
+    mostrarToast("Selecciona un hito de revisión", "error");
+    return;
+  }
+
+  var btn = document.getElementById("cert-btn-generar");
+  if (btn) { btn.disabled = true; btn.textContent = "Generando..."; }
+
+  var payload = { modo: modo, lugar: lugar, firmante_nombre: firmNombre, firmante_cargo: firmCargo };
+  if (hitoHoras) payload.hito_horas = hitoHoras;
+
+  fetch("/api/maquinaria/maquinas/" + maqId + "/certificado-cae", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  }).then(function (res) {
+    if (!res.ok) {
+      return res.json().then(function (d) { throw new Error(d.error || "Error " + res.status); });
+    }
+    var fname = "certificado_cae.pdf";
+    var cd = res.headers.get("Content-Disposition");
+    if (cd) {
+      var match = cd.match(/filename=(.+)/);
+      if (match) fname = match[1];
+    }
+    return res.blob().then(function (blob) {
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = fname;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      var m = document.getElementById("modal-maq-certificado"); if (m) m.remove();
+      mostrarToast("Certificado descargado: " + fname, "success");
+    });
+  }).catch(function (err) {
+    mostrarToast("Error: " + err.message, "error");
+    if (btn) { btn.disabled = false; btn.textContent = "Generar PDF"; }
+  });
 };
 
 window.maqVolver = function () {
@@ -401,6 +913,267 @@ window.maqGuardarEdicion = function (maqId) {
   });
 };
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  Decomisionar / Reactivar máquina                                      ██
+// ═══════════════════════════════════════════════════════════════════════════════
+
+window.maqDecomisionar = function (maqId, nombre) {
+  if (!confirm("\u00bfDecomisionar " + nombre + "? La m\u00e1quina pasar\u00e1 a estado 'De baja'.")) return;
+  fetch("/api/maquinaria/maquinas/" + maqId, {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ estado: "baja", activa: 0 })
+  }).then(function (res) {
+    if (res.ok) { mostrarToast(nombre + " decomisionada", "success"); maqDetalle(maqId); }
+    else { mostrarToast("Error al decomisionar", "error"); }
+  });
+};
+
+window.maqReactivar = function (maqId, nombre) {
+  if (!confirm("\u00bfReactivar " + nombre + "?")) return;
+  fetch("/api/maquinaria/maquinas/" + maqId, {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ estado: "disponible", activa: 1 })
+  }).then(function (res) {
+    if (res.ok) { mostrarToast(nombre + " reactivada", "success"); maqDetalle(maqId); }
+    else { mostrarToast("Error al reactivar", "error"); }
+  });
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  Completar revisión pendiente manualmente                              ██
+// ═══════════════════════════════════════════════════════════════════════════════
+
+window.maqCompletarRevision = function (maqId, intervalo, horometro) {
+  var hito = Math.floor(horometro / intervalo) * intervalo;
+  if (!confirm("Marcar revisi\u00f3n de " + intervalo + "h como realizada al hito " + hito + "h?")) return;
+  fetch("/api/maquinaria/maquinas/" + maqId + "/completar-revision", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ intervalo: intervalo, horometro_actual: horometro })
+  }).then(function (res) {
+    if (res.ok) {
+      mostrarToast("Revisi\u00f3n " + intervalo + "h marcada como realizada", "success");
+      maqDetalle(maqId);
+    } else {
+      res.json().then(function (d) { mostrarToast(d.error || "Error", "error"); })
+        .catch(function () { mostrarToast("Error al completar revisi\u00f3n", "error"); });
+    }
+  });
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  Detalle de check semanal (admin: ver, editar, eliminar)               ██
+// ═══════════════════════════════════════════════════════════════════════════════
+
+window.maqVerCheck = function (checkId, maqId) {
+  Promise.all([
+    fetch("/api/maquinaria/checks/" + checkId).then(function (r) { return r.json(); }),
+    fetch("/api/maquinaria/templates/semanal").then(function (r) { return r.json(); }).catch(function () { return { templates: [] }; })
+  ]).then(function (results) {
+    var c = results[0];
+    var templates = results[1].templates || [];
+    if (!c || c.error) { mostrarToast("Error al cargar check", "error"); return; }
+
+    var cl = c.checklist_parsed || {};
+
+    // Build checklist HTML
+    var clHtml = "";
+    if (templates.length) {
+      clHtml = templates.map(function (t) {
+        var entry = cl[String(t.id)] || {};
+        var ok = entry.ok;
+        var nota = entry.nota || "";
+        var icon = ok ? '<span style="color:#16A34A;">\u2713</span>' : '<span style="color:#DC2626;">\u2717</span>';
+        return '<div style="display:flex;align-items:start;gap:8px;padding:6px 0;border-bottom:1px solid var(--color-border);" data-tmpl-id="' + t.id + '">' +
+          '<input type="checkbox" class="chk-item" data-id="' + t.id + '"' + (ok ? ' checked' : '') + ' style="margin-top:3px;cursor:pointer;">' +
+          '<div style="flex:1;">' +
+            '<div style="font-size:13px;font-weight:500;">' + _esc(t.nombre) + '</div>' +
+            (nota ? '<div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px;">' + _esc(nota) + '</div>' : '') +
+          '</div></div>';
+      }).join("");
+    } else {
+      // No templates, show raw JSON keys
+      var keys = Object.keys(cl);
+      if (keys.length) {
+        clHtml = keys.map(function (k) {
+          var entry = cl[k];
+          return '<div style="padding:4px 0;font-size:13px;">' +
+            (entry.ok ? '\u2713' : '\u2717') + ' Item ' + k +
+            (entry.nota ? ' \u2014 ' + _esc(entry.nota) : '') + '</div>';
+        }).join("");
+      } else {
+        clHtml = '<p style="color:var(--color-text-secondary);font-size:13px;">Sin checklist</p>';
+      }
+    }
+
+    // Fotos HTML
+    var fotosHtml = "";
+    if (c.fotos && c.fotos.length) {
+      fotosHtml = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">' +
+        c.fotos.map(function (f) {
+          return '<img src="/uploads/maquinaria/' + _esc(f.filename) + '" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--color-border);cursor:pointer;" ' +
+            'onclick="window.open(this.src,\'_blank\')">';
+        }).join("") + '</div>';
+    }
+
+    var modal = document.createElement("div");
+    modal.className = "modal-overlay visible";
+    modal.id = "modal-check-detalle";
+    modal.onclick = function (e) { if (e.target === modal) modal.remove(); };
+    modal.innerHTML =
+      '<div class="modal-content" style="max-width:560px;max-height:80vh;overflow-y:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:16px;">' +
+          '<div>' +
+            '<h2 style="margin:0;">Check semanal</h2>' +
+            '<div style="font-size:13px;color:var(--color-text-secondary);margin-top:4px;">' +
+              (c.fecha || "").substring(0, 10) + ' \u00b7 ' + (c.horometro || 0) + 'h' +
+              (c.usuario_nombre ? ' \u00b7 por ' + _esc(c.usuario_nombre) : '') +
+            '</div>' +
+          '</div>' +
+          '<span style="font-size:11px;padding:3px 10px;border-radius:99px;background:' + (c.estado === "cerrado" ? '#16A34A15' : '#CA8A0415') + ';color:' + (c.estado === "cerrado" ? '#16A34A' : '#CA8A04') + ';font-weight:500;">' + (c.estado || 'abierto') + '</span>' +
+        '</div>' +
+
+        // Checklist
+        '<div style="margin-bottom:16px;">' +
+          '<div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:8px;">Checklist</div>' +
+          '<div id="chk-detail-items">' + clHtml + '</div>' +
+        '</div>' +
+
+        // Observaciones
+        '<div style="margin-bottom:16px;">' +
+          '<div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:4px;">Observaciones</div>' +
+          '<textarea id="chk-edit-obs" class="form-input" rows="2" style="font-size:13px;">' + _esc(c.observaciones || '') + '</textarea>' +
+        '</div>' +
+
+        // Horómetro editable
+        '<div style="margin-bottom:16px;">' +
+          '<div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:4px;">Hor\u00f3metro</div>' +
+          '<input type="number" id="chk-edit-horo" class="form-input" step="any" value="' + (c.horometro || 0) + '" style="max-width:150px;">' +
+        '</div>' +
+
+        // Fotos
+        (fotosHtml ? '<div style="margin-bottom:16px;"><div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:4px;">Fotos</div>' + fotosHtml + '</div>' : '') +
+
+        // Buttons
+        '<div style="display:flex;gap:8px;justify-content:space-between;margin-top:16px;border-top:1px solid var(--color-border);padding-top:16px;">' +
+          '<button class="btn-outline" style="color:#DC2626;border-color:#DC2626;font-size:13px;padding:6px 14px;" onclick="maqEliminarCheck(' + checkId + ',' + maqId + ')">Eliminar check</button>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button class="btn-outline" style="font-size:13px;padding:6px 14px;" onclick="document.getElementById(\'modal-check-detalle\').remove()">Cancelar</button>' +
+            '<button class="btn-primary" style="width:auto;font-size:13px;padding:6px 16px;" onclick="maqGuardarCheck(' + checkId + ',' + maqId + ')">Guardar cambios</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+  }).catch(function (err) {
+    console.error("maqVerCheck error:", err);
+    mostrarToast("Error al cargar check: " + err.message, "error");
+  });
+};
+
+window.maqGuardarCheck = function (checkId, maqId) {
+  // Rebuild checklist from checkboxes
+  var items = document.querySelectorAll("#chk-detail-items .chk-item");
+  var checklist = {};
+  items.forEach(function (cb) {
+    checklist[cb.getAttribute("data-id")] = { ok: cb.checked, nota: "" };
+  });
+  var data = {
+    observaciones: (document.getElementById("chk-edit-obs") || {}).value || "",
+    horometro: parseFloat((document.getElementById("chk-edit-horo") || {}).value) || 0,
+    checklist: checklist
+  };
+  fetch("/api/maquinaria/checks/" + checkId, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
+  }).then(function (res) {
+    if (res.ok) {
+      var m = document.getElementById("modal-check-detalle"); if (m) m.remove();
+      mostrarToast("Check actualizado", "success");
+      maqDetalle(maqId);
+    } else { mostrarToast("Error al actualizar", "error"); }
+  });
+};
+
+window.maqEliminarCheck = function (checkId, maqId) {
+  if (!confirm("\u00bfEliminar este check semanal? Esta acci\u00f3n no se puede deshacer.")) return;
+  fetch("/api/maquinaria/checks/" + checkId, {
+    method: "DELETE"
+  }).then(function (res) {
+    if (res.ok) {
+      var m = document.getElementById("modal-check-detalle"); if (m) m.remove();
+      mostrarToast("Check eliminado", "success");
+      maqDetalle(maqId);
+    } else { mostrarToast("Error al eliminar", "error"); }
+  });
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  Nueva máquina (crear desde la web)                                    ██
+// ═══════════════════════════════════════════════════════════════════════════════
+
+window.maqNuevaModal = function () {
+  var modal = document.createElement("div");
+  modal.className = "modal-overlay visible";
+  modal.id = "modal-maq-nueva";
+  modal.onclick = function (e) { if (e.target === modal) modal.remove(); };
+  modal.innerHTML =
+    '<div class="modal-content" style="max-width:520px;">' +
+      '<h2 style="margin:0 0 16px;">Nueva m\u00e1quina</h2>' +
+      '<div style="display:grid;gap:12px;">' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+          '<div><label class="form-label">ID interno *</label><input type="text" id="maq-nw-intid" class="form-input" placeholder="Ej: HD1000-09"></div>' +
+          '<div><label class="form-label">Nombre *</label><input type="text" id="maq-nw-nombre" class="form-input" placeholder="Ej: Giulietta"></div></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+          '<div><label class="form-label">Modelo</label><input type="text" id="maq-nw-modelo" class="form-input" value="ORTECO HD1000"></div>' +
+          '<div><label class="form-label">N\u00ba Serie</label><input type="text" id="maq-nw-serie" class="form-input" placeholder="Ej: W240"></div></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+          '<div><label class="form-label">Hor\u00f3metro actual</label><input type="number" id="maq-nw-horometro" class="form-input" step="any" value="0"></div>' +
+          '<div><label class="form-label">Hor\u00f3metro inicial</label><input type="number" id="maq-nw-horo-ini" class="form-input" step="any" value="0"></div></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+          '<div><label class="form-label">Fecha comisi\u00f3n</label><input type="date" id="maq-nw-fecha" class="form-input"></div>' +
+          '<div><label class="form-label">Ubicaci\u00f3n</label><input type="text" id="maq-nw-ubicacion" class="form-input" placeholder="Ej: Parque PV Cuenca"></div></div>' +
+        '<div><label class="form-label">Notas</label><textarea id="maq-nw-notas" class="form-input" rows="2" placeholder="Observaciones opcionales"></textarea></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">' +
+        '<button class="btn-outline" onclick="document.getElementById(\'modal-maq-nueva\').remove()">Cancelar</button>' +
+        '<button class="btn-primary" style="width:auto;padding:8px 20px;" onclick="maqCrearNueva()">Crear m\u00e1quina</button>' +
+      '</div></div>';
+  document.body.appendChild(modal);
+};
+
+window.maqCrearNueva = function () {
+  var intId = (document.getElementById("maq-nw-intid") || {}).value || "";
+  var nombre = (document.getElementById("maq-nw-nombre") || {}).value || "";
+  if (!intId.trim() || !nombre.trim()) {
+    mostrarToast("ID interno y nombre son obligatorios", "error");
+    return;
+  }
+  var data = {
+    internal_id: intId.trim(),
+    nombre: nombre.trim(),
+    modelo: (document.getElementById("maq-nw-modelo") || {}).value || "ORTECO HD1000",
+    numero_serie: (document.getElementById("maq-nw-serie") || {}).value || null,
+    horometro_actual: parseFloat((document.getElementById("maq-nw-horometro") || {}).value) || 0,
+    horometro_inicial: parseFloat((document.getElementById("maq-nw-horo-ini") || {}).value) || 0,
+    fecha_comision: (document.getElementById("maq-nw-fecha") || {}).value || null,
+    ubicacion: (document.getElementById("maq-nw-ubicacion") || {}).value || null,
+    notas: (document.getElementById("maq-nw-notas") || {}).value || null
+  };
+  fetch("/api/maquinaria/maquinas", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
+  }).then(function (res) {
+    if (res.ok) {
+      var m = document.getElementById("modal-maq-nueva"); if (m) m.remove();
+      mostrarToast("M\u00e1quina '" + data.nombre + "' creada", "success");
+      cargarMaquinaria();
+    } else {
+      res.json().then(function (d) {
+        mostrarToast(d.error || "Error al crear m\u00e1quina", "error");
+      }).catch(function () { mostrarToast("Error al crear m\u00e1quina", "error"); });
+    }
+  }).catch(function (err) {
+    mostrarToast("Error de red: " + err.message, "error");
+  });
+};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ██  Tokens de acceso operario                                             ██

@@ -5,7 +5,7 @@ import json
 import logging
 import os
 
-from flask import Blueprint, jsonify, request, render_template_string, send_from_directory, make_response
+from flask import Blueprint, Response, jsonify, request, render_template_string, send_from_directory, make_response
 from flask_login import current_user
 
 from core import maquinaria_db
@@ -40,13 +40,231 @@ def api_obtener_maquina(mid):
 @maquinaria_bp.post("/api/maquinaria/maquinas")
 def api_crear_maquina():
   data = request.get_json(silent=True) or {}
-  return jsonify(maquinaria_db.crear_maquina(data)), 201
+  if not data.get("internal_id") or not data.get("nombre"):
+    return jsonify({"error": "internal_id y nombre son obligatorios"}), 400
+  try:
+    return jsonify(maquinaria_db.crear_maquina(data)), 201
+  except Exception as e:
+    msg = str(e)
+    if "UNIQUE" in msg:
+      return jsonify({"error": "Ya existe una m\u00e1quina con ese ID interno"}), 409
+    return jsonify({"error": msg}), 500
 
 
 @maquinaria_bp.put("/api/maquinaria/maquinas/<int:mid>")
 def api_actualizar_maquina(mid):
   data = request.get_json(silent=True) or {}
   return jsonify(maquinaria_db.actualizar_maquina(mid, data))
+
+
+@maquinaria_bp.post("/api/maquinaria/maquinas/<int:mid>/completar-revision")
+def api_completar_revision(mid):
+  data = request.get_json(silent=True) or {}
+  intervalo = data.get("intervalo")
+  horometro = data.get("horometro_actual")
+  if not intervalo or horometro is None:
+    return jsonify({"error": "intervalo y horometro_actual son obligatorios"}), 400
+  result = maquinaria_db.marcar_revision_completada(mid, int(intervalo), float(horometro))
+  if result.get("error"):
+    return jsonify(result), 400
+  return jsonify(result)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ██  Exports de historial de servicio + documentos                          ██
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@maquinaria_bp.get("/api/maquinaria/maquinas/<int:mid>/export/service-history")
+def api_export_service_history(mid):
+  """Genera y descarga historial de servicio (PDF o Excel)."""
+  from core import maquinaria_exports
+  fmt = request.args.get("format", "pdf").lower()
+  desde = request.args.get("desde")
+  hasta = request.args.get("hasta")
+  user_name = current_user.nombre if current_user.is_authenticated else "admin"
+  try:
+    if fmt == "xlsx":
+      data_bytes, doc_record = maquinaria_exports.generar_service_history_xlsx(
+          mid, desde=desde, hasta=hasta, generado_por=user_name)
+      return Response(data_bytes,
+          mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          headers={"Content-Disposition": f"attachment; filename={doc_record['filename']}"})
+    else:
+      data_bytes, doc_record = maquinaria_exports.generar_service_history_pdf(
+          mid, desde=desde, hasta=hasta, generado_por=user_name)
+      return Response(data_bytes, mimetype="application/pdf",
+          headers={"Content-Disposition": f"attachment; filename={doc_record['filename']}"})
+  except ValueError as e:
+    return jsonify({"error": str(e)}), 404
+  except Exception as e:
+    return jsonify({"error": f"Error generando export: {e}"}), 500
+
+
+@maquinaria_bp.get("/api/maquinaria/maquinas/<int:mid>/documentos")
+def api_listar_documentos_maquina(mid):
+  return jsonify({"documentos": maquinaria_db.listar_documentos(maquina_id=mid)})
+
+
+@maquinaria_bp.post("/api/maquinaria/maquinas/<int:mid>/certificado-cae")
+def api_generar_certificado_cae(mid):
+  """Genera certificado CAE/PRL. Body: {modo: "ultima"|"hito", hito_horas: 4000}"""
+  from core import maquinaria_exports
+  data = request.get_json(silent=True) or {}
+  modo = data.get("modo", "ultima")
+  hito_horas = data.get("hito_horas")
+  lugar = data.get("lugar", "Badajoz")
+  firmante_nombre = data.get("firmante_nombre")
+  firmante_cargo = data.get("firmante_cargo")
+  user_name = current_user.nombre if current_user.is_authenticated else "admin"
+  try:
+    pdf_bytes, doc_record = maquinaria_exports.generar_certificado_cae(
+        mid, modo=modo, hito_horas=hito_horas, lugar=lugar,
+        firmante_nombre=firmante_nombre, firmante_cargo=firmante_cargo,
+        generado_por=user_name)
+    return Response(pdf_bytes, mimetype="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={doc_record['filename']}"})
+  except ValueError as e:
+    return jsonify({"error": str(e)}), 404
+  except Exception as e:
+    return jsonify({"error": f"Error generando certificado: {e}"}), 500
+
+
+@maquinaria_bp.get("/api/maquinaria/maquinas/<int:mid>/asset-passport")
+def api_generar_asset_passport(mid):
+  """Genera Asset Passport PDF — resumen ejecutivo de 1 página."""
+  from core import maquinaria_exports
+  user_name = current_user.nombre if current_user.is_authenticated else "admin"
+  try:
+    pdf_bytes, doc_record = maquinaria_exports.generar_asset_passport(
+        mid, generado_por=user_name)
+    return Response(pdf_bytes, mimetype="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={doc_record['filename']}"})
+  except ValueError as e:
+    return jsonify({"error": str(e)}), 404
+  except Exception as e:
+    return jsonify({"error": f"Error generando Asset Passport: {e}"}), 500
+
+
+@maquinaria_bp.get("/api/maquinaria/maquinas/<int:mid>/chart-data")
+def api_chart_data(mid):
+  """Returns hourometer chart data as JSON for frontend Chart.js rendering."""
+  from core.db import conectar as _db_conectar
+  from datetime import datetime, timedelta
+
+  maq = maquinaria_db.obtener_maquina(mid)
+  if not maq:
+    return jsonify({"error": "No encontrada"}), 404
+
+  horo = maq.get("horometro_actual") or 0
+
+  with _db_conectar() as conn:
+    rows_checks = conn.execute(
+        "SELECT fecha, horometro FROM maquinaria_checks "
+        "WHERE maquina_id = ? AND horometro IS NOT NULL AND horometro > 0 "
+        "AND estado != 'enmendado' ORDER BY fecha",
+        [mid]).fetchall()
+    rows_logs = conn.execute(
+        "SELECT completed_at, MAX(horometro_at) as horo "
+        "FROM maquinaria_maintenance_logs "
+        "WHERE maquina_id = ? AND horometro_at IS NOT NULL AND horometro_at > 0 "
+        "GROUP BY completed_at ORDER BY completed_at",
+        [mid]).fetchall()
+
+  combined = []
+  for r in rows_checks:
+    try:
+      d = datetime.fromisoformat(r["fecha"][:10])
+      combined.append((d, float(r["horometro"])))
+    except (ValueError, TypeError):
+      pass
+  for r in rows_logs:
+    try:
+      d_str = r["completed_at"] or ""
+      d = datetime.fromisoformat(d_str[:10])
+      combined.append((d, float(r["horo"])))
+    except (ValueError, TypeError):
+      pass
+
+  if horo > 0:
+    combined.append((datetime.now().replace(hour=0, minute=0, second=0, microsecond=0),
+                     float(horo)))
+
+  combined.sort(key=lambda x: (x[0], x[1]))
+  deduped = {}
+  for d, hr in combined:
+    if d not in deduped or hr > deduped[d]:
+      deduped[d] = hr
+  by_date = sorted(deduped.items(), key=lambda x: x[0])
+
+  sorted_readings = []
+  running_max = -1.0
+  for d, hr in by_date:
+    if hr >= running_max:
+      sorted_readings.append((d, hr))
+      running_max = hr
+
+  if len(sorted_readings) < 2:
+    return jsonify({"readings": [], "biweekly": [], "stats": None})
+
+  dates = [x[0] for x in sorted_readings]
+  horos_list = [x[1] for x in sorted_readings]
+
+  # Cumulative readings
+  readings = [{"date": d.strftime("%Y-%m-%d"), "horo": h} for d, h in sorted_readings]
+
+  # Biweekly consumption
+  period_days = 14
+  start, end = dates[0], dates[-1]
+  periods = []
+  current = start
+  while current <= end:
+    periods.append(current)
+    current += timedelta(days=period_days)
+
+  interp_horos = []
+  for p in periods:
+    before_h, after_h = 0, horos_list[-1]
+    before_d, after_d = dates[0], dates[-1]
+    for i in range(len(dates)):
+      if dates[i] <= p:
+        before_h = horos_list[i]
+        before_d = dates[i]
+      if dates[i] >= p:
+        after_h = horos_list[i]
+        after_d = dates[i]
+        break
+    if before_d == after_d:
+      interp_horos.append(before_h)
+    else:
+      ratio = (p - before_d).total_seconds() / (after_d - before_d).total_seconds()
+      interp_horos.append(before_h + (after_h - before_h) * ratio)
+
+  biweekly = []
+  for i in range(1, len(periods)):
+    delta = interp_horos[i] - interp_horos[i - 1]
+    biweekly.append({
+        "label": periods[i].strftime("%d/%m/%y"),
+        "consumption": round(max(0, delta), 1)
+    })
+
+  max_bars = 26
+  if len(biweekly) > max_bars:
+    biweekly = biweekly[-max_bars:]
+
+  # Stats
+  total_hours = horos_list[-1] - horos_list[0]
+  total_days = max((dates[-1] - dates[0]).days, 1)
+  avg_daily = total_hours / total_days
+  stats = {
+      "period_start": dates[0].strftime("%d/%m/%Y"),
+      "period_end": dates[-1].strftime("%d/%m/%Y"),
+      "total_hours": round(total_hours, 1),
+      "avg_weekly": round(avg_daily * 7, 1),
+      "avg_monthly": round(avg_daily * 30, 0),
+      "utilization_pct": round(min(100, (avg_daily * 7) / 50 * 100), 0),
+  }
+
+  return jsonify({"readings": readings, "biweekly": biweekly, "stats": stats})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -68,6 +286,26 @@ def api_crear_check():
 @maquinaria_bp.put("/api/maquinaria/checks/<int:cid>/cerrar")
 def api_cerrar_check(cid):
   return jsonify(maquinaria_db.cerrar_check(cid))
+
+
+@maquinaria_bp.get("/api/maquinaria/checks/<int:cid>")
+def api_obtener_check(cid):
+  check = maquinaria_db.obtener_check(cid)
+  if not check:
+    return jsonify({"error": "Check no encontrado"}), 404
+  return jsonify(check)
+
+
+@maquinaria_bp.put("/api/maquinaria/checks/<int:cid>")
+def api_actualizar_check(cid):
+  data = request.get_json(silent=True) or {}
+  return jsonify(maquinaria_db.actualizar_check(cid, data))
+
+
+@maquinaria_bp.delete("/api/maquinaria/checks/<int:cid>")
+def api_eliminar_check(cid):
+  maquinaria_db.eliminar_check(cid)
+  return jsonify({"ok": True})
 
 
 @maquinaria_bp.post("/api/maquinaria/revisiones")
@@ -1524,5 +1762,410 @@ function enviarRevision(e) {{
   }});
   return false;
 }}
+</script>
+</body></html>"""
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ██  Fase 4: Auditor View — Links temporales                                ██
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@maquinaria_bp.post("/api/maquinaria/auditor-link")
+def api_crear_auditor_link():
+  """Crea un link de auditor temporal para una máquina."""
+  data = request.get_json(silent=True) or {}
+  maquina_id = data.get("maquina_id")
+  if not maquina_id:
+    return jsonify({"error": "maquina_id es obligatorio"}), 400
+  nombre = data.get("nombre_destinatario", "").strip() or None
+  dias = int(data.get("dias_expiracion", 14))
+  if dias < 1 or dias > 90:
+    return jsonify({"error": "dias_expiracion debe estar entre 1 y 90"}), 400
+  max_acc = data.get("max_accesos")
+  if max_acc is not None:
+    max_acc = int(max_acc) if int(max_acc) > 0 else None
+  user_id = current_user.id if current_user.is_authenticated else None
+  try:
+    link = maquinaria_db.crear_auditor_link(
+        maquina_id, user_id, nombre, dias, max_acc)
+    return jsonify(link), 201
+  except Exception as e:
+    return jsonify({"error": str(e)}), 500
+
+
+@maquinaria_bp.get("/api/maquinaria/auditor-links")
+def api_listar_auditor_links():
+  """Lista links de auditor activos, opcionalmente filtrados por máquina."""
+  mid = request.args.get("maquina_id", type=int)
+  return jsonify({"links": maquinaria_db.listar_auditor_links(mid)})
+
+
+@maquinaria_bp.delete("/api/maquinaria/auditor-links/<int:lid>")
+def api_revocar_auditor_link(lid):
+  """Revoca un link de auditor."""
+  maquinaria_db.revocar_auditor_link(lid)
+  return jsonify({"ok": True})
+
+
+@maquinaria_bp.get("/api/maquinaria/auditor-links/<int:lid>/log")
+def api_audit_log(lid):
+  """Obtiene el log de accesos de un link."""
+  return jsonify({"log": maquinaria_db.obtener_audit_log(lid)})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ██  Fase 4: Auditor View — Página pública (sin login)                      ██
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@maquinaria_bp.get("/audit/<token>")
+def audit_view(token):
+  """Página pública read-only para auditor — ficha de mantenimiento sin login."""
+  link = maquinaria_db.validar_auditor_token(token)
+  if not link:
+    return _audit_error_page("Link no válido, expirado o revocado."), 403
+
+  maquinaria_db.registrar_acceso_auditor(
+      link["id"], request.remote_addr,
+      request.headers.get("User-Agent", "")[:200], "view_page")
+
+  mid = link["maquina_id"]
+  maq = maquinaria_db.obtener_maquina(mid)
+  if not maq:
+    return _audit_error_page("Máquina no encontrada."), 404
+
+  # Sanitize: remove sensitive data
+  for key in ("notas", "foto_url", "proyecto_id"):
+    maq.pop(key, None)
+  for c in maq.get("checks", []):
+    c.pop("usuario_id", None)
+  for i in maq.get("incidencias", []):
+    i.pop("usuario_id", None)
+
+  resp = make_response(_render_audit_page(link, maq, token))
+  resp.headers["X-Robots-Tag"] = "noindex, nofollow"
+  resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+  return resp
+
+
+@maquinaria_bp.get("/audit/<token>/passport.pdf")
+def audit_passport_pdf(token):
+  """Descarga Asset Passport PDF desde link de auditor."""
+  link = maquinaria_db.validar_auditor_token(token)
+  if not link:
+    return _audit_error_page("Link no válido, expirado o revocado."), 403
+  maquinaria_db.registrar_acceso_auditor(
+      link["id"], request.remote_addr,
+      request.headers.get("User-Agent", "")[:200], "download_passport")
+  from core import maquinaria_exports
+  try:
+    pdf_bytes, doc = maquinaria_exports.generar_asset_passport(
+        link["maquina_id"], generado_por="Auditor View")
+    resp = Response(pdf_bytes, mimetype="application/pdf",
+        headers={"Content-Disposition": f"inline; filename={doc['filename']}"})
+    resp.headers["X-Robots-Tag"] = "noindex, nofollow"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+  except Exception as e:
+    return _audit_error_page(f"Error generando passport: {e}"), 500
+
+
+@maquinaria_bp.get("/audit/<token>/history.pdf")
+def audit_history_pdf(token):
+  """Descarga historial de servicio PDF desde link de auditor."""
+  link = maquinaria_db.validar_auditor_token(token)
+  if not link:
+    return _audit_error_page("Link no válido, expirado o revocado."), 403
+  maquinaria_db.registrar_acceso_auditor(
+      link["id"], request.remote_addr,
+      request.headers.get("User-Agent", "")[:200], "download_history")
+  from core import maquinaria_exports
+  try:
+    pdf_bytes, doc = maquinaria_exports.generar_service_history_pdf(link["maquina_id"])
+    resp = Response(pdf_bytes, mimetype="application/pdf",
+        headers={"Content-Disposition": f"inline; filename={doc['filename']}"})
+    resp.headers["X-Robots-Tag"] = "noindex, nofollow"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+  except Exception as e:
+    return _audit_error_page(f"Error generando historial: {e}"), 500
+
+
+@maquinaria_bp.get("/audit/<token>/chart-data")
+def audit_chart_data(token):
+  """Returns chart data for the public audit view."""
+  link = maquinaria_db.validar_auditor_token(token)
+  if not link:
+    return jsonify({"error": "Token no válido"}), 403
+  from datetime import datetime, timedelta
+  from core.db import conectar as _db_conectar
+
+  mid = link["maquina_id"]
+  maq = maquinaria_db.obtener_maquina(mid)
+  if not maq:
+    return jsonify({"readings": [], "biweekly": [], "stats": None})
+  horo = maq.get("horometro_actual") or 0
+  with _db_conectar() as conn:
+    rows_checks = conn.execute(
+        "SELECT fecha, horometro FROM maquinaria_checks "
+        "WHERE maquina_id = ? AND horometro IS NOT NULL AND horometro > 0 "
+        "AND estado != 'enmendado' ORDER BY fecha", [mid]).fetchall()
+    rows_logs = conn.execute(
+        "SELECT completed_at, MAX(horometro_at) as horo "
+        "FROM maquinaria_maintenance_logs "
+        "WHERE maquina_id = ? AND horometro_at IS NOT NULL AND horometro_at > 0 "
+        "GROUP BY completed_at ORDER BY completed_at", [mid]).fetchall()
+  combined = []
+  for r in rows_checks:
+    try:
+      d = datetime.fromisoformat(r["fecha"][:10]); combined.append((d, float(r["horometro"])))
+    except (ValueError, TypeError): pass
+  for r in rows_logs:
+    try:
+      d = datetime.fromisoformat((r["completed_at"] or "")[:10]); combined.append((d, float(r["horo"])))
+    except (ValueError, TypeError): pass
+  if horo > 0:
+    combined.append((datetime.now().replace(hour=0, minute=0, second=0, microsecond=0), float(horo)))
+  combined.sort(key=lambda x: (x[0], x[1]))
+  deduped = {}
+  for d, hr in combined:
+    if d not in deduped or hr > deduped[d]: deduped[d] = hr
+  by_date = sorted(deduped.items(), key=lambda x: x[0])
+  sorted_readings, running_max = [], -1.0
+  for d, hr in by_date:
+    if hr >= running_max: sorted_readings.append((d, hr)); running_max = hr
+  if len(sorted_readings) < 2:
+    return jsonify({"readings": [], "biweekly": [], "stats": None})
+  dates = [x[0] for x in sorted_readings]
+  horos_list = [x[1] for x in sorted_readings]
+  readings = [{"date": d.strftime("%Y-%m-%d"), "horo": h} for d, h in sorted_readings]
+  start, end = dates[0], dates[-1]
+  periods, current = [], start
+  while current <= end: periods.append(current); current += timedelta(days=14)
+  interp_horos = []
+  for p in periods:
+    before_h, after_h, before_d, after_d = 0, horos_list[-1], dates[0], dates[-1]
+    for i in range(len(dates)):
+      if dates[i] <= p: before_h = horos_list[i]; before_d = dates[i]
+      if dates[i] >= p: after_h = horos_list[i]; after_d = dates[i]; break
+    if before_d == after_d: interp_horos.append(before_h)
+    else:
+      ratio = (p - before_d).total_seconds() / (after_d - before_d).total_seconds()
+      interp_horos.append(before_h + (after_h - before_h) * ratio)
+  biweekly = []
+  for i in range(1, len(periods)):
+    delta = interp_horos[i] - interp_horos[i - 1]
+    biweekly.append({"label": periods[i].strftime("%d/%m/%y"), "consumption": round(max(0, delta), 1)})
+  if len(biweekly) > 26: biweekly = biweekly[-26:]
+  total_hours = horos_list[-1] - horos_list[0]
+  total_days = max((dates[-1] - dates[0]).days, 1)
+  avg_daily = total_hours / total_days
+  stats = {"period_start": dates[0].strftime("%d/%m/%Y"), "period_end": dates[-1].strftime("%d/%m/%Y"),
+    "total_hours": round(total_hours, 1), "avg_weekly": round(avg_daily * 7, 1),
+    "avg_monthly": round(avg_daily * 30, 0), "utilization_pct": round(min(100, (avg_daily * 7) / 50 * 100), 0)}
+  return jsonify({"readings": readings, "biweekly": biweekly, "stats": stats})
+
+
+def _audit_error_page(msg):
+  return f"""<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Acceso denegado</title>
+<style>body{{font-family:system-ui,-apple-system,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#F8FAFC;color:#1E293B;}}
+.card{{background:#fff;border-radius:12px;padding:40px;box-shadow:0 4px 24px rgba(0,0,0,.08);text-align:center;max-width:400px;}}
+h1{{font-size:20px;margin:0 0 12px;color:#DC2626;}} p{{font-size:14px;color:#64748B;margin:0;}}</style></head>
+<body><div class="card"><h1>Acceso no disponible</h1><p>{msg}</p></div></body></html>"""
+
+
+def _esc_html(s):
+  if not s: return ""
+  return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def _render_audit_page(link, maq, token):
+  """Renders the public audit view HTML page."""
+  from datetime import datetime as _dt
+
+  nombre = maq.get("nombre", "Máquina")
+  modelo = maq.get("modelo", "")
+  serie = maq.get("numero_serie", "")
+  horo = maq.get("horometro_actual", 0)
+  horo_ini = maq.get("horometro_inicial", 0)
+  estado = maq.get("estado", "")
+  proyecto = maq.get("proyecto_nombre", "")
+  internal_id = maq.get("internal_id", "")
+  comision = (maq.get("fecha_comision") or "")[:4]
+  destinatario = link.get("nombre_destinatario") or "Auditor"
+  expires = (link.get("expires_at") or "")[:10]
+
+  estado_labels = {"disponible": "Disponible", "en_proyecto": "En proyecto", "en_taller": "En taller", "baja": "De baja"}
+  estado_colors = {"disponible": "#16A34A", "en_proyecto": "#2563EB", "en_taller": "#CA8A04", "baja": "#DC2626"}
+  est_label = estado_labels.get(estado, estado)
+  est_color = estado_colors.get(estado, "#64748B")
+
+  checks = maq.get("checks", [])
+  checks_html = ""
+  for c in checks[:8]:
+    fecha = (c.get("fecha") or "")[:10]
+    h = c.get("horometro", 0)
+    checks_html += f'<tr><td>{fecha}</td><td>{h}h</td><td>{c.get("estado", "")}</td></tr>'
+  if not checks_html:
+    checks_html = '<tr><td colspan="3" style="text-align:center;color:#94A3B8;">Sin checks registrados</td></tr>'
+
+  all_revs = []
+  for r in maq.get("revisiones", []):
+    all_revs.append({"h": r.get("horometro_al_revision", 0) or r.get("horometro", 0), "fecha": (r.get("fecha") or "")[:10], "tipo": r.get("tipo", "")})
+  for r in maq.get("revisiones_historico", []):
+    all_revs.append({"h": r.get("horometro_al_revision", 0), "fecha": (r.get("fecha") or "")[:10], "tipo": "mantenimiento", "tareas": r.get("n_tareas", 0)})
+  all_revs.sort(key=lambda x: x["h"], reverse=True)
+
+  revs_html = ""
+  for r in all_revs[:10]:
+    tareas = f' ({r["tareas"]} tareas)' if r.get("tareas") else ""
+    revs_html += f'<tr><td>{r["h"]}h</td><td>{r["fecha"]}</td><td>{r["tipo"]}{tareas}</td></tr>'
+  if not revs_html:
+    revs_html = '<tr><td colspan="3" style="text-align:center;color:#94A3B8;">Sin revisiones registradas</td></tr>'
+
+  pend = maq.get("revisiones_pendientes", [])
+  pend_html = ""
+  for p in pend:
+    urg = p.get("urgente", False)
+    hito = p.get("proximo_hito", "")
+    tipo = p.get("tipo", "")
+    color = "#DC2626" if urg else "#CA8A04"
+    pend_html += f'<span style="display:inline-block;padding:4px 10px;border-radius:99px;font-size:12px;background:{color}15;color:{color};border:1px solid {color}30;margin:2px;">{hito}h ({tipo}){"&iexcl;atrasada!" if urg else ""}</span> '
+  if not pend_html:
+    pend_html = '<span style="color:#16A34A;font-size:13px;">Todas al d&iacute;a</span>'
+
+  inc_count = len(maq.get("incidencias", []))
+  horas_operadas = (horo or 0) - (horo_ini or 0)
+
+  return f"""<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Auditor View &mdash; {_esc_html(nombre)}</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0;}}
+body{{font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif;background:#F1F5F9;color:#1E293B;line-height:1.5;}}
+.container{{max-width:900px;margin:0 auto;padding:24px 16px;}}
+.header{{background:linear-gradient(135deg,#1E293B,#334155);color:#fff;padding:32px 28px;border-radius:16px;margin-bottom:24px;}}
+.header h1{{font-size:26px;font-weight:700;margin-bottom:4px;}}
+.header .subtitle{{font-size:14px;opacity:0.7;}}
+.badge{{display:inline-block;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:500;}}
+.kpis{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px;}}
+.kpi{{background:#fff;border-radius:12px;padding:16px;border:1px solid #E2E8F0;}}
+.kpi-label{{font-size:11px;text-transform:uppercase;color:#64748B;margin-bottom:4px;}}
+.kpi-value{{font-size:24px;font-weight:700;}}
+.kpi-sub{{font-size:12px;color:#64748B;}}
+.section{{background:#fff;border-radius:12px;border:1px solid #E2E8F0;margin-bottom:16px;overflow:hidden;}}
+.section-header{{padding:12px 20px;background:#F8FAFC;border-bottom:1px solid #E2E8F0;font-weight:600;font-size:14px;}}
+.section-body{{padding:16px 20px;}}
+table{{width:100%;border-collapse:collapse;font-size:13px;}}
+th{{text-align:left;padding:6px 8px;border-bottom:2px solid #E2E8F0;font-size:11px;text-transform:uppercase;color:#64748B;}}
+td{{padding:6px 8px;border-bottom:1px solid #F1F5F9;}}
+.actions{{display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;}}
+.btn{{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:500;text-decoration:none;border:1px solid #E2E8F0;background:#fff;color:#1E293B;cursor:pointer;transition:all .15s;}}
+.btn:hover{{background:#F8FAFC;box-shadow:0 2px 8px rgba(0,0,0,.06);}}
+.btn-primary{{background:#2563EB;color:#fff;border-color:#2563EB;}} .btn-primary:hover{{background:#1D4ED8;}}
+.footer{{text-align:center;padding:24px;font-size:12px;color:#94A3B8;}}
+.charts-container{{position:relative;height:260px;margin-bottom:16px;}}
+.two-col{{display:grid;grid-template-columns:1fr 1fr;gap:16px;}}
+@media(max-width:640px){{.two-col{{grid-template-columns:1fr;}} .kpis{{grid-template-columns:1fr 1fr;}}}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+</head><body>
+<div class="container">
+  <div class="header">
+    <div style="display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:12px;">
+      <div>
+        <h1>{_esc_html(nombre)}</h1>
+        <div class="subtitle">{_esc_html(internal_id)} &middot; {_esc_html(modelo)}{(' &middot; S/N: ' + _esc_html(serie)) if serie else ''}</div>
+      </div>
+      <div style="text-align:right;">
+        <span class="badge" style="background:{est_color}25;color:{est_color};">{est_label}</span>
+        <div style="font-size:11px;opacity:0.6;margin-top:4px;">V&aacute;lido hasta: {expires}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="kpi-label">Hor&oacute;metro actual</div><div class="kpi-value">{horo:,.0f}h</div><div class="kpi-sub">Inicial: {horo_ini:,.0f}h &middot; Operadas: {horas_operadas:,.0f}h</div></div>
+    <div class="kpi"><div class="kpi-label">Comisionado</div><div class="kpi-value">{comision or '&mdash;'}</div><div class="kpi-sub">{_esc_html(proyecto) if proyecto else 'Sin proyecto asignado'}</div></div>
+    <div class="kpi"><div class="kpi-label">Revisiones pendientes</div><div class="kpi-value">{len(pend)}</div><div class="kpi-sub">{pend_html}</div></div>
+    <div class="kpi"><div class="kpi-label">Incidencias abiertas</div><div class="kpi-value" style="color:{'#DC2626' if inc_count else '#16A34A'};">{inc_count}</div></div>
+  </div>
+
+  <div class="actions">
+    <a href="/audit/{token}/passport.pdf" target="_blank" class="btn btn-primary">Descargar Asset Passport (PDF)</a>
+    <a href="/audit/{token}/history.pdf" target="_blank" class="btn">Descargar Historial de Servicio (PDF)</a>
+  </div>
+
+  <div class="section">
+    <div class="section-header">An&aacute;lisis de consumo de horas</div>
+    <div class="section-body">
+      <div class="charts-container"><canvas id="audit-chart-cumulative"></canvas></div>
+      <div class="charts-container"><canvas id="audit-chart-biweekly"></canvas></div>
+      <div id="audit-charts-summary" style="padding:8px 0;font-size:13px;color:#64748B;"></div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="section">
+      <div class="section-header">Checks semanales ({len(checks)})</div>
+      <div class="section-body"><table><thead><tr><th>Fecha</th><th>Hor&oacute;metro</th><th>Estado</th></tr></thead><tbody>{checks_html}</tbody></table></div>
+    </div>
+    <div class="section">
+      <div class="section-header">Revisiones realizadas ({len(all_revs)})</div>
+      <div class="section-body"><table><thead><tr><th>Hor&oacute;metro</th><th>Fecha</th><th>Tipo</th></tr></thead><tbody>{revs_html}</tbody></table></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Documento generado para <strong>{_esc_html(destinatario)}</strong> &middot; Datos actualizados al {_dt.now().strftime('%d/%m/%Y %H:%M')}
+    <br>Hincado Directo S.L. &mdash; Vista de auditor&iacute;a de solo lectura
+  </div>
+</div>
+
+<script>
+(function() {{
+  fetch("/audit/{token}/chart-data")
+    .then(function(r) {{ return r.ok ? r.json() : null; }})
+    .then(function(data) {{
+      if (!data || !data.readings || data.readings.length < 2) return;
+      var AZ = "#2563EB", VE = "#16A34A";
+      new Chart(document.getElementById("audit-chart-cumulative"), {{
+        type: "line",
+        data: {{ labels: data.readings.map(function(r){{ return r.date; }}),
+          datasets: [{{ label: "Hor\u00f3metro (h)", data: data.readings.map(function(r){{ return r.horo; }}),
+            borderColor: AZ, backgroundColor: AZ + "25", fill: true, tension: 0.2,
+            pointRadius: 3, pointBackgroundColor: AZ, borderWidth: 2 }}] }},
+        options: {{ responsive: true, maintainAspectRatio: false,
+          plugins: {{ title: {{ display: true, text: "Evoluci\u00f3n del hor\u00f3metro", font: {{ size: 14, weight: "bold" }}, color: "#1E293B" }}, legend: {{ display: false }} }},
+          scales: {{ x: {{ type: "time", time: {{ unit: "month", displayFormats: {{ month: "MMM yyyy" }} }}, grid: {{ display: false }} }},
+            y: {{ title: {{ display: true, text: "Hor\u00f3metro (h)" }}, grid: {{ color: "#E2E8F020" }} }} }} }}
+      }});
+      var vals = data.biweekly.map(function(b){{ return b.consumption; }});
+      var avg = vals.reduce(function(a,b){{ return a+b; }}, 0) / (vals.length || 1);
+      new Chart(document.getElementById("audit-chart-biweekly"), {{
+        type: "bar",
+        data: {{ labels: data.biweekly.map(function(b){{ return b.label; }}),
+          datasets: [
+            {{ label: "Horas", data: vals, backgroundColor: vals.map(function(v){{ return v > 0 ? AZ+"CC" : "#E2E8F0"; }}), borderRadius: 3, order: 2 }},
+            {{ label: "Media: "+avg.toFixed(0)+"h", data: vals.map(function(){{ return avg; }}), type: "line", borderColor: VE, borderWidth: 1.5, borderDash: [6,3], pointRadius: 0, fill: false, order: 1 }}
+          ] }},
+        options: {{ responsive: true, maintainAspectRatio: false,
+          plugins: {{ title: {{ display: true, text: "Consumo bisemanal", font: {{ size: 14, weight: "bold" }}, color: "#1E293B" }},
+            legend: {{ labels: {{ filter: function(i){{ return i.datasetIndex===1; }} }} }} }},
+          scales: {{ x: {{ grid: {{ display: false }}, ticks: {{ maxRotation: 30 }} }},
+            y: {{ title: {{ display: true, text: "Horas" }}, grid: {{ color: "#E2E8F020" }}, ticks: {{ precision: 0 }} }} }} }}
+      }});
+      if (data.stats) {{
+        var s = data.stats;
+        document.getElementById("audit-charts-summary").innerHTML =
+          "<strong>Resumen:</strong> " + s.period_start + " \u2014 " + s.period_end +
+          " \u00b7 Total operadas: " + s.total_hours + "h \u00b7 Media semanal: " + s.avg_weekly + "h \u00b7 Utilizaci\u00f3n: " + s.utilization_pct + "%";
+      }}
+    }}).catch(function() {{}});
+}})();
 </script>
 </body></html>"""

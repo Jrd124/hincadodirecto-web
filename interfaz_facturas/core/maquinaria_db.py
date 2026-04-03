@@ -192,6 +192,60 @@ def init_maquinaria_db() -> None:
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS ix_notif_log_maq ON maquinaria_notification_log(maquina_id, task_code)")
 
+        # ── Documentos generados (certificados, exports, passports) ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS maquinaria_documentos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                maquina_id INTEGER REFERENCES maquinas(id),
+                tipo TEXT NOT NULL CHECK(tipo IN (
+                    'service_history_pdf', 'service_history_xlsx',
+                    'certificado_cae', 'asset_passport', 'data_room_zip'
+                )),
+                titulo TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                filepath TEXT NOT NULL,
+                mime_type TEXT,
+                size_bytes INTEGER,
+                hash_sha256 TEXT,
+                provider TEXT DEFAULT 'local',
+                canonical_path TEXT,
+                generado_por TEXT,
+                metadata_json TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_docs_maq ON maquinaria_documentos(maquina_id, tipo)")
+
+        # ── Auditor links (Fase 4) ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS maquinaria_auditor_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token TEXT NOT NULL UNIQUE,
+                maquina_id INTEGER REFERENCES maquinas(id),
+                flota_completa INTEGER DEFAULT 0,
+                creado_por INTEGER REFERENCES usuarios(id),
+                nombre_destinatario TEXT,
+                expires_at TEXT NOT NULL,
+                revocado INTEGER DEFAULT 0,
+                max_accesos INTEGER,
+                accesos_count INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_auditor_links_token ON maquinaria_auditor_links(token)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS maquinaria_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                auditor_link_id INTEGER REFERENCES maquinaria_auditor_links(id),
+                ip TEXT,
+                user_agent TEXT,
+                accion TEXT,
+                detalle TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
+
         _seed_maquinas(conn)
         _seed_checklist_templates(conn)
         _seed_maintenance_tasks(conn)
@@ -577,7 +631,27 @@ def listar_maquinas(solo_activas: bool = True) -> list:
         if solo_activas:
             q += " WHERE m.activa = 1"
         q += " ORDER BY m.nombre"
-        return [dict(r) for r in conn.execute(q).fetchall()]
+        maquinas = [dict(r) for r in conn.execute(q).fetchall()]
+
+        # Enriquecer con estado computado e incidencias abiertas graves
+        for maq in maquinas:
+            inc_graves = conn.execute(
+                "SELECT COUNT(*) FROM maquinaria_incidencias "
+                "WHERE maquina_id = ? AND estado != 'cerrada' "
+                "AND severidad IN ('alta','seguridad')",
+                [maq["id"]],
+            ).fetchone()[0]
+            maq["_tiene_incidencia_grave"] = inc_graves > 0
+            # Mini-versión de _computar_estado sin cargar todas las incidencias
+            if not maq.get("activa", 1) or maq.get("estado") == "baja":
+                maq["estado_computado"] = "baja"
+            elif inc_graves > 0:
+                maq["estado_computado"] = "en_taller"
+            elif maq.get("proyecto_id"):
+                maq["estado_computado"] = "en_proyecto"
+            else:
+                maq["estado_computado"] = "disponible"
+        return maquinas
 
 
 def obtener_maquina(maq_id: int) -> dict | None:
@@ -599,12 +673,48 @@ def obtener_maquina(maq_id: int) -> dict | None:
             [maq_id],
         ).fetchall()]
 
-        maq["revisiones"] = [dict(r) for r in conn.execute(
+        # Revisiones legacy (maquinaria_revisiones)
+        revs_legacy = [dict(r) for r in conn.execute(
             "SELECT mr.*, u.nombre AS usuario_nombre FROM maquinaria_revisiones mr "
             "LEFT JOIN usuarios u ON u.id = mr.usuario_id "
             "WHERE mr.maquina_id = ? ORDER BY mr.fecha DESC LIMIT 10",
             [maq_id],
         ).fetchall()]
+
+        # Histórico de revisiones (maintenance_logs) — agrupado por revisión real
+        revs_logs_raw = conn.execute(
+            "SELECT horometro_at, due_hours, completed_at, observaciones, "
+            "       task_code, operario_nombre "
+            "FROM maquinaria_maintenance_logs "
+            "WHERE maquina_id = ? ORDER BY horometro_at DESC, task_code",
+            [maq_id],
+        ).fetchall()
+
+        # Agrupar logs por (horometro_at, completed_at) para mostrar como una "revisión"
+        _revs_agrupadas = {}
+        for r in revs_logs_raw:
+            key = (r["horometro_at"], (r["completed_at"] or "")[:10])
+            if key not in _revs_agrupadas:
+                _revs_agrupadas[key] = {
+                    "tipo": "maint_log",
+                    "horometro_al_revision": r["horometro_at"],
+                    "fecha": (r["completed_at"] or "")[:10],
+                    "estado": "cerrado",
+                    "operario_nombre": r["operario_nombre"],
+                    "n_tareas": 0,
+                    "observaciones": r["observaciones"],
+                }
+            _revs_agrupadas[key]["n_tareas"] += 1
+
+        revs_from_logs = sorted(
+            _revs_agrupadas.values(),
+            key=lambda x: x["horometro_al_revision"],
+            reverse=True,
+        )
+
+        # Combinar: legacy primero (si hay), luego logs
+        maq["revisiones"] = revs_legacy if revs_legacy else []
+        maq["revisiones_historico"] = revs_from_logs
 
         maq["incidencias"] = [dict(r) for r in conn.execute(
             "SELECT mi.*, u.nombre AS usuario_nombre FROM maquinaria_incidencias mi "
@@ -617,7 +727,37 @@ def obtener_maquina(maq_id: int) -> dict | None:
         maq["revisiones_pendientes"] = _calcular_revisiones_pendientes(
             conn, maq_id, maq["horometro_actual"],
         )
+
+        # Estado computado: baja > en_taller > en_proyecto > disponible
+        maq["estado_computado"] = _computar_estado(maq)
         return maq
+
+
+def _computar_estado(maq: dict) -> str:
+    """Computa el estado real de la máquina basándose en sus datos.
+
+    Prioridad:
+      1. Si activa=0 → 'baja' (decomisionada manualmente)
+      2. Si estado manual == 'baja' → 'baja'
+      3. Si tiene incidencias abiertas alta/seguridad → 'en_taller'
+      4. Si tiene proyecto_id asignado → 'en_proyecto'
+      5. Default → 'disponible'
+    """
+    if not maq.get("activa", 1):
+        return "baja"
+    if maq.get("estado") == "baja":
+        return "baja"
+
+    # Incidencias abiertas graves → en taller
+    incidencias = maq.get("incidencias", [])
+    for inc in incidencias:
+        if inc.get("severidad") in ("alta", "seguridad") and inc.get("estado") != "cerrada":
+            return "en_taller"
+
+    if maq.get("proyecto_id"):
+        return "en_proyecto"
+
+    return "disponible"
 
 
 def crear_maquina(data: dict) -> dict:
@@ -642,7 +782,7 @@ def actualizar_maquina(maq_id: int, data: dict) -> dict:
         campos = []
         valores = []
         for k in ("nombre", "modelo", "numero_serie", "horometro_actual", "estado",
-                   "proyecto_id", "ubicacion", "notas"):
+                   "proyecto_id", "ubicacion", "notas", "activa"):
             if k in data:
                 campos.append(f"{k} = ?")
                 valores.append(data[k])
@@ -705,18 +845,69 @@ def _calcular_revisiones_pendientes(conn, maquina_id: int, horometro_actual: flo
         # Tomar el mayor de ambas fuentes
         ultimo_h = max(legacy_h, logs_h)
 
-        horas_desde = horometro_actual - ultimo_h
-        if horas_desde >= intervalo:
+        # Próximo hito = último cerrado + intervalo
+        proximo_hito = ultimo_h + intervalo
+        if proximo_hito <= horometro_actual:
+            horas_desde = horometro_actual - ultimo_h
             veces = int(horas_desde / intervalo)
             pendientes.append({
                 "tipo": tipo,
                 "intervalo": intervalo,
+                "proximo_hito": int(proximo_hito),
                 "ultimo_horometro": ultimo_h,
                 "horas_desde_ultima": round(horas_desde, 1),
                 "veces_pendiente": veces,
                 "urgente": veces > 1,
             })
     return pendientes
+
+
+def marcar_revision_completada(maquina_id: int, intervalo: int, horometro_actual: float) -> dict:
+    """Marca todas las tareas de un intervalo como completadas al hito correspondiente.
+
+    Inserta logs en maquinaria_maintenance_logs con due_hours = floor(horometro / intervalo) * intervalo.
+    """
+    init_maquinaria_db()
+
+    TASK_CODES_BY_INTERVAL = {
+        100: ["REDUCTORES_ORUGAS_100H", "CADENA_ELEVACION_100H", "PATIN_LUBRICACION_100H",
+              "INTERIOR_COLUMNA_100H", "BARRENA_ACEITE_100H", "SACAMUESTRAS_ENGRASAR_100H",
+              "PERFORADOR_RP500_100H"],
+        250: ["ORUGAS_TENSION_250H", "MEMBRANA_ACUMULADOR_250H", "TIRANTES_PERNOS_250H"],
+        500: ["HIDRAULICO_NIVEL_500H", "PINZA_EXTRACCION_500H", "LEVANTADOR_GUARDARRAILES_500H"],
+        1000: ["REDUCTOR_ORUGAS_ACEITE_1000H", "FILTRO_HIDRAULICO_ENVIO_1000H",
+               "FILTRO_HIDRAULICO_DESCARGA_1000H", "BARRENA_ACEITE_REDUCTOR_1000H",
+               "PERFORADOR_ACEITE_REDUCTOR_1000H", "CADENA_ELEVACION_1000H"],
+        2000: ["DEPOSITO_HIDRAULICO_2000H"],
+    }
+
+    codes = TASK_CODES_BY_INTERVAL.get(intervalo, [])
+    if not codes:
+        return {"error": f"Intervalo {intervalo} no válido"}
+
+    due_hours = int((horometro_actual // intervalo) * intervalo)
+    now = _now()
+    inserted = 0
+
+    with _conectar() as conn:
+        for tc in codes:
+            existing = conn.execute(
+                "SELECT id FROM maquinaria_maintenance_logs "
+                "WHERE maquina_id = ? AND task_code = ? AND due_hours = ?",
+                [maquina_id, tc, due_hours],
+            ).fetchone()
+            if existing:
+                continue
+            conn.execute(
+                "INSERT INTO maquinaria_maintenance_logs "
+                "(maquina_id, task_code, horometro_at, due_hours, "
+                " operario_nombre, observaciones, completed_at, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [maquina_id, tc, horometro_actual, due_hours,
+                 "Admin (manual)", "Marcada como realizada desde panel admin.", now, now],
+            )
+            inserted += 1
+    return {"ok": True, "inserted": inserted, "due_hours": due_hours}
 
 
 # ── Checklist templates ──────────────────────────────────────────────────────
@@ -766,6 +957,58 @@ def cerrar_check(check_id: int) -> dict:
             [_now(), check_id],
         )
         return dict(conn.execute("SELECT * FROM maquinaria_checks WHERE id = ?", [check_id]).fetchone())
+
+
+def obtener_check(check_id: int) -> dict | None:
+    """Obtiene un check semanal por ID, con fotos."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        row = conn.execute(
+            "SELECT mc.*, u.nombre AS usuario_nombre FROM maquinaria_checks mc "
+            "LEFT JOIN usuarios u ON u.id = mc.usuario_id WHERE mc.id = ?",
+            [check_id],
+        ).fetchone()
+        if not row:
+            return None
+        check = dict(row)
+        check["fotos"] = [dict(r) for r in conn.execute(
+            "SELECT * FROM maquinaria_fotos WHERE entidad_tipo = 'check' AND entidad_id = ? ORDER BY created_at",
+            [check_id],
+        ).fetchall()]
+        # Parse checklist JSON
+        try:
+            check["checklist_parsed"] = json.loads(check.get("checklist") or "{}")
+        except Exception:
+            check["checklist_parsed"] = {}
+        return check
+
+
+def actualizar_check(check_id: int, data: dict) -> dict:
+    """Actualiza campos de un check semanal (admin)."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        campos = []
+        valores = []
+        for k in ("horometro", "observaciones", "estado"):
+            if k in data:
+                campos.append(f"{k} = ?")
+                valores.append(data[k])
+        if "checklist" in data:
+            campos.append("checklist = ?")
+            valores.append(json.dumps(data["checklist"]) if isinstance(data["checklist"], dict) else data["checklist"])
+        if campos:
+            valores.append(check_id)
+            conn.execute(f"UPDATE maquinaria_checks SET {', '.join(campos)} WHERE id = ?", valores)
+        return dict(conn.execute("SELECT * FROM maquinaria_checks WHERE id = ?", [check_id]).fetchone())
+
+
+def eliminar_check(check_id: int) -> bool:
+    """Elimina un check semanal y sus fotos asociadas."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        conn.execute("DELETE FROM maquinaria_fotos WHERE entidad_tipo = 'check' AND entidad_id = ?", [check_id])
+        conn.execute("DELETE FROM maquinaria_checks WHERE id = ?", [check_id])
+        return True
 
 
 # ── Incidencias ──────────────────────────────────────────────────────────────
@@ -1014,3 +1257,254 @@ def dashboard_mantenimiento() -> dict:
             "maquinas_con_revision_pendiente": maquinas_con_revision,
             "tokens_activos": tokens_activos,
         }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ██  Historial completo de servicio (para exports)                         ██
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def obtener_historial_servicio(maquina_id: int, desde: str = None, hasta: str = None) -> dict:
+    """Obtiene historial completo de una máquina para export.
+
+    Retorna dict con: maquina, revisiones (maintenance_logs agrupados),
+    checks, incidencias, todo filtrable por rango de fechas.
+    """
+    init_maquinaria_db()
+    with _conectar() as conn:
+        maq = conn.execute(
+            "SELECT m.*, p.nombre AS proyecto_nombre FROM maquinas m "
+            "LEFT JOIN proyectos p ON p.id = m.proyecto_id WHERE m.id = ?",
+            [maquina_id],
+        ).fetchone()
+        if not maq:
+            return None
+        maq = dict(maq)
+
+        # ── Revisiones (maintenance_logs) ──
+        sql_rev = (
+            "SELECT horometro_at, due_hours, completed_at, task_code, operario_nombre, observaciones "
+            "FROM maquinaria_maintenance_logs WHERE maquina_id = ?"
+        )
+        params_rev = [maquina_id]
+        if desde:
+            sql_rev += " AND completed_at >= ?"
+            params_rev.append(desde)
+        if hasta:
+            sql_rev += " AND completed_at <= ?"
+            params_rev.append(hasta + "T23:59:59")
+        sql_rev += " ORDER BY horometro_at DESC, task_code"
+        revs_raw = conn.execute(sql_rev, params_rev).fetchall()
+
+        # Agrupar por (horometro_at, completed_at) → evento de revisión
+        rev_events = {}
+        for r in revs_raw:
+            r = dict(r)
+            key = (r["horometro_at"], (r["completed_at"] or "")[:10])
+            if key not in rev_events:
+                rev_events[key] = {
+                    "horometro": r["horometro_at"],
+                    "fecha": (r["completed_at"] or "")[:10],
+                    "operario": r["operario_nombre"],
+                    "tareas": [],
+                    "observaciones": r["observaciones"],
+                }
+            rev_events[key]["tareas"].append(r["task_code"])
+        revisiones = sorted(rev_events.values(), key=lambda x: x["horometro"], reverse=True)
+
+        # ── Checks semanales ──
+        sql_chk = (
+            "SELECT mc.*, u.nombre AS usuario_nombre FROM maquinaria_checks mc "
+            "LEFT JOIN usuarios u ON u.id = mc.usuario_id WHERE mc.maquina_id = ?"
+        )
+        params_chk = [maquina_id]
+        if desde:
+            sql_chk += " AND mc.fecha >= ?"
+            params_chk.append(desde)
+        if hasta:
+            sql_chk += " AND mc.fecha <= ?"
+            params_chk.append(hasta)
+        sql_chk += " ORDER BY mc.fecha DESC"
+        checks = [dict(r) for r in conn.execute(sql_chk, params_chk).fetchall()]
+
+        # ── Incidencias ──
+        sql_inc = (
+            "SELECT mi.*, u.nombre AS usuario_nombre FROM maquinaria_incidencias mi "
+            "LEFT JOIN usuarios u ON u.id = mi.usuario_id WHERE mi.maquina_id = ?"
+        )
+        params_inc = [maquina_id]
+        if desde:
+            sql_inc += " AND mi.fecha >= ?"
+            params_inc.append(desde)
+        if hasta:
+            sql_inc += " AND mi.fecha <= ?"
+            params_inc.append(hasta)
+        sql_inc += " ORDER BY mi.fecha DESC"
+        incidencias = [dict(r) for r in conn.execute(sql_inc, params_inc).fetchall()]
+
+        return {
+            "maquina": maq,
+            "revisiones": revisiones,
+            "checks": checks,
+            "incidencias": incidencias,
+            "filtro_desde": desde,
+            "filtro_hasta": hasta,
+        }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ██  Documentos generados (CRUD)                                           ██
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def registrar_documento(data: dict) -> dict:
+    """Registra un documento generado en maquinaria_documentos."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO maquinaria_documentos "
+            "(maquina_id, tipo, titulo, filename, filepath, mime_type, size_bytes, "
+            " hash_sha256, provider, canonical_path, generado_por, metadata_json, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [data.get("maquina_id"), data["tipo"], data["titulo"], data["filename"],
+             data["filepath"], data.get("mime_type"), data.get("size_bytes"),
+             data.get("hash_sha256"), data.get("provider", "local"),
+             data.get("canonical_path"), data.get("generado_por"),
+             json.dumps(data.get("metadata")) if data.get("metadata") else None,
+             _now()],
+        )
+        did = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        return dict(conn.execute("SELECT * FROM maquinaria_documentos WHERE id = ?", [did]).fetchone())
+
+
+def listar_documentos(maquina_id: int = None, tipo: str = None) -> list:
+    """Lista documentos, opcionalmente filtrados por máquina y/o tipo."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        sql = "SELECT d.*, m.nombre AS maquina_nombre FROM maquinaria_documentos d LEFT JOIN maquinas m ON m.id = d.maquina_id WHERE 1=1"
+        params = []
+        if maquina_id:
+            sql += " AND d.maquina_id = ?"
+            params.append(maquina_id)
+        if tipo:
+            sql += " AND d.tipo = ?"
+            params.append(tipo)
+        sql += " ORDER BY d.created_at DESC"
+        return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ██  Auditor Links (Fase 4)                                                 ██
+# ═══════════════════════════════════════════════════════════════════════════════
+
+import hmac
+import hashlib as _hashlib
+
+
+def _generar_token_auditor() -> str:
+    """Genera un token seguro URL-safe de 32 bytes."""
+    return secrets.token_urlsafe(32)
+
+
+def crear_auditor_link(maquina_id: int, creado_por: int, nombre_destinatario: str = None,
+                       dias_expiracion: int = 14, max_accesos: int = None) -> dict:
+    """Crea un link de auditor temporal para una máquina."""
+    init_maquinaria_db()
+    token = _generar_token_auditor()
+    expires_at = (datetime.now() + timedelta(days=dias_expiracion)).isoformat()
+    now = _now()
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO maquinaria_auditor_links "
+            "(token, maquina_id, flota_completa, creado_por, nombre_destinatario, "
+            " expires_at, max_accesos, created_at) "
+            "VALUES (?, ?, 0, ?, ?, ?, ?, ?)",
+            [token, maquina_id, creado_por, nombre_destinatario, expires_at, max_accesos, now],
+        )
+        lid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        return dict(conn.execute(
+            "SELECT al.*, m.nombre AS maquina_nombre "
+            "FROM maquinaria_auditor_links al "
+            "LEFT JOIN maquinas m ON m.id = al.maquina_id "
+            "WHERE al.id = ?", [lid]).fetchone())
+
+
+def listar_auditor_links(maquina_id: int = None) -> list:
+    """Lista links de auditor activos (no revocados, no expirados)."""
+    init_maquinaria_db()
+    now = _now()
+    with _conectar() as conn:
+        sql = (
+            "SELECT al.*, m.nombre AS maquina_nombre, u.nombre AS creador_nombre "
+            "FROM maquinaria_auditor_links al "
+            "LEFT JOIN maquinas m ON m.id = al.maquina_id "
+            "LEFT JOIN usuarios u ON u.id = al.creado_por "
+            "WHERE al.revocado = 0 "
+        )
+        params = []
+        if maquina_id:
+            sql += " AND al.maquina_id = ? "
+            params.append(maquina_id)
+        sql += " ORDER BY al.created_at DESC"
+        return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
+def revocar_auditor_link(link_id: int) -> bool:
+    """Revoca un link de auditor."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        conn.execute("UPDATE maquinaria_auditor_links SET revocado = 1 WHERE id = ?", [link_id])
+        return conn.total_changes > 0
+
+
+def validar_auditor_token(token: str) -> dict | None:
+    """Valida un token de auditor. Devuelve el link si es válido, None si no."""
+    init_maquinaria_db()
+    now = _now()
+    with _conectar() as conn:
+        row = conn.execute(
+            "SELECT al.*, m.nombre AS maquina_nombre, m.internal_id, m.modelo, "
+            "       m.numero_serie, m.horometro_actual, m.horometro_inicial, "
+            "       m.fecha_comision, m.estado, p.nombre AS proyecto_nombre "
+            "FROM maquinaria_auditor_links al "
+            "LEFT JOIN maquinas m ON m.id = al.maquina_id "
+            "LEFT JOIN proyectos p ON p.id = m.proyecto_id "
+            "WHERE al.token = ? AND al.revocado = 0",
+            [token],
+        ).fetchone()
+        if not row:
+            return None
+        link = dict(row)
+        # Check expiration
+        if link["expires_at"] < now:
+            return None
+        # Check max accesses
+        if link["max_accesos"] and link["accesos_count"] >= link["max_accesos"]:
+            return None
+        return link
+
+
+def registrar_acceso_auditor(link_id: int, ip: str, user_agent: str,
+                             accion: str, detalle: str = None) -> None:
+    """Registra un acceso en el audit log e incrementa el contador."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO maquinaria_audit_log (auditor_link_id, ip, user_agent, accion, detalle, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            [link_id, ip, user_agent, accion, detalle, _now()],
+        )
+        conn.execute(
+            "UPDATE maquinaria_auditor_links SET accesos_count = accesos_count + 1 WHERE id = ?",
+            [link_id],
+        )
+
+
+def obtener_audit_log(link_id: int) -> list:
+    """Obtiene el log de accesos de un link de auditor."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM maquinaria_audit_log WHERE auditor_link_id = ? ORDER BY created_at DESC",
+            [link_id],
+        ).fetchall()]
