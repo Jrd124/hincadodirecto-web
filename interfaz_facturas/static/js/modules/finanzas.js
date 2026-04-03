@@ -561,7 +561,7 @@ function renderPaginacionBancos(container, actual, total) {
         var fLine = "<span class=\"cel-flex\">";
         if (m.multi_n_facturas) {
           fLine += "<span class=\"badge-conciliado\">Cobro → " + m.multi_n_facturas + " fact.</span>";
-          fLine += "<button type=\"button\" class=\"btn-small bancos-btn-ver-multi\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Ver facturas vinculadas\">Ver</button>";
+          fLine += "<button type=\"button\" class=\"btn-small bancos-btn-ver-multi\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" data-empresa-id=\"" + ((m.empresa_id || "") + "").replace(/\"/g, "&quot;") + "\" title=\"Ver facturas vinculadas\">Ver</button>";
         } else {
           fLine += "<span class=\"badge-conciliado\">Factura</span>";
           if (facturaRuta) {
@@ -776,6 +776,7 @@ function renderPaginacionBancos(container, actual, total) {
       var btn = e.target && e.target.closest && e.target.closest(".bancos-btn-ver-multi");
       if (!btn) return;
       var movId = btn.getAttribute("data-mov-id");
+      var multiEmpresaId = btn.getAttribute("data-empresa-id") || "";
       if (!movId) return;
       btn.disabled = true;
       fetch("/api/bancos/conciliacion/detalle-multi/" + movId)
@@ -784,11 +785,13 @@ function renderPaginacionBancos(container, actual, total) {
           var fmt = typeof formatearNumeroES === "function" ? formatearNumeroES : String;
           var html = '<div style="padding:20px;max-width:600px;">';
           html += '<h3 style="margin:0 0 12px;">Cobro de ' + fmt(d.importe) + ' \u20AC \u2014 ' + (d.fecha || "?") + '</h3>';
-          html += '<table class="tabla-generica" style="width:100%;"><thead><tr><th>N\u00BA Factura</th><th>Cliente</th><th class="numero">Importe factura</th><th class="numero">Aplicado</th></tr></thead><tbody>';
+          var eyeSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+          html += '<table class="tabla-generica" style="width:100%;"><thead><tr><th>N\u00BA Factura</th><th>Cliente</th><th class="numero">Importe factura</th><th class="numero">Aplicado</th><th style="width:40px;"></th></tr></thead><tbody>';
           (d.facturas || []).forEach(function (f) {
             html += '<tr><td>' + (f.numero_factura || "?") + '</td><td>' + (f.cliente || "?") + '</td>';
             html += '<td class="numero">' + fmt(f.total_factura) + ' \u20AC</td>';
-            html += '<td class="numero">' + fmt(f.importe_aplicado) + ' \u20AC</td></tr>';
+            html += '<td class="numero">' + fmt(f.importe_aplicado) + ' \u20AC</td>';
+            html += '<td style="text-align:center;"><button class="btn-ver-factura-multi" data-fid="' + (f.factura_cliente_id || "") + '" title="Ver factura" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--color-text-secondary);" onmouseover="this.style.color=\'var(--color-primary)\'" onmouseout="this.style.color=\'var(--color-text-secondary)\'">' + eyeSvg + '</button></td></tr>';
           });
           html += '</tbody></table>';
           html += '<p style="margin:12px 0 0;font-weight:600;">Total aplicado: ' + fmt(d.total_aplicado) + ' \u20AC</p>';
@@ -808,6 +811,23 @@ function renderPaginacionBancos(container, actual, total) {
           }
           document.getElementById("modal-detalle-multi-body").innerHTML = html;
           overlay.classList.add("visible");
+          // Ver factura individual
+          overlay.querySelectorAll(".btn-ver-factura-multi").forEach(function (b) {
+            b.addEventListener("click", function () {
+              var fid = b.getAttribute("data-fid");
+              if (!fid) return;
+              overlay.classList.remove("visible");
+              // Fetch factura and open edit modal
+              fetch("/api/facturas_clientes?empresa_id=" + encodeURIComponent(multiEmpresaId || ""))
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                  var fac = (data.facturas || []).find(function (f) { return String(f.id) === String(fid); });
+                  if (fac && typeof abrirModalEdicionCli === "function") abrirModalEdicionCli(fac);
+                  else mostrarToast("Factura no encontrada", "error");
+                })
+                .catch(function () { mostrarToast("Error cargando factura", "error"); });
+            });
+          });
           // Desvincular todo
           var btnDesv = document.getElementById("btn-desvincular-multi-todo");
           if (btnDesv) {
