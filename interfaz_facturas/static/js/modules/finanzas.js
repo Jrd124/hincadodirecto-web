@@ -560,7 +560,8 @@ function renderPaginacionBancos(container, actual, total) {
       if (conciliadoAt) {
         var fLine = "<span class=\"cel-flex\">";
         if (m.multi_n_facturas) {
-          fLine += "<span class=\"badge-conciliado\">Cobro → " + m.multi_n_facturas + " facturas</span>";
+          fLine += "<span class=\"badge-conciliado\">Cobro → " + m.multi_n_facturas + " fact.</span>";
+          fLine += "<button type=\"button\" class=\"btn-small bancos-btn-ver-multi\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Ver facturas vinculadas\">Ver</button>";
         } else {
           fLine += "<span class=\"badge-conciliado\">Factura</span>";
           if (facturaRuta) {
@@ -765,6 +766,72 @@ function renderPaginacionBancos(container, actual, total) {
           if (listEl && listEl.innerHTML) document.getElementById("bancos-btn-cargar-sugerencias").click();
         })
         .catch(function () { mostrarToast("Error al desvincular.", "error"); })
+        .finally(function () { btn.disabled = false; });
+    });
+  }
+
+  // Ver detalle conciliación múltiple
+  if (tbody) {
+    tbody.addEventListener("click", function (e) {
+      var btn = e.target && e.target.closest && e.target.closest(".bancos-btn-ver-multi");
+      if (!btn) return;
+      var movId = btn.getAttribute("data-mov-id");
+      if (!movId) return;
+      btn.disabled = true;
+      fetch("/api/bancos/conciliacion/detalle-multi/" + movId)
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          var fmt = typeof formatearNumeroES === "function" ? formatearNumeroES : String;
+          var html = '<div style="padding:20px;max-width:600px;">';
+          html += '<h3 style="margin:0 0 12px;">Cobro de ' + fmt(d.importe) + ' \u20AC \u2014 ' + (d.fecha || "?") + '</h3>';
+          html += '<table class="tabla-generica" style="width:100%;"><thead><tr><th>N\u00BA Factura</th><th>Cliente</th><th class="numero">Importe factura</th><th class="numero">Aplicado</th></tr></thead><tbody>';
+          (d.facturas || []).forEach(function (f) {
+            html += '<tr><td>' + (f.numero_factura || "?") + '</td><td>' + (f.cliente || "?") + '</td>';
+            html += '<td class="numero">' + fmt(f.total_factura) + ' \u20AC</td>';
+            html += '<td class="numero">' + fmt(f.importe_aplicado) + ' \u20AC</td></tr>';
+          });
+          html += '</tbody></table>';
+          html += '<p style="margin:12px 0 0;font-weight:600;">Total aplicado: ' + fmt(d.total_aplicado) + ' \u20AC</p>';
+          html += '<div style="margin-top:16px;display:flex;gap:8px;">';
+          html += '<button onclick="this.closest(\'.modal-overlay\').classList.remove(\'visible\')" class="secondary">Cerrar</button>';
+          html += '<button class="danger" id="btn-desvincular-multi-todo" data-mov-id="' + movId + '">Desvincular todo</button>';
+          html += '</div></div>';
+          // Reuse a generic overlay or create one
+          var overlay = document.getElementById("modal-detalle-multi-overlay");
+          if (!overlay) {
+            overlay = document.createElement("div");
+            overlay.id = "modal-detalle-multi-overlay";
+            overlay.className = "modal-overlay";
+            overlay.innerHTML = '<div class="modal-editar" role="dialog" id="modal-detalle-multi-body"></div>';
+            overlay.addEventListener("click", function (ev) { if (ev.target === overlay) overlay.classList.remove("visible"); });
+            document.body.appendChild(overlay);
+          }
+          document.getElementById("modal-detalle-multi-body").innerHTML = html;
+          overlay.classList.add("visible");
+          // Desvincular todo
+          var btnDesv = document.getElementById("btn-desvincular-multi-todo");
+          if (btnDesv) {
+            btnDesv.addEventListener("click", function () {
+              if (!confirm("¿Desvincular TODAS las facturas de este cobro?")) return;
+              btnDesv.disabled = true;
+              btnDesv.textContent = "Desvinculando...";
+              fetch("/api/bancos/conciliacion/desvincular", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ movimiento_id: parseInt(movId, 10) }),
+              })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                  overlay.classList.remove("visible");
+                  if (data.error) { mostrarToast(data.error, "error"); return; }
+                  cargarMovimientosBancos();
+                  mostrarToast(data.mensaje || "Desvinculación completada.", "success");
+                })
+                .catch(function () { mostrarToast("Error al desvincular.", "error"); btnDesv.disabled = false; });
+            });
+          }
+        })
+        .catch(function () { mostrarToast("Error cargando detalle.", "error"); })
         .finally(function () { btn.disabled = false; });
     });
   }

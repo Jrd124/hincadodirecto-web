@@ -4780,6 +4780,60 @@ def conciliacion_resumen_factura_proveedor(factura_id: int):
   })
 
 
+@bancos_bp.route("/api/bancos/conciliacion/detalle-multi/<int:movimiento_id>", methods=["GET"])
+def conciliacion_detalle_multi(movimiento_id: int):
+  """Detalle de conciliación múltiple: facturas vinculadas a un movimiento."""
+  from routes.helpers import _parse_importe_es
+
+  # Get movement info from movimientos.db
+  mov_info = {"fecha": "", "importe": 0}
+  try:
+    _init_movimientos_db()
+    conn_b = _get_bancos_db()
+    row = conn_b.execute("SELECT fecha_operacion, importe FROM movimientos WHERE id = ?", (movimiento_id,)).fetchone()
+    if row:
+      mov_info = {"fecha": (row[0] or "").strip(), "importe": abs(float(row[1] or 0))}
+    conn_b.close()
+  except Exception:
+    pass
+
+  # Get linked invoices from conciliacion_multiple in gestion.db
+  facturas = []
+  total_aplicado = 0
+  try:
+    conn_g = sqlite3.connect(str(GESTION_DB))
+    conn_g.row_factory = sqlite3.Row
+    rows = conn_g.execute(
+      "SELECT cm.factura_cliente_id, cm.importe_aplicado,"
+      " fc.numero_factura, fc.cliente, fc.total_a_pagar"
+      " FROM conciliacion_multiple cm"
+      " LEFT JOIN facturas_cliente fc ON cm.factura_cliente_id = fc.id"
+      " WHERE cm.movimiento_id = ?",
+      (movimiento_id,),
+    ).fetchall()
+    for r in rows:
+      imp = float(r["importe_aplicado"] or 0)
+      total_aplicado += imp
+      facturas.append({
+        "factura_cliente_id": r["factura_cliente_id"],
+        "numero_factura": (r["numero_factura"] or "").strip(),
+        "cliente": (r["cliente"] or "").strip(),
+        "total_factura": _parse_importe_es(r["total_a_pagar"]),
+        "importe_aplicado": round(imp, 2),
+      })
+    conn_g.close()
+  except Exception:
+    pass
+
+  return jsonify({
+    "movimiento_id": movimiento_id,
+    "fecha": mov_info["fecha"],
+    "importe": mov_info["importe"],
+    "facturas": facturas,
+    "total_aplicado": round(total_aplicado, 2),
+  })
+
+
 @bancos_bp.route("/api/bancos/conciliacion/factura-cliente/<int:factura_id>", methods=["GET"])
 def conciliacion_resumen_factura_cliente(factura_id: int):
   """Resumen de conciliación de una factura de cliente: total, cobrado, pendiente, movimientos."""
