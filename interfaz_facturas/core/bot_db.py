@@ -50,6 +50,60 @@ def init_bot_db():
                     (tid, "Admin", datetime.now().isoformat()),
                 )
 
+        # Ensure conciliacion_multiple table exists
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS conciliacion_multiple (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                movimiento_id INTEGER NOT NULL,
+                movimiento_fecha TEXT,
+                movimiento_importe REAL,
+                factura_cliente_id INTEGER NOT NULL,
+                importe_aplicado REAL NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+
+        # Migrate: fix swapped columns in conciliacion_multiple
+        # Some records may have factura_cliente_id and importe_aplicado swapped
+        # Detect: if factura_cliente_id > 1000 and importe_aplicado < 1000, likely swapped
+        try:
+            swapped = conn.execute("""
+                SELECT cm.id, cm.factura_cliente_id, cm.importe_aplicado
+                FROM conciliacion_multiple cm
+                WHERE cm.factura_cliente_id > 1000
+                  AND cm.importe_aplicado < 1000
+                  AND NOT EXISTS (SELECT 1 FROM facturas_cliente fc WHERE fc.id = cm.factura_cliente_id)
+            """).fetchall()
+            for r in swapped:
+                old_fid = r["factura_cliente_id"]
+                old_imp = r["importe_aplicado"]
+                conn.execute(
+                    "UPDATE conciliacion_multiple SET factura_cliente_id = CAST(? AS INTEGER), importe_aplicado = ? WHERE id = ?",
+                    (int(old_imp), float(old_fid), r["id"]),
+                )
+        except Exception:
+            pass
+
+        # Migrate: mark movements with MULTI that have conciliacion_multiple records
+        try:
+            mov_ids = [r["movimiento_id"] for r in conn.execute(
+                "SELECT DISTINCT movimiento_id FROM conciliacion_multiple"
+            ).fetchall()]
+            if mov_ids:
+                import sqlite3 as _sq
+                from config import MOVIMIENTOS_DB
+                conn_b = _sq.connect(str(MOVIMIENTOS_DB))
+                for mid in mov_ids:
+                    conn_b.execute(
+                        "UPDATE movimientos SET factura_cliente_key = 'MULTI', factura_cliente_id = -1"
+                        " WHERE id = ? AND (factura_cliente_key IS NULL OR factura_cliente_key != 'MULTI')",
+                        (mid,),
+                    )
+                conn_b.commit()
+                conn_b.close()
+        except Exception:
+            pass
+
         # Migrate proyecto_partes: add firma columns
         cols = [r[1] for r in conn.execute("PRAGMA table_info(proyecto_partes)").fetchall()]
         for col, typedef in [

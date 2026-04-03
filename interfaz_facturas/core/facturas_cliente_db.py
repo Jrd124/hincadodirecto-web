@@ -323,3 +323,77 @@ def delete_facturas_cliente_por_indices(empresa_id: str, indices: list[int]) -> 
     placeholders = ",".join("?" * len(ids_a_borrar))
     cur = conn.execute(f"DELETE FROM facturas_cliente WHERE id IN ({placeholders})", ids_a_borrar)
     return cur.rowcount
+
+
+def recalcular_todos_estados_cobro() -> dict:
+  """Recalcula estado_cobro de todas las facturas basándose en cobros conciliados.
+
+  Solo actualiza si el nuevo estado es 'mejor' que el actual:
+  - Empty/pendiente → parcial/cobrada (upgrade based on payments)
+  - parcial → cobrada (upgrade if fully paid)
+  - NEVER downgrades cobrada → pendiente (manual override respected)
+
+  Returns {"actualizadas": int, "detalle": [...]}.
+  """
+  import sqlite3
+  from config import MOVIMIENTOS_DB
+  from routes.helpers import _parse_importe_es
+
+  init_facturas_cliente_db()
+
+  # Build cobrado map from movimientos.db
+  cobrado_map = {}
+  try:
+    conn_b = sqlite3.connect(str(MOVIMIENTOS_DB))
+    conn_b.row_factory = sqlite3.Row
+    for row in conn_b.execute(
+      "SELECT factura_cliente_id, SUM(ABS(importe)) as t"
+      " FROM movimientos WHERE factura_cliente_id IS NOT NULL AND factura_cliente_id > 0 GROUP BY factura_cliente_id"
+    ).fetchall():
+      cobrado_map[row["factura_cliente_id"]] = float(row["t"] or 0)
+    conn_b.close()
+  except Exception:
+    pass
+
+  # Also conciliacion_multiple
+  with _conectar() as conn:
+    try:
+      for row in conn.execute(
+        "SELECT factura_cliente_id, SUM(importe_aplicado) as t"
+        " FROM conciliacion_multiple GROUP BY factura_cliente_id"
+      ).fetchall():
+        fid = row["factura_cliente_id"]
+        cobrado_map[fid] = cobrado_map.get(fid, 0) + float(row["t"] or 0)
+    except Exception:
+      pass
+
+  # Recalculate
+  actualizadas = 0
+  detalle = []
+  with _conectar() as conn:
+    facturas = conn.execute("SELECT id, total_a_pagar, estado_cobro FROM facturas_cliente").fetchall()
+    for f in facturas:
+      total = _parse_importe_es(f["total_a_pagar"])
+      cobrado = cobrado_map.get(f["id"], 0)
+      old = (f["estado_cobro"] or "").strip().lower()
+
+      if total > 0 and cobrado >= total - 1.0:
+        new = "cobrada"
+      elif cobrado > 0.01:
+        new = "parcial"
+      else:
+        new = "pendiente"
+
+      # Only upgrade, never downgrade
+      rank = {"": 0, "pendiente": 0, "parcial": 1, "cobrada": 2}
+      if rank.get(new, 0) > rank.get(old, 0):
+        conn.execute("UPDATE facturas_cliente SET estado_cobro = ? WHERE id = ?", (new, f["id"]))
+        actualizadas += 1
+        detalle.append({"id": f["id"], "old": old or "(empty)", "new": new})
+      elif old == "" and new == "pendiente":
+        # Fix empty → pendiente (same rank but cleaner)
+        conn.execute("UPDATE facturas_cliente SET estado_cobro = 'pendiente' WHERE id = ?", (f["id"],))
+        actualizadas += 1
+        detalle.append({"id": f["id"], "old": "(empty)", "new": "pendiente"})
+
+  return {"actualizadas": actualizadas, "detalle": detalle}
