@@ -1619,9 +1619,11 @@ function renderPaginacionBancos(container, actual, total) {
       var tarjetaLabel = tarjetaAlias || ((l.tarjeta_banco || "Banco") + " – " + (l.tarjeta_persona || "Titular"));
       var estado = (l.estado || "pendiente");
       var totalMovRaw = l.total_movimiento != null ? Number(l.total_movimiento) : 0;
-      var totalMov = Math.abs(totalMovRaw);
-      var totalFact0 = l.total_facturas != null ? Math.abs(Number(l.total_facturas)) : 0;
-      var pendiente = Math.max(0, totalFact0 - totalMov);
+      var totalMov = Math.abs(totalMovRaw);  // extracto (cargo bancario) always positive
+      var totalFact = l.total_facturas != null ? Math.abs(Number(l.total_facturas)) : 0;
+      // Pendiente = cuánto del extracto NO tiene factura asociada
+      var pendiente = totalMov - totalFact;  // positive = faltan facturas, negative = sobran facturas
+      var pendienteColor = Math.abs(pendiente) < 1 ? "#16A34A" : pendiente > 0 ? "#D97706" : "#DC2626";
       var tid = l.tarjeta_id != null ? l.tarjeta_id : "";
       var per = (l.periodo || "").trim();
       var baseUrl = "/api/empresas/" + encodeURIComponent(empresaId) + "/tarjetas/extracto-export?tarjeta_id=" + encodeURIComponent(tid) + "&periodo=" + encodeURIComponent(per);
@@ -1631,12 +1633,13 @@ function renderPaginacionBancos(container, actual, total) {
       html += "<td>" + tarjetaLabel + "</td>";
       html += "<td>" + (l.periodo || "—") + "</td>";
       html += "<td class=\"numero\">" + (l.num_facturas != null ? String(l.num_facturas) : "0") + "</td>";
-      html += "<td class=\"numero\">" + formatearNumeroES(totalFact0) + "</td>";
+      html += "<td class=\"numero\">" + formatearNumeroES(totalFact) + "</td>";
       html += "<td class=\"numero\">" + formatearNumeroES(totalMov) + "</td>";
-      html += "<td class=\"numero\">" + formatearNumeroES(pendiente) + "</td>";
+      html += "<td class=\"numero\" style=\"color:" + pendienteColor + "\">" + formatearNumeroES(Math.abs(pendiente) < 1 ? 0 : pendiente) + "</td>";
       var badgeClass = estado === "conciliado" ? "conciliado" : estado === "cargo recibido" ? "cargo-recibido" : "pendiente";
       var estadoLabel = estado.charAt(0).toUpperCase() + estado.slice(1);
-      var pctVinculado = totalFact0 > 0 && totalMov > 0 ? Math.min(100, Math.round((totalMov / totalFact0) * 100)) : (estado === "conciliado" ? 100 : 0);
+      // % = cuánto del extracto está cubierto por facturas
+      var pctVinculado = totalMov > 0 ? Math.min(100, Math.round((totalFact / totalMov) * 100)) : (totalFact > 0 ? 0 : (estado === "conciliado" ? 100 : 0));
       html += "<td><span class=\"badge-estado " + badgeClass + "\">" + estadoLabel + "</span>";
       var fillClass = pctVinculado >= 100 ? "fill-100" : pctVinculado === 0 ? "fill-0" : "";
       html += " <span class=\"barra-progreso-extracto\"><span class=\"barra-bg\"><span class=\"barra-fill " + fillClass + "\" style=\"width:" + pctVinculado + "%\"></span></span><span class=\"barra-pct\">" + pctVinculado + "%</span></span>";
