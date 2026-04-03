@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Job diario de notificaciones de mantenimiento.
+"""Job semanal de notificaciones de mantenimiento (viernes 8:00).
 
 Uso:
   # Dry-run (ver qué se enviaría sin enviar nada):
@@ -11,8 +11,8 @@ Uso:
   # Desde Docker en producción:
   docker exec hincado-erp python scripts/check_maintenance_due.py
 
-Programar en cron (1x al día a las 8:00):
-  0 8 * * * cd /app && python scripts/check_maintenance_due.py >> /app/data/logs/maintenance_notify.log 2>&1
+Programar en cron (viernes a las 8:00):
+  0 8 * * 5 cd /app && python scripts/check_maintenance_due.py >> /app/data/logs/maintenance_notify.log 2>&1
 """
 from __future__ import annotations
 
