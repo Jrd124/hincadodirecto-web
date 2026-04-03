@@ -334,7 +334,7 @@ def consultar_finanzas(tipo: str = "resumen") -> str:
         hoy = datetime.now()
         mes_prefix = hoy.strftime("%Y-%m")
         anio_prefix = hoy.strftime("%Y")
-        _P = "CAST(REPLACE(REPLACE(COALESCE(total_a_pagar,'0'),'.',''),',','.') AS REAL)"
+        _P = "CASE WHEN total_a_pagar LIKE '%,%' THEN CAST(REPLACE(REPLACE(COALESCE(total_a_pagar,'0'),'.',''),',','.') AS REAL) ELSE CAST(COALESCE(total_a_pagar,'0') AS REAL) END"
 
         fact_mes = _safe_scalar(conn,
             f"SELECT COALESCE(SUM({_P}),0) FROM facturas_cliente WHERE fecha_factura LIKE ?",

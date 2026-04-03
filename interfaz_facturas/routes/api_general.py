@@ -53,7 +53,7 @@ def api_dashboard():
   try:
     with _conectar_db() as conn:
       row = conn.execute(
-        "SELECT COUNT(*) as cnt, COALESCE(SUM(CAST(REPLACE(REPLACE(total_a_pagar, '.', ''), ',', '.') AS REAL)), 0) as total "
+        "SELECT COUNT(*) as cnt, COALESCE(SUM(CASE WHEN total_a_pagar LIKE '%,%' THEN CAST(REPLACE(REPLACE(total_a_pagar,'.',''),',','.') AS REAL) ELSE CAST(total_a_pagar AS REAL) END), 0) as total "
         "FROM facturas_proveedor WHERE LOWER(TRIM(estado_pago)) = 'pendiente'"
       ).fetchone()
       if row:
@@ -75,7 +75,7 @@ def api_dashboard():
         for r in rows
       ]
       rows2 = conn.execute(
-        "SELECT empresa_id, COUNT(*) as cnt, COALESCE(SUM(CAST(REPLACE(REPLACE(total_a_pagar, '.', ''), ',', '.') AS REAL)), 0) as total "
+        "SELECT empresa_id, COUNT(*) as cnt, COALESCE(SUM(CASE WHEN total_a_pagar LIKE '%,%' THEN CAST(REPLACE(REPLACE(total_a_pagar,'.',''),',','.') AS REAL) ELSE CAST(total_a_pagar AS REAL) END), 0) as total "
         "FROM facturas_proveedor WHERE LOWER(TRIM(estado_pago)) = 'pendiente' GROUP BY empresa_id"
       ).fetchall()
       result["pendientes_por_empresa"] = [
@@ -103,7 +103,7 @@ def api_dashboard():
       for y, m in meses_uniq:
         prefix = f"{y}-{m:02d}"
         r = conn.execute(
-          "SELECT COUNT(*) as cnt, COALESCE(SUM(CAST(REPLACE(REPLACE(total_a_pagar, '.', ''), ',', '.') AS REAL)), 0) as total "
+          "SELECT COUNT(*) as cnt, COALESCE(SUM(CASE WHEN total_a_pagar LIKE '%,%' THEN CAST(REPLACE(REPLACE(total_a_pagar,'.',''),',','.') AS REAL) ELSE CAST(total_a_pagar AS REAL) END), 0) as total "
           "FROM facturas_proveedor WHERE fecha_factura LIKE ?", (prefix + "%",)
         ).fetchone()
         facturas_por_mes.append({"mes": _meses_es[m - 1], "count": r["cnt"], "importe": round(r["total"], 2)})
@@ -118,7 +118,7 @@ def api_dashboard():
           estado_map[st] = e["cnt"]
       result["facturas_por_estado"] = estado_map
       top = conn.execute(
-        "SELECT proveedor, COALESCE(SUM(CAST(REPLACE(REPLACE(total_a_pagar, '.', ''), ',', '.') AS REAL)), 0) as total "
+        "SELECT proveedor, COALESCE(SUM(CASE WHEN total_a_pagar LIKE '%,%' THEN CAST(REPLACE(REPLACE(total_a_pagar,'.',''),',','.') AS REAL) ELSE CAST(total_a_pagar AS REAL) END), 0) as total "
         "FROM facturas_proveedor GROUP BY proveedor ORDER BY total DESC LIMIT 5"
       ).fetchall()
       result["top_proveedores"] = [{"nombre": t["proveedor"], "importe": round(t["total"], 2)} for t in top]
@@ -196,7 +196,9 @@ def api_dashboard_director():
       result["proyectos"]["lista_vivos"] = lista_vivos
 
       # ── Finanzas ──
-      _PARSE_IMPORTE = "CAST(REPLACE(REPLACE(total_a_pagar,'.',''),',','.') AS REAL)"
+      _PARSE_IMPORTE = ("CASE WHEN total_a_pagar LIKE '%,%'"
+                        " THEN CAST(REPLACE(REPLACE(total_a_pagar,'.',''),',','.') AS REAL)"
+                        " ELSE CAST(total_a_pagar AS REAL) END")
 
       # Facturado mes (clientes)
       r = conn.execute(
@@ -230,7 +232,9 @@ def api_dashboard_director():
       result["finanzas"]["cobrado_mes"] = round(r["t"], 2) if r else 0
 
       # Pendiente pago (proveedores)
-      _PARSE_PROV = "CAST(REPLACE(REPLACE(total_a_pagar,'.',''),',','.') AS REAL)"
+      _PARSE_PROV = ("CASE WHEN total_a_pagar LIKE '%,%'"
+                     " THEN CAST(REPLACE(REPLACE(total_a_pagar,'.',''),',','.') AS REAL)"
+                     " ELSE CAST(total_a_pagar AS REAL) END")
       r = conn.execute(
         f"SELECT COUNT(*) as c, COALESCE(SUM({_PARSE_PROV}),0) as t"
         " FROM facturas_proveedor WHERE LOWER(TRIM(estado_pago)) = 'pendiente'"
