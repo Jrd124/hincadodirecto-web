@@ -348,7 +348,7 @@ def recalcular_todos_estados_cobro() -> dict:
     conn_b.row_factory = sqlite3.Row
     for row in conn_b.execute(
       "SELECT factura_cliente_id, SUM(ABS(importe)) as t"
-      " FROM movimientos WHERE factura_cliente_id IS NOT NULL GROUP BY factura_cliente_id"
+      " FROM movimientos WHERE factura_cliente_id IS NOT NULL AND factura_cliente_id > 0 GROUP BY factura_cliente_id"
     ).fetchall():
       cobrado_map[row["factura_cliente_id"]] = float(row["t"] or 0)
     conn_b.close()
