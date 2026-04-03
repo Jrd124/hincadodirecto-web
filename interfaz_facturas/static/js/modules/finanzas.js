@@ -586,12 +586,24 @@ function renderPaginacionBancos(container, actual, total) {
           vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-vincular-extracto\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Vincular a extracto\">Vincular</button>");
         }
       }
-      // Conciliar button if no links at all
+      // Conciliar button — different rules for cobros (positive) vs pagos (negative)
       if (vincParts.length === 0 && !conciliadoAt) {
         var conceptoLower = ((m.concepto || "") + "").toLowerCase();
-        var excluidoSugerencia = conceptoLower.indexOf("nomina") >= 0 || conceptoLower.indexOf("nómina") >= 0 || conceptoLower.indexOf("adelanto") >= 0 || conceptoLower.indexOf("liquidacion de las tarjetas") >= 0 || conceptoLower.indexOf("liquidacion tarjeta") >= 0 || conceptoLower.indexOf("adeudo mensual de tarjeta") >= 0 || conceptoLower.indexOf("adeudo mensual tarjeta") >= 0 || conceptoLower.indexOf("recibo mensual tarjeta") >= 0 || conceptoLower.indexOf("recibo tarjeta") >= 0 || conceptoLower.indexOf("pago tarjeta") >= 0 || conceptoLower.indexOf("cargo tarjeta") >= 0;
-        var esTraspasoExcluido = conceptoLower.indexOf("traspaso") >= 0;
-        if (!excluidoSugerencia && !esTraspasoExcluido) {
+        var impNum = Number(m.importe) || 0;
+        var excluido = false;
+        if (impNum > 0) {
+          // COBROS: only exclude transfers
+          excluido = conceptoLower.indexOf("traspaso") >= 0 || conceptoLower.indexOf("transferencia propia") >= 0;
+        } else {
+          // PAGOS: exclude payroll, taxes, cards, transfers
+          var pagosExcluir = ["nomina", "nómina", "salario", "ss empresa", "seguridad social",
+            "adelanto empleado", "liquidación tarjeta", "liquidacion tarjeta", "cargo tarjeta",
+            "traspaso", "transferencia propia", "recibo seguro", "impuesto", "hacienda", "aeat", "tgss"];
+          for (var ei = 0; ei < pagosExcluir.length; ei++) {
+            if (conceptoLower.indexOf(pagosExcluir[ei]) >= 0) { excluido = true; break; }
+          }
+        }
+        if (!excluido) {
           vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-conciliar-factura\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" data-empresa-id=\"" + ((m.empresa_id || "") + "").replace(/\"/g, "&quot;") + "\" data-concepto=\"" + ((m.concepto || "") + "").replace(/\"/g, "&quot;") + "\" data-fecha=\"" + ((m.fecha_operacion || "") + "").replace(/\"/g, "&quot;") + "\" data-importe=\"" + (m.importe != null ? String(m.importe) : "").replace(/\"/g, "&quot;") + "\" title=\"Vincular a factura\">Conciliar</button>");
         }
       }
@@ -860,6 +872,7 @@ function renderPaginacionBancos(container, actual, total) {
   var conciliarFacturaMovId = null;
   var conciliarFacturaEmpresaId = "";
   var conciliarFacturaEsEntrada = false;
+  var conciliarFacturaImporte = 0;
   var conciliarFacturaLista = [];
 
   function formatNumeroConciliar(n) {
@@ -873,37 +886,162 @@ function renderPaginacionBancos(container, actual, total) {
     return entero + "," + (partes[1] || "00");
   }
 
+  function _parseImporteFactura(f) {
+    var v = f.total_a_pagar != null ? f.total_a_pagar : (f.total_factura != null ? f.total_factura : f.total);
+    if (v == null) return 0;
+    return Math.abs(parseFloat(String(v).replace(/\./g, "").replace(",", ".")) || 0);
+  }
+
   function renderConciliarFacturasLista(facturas) {
     if (!tbodyConciliarFacturas) return;
     tbodyConciliarFacturas.innerHTML = "";
+    // Remove old totals bar if any
+    var oldBar = document.getElementById("conciliar-multi-totals");
+    if (oldBar) oldBar.remove();
+    var oldBtn = document.getElementById("btn-conciliar-multi-confirmar");
+    if (oldBtn) oldBtn.remove();
+
     if (!facturas || facturas.length === 0) {
       if (conciliarFacturaSinDatos) conciliarFacturaSinDatos.style.display = "block";
       return;
     }
     if (conciliarFacturaSinDatos) conciliarFacturaSinDatos.style.display = "none";
     var esClientes = conciliarFacturaEsEntrada;
-    facturas.forEach(function (f) {
-      var tr = document.createElement("tr");
-      var fecha = (f.fecha_factura || "").toString().trim() || "—";
-      var numero = (f.numero_factura || "").toString().trim() || "—";
-      var total = f.total_a_pagar != null ? f.total_a_pagar : (f.total_factura != null ? f.total_factura : f.total);
-      if (esClientes) {
+
+    if (esClientes) {
+      // Multi-select mode for client invoices
+      var thead = document.querySelector("#tabla-conciliar-facturas thead tr");
+      if (thead) thead.innerHTML = '<th style="width:30px;"></th><th class="col-fecha">Fecha</th><th>Cliente</th><th>Nº</th><th class="numero">Pendiente</th><th class="numero" style="width:110px;">Aplicar</th>';
+
+      facturas.forEach(function (f) {
+        var tr = document.createElement("tr");
+        var fecha = (f.fecha_factura || "").toString().trim() || "—";
+        var numero = (f.numero_factura || "").toString().trim() || "—";
         var cliente = (f.cliente || "").toString().trim() || "—";
-        var concepto = (f.proyecto || f.tipologia || "").toString().trim() || "—";
-        var numEsc = (numero + "").replace(/"/g, "&quot;");
-        var fechaEsc = (fecha + "").replace(/"/g, "&quot;");
-        var clienteEsc = (cliente + "").replace(/"/g, "&quot;");
-        var estadoCobro = (f.estado_cobro || "pendiente").toString().trim().toLowerCase();
-        var estadoCel = estadoCobro === "cobrada" ? "Cobrada" : estadoCobro === "parcial" ? "Parcial" : "Pendiente";
-        tr.innerHTML = "<td class=\"col-fecha\">" + fecha + "</td><td>" + cliente.replace(/</g, "&lt;") + "</td><td title=\"" + (concepto.replace(/"/g, "&quot;")) + "\">" + (concepto.length > 40 ? concepto.slice(0, 40) + "…" : concepto).replace(/</g, "&lt;") + "</td><td>" + numero.replace(/</g, "&lt;") + "</td><td class=\"numero\">" + formatNumeroConciliar(total) + "</td><td>" + estadoCel + "</td><td class=\"col-acciones\"><button type=\"button\" class=\"btn-small bancos-btn-vincular-factura-conciliar\" data-factura-cliente-id=\"" + (f.id != null ? f.id : "") + "\" data-numero-factura=\"" + numEsc + "\" data-fecha-factura=\"" + fechaEsc + "\" data-cliente=\"" + clienteEsc + "\">Vincular</button></td>";
-      } else {
+        var pendiente = _parseImporteFactura(f);
+        tr.innerHTML = '<td><input type="checkbox" class="conciliar-multi-check" data-fid="' + (f.id || "") + '" data-pendiente="' + pendiente + '"></td>' +
+          '<td class="col-fecha">' + fecha + '</td>' +
+          '<td>' + cliente.replace(/</g, "&lt;") + '</td>' +
+          '<td>' + numero.replace(/</g, "&lt;") + '</td>' +
+          '<td class="numero">' + formatNumeroConciliar(pendiente) + '</td>' +
+          '<td><input type="number" class="conciliar-multi-importe" data-fid="' + (f.id || "") + '" value="0" min="0" step="0.01" style="width:100px;font-size:12px;padding:2px 4px;text-align:right;" disabled></td>';
+        tbodyConciliarFacturas.appendChild(tr);
+      });
+
+      // Totals bar
+      var bar = document.createElement("div");
+      bar.id = "conciliar-multi-totals";
+      bar.style.cssText = "display:flex;align-items:center;gap:12px;margin-top:12px;padding:8px 12px;background:#F8FAFC;border-radius:6px;font-size:13px;";
+      bar.innerHTML = '<span>Cobro: <strong>' + formatNumeroConciliar(conciliarFacturaImporte) + '</strong></span>' +
+        '<span>Aplicado: <strong id="conciliar-multi-sum">0,00</strong></span>' +
+        '<span id="conciliar-multi-diff" style="margin-left:auto;font-weight:600;"></span>';
+      tbodyConciliarFacturas.closest(".tabla-wrapper").after(bar);
+
+      // Confirm button
+      var btn = document.createElement("button");
+      btn.id = "btn-conciliar-multi-confirmar";
+      btn.className = "primary";
+      btn.style.cssText = "margin-top:8px;width:100%;padding:8px;font-size:14px;font-weight:600;";
+      btn.textContent = "Conciliar seleccionadas";
+      btn.disabled = true;
+      bar.after(btn);
+
+      // Event: checkbox toggles importe field
+      tbodyConciliarFacturas.addEventListener("change", function (e) {
+        if (e.target.classList.contains("conciliar-multi-check")) {
+          var fid = e.target.getAttribute("data-fid");
+          var inp = tbodyConciliarFacturas.querySelector('.conciliar-multi-importe[data-fid="' + fid + '"]');
+          if (e.target.checked) {
+            var pendiente = parseFloat(e.target.getAttribute("data-pendiente")) || 0;
+            var remaining = conciliarFacturaImporte - _sumarAplicados();
+            inp.value = Math.min(pendiente, Math.max(remaining, 0)).toFixed(2);
+            inp.disabled = false;
+          } else {
+            inp.value = "0";
+            inp.disabled = true;
+          }
+          _actualizarTotalesMulti();
+        }
+        if (e.target.classList.contains("conciliar-multi-importe")) {
+          _actualizarTotalesMulti();
+        }
+      });
+      tbodyConciliarFacturas.addEventListener("input", function (e) {
+        if (e.target.classList.contains("conciliar-multi-importe")) _actualizarTotalesMulti();
+      });
+
+      // Confirm click
+      btn.addEventListener("click", function () {
+        var aplicaciones = [];
+        tbodyConciliarFacturas.querySelectorAll(".conciliar-multi-check:checked").forEach(function (cb) {
+          var fid = cb.getAttribute("data-fid");
+          var inp = tbodyConciliarFacturas.querySelector('.conciliar-multi-importe[data-fid="' + fid + '"]');
+          var imp = parseFloat(inp.value) || 0;
+          if (imp > 0 && fid) aplicaciones.push({ factura_cliente_id: parseInt(fid), importe_aplicado: imp });
+        });
+        if (!aplicaciones.length) return;
+        btn.disabled = true;
+        btn.textContent = "Conciliando...";
+        fetch("/api/bancos/conciliacion/confirmar-cliente-multiple", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ movimiento_id: parseInt(conciliarFacturaMovId), empresa_id: conciliarFacturaEmpresaId, aplicaciones: aplicaciones }),
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.error) { mostrarToast(data.error, "error"); btn.disabled = false; btn.textContent = "Conciliar seleccionadas"; return; }
+            cerrarModalConciliarFactura();
+            cargarMovimientosBancos();
+            mostrarToast(data.mensaje || "Conciliación múltiple registrada.", "success");
+          })
+          .catch(function () { mostrarToast("Error al conciliar.", "error"); btn.disabled = false; btn.textContent = "Conciliar seleccionadas"; });
+      });
+
+    } else {
+      // Supplier: keep original single-select behavior
+      facturas.forEach(function (f) {
+        var tr = document.createElement("tr");
+        var fecha = (f.fecha_factura || "").toString().trim() || "—";
+        var numero = (f.numero_factura || "").toString().trim() || "—";
+        var total = f.total_a_pagar != null ? f.total_a_pagar : (f.total_factura != null ? f.total_factura : f.total);
         var proveedor = (f.proveedor || "").toString().trim() || "—";
         var concepto = (f.resumen_concepto || "").toString().trim() || "—";
         var estado = ((f.estado_pago || "").toString().trim() || "pendiente").toLowerCase();
         tr.innerHTML = "<td class=\"col-fecha\">" + fecha + "</td><td>" + proveedor.replace(/</g, "&lt;") + "</td><td title=\"" + (concepto.replace(/"/g, "&quot;")) + "\">" + (concepto.length > 40 ? concepto.slice(0, 40) + "…" : concepto).replace(/</g, "&lt;") + "</td><td>" + numero.replace(/</g, "&lt;") + "</td><td class=\"numero\">" + formatNumeroConciliar(total) + "</td><td>" + (estado === "parcial" ? "Parcial" : "Pendiente") + "</td><td class=\"col-acciones\"><button type=\"button\" class=\"btn-small bancos-btn-vincular-factura-conciliar\" data-factura-id=\"" + (f.id != null ? f.id : "") + "\">Vincular</button></td>";
-      }
-      tbodyConciliarFacturas.appendChild(tr);
+        tbodyConciliarFacturas.appendChild(tr);
+      });
+    }
+  }
+
+  function _sumarAplicados() {
+    var total = 0;
+    if (!tbodyConciliarFacturas) return 0;
+    tbodyConciliarFacturas.querySelectorAll(".conciliar-multi-importe").forEach(function (inp) {
+      if (!inp.disabled) total += parseFloat(inp.value) || 0;
     });
+    return total;
+  }
+
+  function _actualizarTotalesMulti() {
+    var sum = _sumarAplicados();
+    var elSum = document.getElementById("conciliar-multi-sum");
+    var elDiff = document.getElementById("conciliar-multi-diff");
+    var btn = document.getElementById("btn-conciliar-multi-confirmar");
+    if (elSum) elSum.textContent = formatNumeroConciliar(sum);
+    var diff = conciliarFacturaImporte - sum;
+    if (elDiff) {
+      if (Math.abs(diff) < 0.01) {
+        elDiff.textContent = "✓ Cuadra";
+        elDiff.style.color = "#16A34A";
+      } else if (diff > 0) {
+        elDiff.textContent = "Sobrante: " + formatNumeroConciliar(diff);
+        elDiff.style.color = "#D97706";
+      } else {
+        elDiff.textContent = "Excede: " + formatNumeroConciliar(Math.abs(diff));
+        elDiff.style.color = "#DC2626";
+      }
+    }
+    if (btn) btn.disabled = (sum <= 0 || sum > conciliarFacturaImporte + 0.02);
   }
 
   function filtrarConciliarFacturas() {
@@ -932,6 +1070,7 @@ function renderPaginacionBancos(container, actual, total) {
     conciliarFacturaMovId = movId;
     conciliarFacturaEmpresaId = empresaId || "";
     conciliarFacturaEsEntrada = Number(importe) > 0;
+    conciliarFacturaImporte = Math.abs(Number(importe) || 0);
     if (conciliarFacturaMovInfo) conciliarFacturaMovInfo.innerHTML = "<strong>Movimiento:</strong> " + (fecha || "—") + " · " + (concepto || "—").replace(/</g, "&lt;") + " · Importe: " + formatNumeroConciliar(importe) + " · Empresa: " + (empresaId || "—").replace(/</g, "&lt;");
     if (conciliarFacturaBuscar) {
       conciliarFacturaBuscar.value = "";
@@ -1479,8 +1618,10 @@ function renderPaginacionBancos(container, actual, total) {
       var tarjetaAlias = (l.tarjeta_alias || "").trim();
       var tarjetaLabel = tarjetaAlias || ((l.tarjeta_banco || "Banco") + " – " + (l.tarjeta_persona || "Titular"));
       var estado = (l.estado || "pendiente");
-      var totalMov = l.total_movimiento != null ? l.total_movimiento : 0;
-      var pendiente = l.pendiente_facturas != null ? l.pendiente_facturas : (l.total_facturas || 0) + totalMov;
+      var totalMovRaw = l.total_movimiento != null ? Number(l.total_movimiento) : 0;
+      var totalMov = Math.abs(totalMovRaw);
+      var totalFact0 = l.total_facturas != null ? Math.abs(Number(l.total_facturas)) : 0;
+      var pendiente = Math.max(0, totalFact0 - totalMov);
       var tid = l.tarjeta_id != null ? l.tarjeta_id : "";
       var per = (l.periodo || "").trim();
       var baseUrl = "/api/empresas/" + encodeURIComponent(empresaId) + "/tarjetas/extracto-export?tarjeta_id=" + encodeURIComponent(tid) + "&periodo=" + encodeURIComponent(per);
@@ -1490,14 +1631,12 @@ function renderPaginacionBancos(container, actual, total) {
       html += "<td>" + tarjetaLabel + "</td>";
       html += "<td>" + (l.periodo || "—") + "</td>";
       html += "<td class=\"numero\">" + (l.num_facturas != null ? String(l.num_facturas) : "0") + "</td>";
-      html += "<td class=\"numero\">" + formatearNumeroES(l.total_facturas != null ? String(l.total_facturas) : null) + "</td>";
+      html += "<td class=\"numero\">" + formatearNumeroES(totalFact0) + "</td>";
       html += "<td class=\"numero\">" + formatearNumeroES(totalMov) + "</td>";
       html += "<td class=\"numero\">" + formatearNumeroES(pendiente) + "</td>";
       var badgeClass = estado === "conciliado" ? "conciliado" : estado === "cargo recibido" ? "cargo-recibido" : "pendiente";
       var estadoLabel = estado.charAt(0).toUpperCase() + estado.slice(1);
-      var totalFact = l.total_facturas != null ? Math.abs(Number(l.total_facturas)) : 0;
-      var totalMovAbs = l.total_movimiento != null ? Math.abs(Number(l.total_movimiento)) : 0;
-      var pctVinculado = totalFact > 0 && totalMovAbs > 0 ? Math.min(100, Math.round((totalMovAbs / totalFact) * 100)) : (estado === "conciliado" ? 100 : 0);
+      var pctVinculado = totalFact0 > 0 && totalMov > 0 ? Math.min(100, Math.round((totalMov / totalFact0) * 100)) : (estado === "conciliado" ? 100 : 0);
       html += "<td><span class=\"badge-estado " + badgeClass + "\">" + estadoLabel + "</span>";
       var fillClass = pctVinculado >= 100 ? "fill-100" : pctVinculado === 0 ? "fill-0" : "";
       html += " <span class=\"barra-progreso-extracto\"><span class=\"barra-bg\"><span class=\"barra-fill " + fillClass + "\" style=\"width:" + pctVinculado + "%\"></span></span><span class=\"barra-pct\">" + pctVinculado + "%</span></span>";
