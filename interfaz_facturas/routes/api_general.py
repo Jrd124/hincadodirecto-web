@@ -214,14 +214,48 @@ def api_dashboard_director():
       ).fetchone()
       result["finanzas"]["facturado_año"] = round(r["t"], 2) if r else 0
 
-      # Pendiente cobro (clientes)
-      r = conn.execute(
-        f"SELECT COUNT(*) as c, COALESCE(SUM({_PARSE_IMPORTE}),0) as t"
-        " FROM facturas_cliente WHERE LOWER(TRIM(COALESCE(estado_cobro,''))) IN ('pendiente','','parcial')"
-      ).fetchone()
-      if r:
-        result["finanzas"]["pendiente_cobro"] = round(r["t"], 2)
-        result["finanzas"]["pendiente_cobro_count"] = r["c"]
+      # Pendiente cobro (clientes) — net of partial collections
+      facturas_pte = conn.execute(
+        "SELECT id, total_a_pagar, estado_cobro FROM facturas_cliente"
+        " WHERE LOWER(TRIM(COALESCE(estado_cobro,''))) IN ('pendiente','','parcial')"
+      ).fetchall()
+      # Get collected amounts from movimientos.db + conciliacion_multiple
+      cobrado_por_factura = {}
+      try:
+        import sqlite3 as _sq
+        from config import MOVIMIENTOS_DB
+        conn_b = _sq.connect(str(MOVIMIENTOS_DB))
+        conn_b.row_factory = _sq.Row
+        for row in conn_b.execute(
+          "SELECT factura_cliente_id, SUM(ABS(importe)) as total"
+          " FROM movimientos WHERE factura_cliente_id IS NOT NULL GROUP BY factura_cliente_id"
+        ).fetchall():
+          cobrado_por_factura[row["factura_cliente_id"]] = float(row["total"] or 0)
+        conn_b.close()
+      except Exception:
+        pass
+      # Also from conciliacion_multiple
+      try:
+        for row in conn.execute(
+          "SELECT factura_cliente_id, SUM(importe_aplicado) as total"
+          " FROM conciliacion_multiple GROUP BY factura_cliente_id"
+        ).fetchall():
+          fid = row["factura_cliente_id"]
+          cobrado_por_factura[fid] = cobrado_por_factura.get(fid, 0) + float(row["total"] or 0)
+      except Exception:
+        pass
+
+      total_pte_cobro = 0.0
+      n_pte_cobro = 0
+      for f in facturas_pte:
+        total_fac = _parse_importe_es(f["total_a_pagar"])
+        cobrado = cobrado_por_factura.get(f["id"], 0)
+        neto = max(0, total_fac - cobrado)
+        if neto > 0.01:
+          total_pte_cobro += neto
+          n_pte_cobro += 1
+      result["finanzas"]["pendiente_cobro"] = round(total_pte_cobro, 2)
+      result["finanzas"]["pendiente_cobro_count"] = n_pte_cobro
 
       # Cobrado mes (clientes)
       r = conn.execute(
@@ -231,17 +265,13 @@ def api_dashboard_director():
       ).fetchone()
       result["finanzas"]["cobrado_mes"] = round(r["t"], 2) if r else 0
 
-      # Pendiente pago (proveedores)
-      _PARSE_PROV = ("CASE WHEN total_a_pagar LIKE '%,%'"
-                     " THEN CAST(REPLACE(REPLACE(total_a_pagar,'.',''),',','.') AS REAL)"
-                     " ELSE CAST(total_a_pagar AS REAL) END")
-      r = conn.execute(
-        f"SELECT COUNT(*) as c, COALESCE(SUM({_PARSE_PROV}),0) as t"
-        " FROM facturas_proveedor WHERE LOWER(TRIM(estado_pago)) = 'pendiente'"
-      ).fetchone()
-      if r:
-        result["finanzas"]["pendiente_pago"] = round(r["t"], 2)
-        result["finanzas"]["pendiente_pago_count"] = r["c"]
+      # Pendiente pago (proveedores) — Python-side parsing for robustness
+      facturas_prov_pte = conn.execute(
+        "SELECT total_a_pagar FROM facturas_proveedor"
+        " WHERE LOWER(TRIM(COALESCE(estado_pago,''))) IN ('pendiente','')"
+      ).fetchall()
+      result["finanzas"]["pendiente_pago"] = round(_sum_importes(facturas_prov_pte, "total_a_pagar"), 2)
+      result["finanzas"]["pendiente_pago_count"] = len(facturas_prov_pte)
 
       # ── Maquinaria ──
       r = conn.execute("SELECT COUNT(*) as total FROM maquinas WHERE activa = 1").fetchone()
