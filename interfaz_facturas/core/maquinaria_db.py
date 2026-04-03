@@ -246,6 +246,11 @@ def init_maquinaria_db() -> None:
             )
         """)
 
+        # Añadir responsable_id a maquinas si no existe (FK a empleados)
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(maquinas)").fetchall()]
+        if "responsable_id" not in cols:
+            conn.execute("ALTER TABLE maquinas ADD COLUMN responsable_id INTEGER REFERENCES empleados(id)")
+
         _seed_maquinas(conn)
         _seed_checklist_templates(conn)
         _seed_maintenance_tasks(conn)
@@ -658,8 +663,13 @@ def obtener_maquina(maq_id: int) -> dict | None:
     init_maquinaria_db()
     with _conectar() as conn:
         row = conn.execute(
-            "SELECT m.*, p.nombre AS proyecto_nombre FROM maquinas m "
-            "LEFT JOIN proyectos p ON p.id = m.proyecto_id WHERE m.id = ?",
+            "SELECT m.*, p.nombre AS proyecto_nombre, "
+            "(e.nombre || ' ' || COALESCE(e.apellidos, '')) AS responsable_nombre, "
+            "e.telefono AS responsable_telefono "
+            "FROM maquinas m "
+            "LEFT JOIN proyectos p ON p.id = m.proyecto_id "
+            "LEFT JOIN empleados e ON e.id = m.responsable_id "
+            "WHERE m.id = ?",
             [maq_id],
         ).fetchone()
         if not row:
@@ -1044,6 +1054,17 @@ def actualizar_incidencia(inc_id: int, data: dict) -> dict:
                  data.get("severidad", "media"), inc_id],
             )
         return dict(conn.execute("SELECT * FROM maquinaria_incidencias WHERE id = ?", [inc_id]).fetchone())
+
+
+def asignar_responsable_maquina(maquina_id: int, responsable_id: int | None) -> bool:
+    """Asigna (o desasigna con None) un empleado como responsable de una máquina."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        conn.execute(
+            "UPDATE maquinas SET responsable_id = ? WHERE id = ?",
+            [responsable_id, maquina_id],
+        )
+        return True
 
 
 # ── Tokens de acceso operario ────────────────────────────────────────────────

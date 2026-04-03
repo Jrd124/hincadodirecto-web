@@ -183,7 +183,24 @@ def calcular_tareas_due(maquina_id: int | None = None) -> list:
                     [maq["id"], code, week],
                 ).fetchone()
 
-                # Buscar token activo + contacto para esta máquina
+                # ── Buscar responsable asignado a la máquina ──
+                responsable_nombre = None
+                responsable_telefono = None
+                fuente_contacto = None
+
+                resp_id = maq.get("responsable_id")
+                if resp_id:
+                    resp = conn.execute(
+                        "SELECT (nombre || ' ' || COALESCE(apellidos, '')) AS nombre, telefono "
+                        "FROM empleados WHERE id = ? AND estado = 'activo'",
+                        [resp_id],
+                    ).fetchone()
+                    if resp:
+                        responsable_nombre = resp["nombre"]
+                        responsable_telefono = resp["telefono"]
+                        fuente_contacto = "responsable"
+
+                # ── Fallback: token + contacto operario ──
                 token_info = conn.execute(
                     "SELECT t.id AS token_id, t.token, t.operario_nombre, "
                     "c.telefono, c.canal_preferido, c.notificaciones_activas "
@@ -193,6 +210,11 @@ def calcular_tareas_due(maquina_id: int | None = None) -> list:
                     "ORDER BY t.created_at DESC LIMIT 1",
                     [maq["id"]],
                 ).fetchone()
+
+                if not fuente_contacto and token_info and token_info["telefono"]:
+                    responsable_nombre = token_info["operario_nombre"]
+                    responsable_telefono = token_info["telefono"]
+                    fuente_contacto = "token_contacto"
 
                 results.append({
                     "maquina_id": maq["id"],
@@ -209,6 +231,9 @@ def calcular_tareas_due(maquina_id: int | None = None) -> list:
                     "is_due": True,
                     "already_notified_this_week": notified is not None,
                     "token": dict(token_info) if token_info else None,
+                    "responsable_nombre": responsable_nombre,
+                    "responsable_telefono": responsable_telefono,
+                    "fuente_contacto": fuente_contacto,
                 })
 
     return results

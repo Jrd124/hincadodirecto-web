@@ -6,7 +6,7 @@ import logging
 import os
 
 from flask import Blueprint, Response, jsonify, request, render_template_string, send_from_directory, make_response
-from flask_login import current_user
+from flask_login import current_user, login_required
 
 from core import maquinaria_db
 from core import notificaciones_maquinaria as notif_maq
@@ -340,6 +340,19 @@ def api_actualizar_incidencia(iid):
 @maquinaria_bp.get("/api/maquinaria/dashboard")
 def api_dashboard_mantenimiento():
   return jsonify(maquinaria_db.dashboard_mantenimiento())
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ██  Responsable de máquina (vinculado a empleados)                         ██
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@maquinaria_bp.post("/api/maquinaria/maquinas/<int:mid>/responsable")
+@login_required
+def api_asignar_responsable(mid):
+  data = request.get_json(silent=True) or {}
+  responsable_id = data.get("responsable_id")  # None para desasignar
+  maquinaria_db.asignar_responsable_maquina(mid, responsable_id)
+  return jsonify({"ok": True})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -255,6 +255,29 @@ window.maqDetalle = function (maqId) {
           '</div>' +
         '</div>' +
 
+        // Responsable de mantenimiento section
+        '<div id="maq-responsable-section" style="margin-top:20px;">' +
+          '<div style="border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;">' +
+            '<div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);">' +
+              '<span style="font-size:14px;font-weight:600;">\uD83D\uDC64 Responsable de mantenimiento</span>' +
+            '</div>' +
+            '<div style="padding:16px;">' +
+              '<div style="display:flex;align-items:center;gap:12px;">' +
+                '<select id="maq-resp-select" class="form-input" style="flex:1;max-width:350px;">' +
+                  '<option value="">Sin responsable asignado</option>' +
+                '</select>' +
+                '<button class="btn-primary" style="width:auto;padding:8px 16px;" onclick="maqGuardarResponsable(' + m.id + ')">Guardar</button>' +
+              '</div>' +
+              (m.responsable_nombre
+                ? '<div style="margin-top:10px;padding:10px 14px;background:var(--color-bg-secondary);border-radius:var(--radius-md);font-size:13px;">' +
+                    '<strong>' + _esc(m.responsable_nombre) + '</strong>' +
+                    (m.responsable_telefono ? '<span style="color:var(--color-text-secondary);margin-left:8px;">' + _esc(m.responsable_telefono) + '</span>' : '') +
+                  '</div>'
+                : '') +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+
         // Auditor links section
         '<div id="maq-auditor-section" style="margin-top:20px;">' +
           '<div style="border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;">' +
@@ -280,6 +303,9 @@ window.maqDetalle = function (maqId) {
 
       // ═══ AUDITOR LINKS ═══
       _maqLoadAuditorLinks(m.id);
+
+      // ═══ RESPONSABLE DROPDOWN ═══
+      _maqLoadResponsableSelect(m.responsable_id);
     })
     .catch(function () { mostrarToast("Error al cargar m\u00e1quina", "error"); });
 };
@@ -1308,6 +1334,43 @@ window.maqReactivarToken = function (tokenId, maqId) {
     if (m) m.remove();
     mostrarToast("Token reactivado (90 d\u00edas)", "success");
     maqTokensModal(maqId);
+  });
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ██  Responsable de mantenimiento (vinculado a empleados RRHH)             ██
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function _maqLoadResponsableSelect(currentId) {
+  fetch("/api/empleados")
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var sel = document.getElementById("maq-resp-select");
+      if (!sel) return;
+      var empleados = (data.empleados || []).filter(function (e) { return e.estado === "activo"; });
+      sel.innerHTML = '<option value="">Sin responsable asignado</option>' +
+        empleados.map(function (e) {
+          var nombre = _esc(e.nombre + (e.apellidos ? ' ' + e.apellidos : ''));
+          var tel = e.telefono ? ' \u00b7 ' + _esc(e.telefono) : '';
+          return '<option value="' + e.id + '"' + (e.id === currentId ? ' selected' : '') + '>' +
+            nombre + tel + '</option>';
+        }).join("");
+    });
+}
+
+window.maqGuardarResponsable = function (maqId) {
+  var sel = document.getElementById("maq-resp-select");
+  var respId = sel ? (sel.value ? parseInt(sel.value) : null) : null;
+  fetch("/api/maquinaria/maquinas/" + maqId + "/responsable", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ responsable_id: respId })
+  }).then(function (r) {
+    if (r.ok) {
+      mostrarToast("Responsable actualizado", "success");
+      maqDetalle(maqId);
+    } else { mostrarToast("Error al asignar responsable", "error"); }
   });
 };
 
