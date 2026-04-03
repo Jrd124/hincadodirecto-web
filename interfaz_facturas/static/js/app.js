@@ -196,9 +196,9 @@ function cargarDashboardDirector() {
       _setDir("dir-facturado-mes", _fmtEur(f.facturado_mes));
       _setDir("dir-facturado-anio", _fmtEur(f["facturado_año"]) + " en el año");
       _setDir("dir-pendiente-cobro", _fmtEur(f.pendiente_cobro));
-      _setDir("dir-pendiente-cobro-n", f.pendiente_cobro_count + " facturas");
+      _setDir("dir-pendiente-cobro-n", f.pendiente_cobro_texto || (f.pendiente_cobro_count + " facturas"));
       _setDir("dir-pendiente-pago", _fmtEur(f.pendiente_pago));
-      _setDir("dir-pendiente-pago-n", f.pendiente_pago_count + " facturas");
+      _setDir("dir-pendiente-pago-n", f.pendiente_pago_texto || (f.pendiente_pago_count + " facturas"));
       _setDir("dir-maquinas", m.asignadas + " / " + m.total + " asignadas");
       _setDir("dir-maquinas-rev", m.revisiones_pendientes + " revisiones pendientes");
 

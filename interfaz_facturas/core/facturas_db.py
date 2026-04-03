@@ -388,3 +388,57 @@ def migrar_desde_csv() -> dict[str, Any]:
     except Exception as e:
       resultado["errores"].append(f"{empresa_id} insert: {e}")
   return resultado
+
+
+def recalcular_todos_estados_pago() -> dict:
+  """Recalcula estado_pago de facturas proveedores basándose en pagos conciliados.
+
+  Solo actualiza vacíos → pendiente, y upgrades (pendiente → parcial/pagada).
+  Nunca degrada 'pagada' manualmente asignada.
+  """
+  import sqlite3
+  from config import MOVIMIENTOS_DB
+  from routes.helpers import _parse_importe_es
+
+  init_facturas_db()
+
+  pagado_map = {}
+  try:
+    conn_b = sqlite3.connect(str(MOVIMIENTOS_DB))
+    conn_b.row_factory = sqlite3.Row
+    for row in conn_b.execute(
+      "SELECT factura_proveedor_id, SUM(ABS(importe)) as t"
+      " FROM movimientos WHERE factura_proveedor_id IS NOT NULL GROUP BY factura_proveedor_id"
+    ).fetchall():
+      pagado_map[row["factura_proveedor_id"]] = float(row["t"] or 0)
+    conn_b.close()
+  except Exception:
+    pass
+
+  actualizadas = 0
+  detalle = []
+  with _conectar() as conn:
+    facturas = conn.execute("SELECT id, total_a_pagar, estado_pago FROM facturas_proveedor").fetchall()
+    for f in facturas:
+      total = _parse_importe_es(f["total_a_pagar"])
+      pagado = pagado_map.get(f["id"], 0)
+      old = (f["estado_pago"] or "").strip().lower()
+
+      if total > 0 and pagado >= total - 1.0:
+        new = "pagada"
+      elif pagado > 0.01:
+        new = "parcial"
+      else:
+        new = "pendiente"
+
+      rank = {"": 0, "pendiente": 0, "parcial": 1, "pagada": 2}
+      if rank.get(new, 0) > rank.get(old, 0):
+        conn.execute("UPDATE facturas_proveedor SET estado_pago = ? WHERE id = ?", (new, f["id"]))
+        actualizadas += 1
+        detalle.append({"id": f["id"], "old": old or "(empty)", "new": new})
+      elif old == "" and new == "pendiente":
+        conn.execute("UPDATE facturas_proveedor SET estado_pago = 'pendiente' WHERE id = ?", (f["id"],))
+        actualizadas += 1
+        detalle.append({"id": f["id"], "old": "(empty)", "new": "pendiente"})
+
+  return {"actualizadas": actualizadas, "detalle": detalle}
