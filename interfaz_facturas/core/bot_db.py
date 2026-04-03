@@ -63,6 +63,27 @@ def init_bot_db():
             )
         """)
 
+        # Migrate: fix swapped columns in conciliacion_multiple
+        # Some records may have factura_cliente_id and importe_aplicado swapped
+        # Detect: if factura_cliente_id > 1000 and importe_aplicado < 1000, likely swapped
+        try:
+            swapped = conn.execute("""
+                SELECT cm.id, cm.factura_cliente_id, cm.importe_aplicado
+                FROM conciliacion_multiple cm
+                WHERE cm.factura_cliente_id > 1000
+                  AND cm.importe_aplicado < 1000
+                  AND NOT EXISTS (SELECT 1 FROM facturas_cliente fc WHERE fc.id = cm.factura_cliente_id)
+            """).fetchall()
+            for r in swapped:
+                old_fid = r["factura_cliente_id"]
+                old_imp = r["importe_aplicado"]
+                conn.execute(
+                    "UPDATE conciliacion_multiple SET factura_cliente_id = CAST(? AS INTEGER), importe_aplicado = ? WHERE id = ?",
+                    (int(old_imp), float(old_fid), r["id"]),
+                )
+        except Exception:
+            pass
+
         # Migrate: mark movements with MULTI that have conciliacion_multiple records
         try:
             mov_ids = [r["movimiento_id"] for r in conn.execute(
