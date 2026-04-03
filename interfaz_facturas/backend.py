@@ -4727,6 +4727,75 @@ def conciliacion_resumen_factura_proveedor(factura_id: int):
   })
 
 
+@bancos_bp.route("/api/bancos/conciliacion/factura-cliente/<int:factura_id>", methods=["GET"])
+def conciliacion_resumen_factura_cliente(factura_id: int):
+  """Resumen de conciliación de una factura de cliente: total, cobrado, pendiente, movimientos."""
+  from routes.helpers import _parse_importe_es
+  total_factura = 0.0
+  total_cobrado = 0.0
+  movimientos = []
+
+  # Get factura from gestion.db
+  try:
+    conn_gest = sqlite3.connect(str(GESTION_DB))
+    conn_gest.row_factory = sqlite3.Row
+    row = conn_gest.execute("SELECT total_a_pagar FROM facturas_cliente WHERE id = ?", (factura_id,)).fetchone()
+    if row:
+      total_factura = _parse_importe_es(row["total_a_pagar"])
+    conn_gest.close()
+  except Exception:
+    pass
+
+  if total_factura == 0:
+    return jsonify({"total_factura": 0, "total_cobrado": 0, "pendiente": 0, "movimientos": []})
+
+  # Movimientos from movimientos.db
+  try:
+    _init_movimientos_db()
+    conn_bancos = _get_bancos_db()
+    rows = conn_bancos.execute(
+      "SELECT id, fecha_operacion, concepto, importe FROM movimientos WHERE factura_cliente_id = ? ORDER BY fecha_operacion",
+      (factura_id,),
+    ).fetchall()
+    for r in rows:
+      movimientos.append({
+        "id": r[0], "fecha": (r[1] or "").strip(), "concepto": (r[2] or "").strip(),
+        "importe": abs(r[3] or 0), "origen": "banco",
+      })
+      total_cobrado += abs(r[3] or 0)
+    conn_bancos.close()
+  except Exception:
+    pass
+
+  # conciliacion_multiple from gestion.db
+  try:
+    conn_gest = sqlite3.connect(str(GESTION_DB))
+    conn_gest.row_factory = sqlite3.Row
+    rows = conn_gest.execute(
+      "SELECT id, movimiento_fecha, movimiento_importe, importe_aplicado, created_at"
+      " FROM conciliacion_multiple WHERE factura_cliente_id = ? ORDER BY created_at",
+      (factura_id,),
+    ).fetchall()
+    for r in rows:
+      movimientos.append({
+        "id": r["id"], "fecha": (r["movimiento_fecha"] or "").strip(),
+        "concepto": "Conciliación múltiple", "importe": r["importe_aplicado"],
+        "origen": "multiple",
+      })
+      total_cobrado += r["importe_aplicado"] or 0
+    conn_gest.close()
+  except Exception:
+    pass
+
+  pendiente = max(0.0, total_factura - total_cobrado)
+  return jsonify({
+    "total_factura": round(total_factura, 2),
+    "total_cobrado": round(total_cobrado, 2),
+    "pendiente": round(pendiente, 2),
+    "movimientos": movimientos,
+  })
+
+
 @bancos_bp.route("/api/bancos/movimientos_export", methods=["GET"])
 def exportar_movimientos_bancos():
   """

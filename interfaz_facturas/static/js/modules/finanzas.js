@@ -4458,14 +4458,35 @@ function abrirModalEdicionCli(f) {
       .catch(() => {});
   }
 
-  var totalCobrar = (f.total_a_pagar || "").toString().trim();
   var concCliWrap = document.getElementById("edc-conciliacion-wrap");
   var concCliResumen = document.getElementById("edc-conciliacion-resumen");
   var concCliPendiente = document.getElementById("edc-conciliacion-pendiente");
-  if (concCliWrap) {
+  if (concCliWrap && f.id) {
     concCliWrap.style.display = "block";
-    if (concCliResumen) concCliResumen.textContent = "Total a cobrar: " + (totalCobrar ? (typeof formatearNumeroES === "function" ? formatearNumeroES(totalCobrar) : totalCobrar) + " €" : "—");
-    if (concCliPendiente) concCliPendiente.textContent = "Total cobrado: — · Pendiente de cobro: " + (totalCobrar ? (typeof formatearNumeroES === "function" ? formatearNumeroES(totalCobrar) : totalCobrar) + " € (sin movimientos vinculados)" : "—");
+    if (concCliResumen) concCliResumen.textContent = "Cargando conciliación...";
+    if (concCliPendiente) concCliPendiente.textContent = "";
+    fetch("/api/bancos/conciliacion/factura-cliente/" + f.id)
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var fmt = typeof formatearNumeroES === "function" ? formatearNumeroES : String;
+        if (concCliResumen) concCliResumen.textContent = "Total a cobrar: " + fmt(d.total_factura) + " €";
+        if (d.total_cobrado > 0) {
+          var movTxt = d.movimientos.map(function (m) {
+            return m.fecha + " — " + fmt(m.importe) + " €";
+          }).join("\n");
+          if (concCliPendiente) {
+            concCliPendiente.innerHTML =
+              "Total cobrado: <strong style=\"color:#16A34A\">" + fmt(d.total_cobrado) + " €</strong>" +
+              " · Pendiente: <strong style=\"color:" + (d.pendiente > 0.01 ? "#D97706" : "#16A34A") + "\">" + fmt(d.pendiente) + " €</strong>" +
+              " <span style=\"color:#94A3B8;font-size:12px;\">(" + d.movimientos.length + " movimiento" + (d.movimientos.length !== 1 ? "s" : "") + ")</span>";
+          }
+        } else {
+          if (concCliPendiente) concCliPendiente.textContent = "Sin cobros vinculados · Pendiente: " + fmt(d.total_factura) + " €";
+        }
+      })
+      .catch(function () {
+        if (concCliResumen) concCliResumen.textContent = "Error cargando conciliación";
+      });
   }
 
   _validarImportesFacturaCliente();
