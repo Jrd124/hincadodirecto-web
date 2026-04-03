@@ -559,10 +559,14 @@ function renderPaginacionBancos(container, actual, total) {
       // Factura conciliation
       if (conciliadoAt) {
         var fLine = "<span class=\"cel-flex\">";
-        fLine += "<span class=\"badge-conciliado\">Factura</span>";
-        if (facturaRuta) {
-          var rutaEsc = encodeURIComponent(facturaRuta);
-          fLine += "<a href=\"/api/archivo?ruta=" + rutaEsc + "\" target=\"_blank\" class=\"btn-small\" title=\"Abrir factura\">Ver</a>";
+        if (m.multi_n_facturas) {
+          fLine += "<span class=\"badge-conciliado\">Cobro → " + m.multi_n_facturas + " facturas</span>";
+        } else {
+          fLine += "<span class=\"badge-conciliado\">Factura</span>";
+          if (facturaRuta) {
+            var rutaEsc = encodeURIComponent(facturaRuta);
+            fLine += "<a href=\"/api/archivo?ruta=" + rutaEsc + "\" target=\"_blank\" class=\"btn-small\" title=\"Abrir factura\">Ver</a>";
+          }
         }
         fLine += "<button type=\"button\" class=\"btn-small bancos-btn-desvincular\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Quitar vinculación\">Desvincular</button>";
         fLine += "</span>";

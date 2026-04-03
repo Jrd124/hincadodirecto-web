@@ -3888,6 +3888,27 @@ def listar_movimientos():
       finally:
         conn_gest.close()
 
+    # Enrich MULTI-conciliated movements with invoice count from conciliacion_multiple
+    multi_mov_ids = [m["id"] for m in movimientos if (m.get("factura_cliente_key") or "") == "MULTI"]
+    if multi_mov_ids:
+      conn_gest = sqlite3.connect(str(GESTION_DB))
+      conn_gest.row_factory = sqlite3.Row
+      try:
+        placeholders = ",".join("?" * len(multi_mov_ids))
+        rows_cm = conn_gest.execute(
+          f"SELECT movimiento_id, COUNT(*) as n, SUM(importe_aplicado) as total"
+          f" FROM conciliacion_multiple WHERE movimiento_id IN ({placeholders}) GROUP BY movimiento_id",
+          multi_mov_ids,
+        ).fetchall()
+        cm_map = {r["movimiento_id"]: {"multi_n_facturas": r["n"], "multi_total": r["total"]} for r in rows_cm}
+        for m in movimientos:
+          if m["id"] in cm_map:
+            m.update(cm_map[m["id"]])
+      except Exception:
+        pass
+      finally:
+        conn_gest.close()
+
     # Calcular saldo acumulado
     cond_acum = []
     params_acum = []
@@ -4265,21 +4286,15 @@ def _factura_cliente_key(numero_factura: str, fecha_factura: str, cliente: str) 
 
 def _recalcular_estado_cobro_cliente(factura_cli_id: int, factura: dict | None = None) -> str:
   """Recalcula el estado_cobro de una factura de cliente sumando movimientos vinculados."""
+  from routes.helpers import _parse_importe_es
   if factura is None:
     factura = facturas_cliente_db.get_factura_cliente_por_id(factura_cli_id)
   if not factura:
     return "pendiente"
 
-  total_fac = 0.0
-  for campo in ("total_a_pagar",):
-    v = factura.get(campo)
-    if v is not None and str(v).strip():
-      try:
-        total_fac = abs(float(str(v).strip().replace(",", ".")))
-        break
-      except (ValueError, TypeError):
-        pass
+  total_fac = _parse_importe_es(factura.get("total_a_pagar"))
 
+  # Sum from direct 1:1 conciliation in movimientos.db
   _init_movimientos_db()
   conn_bancos = _get_bancos_db()
   try:
@@ -4290,6 +4305,18 @@ def _recalcular_estado_cobro_cliente(factura_cli_id: int, factura: dict | None =
     total_cobrado = float(row_sum[0] or 0) if row_sum else 0.0
   finally:
     conn_bancos.close()
+
+  # Also sum from conciliacion_multiple in gestion.db
+  try:
+    conn_gest = sqlite3.connect(str(GESTION_DB))
+    row_cm = conn_gest.execute(
+      "SELECT COALESCE(SUM(importe_aplicado), 0) FROM conciliacion_multiple WHERE factura_cliente_id = ?",
+      (factura_cli_id,),
+    ).fetchone()
+    total_cobrado += float(row_cm[0] or 0) if row_cm else 0
+    conn_gest.close()
+  except Exception:
+    pass
 
   if total_cobrado < 0.01:
     estado = "pendiente"
@@ -4452,7 +4479,8 @@ def conciliacion_confirmar_cliente_multiple():
     mov_imp = float(mov_row[1] or 0) if mov_row else 0
 
     conn_bancos.execute(
-      "UPDATE movimientos SET conciliado_at = ?, empresa_id = ? WHERE id = ?",
+      "UPDATE movimientos SET factura_cliente_key = 'MULTI', factura_cliente_id = -1,"
+      " conciliado_at = ?, empresa_id = ? WHERE id = ?",
       (ahora, empresa_id, mov_id),
     )
     conn_bancos.commit()
@@ -4556,7 +4584,7 @@ def conciliacion_desvincular():
   conn_bancos = _get_bancos_db()
   try:
     row = conn_bancos.execute(
-      "SELECT id, factura_proveedor_id, factura_cliente_key, empresa_id FROM movimientos WHERE id = ?",
+      "SELECT id, factura_proveedor_id, factura_cliente_key, empresa_id, factura_cliente_id FROM movimientos WHERE id = ?",
       (mov_id,),
     ).fetchone()
     if not row:
@@ -4564,6 +4592,31 @@ def conciliacion_desvincular():
     factura_id = row[1]
     factura_cliente_key = (row[2] or "").strip()
     empresa_id = (row[3] or "").strip()
+    factura_cliente_id_val = row[4]
+
+    # Handle MULTI conciliation (1 movement → N invoices)
+    if factura_cliente_key == "MULTI":
+      conn_bancos.execute(
+        "UPDATE movimientos SET factura_cliente_key = NULL, factura_cliente_id = NULL, conciliado_at = NULL WHERE id = ?",
+        (mov_id,),
+      )
+      conn_bancos.commit()
+      conn_bancos.close()
+      # Delete from conciliacion_multiple and recalculate each invoice
+      from core.db import conectar as _conectar_gestion
+      facturas_afectadas = []
+      with _conectar_gestion() as conn_g:
+        rows_cm = conn_g.execute(
+          "SELECT factura_cliente_id FROM conciliacion_multiple WHERE movimiento_id = ?", (mov_id,)
+        ).fetchall()
+        facturas_afectadas = [r["factura_cliente_id"] for r in rows_cm]
+        conn_g.execute("DELETE FROM conciliacion_multiple WHERE movimiento_id = ?", (mov_id,))
+      for fid in facturas_afectadas:
+        _recalcular_estado_cobro_cliente(fid)
+      if empresa_id:
+        _invalidar_cache_listado_clientes(empresa_id)
+      return jsonify({"ok": True, "mensaje": f"Conciliación múltiple deshecha ({len(facturas_afectadas)} facturas actualizadas)."})
+
     if not factura_id and not factura_cliente_key:
       return jsonify({"error": "El movimiento no está conciliado con ninguna factura"}), 400
     if factura_cliente_key:
