@@ -130,14 +130,14 @@ def api_proyectos_dashboard():
 
 
 @proyectos_bp.post("/api/proyectos/<int:proyecto_id>/recursos")
-def api_asignar_recurso(proyecto_id: int):
+def api_post_proyecto_recursos(proyecto_id: int):
   data = request.get_json(silent=True) or {}
   recurso = proyectos_db.asignar_recurso(proyecto_id, data)
   return jsonify(recurso), 201
 
 
 @proyectos_bp.delete("/api/proyectos/recursos/<int:recurso_id>")
-def api_desasignar_recurso(recurso_id: int):
+def api_delete_proyecto_recurso_item(recurso_id: int):
   ok = proyectos_db.desasignar_recurso(recurso_id)
   if not ok:
     return jsonify({"error": "Recurso no encontrado"}), 404
@@ -467,7 +467,7 @@ def api_asignaciones_proyecto(proyecto_id):
 
 
 @proyectos_bp.post("/api/proyectos/<int:proyecto_id>/asignaciones")
-def api_asignar_recurso(proyecto_id):
+def api_post_proyecto_asignaciones(proyecto_id):
   data = request.get_json(silent=True) or {}
   tipo = data.get("recurso_tipo", "")
   rid = data.get("recurso_id")
@@ -490,7 +490,7 @@ def api_asignar_recurso(proyecto_id):
 
 
 @proyectos_bp.delete("/api/proyectos/<int:proyecto_id>/asignaciones")
-def api_desasignar_recurso(proyecto_id):
+def api_delete_proyecto_asignaciones(proyecto_id):
   data = request.get_json(silent=True) or {}
   tipo = data.get("recurso_tipo", "")
   rid = data.get("recurso_id")
