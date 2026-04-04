@@ -1323,11 +1323,27 @@ async def callback_factura_pago(update: Update, context: ContextTypes.DEFAULT_TY
         )
 
     elif query.data == "facpago_personal":
-        # Ask whose personal card
-        set_estado(tid, "factura_pago_nombre", datos)
-        datos["_pago_tipo"] = "personal"
-        set_estado(tid, "factura_pago_nombre", datos)
-        await query.edit_message_text("¿De quién es la tarjeta personal? Escribe el nombre:")
+        # Show buttons: "Yo mismo" + each operario
+        user = get_usuario(tid)
+        mi_nombre = user["nombre"] if user else "Yo"
+        buttons = [[InlineKeyboardButton(f"🙋 Yo mismo ({mi_nombre})", callback_data=f"facpago_pers_{mi_nombre}")]]
+        operarios = listar_usuarios(rol="operario")
+        for op in operarios:
+            buttons.append([InlineKeyboardButton(f"👷 {op['nombre']}", callback_data=f"facpago_pers_{op['nombre']}")])
+        await query.edit_message_text(
+            "💳 ¿Quién ha pagado con su tarjeta personal?",
+            reply_markup=InlineKeyboardMarkup(buttons),
+        )
+
+    elif query.data.startswith("facpago_pers_"):
+        nombre = query.data[len("facpago_pers_"):]
+        datos["estado_pago"] = "pagada"
+        datos["comentarios"] = f"Pagada con tarjeta personal de {nombre} — tramitar reembolso"
+        await _run_sync(guardar_factura_proveedor, datos)
+        clear_estado(tid)
+        await query.edit_message_text(
+            f"✅ Factura registrada. Pagada con tarjeta personal de {nombre} ({_fmt_eur(datos.get('total_a_pagar'))})"
+        )
 
     elif query.data == "facpago_empresa":
         # Show available company cards
