@@ -460,6 +460,7 @@
       .panel-usuarios,
       .panel-maquinaria,
       .panel-cae,
+      .panel-albaranes,
       .content-panel {
         display: none;
       }
@@ -479,6 +480,7 @@
       .panel-usuarios.visible,
       .panel-maquinaria.visible,
       .panel-cae.visible,
+      .panel-albaranes.visible,
       .content-panel.visible {
         display: block;
       }
