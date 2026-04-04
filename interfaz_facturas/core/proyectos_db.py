@@ -200,6 +200,24 @@ def init_proyectos_db() -> None:
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS ix_cert_det_cert ON certificacion_detalle(certificacion_id)")
+        # ── Asignaciones diarias de recursos ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS proyecto_asignaciones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                proyecto_id INTEGER NOT NULL,
+                recurso_tipo TEXT NOT NULL CHECK(recurso_tipo IN ('empleado','maquina','vehiculo')),
+                recurso_id INTEGER NOT NULL,
+                recurso_nombre TEXT NOT NULL,
+                fecha TEXT NOT NULL,
+                estado TEXT DEFAULT 'planificado' CHECK(estado IN ('planificado','confirmado','incidencia','cancelado')),
+                notas TEXT,
+                created_at TEXT NOT NULL,
+                UNIQUE(recurso_tipo, recurso_id, fecha)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_asig_proy ON proyecto_asignaciones(proyecto_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_asig_fecha ON proyecto_asignaciones(fecha)")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_asig_recurso ON proyecto_asignaciones(recurso_tipo, recurso_id)")
         _backfill_codigos(conn)
     _initialized = True
 
@@ -903,3 +921,174 @@ def obtener_certificacion(cert_id: int) -> dict | None:
             SELECT * FROM certificacion_detalle WHERE certificacion_id = ? ORDER BY fecha ASC
         """, [cert_id]).fetchall()]
         return cert
+
+
+# ── Asignaciones diarias ─────────────────────────────────────────────────
+
+def asignar_recurso(proyecto_id: int, recurso_tipo: str, recurso_id: int,
+                    recurso_nombre: str, fecha: str, notas: str = "") -> dict | None:
+    init_proyectos_db()
+    with _conectar() as conn:
+        try:
+            conn.execute(
+                "INSERT INTO proyecto_asignaciones (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, notas, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, notas or None, _now()),
+            )
+            row = conn.execute(
+                "SELECT * FROM proyecto_asignaciones WHERE recurso_tipo=? AND recurso_id=? AND fecha=?",
+                (recurso_tipo, recurso_id, fecha),
+            ).fetchone()
+            return dict(row) if row else None
+        except Exception:
+            return None  # UNIQUE violation — already assigned
+
+
+def asignar_rango(proyecto_id: int, recurso_tipo: str, recurso_id: int,
+                  recurso_nombre: str, fecha_desde: str, fecha_hasta: str) -> int:
+    """Assign a resource for each weekday in [fecha_desde, fecha_hasta]. Returns count."""
+    from datetime import datetime as _dt, timedelta as _td
+    init_proyectos_db()
+    d = _dt.strptime(fecha_desde, "%Y-%m-%d").date()
+    end = _dt.strptime(fecha_hasta, "%Y-%m-%d").date()
+    ahora = _now()
+    count = 0
+    with _conectar() as conn:
+        while d <= end:
+            if d.weekday() < 5:  # Mon-Fri
+                try:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO proyecto_asignaciones"
+                        " (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, created_at)"
+                        " VALUES (?, ?, ?, ?, ?, ?)",
+                        (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, d.isoformat(), ahora),
+                    )
+                    count += 1
+                except Exception:
+                    pass
+            d += _td(days=1)
+    return count
+
+
+def desasignar(proyecto_id: int, recurso_tipo: str, recurso_id: int, fecha: str) -> bool:
+    init_proyectos_db()
+    with _conectar() as conn:
+        n = conn.execute(
+            "DELETE FROM proyecto_asignaciones WHERE proyecto_id=? AND recurso_tipo=? AND recurso_id=? AND fecha=?",
+            (proyecto_id, recurso_tipo, recurso_id, fecha),
+        ).rowcount
+        return n > 0
+
+
+def desasignar_rango(proyecto_id: int, recurso_tipo: str, recurso_id: int,
+                     fecha_desde: str, fecha_hasta: str) -> int:
+    init_proyectos_db()
+    with _conectar() as conn:
+        n = conn.execute(
+            "DELETE FROM proyecto_asignaciones WHERE proyecto_id=? AND recurso_tipo=? AND recurso_id=?"
+            " AND fecha >= ? AND fecha <= ?",
+            (proyecto_id, recurso_tipo, recurso_id, fecha_desde, fecha_hasta),
+        ).rowcount
+        return n
+
+
+def obtener_asignaciones_proyecto(proyecto_id: int, fecha_desde: str = "", fecha_hasta: str = "") -> list[dict]:
+    init_proyectos_db()
+    conn = _get_conn()
+    try:
+        where = "proyecto_id = ?"
+        params: list = [proyecto_id]
+        if fecha_desde:
+            where += " AND fecha >= ?"
+            params.append(fecha_desde)
+        if fecha_hasta:
+            where += " AND fecha <= ?"
+            params.append(fecha_hasta)
+        rows = conn.execute(
+            f"SELECT * FROM proyecto_asignaciones WHERE {where} ORDER BY fecha, recurso_tipo, recurso_nombre",
+            params,
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def obtener_asignaciones_recurso(recurso_tipo: str, recurso_id: int,
+                                 fecha_desde: str = "", fecha_hasta: str = "") -> list[dict]:
+    init_proyectos_db()
+    conn = _get_conn()
+    try:
+        where = "recurso_tipo = ? AND recurso_id = ?"
+        params: list = [recurso_tipo, recurso_id]
+        if fecha_desde:
+            where += " AND fecha >= ?"
+            params.append(fecha_desde)
+        if fecha_hasta:
+            where += " AND fecha <= ?"
+            params.append(fecha_hasta)
+        rows = conn.execute(
+            f"SELECT pa.*, p.nombre as proyecto_nombre FROM proyecto_asignaciones pa"
+            f" JOIN proyectos p ON pa.proyecto_id = p.id WHERE {where} ORDER BY fecha",
+            params,
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def obtener_recursos_proyecto(proyecto_id: int) -> list[dict]:
+    """Unique resources that are or have been assigned to this project."""
+    init_proyectos_db()
+    conn = _get_conn()
+    try:
+        rows = conn.execute("""
+            SELECT recurso_tipo, recurso_id, recurso_nombre,
+                   MIN(fecha) as primera_fecha, MAX(fecha) as ultima_fecha,
+                   COUNT(*) as dias_asignados
+            FROM proyecto_asignaciones WHERE proyecto_id = ?
+            GROUP BY recurso_tipo, recurso_id
+            ORDER BY recurso_tipo, recurso_nombre
+        """, (proyecto_id,)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def recursos_disponibles(fecha: str, recurso_tipo: str = "") -> list[dict]:
+    """Resources NOT assigned to any project on the given date."""
+    init_proyectos_db()
+    conn = _get_conn()
+    try:
+        # Get occupied resource IDs for this date
+        ocu_emp = set()
+        ocu_maq = set()
+        ocu_veh = set()
+        for r in conn.execute("SELECT recurso_tipo, recurso_id FROM proyecto_asignaciones WHERE fecha = ?", (fecha,)).fetchall():
+            if r["recurso_tipo"] == "empleado":
+                ocu_emp.add(r["recurso_id"])
+            elif r["recurso_tipo"] == "maquina":
+                ocu_maq.add(r["recurso_id"])
+            elif r["recurso_tipo"] == "vehiculo":
+                ocu_veh.add(r["recurso_id"])
+
+        result = []
+        if not recurso_tipo or recurso_tipo == "empleado":
+            try:
+                for r in conn.execute("SELECT id, nombre, COALESCE(apellidos,'') as ap, puesto FROM empleados WHERE estado='activo' ORDER BY nombre").fetchall():
+                    if r["id"] not in ocu_emp:
+                        result.append({"tipo": "empleado", "id": r["id"], "nombre": f"{r['nombre']} {r['ap']}".strip(), "detalle": r["puesto"] or ""})
+            except Exception:
+                pass
+        if not recurso_tipo or recurso_tipo == "maquina":
+            for r in conn.execute("SELECT id, nombre, modelo FROM maquinas WHERE activa=1 ORDER BY nombre").fetchall():
+                if r["id"] not in ocu_maq:
+                    result.append({"tipo": "maquina", "id": r["id"], "nombre": r["nombre"], "detalle": r["modelo"] or ""})
+
+        return result
+    finally:
+        conn.close()
+
+
+def _get_conn():
+    from core.db import get_conn
+    return get_conn()

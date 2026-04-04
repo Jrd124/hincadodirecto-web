@@ -398,48 +398,22 @@
             '<div style="margin-left:auto;font-size:13px;color:var(--color-text-secondary);">' + _dashFmtEur(totalCostes) + ' en ' + ((p.costes || []).length) + ' facturas</div></div>' +
             '<div class="presup-section-body" style="border-left-color:#DC2626;">' + costBody + '</div></div>';
 
-        // ═══ Sección: Recursos asignados ═══
-        var rec = p.recursos || [];
-        function _recChips(items, colorActivo, fallback) {
-          if (!items.length) return '<span style="font-size:12px;color:var(--color-text-secondary);font-style:italic;">' + fallback + '</span>';
-          return items.map(function (r) {
-            var activo = r.activo !== false && r.activo !== 0;
-            var bg = activo ? colorActivo + '10' : '#DC262610';
-            var fg = activo ? colorActivo : '#DC2626';
-            var bdr = activo ? colorActivo + '30' : '#DC262630';
-            return '<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:99px;font-size:12px;background:' + bg + ';color:' + fg + ';border:1px solid ' + bdr + ';">' +
-              '<span style="width:6px;height:6px;border-radius:50%;background:' + fg + ';"></span>' +
-              _esc(r.descripcion || r.tercero_nombre || r.tipo) +
-            '</span>';
-          }).join('');
-        }
-        var recPersonas = rec.filter(function (r) { return r.tipo === 'operador' || r.tipo === 'ayudante' || r.tipo === 'ayudante_tiralineas'; });
-        var recMaquinas = rec.filter(function (r) { return r.tipo === 'maquina'; });
-        var recVehiculos = rec.filter(function (r) { return r.tipo === 'vehiculo' || r.tipo === 'pickup'; });
+        // ═══ Sección: Recursos asignados (calendar) ═══
         document.getElementById("proy-dash-recursos-section").innerHTML =
-          '<div style="border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;">' +
-            '<div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;">' +
-              '<div style="display:flex;align-items:center;gap:8px;">' +
-                '<span style="font-size:14px;">\uD83D\uDD27</span>' +
-                '<span style="font-size:14px;font-weight:600;">Recursos asignados</span>' +
+          '<div class="presup-section" style="margin-bottom:16px;">' +
+            '<div class="presup-section-header"><div class="presup-section-number" style="background:#7C3AED;">\uD83D\uDD27</div><div class="presup-section-title">Recursos asignados</div>' +
+            '<div style="margin-left:auto;"><button style="padding:5px 14px;font-size:12px;font-weight:500;color:var(--color-primary);background:transparent;border:1px solid var(--color-primary);border-radius:6px;cursor:pointer;" onclick="proyectoAsignarRecursoModal(' + p.id + ')">+ Asignar recurso</button></div></div>' +
+            '<div class="presup-section-body" style="border-left-color:#7C3AED;">' +
+              '<div style="display:grid;grid-template-columns:1fr 220px;gap:16px;">' +
+                '<div>' +
+                  '<div id="proy-recursos-cal" style="margin-bottom:16px;"></div>' +
+                  '<div id="proy-recursos-semana" style="margin-bottom:8px;"></div>' +
+                  '<div id="proy-recursos-semana2"></div>' +
+                '</div>' +
+                '<div id="proy-recursos-sidebar" style="border-left:1px solid var(--color-border);padding-left:16px;"></div>' +
               '</div>' +
-              '<button style="padding:5px 14px;font-size:12px;font-weight:500;color:var(--color-primary);background:transparent;border:1px solid var(--color-primary);border-radius:6px;cursor:pointer;transition:all 0.15s;" onmouseover="this.style.background=\'var(--color-primary)\';this.style.color=\'white\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'var(--color-primary)\'" onclick="proyectoAddRecurso(' + p.id + ')">+ Asignar recurso</button>' +
-            '</div>' +
-            '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;min-height:80px;">' +
-              '<div style="padding:12px 16px;border-right:1px solid var(--color-border);">' +
-                '<div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">\uD83D\uDC77 Personas</div>' +
-                '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + _recChips(recPersonas, '#16A34A', 'Sin asignar') + '</div>' +
-              '</div>' +
-              '<div style="padding:12px 16px;border-right:1px solid var(--color-border);">' +
-                '<div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">\uD83C\uDFD7\uFE0F M\u00e1quinas</div>' +
-                '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + _recChips(recMaquinas, '#2563EB', 'Sin asignar') + '</div>' +
-              '</div>' +
-              '<div style="padding:12px 16px;">' +
-                '<div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">\uD83D\uDE97 Veh\u00edculos</div>' +
-                '<div style="display:flex;flex-wrap:wrap;gap:6px;">' + _recChips(recVehiculos, '#CA8A04', 'Sin asignar') + '</div>' +
-              '</div>' +
-            '</div>' +
-          '</div>';
+            '</div></div>';
+        _renderRecursosCalendario(p.id);
 
         // ═══ Sección: Presupuestos vinculados ═══
         var prs = p.presupuestos || [];
@@ -581,52 +555,221 @@
     });
   }
 
-  window.proyectoAddRecurso = function (proyectoId) {
-    var existing = document.getElementById("modal-add-recurso");
+  // ── Recursos: calendario + semanas + sidebar ──────────────────────────
+
+  var _recProyId = null;
+  var _recAsignaciones = [];
+
+  function _renderRecursosCalendario(proyectoId) {
+    _recProyId = proyectoId;
+    var hoy = new Date();
+    var y = hoy.getFullYear(), m = hoy.getMonth();
+
+    // Fetch asignaciones for current + next month
+    var desde = new Date(y, m, 1).toISOString().slice(0, 10);
+    var hasta = new Date(y, m + 2, 0).toISOString().slice(0, 10);
+
+    Promise.all([
+      fetch("/api/proyectos/" + proyectoId + "/asignaciones?desde=" + desde + "&hasta=" + hasta).then(function(r){return r.json();}),
+      fetch("/api/proyectos/" + proyectoId + "/recursos").then(function(r){return r.json();}),
+    ]).then(function (results) {
+      _recAsignaciones = results[0].asignaciones || [];
+      var recursos = results[1].recursos || [];
+      _pintarCalMes(y, m);
+      _pintarSemanas(hoy);
+      _pintarSidebar(recursos, proyectoId);
+    }).catch(function () {});
+  }
+  window._renderRecursosCalendario = _renderRecursosCalendario;
+
+  function _asigPorFecha() {
+    var map = {};
+    _recAsignaciones.forEach(function (a) {
+      if (!map[a.fecha]) map[a.fecha] = [];
+      map[a.fecha].push(a);
+    });
+    return map;
+  }
+
+  function _pintarCalMes(y, m) {
+    var el = document.getElementById("proy-recursos-cal");
+    if (!el) return;
+    var dias = ["L","M","X","J","V","S","D"];
+    var hoyStr = new Date().toISOString().slice(0, 10);
+    var porFecha = _asigPorFecha();
+    var primerDia = new Date(y, m, 1).getDay(); // 0=Sun
+    primerDia = primerDia === 0 ? 6 : primerDia - 1; // Convert to Mon=0
+    var diasMes = new Date(y, m + 1, 0).getDate();
+    var meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
+      '<button onclick="_recNavMes(-1)" style="background:none;border:none;cursor:pointer;font-size:16px;">\u25C0</button>' +
+      '<span style="font-size:13px;font-weight:600;">' + meses[m] + ' ' + y + '</span>' +
+      '<button onclick="_recNavMes(1)" style="background:none;border:none;cursor:pointer;font-size:16px;">\u25B6</button></div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">';
+    dias.forEach(function (d) { html += '<div style="text-align:center;font-size:10px;font-weight:600;color:var(--color-text-secondary);padding:2px;">' + d + '</div>'; });
+    for (var i = 0; i < primerDia; i++) html += '<div></div>';
+    for (var d = 1; d <= diasMes; d++) {
+      var fecha = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+      var dow = new Date(y, m, d).getDay();
+      var esFinde = dow === 0 || dow === 6;
+      var esHoy = fecha === hoyStr;
+      var tiene = porFecha[fecha] && porFecha[fecha].length > 0;
+      var bg = esHoy ? '#DBEAFE' : tiene ? '#DCFCE7' : esFinde ? '#F9FAFB' : '#fff';
+      var brd = esHoy ? '2px solid #3B82F6' : '1px solid #E5E7EB';
+      html += '<div style="text-align:center;padding:3px 2px;font-size:11px;background:' + bg + ';border:' + brd + ';border-radius:4px;cursor:pointer;position:relative;" title="' + fecha + '">' +
+        d + (tiene ? '<div style="width:4px;height:4px;border-radius:50%;background:#16A34A;margin:1px auto 0;"></div>' : '') + '</div>';
+    }
+    html += '</div>';
+    el.innerHTML = html;
+  }
+
+  window._recCalY = new Date().getFullYear();
+  window._recCalM = new Date().getMonth();
+  window._recNavMes = function (delta) {
+    window._recCalM += delta;
+    if (window._recCalM > 11) { window._recCalM = 0; window._recCalY++; }
+    if (window._recCalM < 0) { window._recCalM = 11; window._recCalY--; }
+    _pintarCalMes(window._recCalY, window._recCalM);
+  };
+
+  function _pintarSemanas(hoy) {
+    var lunes = new Date(hoy);
+    lunes.setDate(lunes.getDate() - ((lunes.getDay() + 6) % 7));
+    _pintarSemana("proy-recursos-semana", lunes, "Esta semana");
+    var lunes2 = new Date(lunes);
+    lunes2.setDate(lunes2.getDate() + 7);
+    _pintarSemana("proy-recursos-semana2", lunes2, "Semana siguiente");
+  }
+
+  function _pintarSemana(containerId, lunes, titulo) {
+    var el = document.getElementById(containerId);
+    if (!el) return;
+    var hoyStr = new Date().toISOString().slice(0, 10);
+    var porFecha = _asigPorFecha();
+    var diasNom = ["Lun","Mar","Mié","Jue","Vie"];
+    var html = '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--color-text-secondary);">' + titulo + '</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;">';
+    for (var i = 0; i < 5; i++) {
+      var d = new Date(lunes);
+      d.setDate(d.getDate() + i);
+      var fecha = d.toISOString().slice(0, 10);
+      var esHoy = fecha === hoyStr;
+      var headerBg = esHoy ? '#DBEAFE' : 'var(--color-bg-page)';
+      var headerBrd = esHoy ? 'border:2px solid #3B82F6;' : '';
+      html += '<div><div style="font-size:11px;font-weight:600;text-align:center;padding:4px;background:' + headerBg + ';border-radius:6px;' + headerBrd + '">' +
+        diasNom[i] + ' ' + String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '</div>';
+      html += '<div style="margin-top:4px;min-height:40px;">';
+      var asigs = porFecha[fecha] || [];
+      if (asigs.length) {
+        asigs.forEach(function (a) {
+          var bg = a.recurso_tipo === 'empleado' ? '#DCFCE7' : a.recurso_tipo === 'maquina' ? '#DBEAFE' : '#FEF3C7';
+          var icon = a.recurso_tipo === 'empleado' ? '\uD83D\uDC77' : a.recurso_tipo === 'maquina' ? '\uD83C\uDFD7\uFE0F' : '\uD83D\uDE97';
+          html += '<div style="padding:3px 6px;font-size:10px;background:' + bg + ';border-radius:4px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + icon + ' ' + _esc(a.recurso_nombre) + '</div>';
+        });
+      } else {
+        html += '<div style="font-size:10px;color:#CBD5E1;text-align:center;padding:8px 0;">\u2014</div>';
+      }
+      html += '</div></div>';
+    }
+    html += '</div>';
+    el.innerHTML = html;
+  }
+
+  function _pintarSidebar(recursos, proyectoId) {
+    var el = document.getElementById("proy-recursos-sidebar");
+    if (!el) return;
+    var emps = recursos.filter(function (r) { return r.recurso_tipo === 'empleado'; });
+    var maqs = recursos.filter(function (r) { return r.recurso_tipo === 'maquina'; });
+    var html = '';
+    if (emps.length) {
+      html += '<div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:6px;">\uD83D\uDC77 Equipo</div>';
+      emps.forEach(function (r) {
+        html += '<div style="padding:4px 0;font-size:12px;">' + _esc(r.recurso_nombre) + ' <span style="color:#94A3B8;">(' + r.dias_asignados + 'd)</span></div>';
+      });
+    }
+    if (maqs.length) {
+      html += '<div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;margin-top:12px;margin-bottom:6px;">\uD83C\uDFD7\uFE0F Máquinas</div>';
+      maqs.forEach(function (r) {
+        html += '<div style="padding:4px 0;font-size:12px;">' + _esc(r.recurso_nombre) + ' <span style="color:#94A3B8;">(' + r.dias_asignados + 'd)</span></div>';
+      });
+    }
+    if (!recursos.length) {
+      html = '<p style="font-size:12px;color:var(--color-text-secondary);font-style:italic;">Sin recursos asignados</p>';
+    }
+    el.innerHTML = html;
+  }
+
+  // ── Modal asignar recurso (nuevo) ──
+
+  window.proyectoAsignarRecursoModal = function (proyectoId) {
+    var hoy = new Date().toISOString().slice(0, 10);
+    var existing = document.getElementById("modal-asignar-recurso");
     if (existing) existing.remove();
     var modal = document.createElement("div");
     modal.className = "modal-overlay visible";
-    modal.id = "modal-add-recurso";
+    modal.id = "modal-asignar-recurso";
     modal.style.zIndex = "110";
     modal.innerHTML = '<div class="modal-editar" role="dialog" style="max-width:450px;">' +
       '<h2 style="margin:0 0 16px;">Asignar recurso</h2>' +
       '<div style="display:grid;gap:12px;">' +
-        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Tipo</label><select id="recurso-tipo" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);">' +
-          '<option value="maquina">M\u00e1quina</option><option value="operador">Operador</option><option value="ayudante">Ayudante</option><option value="ayudante_tiralineas">Ayudante tiralíneas</option><option value="vehiculo">Veh\u00edculo</option><option value="pickup">Pickup</option><option value="otro">Otro</option></select></div>' +
-        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Descripci\u00f3n</label><input type="text" id="recurso-descripcion" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);box-sizing:border-box;" placeholder="Ej: Orteco HD 1000, Juan P\u00e9rez..."></div>' +
+        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Tipo</label>' +
+          '<select id="ar-tipo" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);">' +
+          '<option value="empleado">Empleado</option><option value="maquina">Máquina</option></select></div>' +
+        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Recurso</label>' +
+          '<select id="ar-recurso" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"><option>Cargando...</option></select></div>' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
-          '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Fecha inicio</label><input type="date" id="recurso-fecha-inicio" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);box-sizing:border-box;"></div>' +
-          '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Fecha fin (opcional)</label><input type="date" id="recurso-fecha-fin" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);box-sizing:border-box;"></div></div>' +
-        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Notas (opcional)</label><textarea id="recurso-notas" rows="2" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);box-sizing:border-box;resize:vertical;"></textarea></div>' +
+          '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Desde</label><input type="date" id="ar-desde" value="' + hoy + '" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);box-sizing:border-box;"></div>' +
+          '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Hasta</label><input type="date" id="ar-hasta" value="' + hoy + '" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);box-sizing:border-box;"></div></div>' +
       '</div>' +
       '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">' +
-        '<button class="secondary" onclick="document.getElementById(\'modal-add-recurso\').remove()">Cancelar</button>' +
-        '<button class="primary" style="width:auto;padding:8px 20px;" onclick="proyectoGuardarRecurso(' + proyectoId + ')">Guardar</button>' +
+        '<button class="secondary" onclick="document.getElementById(\'modal-asignar-recurso\').remove()">Cancelar</button>' +
+        '<button class="primary" style="width:auto;" id="ar-btn-guardar">Asignar</button>' +
       '</div></div>';
     modal.addEventListener("click", function (e) { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
-  };
 
-  window.proyectoGuardarRecurso = function (proyectoId) {
-    var body = {
-      tipo: document.getElementById("recurso-tipo").value,
-      descripcion: document.getElementById("recurso-descripcion").value,
-      fecha_inicio: document.getElementById("recurso-fecha-inicio").value || null,
-      fecha_fin: document.getElementById("recurso-fecha-fin").value || null,
-      notas: document.getElementById("recurso-notas").value || null
-    };
-    fetch("/api/proyectos/" + proyectoId + "/recursos", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
-    }).then(function (r) {
-      if (r.ok) {
-        var m = document.getElementById("modal-add-recurso");
-        if (m) m.remove();
-        mostrarToast("Recurso asignado.", "success");
-        proyectoDashboard(proyectoId);
-      } else {
-        mostrarToast("Error al asignar recurso.", "error");
-      }
-    }).catch(function () { mostrarToast("Error de conexi\u00f3n.", "error"); });
+    function cargarDisponibles() {
+      var tipo = document.getElementById("ar-tipo").value;
+      var fecha = document.getElementById("ar-desde").value || hoy;
+      fetch("/api/recursos/disponibles?fecha=" + fecha + "&tipo=" + tipo)
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var sel = document.getElementById("ar-recurso");
+          sel.innerHTML = "";
+          (data.recursos || []).forEach(function (r) {
+            var opt = document.createElement("option");
+            opt.value = r.id + "|" + r.nombre;
+            opt.textContent = r.nombre + (r.detalle ? " (" + r.detalle + ")" : "");
+            sel.appendChild(opt);
+          });
+          if (!sel.options.length) sel.innerHTML = '<option>No hay disponibles</option>';
+        });
+    }
+    cargarDisponibles();
+    document.getElementById("ar-tipo").addEventListener("change", cargarDisponibles);
+    document.getElementById("ar-desde").addEventListener("change", cargarDisponibles);
+
+    document.getElementById("ar-btn-guardar").addEventListener("click", function () {
+      var tipo = document.getElementById("ar-tipo").value;
+      var val = (document.getElementById("ar-recurso").value || "").split("|");
+      var rid = parseInt(val[0]);
+      var nombre = val[1] || "";
+      var desde = document.getElementById("ar-desde").value;
+      var hasta = document.getElementById("ar-hasta").value;
+      if (!rid || !nombre || !desde) return;
+      fetch("/api/proyectos/" + proyectoId + "/asignaciones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recurso_tipo: tipo, recurso_id: rid, recurso_nombre: nombre, fecha: desde, fecha_hasta: hasta }),
+      }).then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.error) { mostrarToast(data.error, "error"); return; }
+          document.getElementById("modal-asignar-recurso").remove();
+          mostrarToast("Recurso asignado.", "success");
+          _renderRecursosCalendario(proyectoId);
+        })
+        .catch(function () { mostrarToast("Error.", "error"); });
+    });
   };
 
   window.proyectoAddDocumento = function (proyectoId) {

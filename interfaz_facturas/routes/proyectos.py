@@ -454,3 +454,70 @@ def api_guardar_parte_ocr():
 
   parte = proyectos_db.crear_parte(int(proyecto_id), parte_data)
   return jsonify(parte), 201
+
+
+# ── Asignaciones de recursos ──────────────────────────────────────────────
+
+@proyectos_bp.get("/api/proyectos/<int:proyecto_id>/asignaciones")
+def api_asignaciones_proyecto(proyecto_id):
+  desde = request.args.get("desde", "")
+  hasta = request.args.get("hasta", "")
+  rows = proyectos_db.obtener_asignaciones_proyecto(proyecto_id, desde, hasta)
+  return jsonify({"asignaciones": rows})
+
+
+@proyectos_bp.post("/api/proyectos/<int:proyecto_id>/asignaciones")
+def api_asignar_recurso(proyecto_id):
+  data = request.get_json(silent=True) or {}
+  tipo = data.get("recurso_tipo", "")
+  rid = data.get("recurso_id")
+  nombre = data.get("recurso_nombre", "")
+  fecha = data.get("fecha", "")
+  fecha_hasta = data.get("fecha_hasta", "")
+
+  if not tipo or rid is None or not nombre:
+    return jsonify({"error": "recurso_tipo, recurso_id y recurso_nombre requeridos"}), 400
+
+  if fecha_hasta and fecha:
+    n = proyectos_db.asignar_rango(proyecto_id, tipo, int(rid), nombre, fecha, fecha_hasta)
+    return jsonify({"ok": True, "dias_asignados": n})
+  elif fecha:
+    row = proyectos_db.asignar_recurso(proyecto_id, tipo, int(rid), nombre, fecha, data.get("notas", ""))
+    if not row:
+      return jsonify({"error": "Recurso ya asignado en esa fecha"}), 409
+    return jsonify(row), 201
+  return jsonify({"error": "fecha requerida"}), 400
+
+
+@proyectos_bp.delete("/api/proyectos/<int:proyecto_id>/asignaciones")
+def api_desasignar_recurso(proyecto_id):
+  data = request.get_json(silent=True) or {}
+  tipo = data.get("recurso_tipo", "")
+  rid = data.get("recurso_id")
+  fecha = data.get("fecha", "")
+  fecha_hasta = data.get("fecha_hasta", "")
+
+  if not tipo or rid is None or not fecha:
+    return jsonify({"error": "recurso_tipo, recurso_id y fecha requeridos"}), 400
+
+  if fecha_hasta:
+    n = proyectos_db.desasignar_rango(proyecto_id, tipo, int(rid), fecha, fecha_hasta)
+  else:
+    n = 1 if proyectos_db.desasignar(proyecto_id, tipo, int(rid), fecha) else 0
+  return jsonify({"ok": True, "eliminados": n})
+
+
+@proyectos_bp.get("/api/proyectos/<int:proyecto_id>/recursos")
+def api_recursos_proyecto(proyecto_id):
+  rows = proyectos_db.obtener_recursos_proyecto(proyecto_id)
+  return jsonify({"recursos": rows})
+
+
+@proyectos_bp.get("/api/recursos/disponibles")
+def api_recursos_disponibles():
+  fecha = request.args.get("fecha", "")
+  tipo = request.args.get("tipo", "")
+  if not fecha:
+    return jsonify({"error": "fecha requerida"}), 400
+  rows = proyectos_db.recursos_disponibles(fecha, tipo)
+  return jsonify({"recursos": rows})
