@@ -143,7 +143,10 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/finanzas — Facturación y pendientes\n"
             "/pendientes — Partes sin firmar\n"
             "/aprobar — Aprobar usuarios nuevos\n"
-            "/usuarios — Lista de usuarios del bot\n\n"
+            "/usuarios — Lista de usuarios del bot\n"
+            "/vertarjetas — Tarjetas asignadas\n"
+            "/asignartarjeta — Asignar tarjeta a operario\n\n"
+            "📷 Envía una foto de: parte, albarán, factura proveedor o cliente\n\n"
             "💬 También puedes preguntarme lo que quieras en lenguaje natural.\n"
             '_Ej: "¿Cuántas hincas lleva Logroño?"_'
         )
@@ -810,12 +813,26 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     set_estado(update.effective_user.id, "foto_pendiente", {"photo_bytes_len": len(content)})
     context.user_data["_photo_bytes"] = bytes(content)
 
-    kb = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("📋 Parte de trabajo", callback_data="foto_tipo_parte"),
-            InlineKeyboardButton("🧾 Albarán de compra", callback_data="foto_tipo_albaran"),
-        ]
-    ])
+    rol = _user_rol(update.effective_user.id)
+    if rol == "superadmin":
+        kb = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📋 Parte", callback_data="foto_tipo_parte"),
+                InlineKeyboardButton("🧾 Albarán", callback_data="foto_tipo_albaran"),
+            ],
+            [
+                InlineKeyboardButton("📄 Fact. proveedor", callback_data="foto_tipo_factura_prov"),
+                InlineKeyboardButton("📄 Fact. cliente", callback_data="foto_tipo_factura_cli"),
+            ],
+        ])
+    else:
+        kb = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📋 Parte", callback_data="foto_tipo_parte"),
+                InlineKeyboardButton("🧾 Albarán", callback_data="foto_tipo_albaran"),
+                InlineKeyboardButton("📄 Factura", callback_data="foto_tipo_factura_prov"),
+            ],
+        ])
     await update.message.reply_text("¿Qué tipo de documento es?", reply_markup=kb)
 
 
@@ -835,6 +852,12 @@ async def callback_foto_tipo(update: Update, context: ContextTypes.DEFAULT_TYPE)
     elif query.data == "foto_tipo_albaran":
         await query.edit_message_text("⏳ Procesando albarán...")
         await _procesar_foto_albaran(query, context, content, tid)
+    elif query.data == "foto_tipo_factura_prov":
+        await query.edit_message_text("⏳ Procesando factura de proveedor...")
+        await _procesar_foto_factura_prov(query, context, content, tid)
+    elif query.data == "foto_tipo_factura_cli":
+        await query.edit_message_text("⏳ Procesando factura de cliente...")
+        await _procesar_foto_factura_cli(query, context, content, tid)
 
 
 async def _procesar_foto_parte(query, context, content, tid):
@@ -998,6 +1021,415 @@ async def callback_albaran_pago(update: Update, context: ContextTypes.DEFAULT_TY
         f"📄 #{albaran.get('numero_albaran', '?')} — {albaran.get('proveedor', '?')} — {albaran.get('total', 0)} €\n"
         f"💰 Pago: {metodo}"
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  FACTURA PROVEEDOR OCR
+# ═══════════════════════════════════════════════════════════════════════════
+
+_PROMPT_FACTURA_PROV = """Eres un experto en leer facturas de proveedores españoles.
+Extrae los siguientes campos. Devuelve SOLO JSON válido sin markdown:
+{
+    "numero_factura": "nº factura",
+    "fecha_factura": "YYYY-MM-DD",
+    "proveedor": "nombre del proveedor",
+    "cif_proveedor": "CIF/NIF del proveedor",
+    "concepto": "descripción o concepto",
+    "base_imponible": 100.00,
+    "iva_importe": 21.00,
+    "total_a_pagar": 121.00,
+    "confianza": "alta|media|baja"
+}"""
+
+_PROMPT_FACTURA_CLI = """Eres un experto en leer facturas emitidas por Hincado Directo S.L. a sus clientes.
+Estas facturas tienen el logo de Hincado Directo y están dirigidas a clientes (EPCs, constructoras).
+Extrae los siguientes campos. Devuelve SOLO JSON válido sin markdown:
+{
+    "numero_factura": "nº factura (formato XX/NNN)",
+    "fecha_factura": "YYYY-MM-DD",
+    "cliente": "nombre del cliente",
+    "cif_cliente": "CIF/NIF del cliente",
+    "concepto": "descripción o concepto",
+    "base_imponible": 1000.00,
+    "iva_importe": 210.00,
+    "total_a_pagar": 1210.00,
+    "confianza": "alta|media|baja"
+}"""
+
+
+def _fmt_eur(v):
+    try:
+        return f"{float(v):,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
+    except (TypeError, ValueError):
+        return "? €"
+
+
+async def _procesar_foto_factura_prov(query, context, content, tid):
+    b64 = base64.b64encode(content).decode("utf-8")
+    try:
+        resp = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": [
+                {"type": "text", "text": _PROMPT_FACTURA_PROV},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"}},
+            ]}],
+            max_tokens=1000, temperature=0,
+        )
+        from core.llm import limpiar_json_respuesta
+        datos = json.loads(limpiar_json_respuesta(resp.choices[0].message.content.strip()))
+    except Exception:
+        logger.exception("OCR factura prov error")
+        return await context.bot.send_message(chat_id=tid, text="❌ No he podido leer la factura.")
+
+    # Save image
+    nombre = f"factura_prov_tg_{int(datetime.now().timestamp())}_{hashlib.md5(content).hexdigest()[:8]}.jpg"
+    ruta_subidas = DATOS_DIR / "subidas"
+    ruta_subidas.mkdir(parents=True, exist_ok=True)
+    (ruta_subidas / nombre).write_bytes(content)
+    datos["imagen_archivo"] = "subidas/" + nombre
+    datos["_tipo"] = "proveedor"
+
+    txt = (
+        f"📄 *Factura de proveedor detectada:*\n"
+        f"🏢 Proveedor: {datos.get('proveedor', '?')}\n"
+        f"📝 CIF: {datos.get('cif_proveedor', '?')}\n"
+        f"🗓 Fecha: {datos.get('fecha_factura', '?')}\n"
+        f"💰 Base: {_fmt_eur(datos.get('base_imponible'))}\n"
+        f"💰 IVA: {_fmt_eur(datos.get('iva_importe'))}\n"
+        f"💰 Total: {_fmt_eur(datos.get('total_a_pagar'))}\n\n"
+        f"¿Los datos son correctos?"
+    )
+    set_estado(tid, "factura_confirmar", datos)
+    kb = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Correcto", callback_data="facconf_ok"),
+            InlineKeyboardButton("✏️ Corregir", callback_data="facconf_corregir"),
+        ]
+    ])
+    await context.bot.send_message(chat_id=tid, text=txt, reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+
+
+async def _procesar_foto_factura_cli(query, context, content, tid):
+    b64 = base64.b64encode(content).decode("utf-8")
+    try:
+        resp = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": [
+                {"type": "text", "text": _PROMPT_FACTURA_CLI},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"}},
+            ]}],
+            max_tokens=1000, temperature=0,
+        )
+        from core.llm import limpiar_json_respuesta
+        datos = json.loads(limpiar_json_respuesta(resp.choices[0].message.content.strip()))
+    except Exception:
+        logger.exception("OCR factura cli error")
+        return await context.bot.send_message(chat_id=tid, text="❌ No he podido leer la factura.")
+
+    nombre = f"factura_cli_tg_{int(datetime.now().timestamp())}_{hashlib.md5(content).hexdigest()[:8]}.jpg"
+    ruta_subidas = DATOS_DIR / "subidas"
+    ruta_subidas.mkdir(parents=True, exist_ok=True)
+    (ruta_subidas / nombre).write_bytes(content)
+    datos["imagen_archivo"] = "subidas/" + nombre
+    datos["_tipo"] = "cliente"
+
+    txt = (
+        f"📄 *Factura de cliente detectada:*\n"
+        f"🏢 Cliente: {datos.get('cliente', '?')}\n"
+        f"📝 CIF: {datos.get('cif_cliente', '?')}\n"
+        f"🗓 Fecha: {datos.get('fecha_factura', '?')}\n"
+        f"💰 Base: {_fmt_eur(datos.get('base_imponible'))}\n"
+        f"💰 IVA: {_fmt_eur(datos.get('iva_importe'))}\n"
+        f"💰 Total: {_fmt_eur(datos.get('total_a_pagar'))}\n\n"
+        f"¿Los datos son correctos?"
+    )
+    set_estado(tid, "factura_confirmar", datos)
+    kb = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Correcto, guardar", callback_data="facconf_ok"),
+            InlineKeyboardButton("✏️ Corregir", callback_data="facconf_corregir"),
+        ]
+    ])
+    await context.bot.send_message(chat_id=tid, text=txt, reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+
+
+async def callback_factura_confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    tid = query.from_user.id
+    estado = get_estado(tid)
+    if not estado or estado["estado"] != "factura_confirmar":
+        return await query.edit_message_text("⚠️ No hay factura pendiente.")
+    datos = estado["datos"]
+
+    if query.data == "facconf_ok":
+        await _guardar_factura_bot(query, context, datos, tid)
+    elif query.data == "facconf_corregir":
+        # Start correction flow
+        datos["_correccion_paso"] = 0
+        set_estado(tid, "factura_corregir", datos)
+        campo = "proveedor" if datos.get("_tipo") == "proveedor" else "cliente"
+        valor = datos.get(campo, "?")
+        await query.edit_message_text(
+            f"🏢 {campo.title()} actual: *{valor}*\nEscribe el nombre correcto o /ok si es correcto:",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+
+async def handle_correccion_factura(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles text messages during factura correction flow."""
+    tid = update.effective_user.id
+    estado = get_estado(tid)
+    if not estado or estado["estado"] != "factura_corregir":
+        return  # Not in correction flow — let other handlers process
+    datos = estado["datos"]
+    paso = datos.get("_correccion_paso", 0)
+    txt = update.message.text.strip()
+
+    es_prov = datos.get("_tipo") == "proveedor"
+    campos = [
+        ("proveedor" if es_prov else "cliente", "🏢 " + ("Proveedor" if es_prov else "Cliente")),
+        ("cif_proveedor" if es_prov else "cif_cliente", "📝 CIF"),
+        ("fecha_factura", "🗓 Fecha"),
+        ("base_imponible", "💰 Base imponible"),
+        ("iva_importe", "💰 IVA"),
+        ("total_a_pagar", "💰 Total"),
+    ]
+
+    # Apply correction for current step
+    if txt != "/ok":
+        campo_key = campos[paso][0]
+        if paso >= 3:  # Numeric fields
+            try:
+                datos[campo_key] = float(txt.replace(".", "").replace(",", "."))
+            except ValueError:
+                await update.message.reply_text("Escribe un número válido o /ok:")
+                return
+        else:
+            datos[campo_key] = txt
+
+    paso += 1
+    datos["_correccion_paso"] = paso
+
+    if paso < len(campos):
+        # Next field
+        campo_key, label = campos[paso]
+        valor = datos.get(campo_key, "?")
+        if isinstance(valor, float):
+            valor = _fmt_eur(valor)
+        set_estado(tid, "factura_corregir", datos)
+        await update.message.reply_text(
+            f"{label} actual: *{valor}*\nEscribe el valor correcto o /ok:",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+    else:
+        # All fields done — show summary
+        nombre = datos.get("proveedor" if es_prov else "cliente", "?")
+        cif = datos.get("cif_proveedor" if es_prov else "cif_cliente", "?")
+        txt = (
+            f"📄 *Datos corregidos:*\n"
+            f"🏢 {'Proveedor' if es_prov else 'Cliente'}: {nombre}\n"
+            f"📝 CIF: {cif}\n"
+            f"🗓 Fecha: {datos.get('fecha_factura', '?')}\n"
+            f"💰 Base: {_fmt_eur(datos.get('base_imponible'))}\n"
+            f"💰 IVA: {_fmt_eur(datos.get('iva_importe'))}\n"
+            f"💰 Total: {_fmt_eur(datos.get('total_a_pagar'))}\n\n"
+            f"¿Guardar?"
+        )
+        set_estado(tid, "factura_confirmar", datos)
+        kb = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ Guardar", callback_data="facconf_ok"),
+                InlineKeyboardButton("❌ Descartar", callback_data="facconf_descartar"),
+            ]
+        ])
+        await update.message.reply_text(txt, reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+
+
+async def _guardar_factura_bot(query, context, datos, tid):
+    """Save factura and handle payment flow."""
+    from core.bot_db import guardar_factura_proveedor, guardar_factura_cliente
+
+    rol = _user_rol(tid)
+    tipo = datos.get("_tipo", "proveedor")
+
+    if tipo == "cliente":
+        fid = await _run_sync(guardar_factura_cliente, datos)
+        clear_estado(tid)
+        await query.edit_message_text(
+            f"✅ Factura de cliente registrada en el ERP.\n"
+            f"🏢 {datos.get('cliente', '?')} — {_fmt_eur(datos.get('total_a_pagar'))}"
+        )
+        return
+
+    # Factura proveedor
+    if rol == "superadmin":
+        datos["estado_pago"] = "pendiente"
+        fid = await _run_sync(guardar_factura_proveedor, datos)
+        clear_estado(tid)
+        await query.edit_message_text(
+            f"✅ Factura de proveedor registrada (pendiente de pago).\n"
+            f"🏢 {datos.get('proveedor', '?')} — {_fmt_eur(datos.get('total_a_pagar'))}"
+        )
+        return
+
+    # Operario: ask payment method
+    set_estado(tid, "factura_pago", datos)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ No pagada", callback_data="facpago_pendiente")],
+        [
+            InlineKeyboardButton("💳 Mi tarjeta", callback_data="facpago_personal"),
+            InlineKeyboardButton("💳 Tarjeta empresa", callback_data="facpago_empresa"),
+        ],
+    ])
+    await query.edit_message_text(
+        f"💳 ¿Cómo se ha pagado esta factura de {_fmt_eur(datos.get('total_a_pagar'))}?",
+        reply_markup=kb,
+    )
+
+
+async def callback_factura_pago(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    tid = query.from_user.id
+    estado = get_estado(tid)
+    if not estado or estado["estado"] != "factura_pago":
+        return await query.edit_message_text("⚠️ No hay factura pendiente.")
+    datos = estado["datos"]
+
+    from core.bot_db import guardar_factura_proveedor
+
+    if query.data == "facpago_pendiente":
+        datos["estado_pago"] = "pendiente"
+        await _run_sync(guardar_factura_proveedor, datos)
+        clear_estado(tid)
+        await query.edit_message_text(
+            f"✅ Factura registrada como pendiente de pago ({_fmt_eur(datos.get('total_a_pagar'))})"
+        )
+
+    elif query.data == "facpago_personal":
+        user = get_usuario(tid)
+        datos["estado_pago"] = "pagada"
+        datos["comentarios"] = f"Pagada con tarjeta personal de {user['nombre'] if user else '?'}"
+        await _run_sync(guardar_factura_proveedor, datos)
+        clear_estado(tid)
+        await query.edit_message_text(
+            f"✅ Factura registrada. Pagada con tu tarjeta — se tramitará el reembolso ({_fmt_eur(datos.get('total_a_pagar'))})"
+        )
+
+    elif query.data == "facpago_empresa":
+        user = get_usuario(tid)
+        if user and user.get("tarjeta_id"):
+            datos["estado_pago"] = "pagada"
+            datos["tarjeta_id"] = user["tarjeta_id"]
+            datos["comentarios"] = f"Pagada con tarjeta empresa ({user.get('tarjeta_alias', '')})"
+            await _run_sync(guardar_factura_proveedor, datos)
+            clear_estado(tid)
+            await query.edit_message_text(
+                f"✅ Factura registrada. Pagada con tarjeta empresa de {user['nombre']} ({_fmt_eur(datos.get('total_a_pagar'))})"
+            )
+        else:
+            # No tarjeta assigned — ask whose card
+            set_estado(tid, "factura_pago_nombre", datos)
+            await query.edit_message_text("¿Con la tarjeta de quién la has pagado? Escribe el nombre:")
+
+
+async def handle_factura_pago_nombre(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle text response for 'whose card' question."""
+    tid = update.effective_user.id
+    estado = get_estado(tid)
+    if not estado or estado["estado"] != "factura_pago_nombre":
+        return
+    datos = estado["datos"]
+    nombre_tarjeta = update.message.text.strip()
+
+    from core.bot_db import guardar_factura_proveedor
+    datos["estado_pago"] = "pagada"
+    datos["comentarios"] = f"Pagada con tarjeta empresa de {nombre_tarjeta}"
+    await _run_sync(guardar_factura_proveedor, datos)
+    clear_estado(tid)
+    await update.message.reply_text(
+        f"✅ Factura registrada. Pagada con tarjeta de {nombre_tarjeta} ({_fmt_eur(datos.get('total_a_pagar'))})"
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  TARJETA MANAGEMENT COMMANDS
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def cmd_vertarjetas(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if _user_rol(update.effective_user.id) != "superadmin":
+        return await update.message.reply_text("🚫 Solo para administradores.")
+    users = listar_usuarios()
+    lines = ["💳 *Tarjetas asignadas:*\n"]
+    for u in users:
+        if u["rol"] in ("operario", "superadmin"):
+            tarjeta = u.get("tarjeta_alias") or "Sin tarjeta"
+            if u.get("tarjeta_id"):
+                lines.append(f"👷 {u['nombre']} → {tarjeta}")
+            else:
+                lines.append(f"👷 {u['nombre']} → ❌ Sin tarjeta")
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+
+
+async def cmd_asignartarjeta(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if _user_rol(update.effective_user.id) != "superadmin":
+        return await update.message.reply_text("🚫 Solo para administradores.")
+    users = [u for u in listar_usuarios() if u["rol"] in ("operario", "superadmin")]
+    if not users:
+        return await update.message.reply_text("No hay usuarios.")
+    buttons = []
+    for u in users:
+        label = f"{u['nombre']} — {u.get('tarjeta_alias') or 'sin tarjeta'}"
+        buttons.append([InlineKeyboardButton(label, callback_data=f"asigtar_{u['telegram_id']}")])
+    await update.message.reply_text(
+        "👷 Selecciona un usuario para asignar/quitar tarjeta:",
+        reply_markup=InlineKeyboardMarkup(buttons),
+    )
+
+
+async def callback_asignar_tarjeta(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if data.startswith("asigtar_"):
+        user_tid = int(data.split("_")[1])
+        # Show available tarjetas
+        conn = get_conn()
+        try:
+            rows = conn.execute("SELECT id, alias, banco, persona FROM tarjetas WHERE activa = 1").fetchall()
+        finally:
+            conn.close()
+        buttons = []
+        for r in rows:
+            label = f"{r['alias'] or r['banco']} — {r['persona'] or '?'}"
+            buttons.append([InlineKeyboardButton(label, callback_data=f"settar_{user_tid}_{r['id']}_{label}")])
+        buttons.append([InlineKeyboardButton("❌ Quitar tarjeta", callback_data=f"settar_{user_tid}_0_none")])
+        await query.edit_message_text(
+            "💳 Selecciona la tarjeta a asignar:",
+            reply_markup=InlineKeyboardMarkup(buttons),
+        )
+
+    elif data.startswith("settar_"):
+        parts = data.split("_", 3)
+        user_tid = int(parts[1])
+        tarjeta_id = int(parts[2])
+        label = parts[3] if len(parts) > 3 else ""
+        from core.bot_db import asignar_tarjeta
+        if tarjeta_id == 0:
+            asignar_tarjeta(user_tid, None, "")
+            await query.edit_message_text("✅ Tarjeta quitada.")
+        else:
+            asignar_tarjeta(user_tid, tarjeta_id, label)
+            await query.edit_message_text(f"✅ Tarjeta *{label}* asignada.", parse_mode=ParseMode.MARKDOWN)
+
+
+async def callback_factura_descartar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    clear_estado(query.from_user.id)
+    await query.edit_message_text("❌ Factura descartada.")
 
 
 async def callback_firma(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1398,17 +1830,34 @@ def main():
     app.add_handler(CommandHandler("usuarios", cmd_usuarios))
     app.add_handler(CommandHandler("mispartes", cmd_mispartes))
 
+    # Commands: tarjeta management
+    app.add_handler(CommandHandler("vertarjetas", cmd_vertarjetas))
+    app.add_handler(CommandHandler("asignartarjeta", cmd_asignartarjeta))
+
     # Callbacks
     app.add_handler(CallbackQueryHandler(callback_aprobar, pattern=r"^aprobar_"))
     app.add_handler(CallbackQueryHandler(callback_foto_tipo, pattern=r"^foto_tipo_"))
     app.add_handler(CallbackQueryHandler(callback_firma, pattern=r"^firma_"))
     app.add_handler(CallbackQueryHandler(callback_albaran_pago, pattern=r"^albpago_"))
+    app.add_handler(CallbackQueryHandler(callback_factura_confirmar, pattern=r"^facconf_"))
+    app.add_handler(CallbackQueryHandler(callback_factura_pago, pattern=r"^facpago_"))
+    app.add_handler(CallbackQueryHandler(callback_asignar_tarjeta, pattern=r"^asigtar_|^settar_"))
 
-    # Photo handler (operario OCR)
+    # Photo handler
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
-    # Text fallback (superadmin GPT-4)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_superadmin))
+    # Text handlers for correction flows (BEFORE superadmin fallback)
+    async def _text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Route text to correction flow if active, else to superadmin GPT-4."""
+        tid = update.effective_user.id
+        estado = get_estado(tid)
+        if estado and estado["estado"] == "factura_corregir":
+            return await handle_correccion_factura(update, context)
+        if estado and estado["estado"] == "factura_pago_nombre":
+            return await handle_factura_pago_nombre(update, context)
+        return await handle_text_superadmin(update, context)
+
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _text_router))
 
     # Scheduled jobs
     jq = app.job_queue
