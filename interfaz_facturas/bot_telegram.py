@@ -803,12 +803,43 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not openai_client:
         return await update.message.reply_text("⚠️ OpenAI no configurado.")
 
-    await update.message.reply_text("⏳ Procesando parte...")
-
-    photo = update.message.photo[-1]  # Highest resolution
+    # Store photo for later processing and ask what it is
+    photo = update.message.photo[-1]
     file = await context.bot.get_file(photo.file_id)
     content = await file.download_as_bytearray()
-    b64 = base64.b64encode(bytes(content)).decode("utf-8")
+    set_estado(update.effective_user.id, "foto_pendiente", {"photo_bytes_len": len(content)})
+    context.user_data["_photo_bytes"] = bytes(content)
+
+    kb = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📋 Parte de trabajo", callback_data="foto_tipo_parte"),
+            InlineKeyboardButton("🧾 Albarán de compra", callback_data="foto_tipo_albaran"),
+        ]
+    ])
+    await update.message.reply_text("¿Qué tipo de documento es?", reply_markup=kb)
+
+
+async def callback_foto_tipo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    tid = query.from_user.id
+    content = context.user_data.get("_photo_bytes")
+    if not content:
+        return await query.edit_message_text("⚠️ No se encontró la foto. Envíala de nuevo.")
+
+    clear_estado(tid)
+
+    if query.data == "foto_tipo_parte":
+        await query.edit_message_text("⏳ Procesando parte...")
+        await _procesar_foto_parte(query, context, content, tid)
+    elif query.data == "foto_tipo_albaran":
+        await query.edit_message_text("⏳ Procesando albarán...")
+        await _procesar_foto_albaran(query, context, content, tid)
+
+
+async def _procesar_foto_parte(query, context, content, tid):
+    """Process photo as parte de trabajo."""
+    b64 = base64.b64encode(content).decode("utf-8")
 
     try:
         response = openai_client.chat.completions.create(
@@ -828,26 +859,22 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         texto = limpiar_json_respuesta(texto)
         datos = json.loads(texto)
     except Exception as e:
-        logger.exception("OCR error")
-        return await update.message.reply_text(
-            "❌ No he podido leer el parte. ¿Puedes hacer otra foto con mejor luz?\n"
-            "O usa /manual para introducir los datos a mano."
+        logger.exception("OCR parte error")
+        return await context.bot.send_message(
+            chat_id=tid,
+            text="❌ No he podido leer el parte. ¿Puedes hacer otra foto con mejor luz?\nO usa /manual para introducir los datos a mano.",
         )
 
-    # Save image
-    nombre_archivo = f"parte_tg_{int(datetime.now().timestamp())}_{hashlib.md5(bytes(content)).hexdigest()[:8]}.jpg"
+    nombre_archivo = f"parte_tg_{int(datetime.now().timestamp())}_{hashlib.md5(content).hexdigest()[:8]}.jpg"
     ruta_subidas = DATOS_DIR / "subidas"
     ruta_subidas.mkdir(parents=True, exist_ok=True)
-    (ruta_subidas / nombre_archivo).write_bytes(bytes(content))
+    (ruta_subidas / nombre_archivo).write_bytes(content)
 
-    # Format extracted data
     lineas_txt = ""
     for l in datos.get("lineas", []):
         lineas_txt += f"👷 {l.get('operador', '?')} con {l.get('maquina', '?')}: {l.get('horas', '?')}h\n"
 
-    conf = datos.get("confianza", "?")
-    conf_emoji = {"alta": "🟢", "media": "🟡", "baja": "🔴"}.get(conf, "⚪")
-
+    conf_emoji = {"alta": "🟢", "media": "🟡", "baja": "🔴"}.get(datos.get("confianza", "?"), "⚪")
     texto_resumen = (
         f"📋 *Parte detectado:* {conf_emoji}\n"
         f"🗓 Fecha: {datos.get('fecha', '?')}\n"
@@ -858,9 +885,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"¿Está firmado por el jefe de obra?"
     )
 
-    # Store datos in context for callback
     datos["_imagen_archivo"] = "subidas/" + nombre_archivo
-    set_estado(update.effective_user.id, "esperando_firma", datos)
+    set_estado(tid, "esperando_firma", datos)
 
     kb = InlineKeyboardMarkup([
         [
@@ -868,7 +894,110 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("📝 No, es borrador", callback_data="firma_borrador"),
         ]
     ])
-    await update.message.reply_text(texto_resumen, reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+    await context.bot.send_message(chat_id=tid, text=texto_resumen, reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+
+
+async def _procesar_foto_albaran(query, context, content, tid):
+    """Process photo as albarán de compra."""
+    b64 = base64.b64encode(content).decode("utf-8")
+
+    _PROMPT_ALBARAN = """Eres un experto en leer albaranes de compra de materiales de construcción.
+Extrae los campos del albarán fotografiado. Devuelve SOLO JSON válido:
+{
+    "numero_albaran": "nº del albarán o ticket",
+    "fecha": "YYYY-MM-DD",
+    "proveedor": "nombre del proveedor/tienda",
+    "base_imponible": 100.00,
+    "iva": 21.00,
+    "total": 121.00,
+    "confianza": "alta|media|baja"
+}"""
+
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": _PROMPT_ALBARAN},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"}},
+                ],
+            }],
+            max_tokens=1000,
+            temperature=0,
+        )
+        texto = response.choices[0].message.content.strip()
+        from core.llm import limpiar_json_respuesta
+        texto = limpiar_json_respuesta(texto)
+        datos = json.loads(texto)
+    except Exception as e:
+        logger.exception("OCR albarán error")
+        return await context.bot.send_message(
+            chat_id=tid,
+            text="❌ No he podido leer el albarán. ¿Puedes hacer otra foto con mejor luz?",
+        )
+
+    nombre_archivo = f"albaran_tg_{int(datetime.now().timestamp())}_{hashlib.md5(content).hexdigest()[:8]}.jpg"
+    ruta_subidas = DATOS_DIR / "subidas"
+    ruta_subidas.mkdir(parents=True, exist_ok=True)
+    (ruta_subidas / nombre_archivo).write_bytes(content)
+
+    texto_resumen = (
+        f"🧾 *Albarán detectado:*\n"
+        f"📄 Nº: {datos.get('numero_albaran', '?')}\n"
+        f"🗓 Fecha: {datos.get('fecha', '?')}\n"
+        f"🏪 Proveedor: {datos.get('proveedor', '?')}\n"
+        f"💰 Total: {datos.get('total', '?')} €\n\n"
+        f"¿Cómo se ha pagado?"
+    )
+
+    datos["_imagen_archivo"] = "subidas/" + nombre_archivo
+    set_estado(tid, "albaran_pago", datos)
+
+    kb = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("💳 Tarjeta", callback_data="albpago_tarjeta"),
+            InlineKeyboardButton("🏦 Transfer.", callback_data="albpago_transferencia"),
+        ],
+        [
+            InlineKeyboardButton("💵 Efectivo", callback_data="albpago_efectivo"),
+            InlineKeyboardButton("⏳ Pendiente", callback_data="albpago_pendiente"),
+        ],
+    ])
+    await context.bot.send_message(chat_id=tid, text=texto_resumen, reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+
+
+async def callback_albaran_pago(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    tid = query.from_user.id
+
+    estado = get_estado(tid)
+    if not estado or estado["estado"] != "albaran_pago":
+        return await query.edit_message_text("⚠️ No hay albarán pendiente.")
+
+    datos = estado["datos"]
+    metodo = query.data.replace("albpago_", "")
+
+    from core.albaranes_db import crear_albaran
+    albaran = crear_albaran({
+        "numero_albaran": datos.get("numero_albaran", ""),
+        "fecha": datos.get("fecha", ""),
+        "proveedor": datos.get("proveedor", ""),
+        "importe": datos.get("base_imponible", 0),
+        "iva": datos.get("iva", 0),
+        "total": datos.get("total", 0),
+        "metodo_pago": metodo,
+        "imagen_archivo": datos.get("_imagen_archivo", ""),
+        "registrado_por": f"telegram:{tid}",
+    })
+
+    clear_estado(tid)
+    await query.edit_message_text(
+        f"✅ Albarán registrado en el ERP.\n"
+        f"📄 #{albaran.get('numero_albaran', '?')} — {albaran.get('proveedor', '?')} — {albaran.get('total', 0)} €\n"
+        f"💰 Pago: {metodo}"
+    )
 
 
 async def callback_firma(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1271,7 +1400,9 @@ def main():
 
     # Callbacks
     app.add_handler(CallbackQueryHandler(callback_aprobar, pattern=r"^aprobar_"))
+    app.add_handler(CallbackQueryHandler(callback_foto_tipo, pattern=r"^foto_tipo_"))
     app.add_handler(CallbackQueryHandler(callback_firma, pattern=r"^firma_"))
+    app.add_handler(CallbackQueryHandler(callback_albaran_pago, pattern=r"^albpago_"))
 
     # Photo handler (operario OCR)
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))

@@ -18,8 +18,8 @@ const MODULOS = {
   finanzas: {
     linkId: "nav-finanzas-modulo",
     submenuId: "submenu-finanzas",
-    paneles: { inicio: "panel-finanzas-inicio", bancos: "panel-bancos-inicio", control_calidad: "panel-control-calidad-inicio", tesoreria: "panel-tesoreria-inicio", eeff: "panel-eeff-inicio" },
-    subNavLinks: { proveedores: "nav-finanzas-proveedores", clientes: "nav-finanzas-clientes", control_calidad: "nav-finanzas-control-calidad", bancos: "nav-finanzas-bancos", tesoreria: "nav-finanzas-tesoreria", eeff: "nav-finanzas-eeff" },
+    paneles: { inicio: "panel-finanzas-inicio", bancos: "panel-bancos-inicio", control_calidad: "panel-control-calidad-inicio", tesoreria: "panel-tesoreria-inicio", eeff: "panel-eeff-inicio", albaranes: "panel-albaranes-inicio" },
+    subNavLinks: { proveedores: "nav-finanzas-proveedores", clientes: "nav-finanzas-clientes", albaranes: "nav-finanzas-albaranes", control_calidad: "nav-finanzas-control-calidad", bancos: "nav-finanzas-bancos", tesoreria: "nav-finanzas-tesoreria", eeff: "nav-finanzas-eeff" },
     defecto: "inicio",
   },
   proveedores: {
@@ -526,6 +526,9 @@ function activarFinanzasChild(child) {
   } else if (child === "eeff") {
     document.getElementById("panel-eeff-inicio").classList.add("visible");
     if (typeof cargarEEFF === "function") cargarEEFF();
+  } else if (child === "albaranes") {
+    document.getElementById("panel-albaranes-inicio").classList.add("visible");
+    if (typeof cargarAlbaranes === "function") cargarAlbaranes();
   }
   actualizarHash();
 }

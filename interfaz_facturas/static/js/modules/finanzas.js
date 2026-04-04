@@ -3969,6 +3969,11 @@ function abrirModalEdicion(f) {
     if (concPendiente) concPendiente.textContent = "Pendiente de pago: " + (typeof formatearNumeroES === "function" ? formatearNumeroES(totalFacturaNum) : totalFacturaStr) + " € (sin datos de conciliación)";
   }
 
+  // Load albaranes for this invoice
+  if (typeof window._cargarAlbaranesFactura === "function" && f.id) {
+    window._cargarAlbaranesFactura((f.proveedor || "").toString().trim(), f.id);
+  }
+
   var overlay = document.getElementById("modal-editar-overlay");
   overlay.classList.add("visible");
   overlay.setAttribute("aria-hidden", "false");

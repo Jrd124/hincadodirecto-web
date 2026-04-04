@@ -46,6 +46,7 @@
               <a href="#" class="sidebar-leaf" id="nav-clientes-listado">Únicos</a>
               <a href="#" class="sidebar-leaf" id="nav-clientes-facturas">Facturas</a>
             </div>
+            <a href="#" class="sidebar-child" id="nav-finanzas-albaranes">Albaranes</a>
             <a href="#" class="sidebar-child" id="nav-finanzas-control-calidad">Control de calidad</a>
             <a href="#" class="sidebar-child" id="nav-finanzas-bancos">Bancos</a>
             <a href="#" class="sidebar-child" id="nav-finanzas-tesoreria">Tesoreria</a>
@@ -2484,6 +2485,115 @@
         </div>
       </div>
 
+      <!-- ═══ ALBARANES ═══ -->
+      <div id="panel-albaranes-inicio" class="panel-albaranes">
+        <div class="breadcrumb-visual">Finanzas &rsaquo; Albaranes</div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+          <h1 style="margin:0;font-size:20px;font-weight:600;">Albaranes de compra</h1>
+          <span style="margin-right:auto;font-size:13px;color:var(--color-text-secondary);">Registro de albaranes y vinculación a facturas</span>
+          <button id="btn-nuevo-albaran" class="primary" style="padding:6px 14px;font-size:13px;">+ Nuevo albarán</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
+          <input type="text" id="alb-filtro-proveedor" placeholder="Proveedor..." style="font-size:12px;padding:4px 8px;width:160px;">
+          <select id="alb-filtro-estado" class="form-select" style="font-size:12px;padding:4px 24px 4px 8px;">
+            <option value="">Todos los estados</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="facturado">Facturado</option>
+            <option value="anulado">Anulado</option>
+          </select>
+          <input type="date" id="alb-filtro-desde" style="font-size:12px;padding:4px 8px;">
+          <input type="date" id="alb-filtro-hasta" style="font-size:12px;padding:4px 8px;">
+          <button id="alb-btn-buscar" class="secondary" style="padding:4px 12px;font-size:12px;">Buscar</button>
+        </div>
+        <div class="tabla-wrapper">
+          <table class="tabla-generica" id="tabla-albaranes">
+            <thead>
+              <tr>
+                <th class="col-fecha">Fecha</th>
+                <th>N&ordm; Albarán</th>
+                <th>Proveedor</th>
+                <th class="numero">Total</th>
+                <th>Pagado con</th>
+                <th>Proyecto</th>
+                <th>Estado</th>
+                <th class="col-acciones">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-albaranes"></tbody>
+          </table>
+        </div>
+        <p id="alb-sin-datos" class="sin-datos" style="display:none;">No hay albaranes.</p>
+      </div>
+
+      <!-- Modal: Nuevo/Editar albarán -->
+      <div id="modal-albaran-overlay" class="modal-overlay" aria-hidden="true">
+        <div class="modal-editar modal-lg" role="dialog">
+          <h2 id="modal-albaran-titulo">Nuevo albarán</h2>
+          <form id="form-albaran">
+            <!-- Identificación -->
+            <div style="border-left:3px solid #3B82F6;padding-left:12px;margin-bottom:16px;">
+              <div style="font-size:13px;font-weight:600;color:#3B82F6;margin-bottom:8px;">Identificación</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <div><label style="font-size:12px;">N&ordm; Albarán</label><input id="alb-numero" class="form-input" style="font-size:13px;"></div>
+                <div><label style="font-size:12px;">Fecha</label><input id="alb-fecha" type="date" class="form-input" style="font-size:13px;"></div>
+              </div>
+              <div style="margin-top:8px;"><label style="font-size:12px;">Proveedor</label><input id="alb-proveedor" class="form-input" style="font-size:13px;" placeholder="Nombre del proveedor"></div>
+            </div>
+            <!-- Importes y pago -->
+            <div style="border-left:3px solid #16A34A;padding-left:12px;margin-bottom:16px;">
+              <div style="font-size:13px;font-weight:600;color:#16A34A;margin-bottom:8px;">Importes y pago</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                <div><label style="font-size:12px;">Base imponible</label><input id="alb-importe" type="number" step="0.01" class="form-input" style="font-size:13px;"></div>
+                <div><label style="font-size:12px;">IVA</label><input id="alb-iva" type="number" step="0.01" class="form-input" style="font-size:13px;"></div>
+                <div><label style="font-size:12px;">Total</label><input id="alb-total" type="number" step="0.01" class="form-input" style="font-size:13px;"></div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+                <div>
+                  <label style="font-size:12px;">Método de pago</label>
+                  <select id="alb-metodo-pago" class="form-select" style="font-size:13px;">
+                    <option value="tarjeta">Tarjeta</option>
+                    <option value="transferencia">Transferencia</option>
+                    <option value="efectivo">Efectivo</option>
+                    <option value="pendiente">Pendiente</option>
+                  </select>
+                </div>
+                <div><label style="font-size:12px;">Persona (tarjeta)</label><input id="alb-tarjeta-persona" class="form-input" style="font-size:13px;" placeholder="Nombre del titular"></div>
+              </div>
+              <div style="margin-top:8px;"><label style="font-size:12px;">Proyecto</label>
+                <select id="alb-proyecto" class="form-select" style="font-size:13px;">
+                  <option value="">Sin proyecto</option>
+                </select>
+              </div>
+            </div>
+            <!-- Notas -->
+            <div style="border-left:3px solid #94A3B8;padding-left:12px;margin-bottom:16px;">
+              <div style="font-size:13px;font-weight:600;color:#94A3B8;margin-bottom:8px;">Notas</div>
+              <textarea id="alb-notas" class="form-input" style="font-size:13px;min-height:60px;" placeholder="Notas adicionales..."></textarea>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;">
+              <button type="button" class="secondary" id="btn-cancelar-albaran">Cancelar</button>
+              <button type="submit" class="primary">Guardar</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Modal: Albarán desde foto -->
+      <div id="modal-albaran-foto-overlay" class="modal-overlay" aria-hidden="true">
+        <div class="modal-editar" role="dialog">
+          <h2>Albarán desde foto</h2>
+          <div id="alb-foto-dropzone" class="eeff-dropzone" style="margin-bottom:16px;">
+            <p style="font-size:14px;font-weight:600;">Arrastra la foto del albarán aquí</p>
+            <p>o haz click para seleccionar</p>
+            <input type="file" id="alb-foto-input" accept="image/*" style="display:none;">
+          </div>
+          <div id="alb-foto-resultado" style="display:none;"></div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+            <button type="button" class="secondary" onclick="document.getElementById('modal-albaran-foto-overlay').classList.remove('visible')">Cerrar</button>
+          </div>
+        </div>
+      </div>
+
       <div id="panel-control-calidad-inicio" class="panel-control-calidad">
         <div class="breadcrumb-visual">Finanzas &rsaquo; Control de calidad</div>
         <h1 class="cc-titulo">Control de calidad</h1>
@@ -2686,6 +2796,18 @@
                 <label for="ed-comentarios" class="form-label" style="font-size:12px;">Comentarios revisión</label>
                 <textarea id="ed-comentarios" name="comentarios_revision" class="form-input" style="font-size:13px;min-height:60px;"></textarea>
               </div>
+            </div>
+          </div>
+
+          <!-- Albaranes vinculados -->
+          <div style="border:1px solid var(--color-border);border-radius:var(--radius-md);margin-bottom:12px;overflow:hidden;" id="ed-albaranes-section">
+            <div style="padding:10px 16px;background:#F3E8FF;border-bottom:1px solid var(--color-border);">
+              <span style="font-size:14px;font-weight:600;color:#7C3AED;">Albaranes vinculados</span>
+            </div>
+            <div style="padding:12px 16px;" id="ed-albaranes-body">
+              <p id="ed-albaranes-banner" style="display:none;background:#FEF3C7;border:1px solid #F59E0B;border-radius:6px;padding:8px 12px;font-size:12px;color:#92400E;margin-bottom:8px;"></p>
+              <div id="ed-albaranes-lista"></div>
+              <button type="button" id="btn-vincular-albaranes" class="secondary" style="font-size:12px;padding:4px 12px;margin-top:8px;">Vincular albaranes</button>
             </div>
           </div>
 
@@ -3295,6 +3417,7 @@
     <script src="/static/js/modules/rrhh.js?v=28"></script>
     <script src="/static/js/modules/impuestos.js?v=1"></script>
     <script src="/static/js/modules/eeff.js?v=1"></script>
+    <script src="/static/js/modules/albaranes.js?v=1"></script>
     <script src="/static/js/app.js?v=30"></script>
   </body>
 </html>
