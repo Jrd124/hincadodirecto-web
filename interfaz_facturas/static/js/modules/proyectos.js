@@ -227,6 +227,12 @@
         // ═══ Sección: Partes de trabajo ═══
         var partesHtml = "";
         if (p.partes && p.partes.length) {
+          var _firmaPill = function(ef) {
+            if (ef === "firmado") return '<span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;background:#DCFCE7;color:#166534;">Firmado</span>';
+            if (ef === "firmado_con_cambios") return '<span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;background:#FEF3C7;color:#92400E;">Con cambios</span>';
+            if (ef === "borrador") return '<span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;background:#FEE2E2;color:#991B1B;">Borrador</span>';
+            return '<span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;background:#F3F4F6;color:#6B7280;">\u2014</span>';
+          };
           var filas = p.partes.slice(0, 20).map(function (pt) {
             var _hincadoras = pt.num_operadores || 0;
             try { var _ln = JSON.parse(pt.notas || "[]"); if (Array.isArray(_ln)) _hincadoras = _ln.filter(function(l){return l.rol !== "ayudante";}).length || _hincadoras; } catch(e){}
@@ -236,6 +242,7 @@
               '<td style="padding:8px 6px;text-align:right;">' + (pt.horas_admin || 0) + '</td>' +
               '<td style="padding:8px 6px;text-align:right;">' + _hincadoras + '</td>' +
               '<td style="padding:8px 6px;font-size:12px;color:' + (pt.incidencias ? 'var(--color-danger)' : 'var(--color-text-secondary)') + ';">' + (pt.incidencias ? _esc(pt.incidencias).substring(0, 50) : "\u2014") + '</td>' +
+              '<td style="padding:8px 6px;text-align:center;">' + _firmaPill(pt.estado_firma) + '</td>' +
               '<td style="padding:8px 6px;text-align:center;"><div style="display:flex;gap:2px;justify-content:center;">' +
                 '<button onclick="parteVer(' + pt.id + ',' + p.id + ')" title="Ver parte" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--color-text-secondary);" onmouseover="this.style.color=\'var(--color-primary)\'" onmouseout="this.style.color=\'var(--color-text-secondary)\'">' +
                   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>' +
@@ -252,6 +259,7 @@
             '<th style="text-align:right;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">H. Admin</th>' +
             '<th style="text-align:right;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Hincadoras</th>' +
             '<th style="text-align:left;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Incidencias</th>' +
+            '<th style="text-align:center;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Firma</th>' +
             '<th style="text-align:center;padding:8px 6px;font-weight:600;color:var(--color-text-secondary);font-size:11px;text-transform:uppercase;">Acciones</th>' +
             '</tr></thead><tbody>' + filas + '</tbody></table></div>';
         } else {
@@ -1213,7 +1221,7 @@
           var imgUrl = "/api/archivo?ruta=" + encodeURIComponent(pt.imagen_archivo);
           imgHtml = '<div style="text-align:center;margin-bottom:16px;">' +
             '<img src="' + imgUrl + '" style="max-width:100%;max-height:300px;border-radius:8px;border:1px solid var(--color-border);" onerror="this.style.display=\'none\'">' +
-            '<div style="margin-top:8px;"><button onclick="window.open(\'' + imgUrl + '\',\'_blank\')" style="padding:6px 14px;font-size:13px;font-weight:500;color:var(--color-primary);background:transparent;border:1px solid var(--color-primary);border-radius:6px;cursor:pointer;">Ver parte original</button></div>' +
+            '<div style="margin-top:8px;"><button onclick="window.open(\'' + imgUrl + '\',\'_blank\')" style="padding:6px 14px;font-size:13px;font-weight:500;color:var(--color-primary);background:transparent;border:1px solid var(--color-primary);border-radius:6px;cursor:pointer;">Ver parte original</button>' + imgFirmadoBtn + '</div>' +
           '</div>';
         } else {
           imgHtml = '<div style="text-align:center;margin-bottom:16px;padding:12px;color:var(--color-text-secondary);font-size:13px;font-style:italic;">Parte cargado manualmente \u2014 sin imagen adjunta</div>';
@@ -1221,12 +1229,32 @@
 
         function _vFmt(v) { return v != null && v !== "" ? v : "\u2014"; }
 
+        // Firma badge
+        var _ef = pt.estado_firma || "";
+        var firmaBadge = "";
+        if (_ef === "firmado") firmaBadge = '<div style="padding:8px 16px;background:#DCFCE7;border-radius:8px;margin-bottom:12px;font-weight:600;color:#166534;font-size:13px;">✅ Parte firmado</div>';
+        else if (_ef === "firmado_con_cambios") {
+          firmaBadge = '<div style="padding:8px 16px;background:#FEF3C7;border-radius:8px;margin-bottom:12px;font-weight:600;color:#92400E;font-size:13px;">⚠️ Firmado con diferencias</div>';
+          if (pt.diferencias_firma) {
+            try { var diffs = JSON.parse(pt.diferencias_firma); if (Array.isArray(diffs)) firmaBadge += '<div style="padding:6px 16px;background:#FEF3C7;border-radius:0 0 8px 8px;margin-top:-12px;margin-bottom:12px;font-size:12px;color:#92400E;">' + diffs.join("<br>") + '</div>'; } catch(e){}
+          }
+        }
+        else if (_ef === "borrador") firmaBadge = '<div style="padding:8px 16px;background:#FEE2E2;border-radius:8px;margin-bottom:12px;font-weight:600;color:#991B1B;font-size:13px;">📝 Pendiente de firma</div>';
+
+        // Imagen firmado button
+        var imgFirmadoBtn = "";
+        if (pt.imagen_firmado) {
+          var imgFUrl = "/api/archivo?ruta=" + encodeURIComponent(pt.imagen_firmado);
+          imgFirmadoBtn = ' <button onclick="window.open(\'' + imgFUrl + '\',\'_blank\')" style="padding:6px 14px;font-size:13px;font-weight:500;color:#16A34A;background:transparent;border:1px solid #16A34A;border-radius:6px;cursor:pointer;">Ver parte firmado</button>';
+        }
+
         modal.innerHTML =
           '<div class="modal-content" style="max-width:600px;max-height:90vh;overflow-y:auto;">' +
             '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
               '<h2 style="margin:0;">Parte de trabajo #' + pt.id + '</h2>' +
               '<span style="font-size:13px;color:var(--color-text-secondary);">' + _esc((pt.fecha || "").substring(0, 10)) + '</span>' +
             '</div>' +
+            firmaBadge +
             imgHtml +
             '<div style="border-left:3px solid #16A34A;padding:12px 16px;margin-bottom:12px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
               '<div style="font-size:14px;font-weight:600;color:#16A34A;margin-bottom:12px;">Produccion</div>' +
@@ -1328,6 +1356,15 @@
               '</div>' +
             '</div>' +
 
+            '<div style="border-left:3px solid #7C3AED;padding:12px 16px;margin-bottom:16px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">' +
+              '<div style="font-size:14px;font-weight:600;color:#7C3AED;margin-bottom:8px;">Estado de firma</div>' +
+              '<select id="pe-estado-firma" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);">' +
+                '<option value="borrador"' + (pt.estado_firma === "borrador" ? " selected" : "") + '>Borrador</option>' +
+                '<option value="firmado"' + (pt.estado_firma === "firmado" ? " selected" : "") + '>Firmado</option>' +
+                '<option value="firmado_con_cambios"' + (pt.estado_firma === "firmado_con_cambios" ? " selected" : "") + '>Firmado con cambios</option>' +
+              '</select>' +
+            '</div>' +
+
             '<div style="display:flex;gap:8px;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--color-border);">' +
               '<button class="secondary" style="padding:8px 20px;" onclick="document.getElementById(\'modal-parte-editar\').remove()">Cancelar</button>' +
               '<button class="primary" style="width:auto;padding:8px 20px;" onclick="_parteGuardarEdicion(' + parteId + ',' + proyectoId + ')">Guardar cambios</button>' +
@@ -1348,6 +1385,7 @@
       horas_admin: parseFloat((document.getElementById("pe-horas-admin") || {}).value) || 0,
       combustible_litros: parseFloat((document.getElementById("pe-gasoil") || {}).value) || null,
       incidencias: (document.getElementById("pe-incidencias") || {}).value || "",
+      estado_firma: (document.getElementById("pe-estado-firma") || {}).value || "borrador",
       notas: (function () {
         var userText = (document.getElementById("pe-notas") || {}).value || "";
         var jsonOrig = (document.getElementById("pe-notas-json") || {}).value || "";

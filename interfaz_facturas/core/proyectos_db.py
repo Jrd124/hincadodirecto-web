@@ -713,7 +713,7 @@ def actualizar_parte(parte_id: int, data: dict) -> dict | None:
             UPDATE proyecto_partes SET fecha=?, hincas_realizadas=?, horas_maquina=?,
                 horas_personal=?, num_operadores=?, num_ayudantes=?, horas_admin=?,
                 incidencias=?, condiciones_terreno=?, meteorologia=?, combustible_litros=?,
-                notas=?, updated_by=?
+                notas=?, estado_firma=?, updated_by=?
             WHERE id=?
         """, (
             (data.get("fecha") or "").strip(),
@@ -728,6 +728,7 @@ def actualizar_parte(parte_id: int, data: dict) -> dict | None:
             (data.get("meteorologia") or "").strip() or None,
             data.get("combustible_litros") or None,
             (data.get("notas") or "").strip() or None,
+            (data.get("estado_firma") or "").strip() or None,
             None, parte_id,
         ))
         diff = new_hincas - old_hincas
