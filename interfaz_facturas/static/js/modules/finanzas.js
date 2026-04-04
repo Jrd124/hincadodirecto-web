@@ -3088,7 +3088,7 @@ document.getElementById("btn-eliminar-seleccionadas").addEventListener("click", 
     }
     const json = await resp.json();
     mostrarToast(json.mensaje || "Facturas eliminadas.", "success");
-    cargarListado(emp);
+    cargarListado(emp, true);
   } catch (err) {
     mostrarToast(err.message || "No se pudieron eliminar las facturas.", "error");
   }
@@ -4306,10 +4306,15 @@ function poblarFiltroAnioCli() {
   Array.from(vals).sort().forEach((y) => { const o = document.createElement("option"); o.value = y; o.textContent = y; sel.appendChild(o); });
 }
 
-async function cargarListadoCli(empresaId) {
+async function cargarListadoCli(empresaId, preservarFiltros) {
   var btnCargarCli = document.getElementById("cli-btn-cargar");
+
+  // Save current filters
+  var prevAnio = (document.getElementById("cli-filtro-anio") || {}).value || "";
+  var prevMes = (document.getElementById("cli-filtro-mes") || {}).value || "";
+  var prevCobro = (document.getElementById("cli-filtro-cobro") || {}).value || "";
+
   CLI_FACTURAS = [];
-  // Orden por defecto: fecha más reciente primero
   sortStateCli.key = "fecha_factura";
   sortStateCli.dir = "desc";
   document.getElementById("tbody-clientes-facturas").innerHTML = "";
@@ -4322,6 +4327,12 @@ async function cargarListadoCli(empresaId) {
     const json = await resp.json();
     CLI_FACTURAS = json.facturas || [];
     poblarFiltroAnioCli();
+    // Restore filters if preserving
+    if (preservarFiltros) {
+      if (prevAnio) document.getElementById("cli-filtro-anio").value = prevAnio;
+      if (prevMes && document.getElementById("cli-filtro-mes")) document.getElementById("cli-filtro-mes").value = prevMes;
+      if (prevCobro && document.getElementById("cli-filtro-cobro")) document.getElementById("cli-filtro-cobro").value = prevCobro;
+    }
     renderTablaClientesFacturas();
   } catch (e) {
     document.getElementById("cli-sin-datos").textContent = "Error al cargar las facturas de clientes.";
@@ -4465,7 +4476,7 @@ document.getElementById("cli-btn-eliminar").addEventListener("click", async () =
     if (!resp.ok) { const err = await resp.json().catch(() => ({})); throw new Error(err.error || "Error"); }
     const json = await resp.json();
     mostrarToast(json.mensaje || "Eliminadas.", "success");
-    cargarListadoCli(emp);
+    cargarListadoCli(emp, true);
   } catch (err) {
     mostrarToast(err.message || "No se pudieron eliminar.", "error");
   }
@@ -4744,7 +4755,7 @@ document.getElementById("form-editar-factura-cli").addEventListener("submit", as
     });
     if (!resp.ok) { const err = await resp.json().catch(() => ({})); throw new Error(err.error || "Error"); }
     cerrarModalEdicionCli();
-    cargarListadoCli(emp);
+    cargarListadoCli(emp, true);
     mostrarToast("Factura guardada correctamente.", "success");
     try {
       if (typeof clienteSeleccionadoNombre !== "undefined" && clienteSeleccionadoNombre) {

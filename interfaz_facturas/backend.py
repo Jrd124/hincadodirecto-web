@@ -789,6 +789,9 @@ def _log_api_request(response):
   if request.path.startswith("/api/"):
     user = current_user.username if current_user.is_authenticated else "anon"
     logger.info("%s %s -> %s [%s]", request.method, request.path, response.status_code, user)
+    # Prevent browser caching of API responses
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
   # Seguridad: rutas /w/ y /m/ no indexables
   if request.path.startswith("/w/") or request.path.startswith("/m/"):
     response.headers["X-Robots-Tag"] = "noindex, nofollow"
