@@ -1034,6 +1034,8 @@ Extrae los siguientes campos. Devuelve SOLO JSON válido sin markdown:
     "fecha_factura": "YYYY-MM-DD",
     "proveedor": "nombre del proveedor",
     "cif_proveedor": "CIF/NIF del proveedor",
+    "localidad": "ciudad o localidad del proveedor",
+    "pais": "país del proveedor (España si no se especifica)",
     "concepto": "descripción o concepto",
     "base_imponible": 100.00,
     "iva_importe": 21.00,
@@ -1262,26 +1264,30 @@ async def _guardar_factura_bot(query, context, datos, tid):
         )
         return
 
-    # Factura proveedor
-    if rol == "superadmin":
-        datos["estado_pago"] = "pendiente"
-        fid = await _run_sync(guardar_factura_proveedor, datos)
-        clear_estado(tid)
-        await query.edit_message_text(
-            f"✅ Factura de proveedor registrada (pendiente de pago).\n"
-            f"🏢 {datos.get('proveedor', '?')} — {_fmt_eur(datos.get('total_a_pagar'))}"
-        )
-        return
-
-    # Operario: ask payment method
+    # Factura proveedor — ask payment method for ALL roles
     set_estado(tid, "factura_pago", datos)
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("❌ No pagada", callback_data="facpago_pendiente")],
-        [
-            InlineKeyboardButton("💳 Mi tarjeta", callback_data="facpago_personal"),
-            InlineKeyboardButton("💳 Tarjeta empresa", callback_data="facpago_empresa"),
-        ],
-    ])
+    if rol == "superadmin":
+        kb = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("❌ No pagada", callback_data="facpago_pendiente"),
+                InlineKeyboardButton("🏦 Transferencia", callback_data="facpago_transferencia"),
+            ],
+            [
+                InlineKeyboardButton("💳 Tarjeta personal", callback_data="facpago_personal"),
+                InlineKeyboardButton("💳 Tarjeta empresa", callback_data="facpago_empresa"),
+            ],
+        ])
+    else:
+        kb = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("❌ No pagada", callback_data="facpago_pendiente"),
+                InlineKeyboardButton("🏦 Transferencia", callback_data="facpago_transferencia"),
+            ],
+            [
+                InlineKeyboardButton("💳 Mi tarjeta", callback_data="facpago_personal"),
+                InlineKeyboardButton("💳 Tarjeta empresa", callback_data="facpago_empresa"),
+            ],
+        ])
     await query.edit_message_text(
         f"💳 ¿Cómo se ha pagado esta factura de {_fmt_eur(datos.get('total_a_pagar'))}?",
         reply_markup=kb,
@@ -1307,45 +1313,76 @@ async def callback_factura_pago(update: Update, context: ContextTypes.DEFAULT_TY
             f"✅ Factura registrada como pendiente de pago ({_fmt_eur(datos.get('total_a_pagar'))})"
         )
 
-    elif query.data == "facpago_personal":
-        user = get_usuario(tid)
+    elif query.data == "facpago_transferencia":
         datos["estado_pago"] = "pagada"
-        datos["comentarios"] = f"Pagada con tarjeta personal de {user['nombre'] if user else '?'}"
+        datos["comentarios"] = "Pagada por transferencia"
         await _run_sync(guardar_factura_proveedor, datos)
         clear_estado(tid)
         await query.edit_message_text(
-            f"✅ Factura registrada. Pagada con tu tarjeta — se tramitará el reembolso ({_fmt_eur(datos.get('total_a_pagar'))})"
+            f"✅ Factura registrada. Pagada por transferencia ({_fmt_eur(datos.get('total_a_pagar'))})"
         )
 
+    elif query.data == "facpago_personal":
+        # Ask whose personal card
+        set_estado(tid, "factura_pago_nombre", datos)
+        datos["_pago_tipo"] = "personal"
+        set_estado(tid, "factura_pago_nombre", datos)
+        await query.edit_message_text("¿De quién es la tarjeta personal? Escribe el nombre:")
+
     elif query.data == "facpago_empresa":
-        user = get_usuario(tid)
-        if user and user.get("tarjeta_id"):
-            datos["estado_pago"] = "pagada"
-            datos["tarjeta_id"] = user["tarjeta_id"]
-            datos["comentarios"] = f"Pagada con tarjeta empresa ({user.get('tarjeta_alias', '')})"
-            await _run_sync(guardar_factura_proveedor, datos)
-            clear_estado(tid)
+        # Show available company cards
+        conn = get_conn()
+        try:
+            rows = conn.execute("SELECT id, alias, banco, persona, ultimos4 FROM tarjetas WHERE activa = 1").fetchall()
+        finally:
+            conn.close()
+        if rows:
+            buttons = []
+            for r in rows:
+                label = (r["alias"] or r["banco"] or "Tarjeta") + (" *" + r["ultimos4"] if r["ultimos4"] else "") + f" ({r['persona'] or '?'})"
+                buttons.append([InlineKeyboardButton(label, callback_data=f"facpago_card_{r['id']}_{label[:30]}")])
+            buttons.append([InlineKeyboardButton("❌ Cancelar", callback_data="facpago_pendiente")])
             await query.edit_message_text(
-                f"✅ Factura registrada. Pagada con tarjeta empresa de {user['nombre']} ({_fmt_eur(datos.get('total_a_pagar'))})"
+                "💳 ¿Con qué tarjeta de empresa?",
+                reply_markup=InlineKeyboardMarkup(buttons),
             )
         else:
-            # No tarjeta assigned — ask whose card
+            # No cards in system — ask name
+            datos["_pago_tipo"] = "empresa"
             set_estado(tid, "factura_pago_nombre", datos)
             await query.edit_message_text("¿Con la tarjeta de quién la has pagado? Escribe el nombre:")
 
+    elif query.data.startswith("facpago_card_"):
+        # Selected a specific company card
+        parts = query.data.split("_", 3)
+        tarjeta_id = int(parts[2])
+        label = parts[3] if len(parts) > 3 else "?"
+        datos["estado_pago"] = "pagada"
+        datos["tarjeta_id"] = tarjeta_id
+        datos["comentarios"] = f"Pagada con tarjeta empresa: {label}"
+        await _run_sync(guardar_factura_proveedor, datos)
+        clear_estado(tid)
+        await query.edit_message_text(
+            f"✅ Factura registrada. Pagada con {label} ({_fmt_eur(datos.get('total_a_pagar'))})"
+        )
+
 
 async def handle_factura_pago_nombre(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle text response for 'whose card' question."""
+    """Handle text response for 'whose card' question (personal or empresa)."""
     tid = update.effective_user.id
     estado = get_estado(tid)
     if not estado or estado["estado"] != "factura_pago_nombre":
         return
     datos = estado["datos"]
     nombre_tarjeta = update.message.text.strip()
+    pago_tipo = datos.get("_pago_tipo", "empresa")
 
     from core.bot_db import guardar_factura_proveedor
     datos["estado_pago"] = "pagada"
-    datos["comentarios"] = f"Pagada con tarjeta empresa de {nombre_tarjeta}"
+    if pago_tipo == "personal":
+        datos["comentarios"] = f"Pagada con tarjeta personal de {nombre_tarjeta} — tramitar reembolso"
+    else:
+        datos["comentarios"] = f"Pagada con tarjeta empresa de {nombre_tarjeta}"
     await _run_sync(guardar_factura_proveedor, datos)
     clear_estado(tid)
     await update.message.reply_text(

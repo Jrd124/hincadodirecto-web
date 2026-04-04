@@ -234,6 +234,8 @@ def guardar_factura_proveedor(datos: dict) -> int:
         "fecha_factura": datos.get("fecha_factura", ""),
         "proveedor": datos.get("proveedor", ""),
         "nif_proveedor": datos.get("cif_proveedor", ""),
+        "localidad_proveedor": datos.get("localidad", ""),
+        "pais_proveedor": datos.get("pais", ""),
         "resumen_concepto": datos.get("concepto", ""),
         "numero_factura": datos.get("numero_factura", ""),
         "base_imponible": str(datos.get("base_imponible", "")),
