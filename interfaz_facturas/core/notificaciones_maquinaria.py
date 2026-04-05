@@ -511,11 +511,24 @@ def ejecutar_ciclo_notificaciones(dry_run: bool = False) -> dict:
             resumen["detalles"].append(detail)
             continue
 
-        # Enviar — solo WhatsApp via Meta Cloud API
+        # Enviar — WhatsApp via Meta Cloud API
         if canal in ("whatsapp", "sms"):
-            # Usamos siempre WhatsApp; SMS legacy eliminado
             canal = "whatsapp"
-            ok, ext_id = _send_whatsapp(telefono, mensaje)
+            # Intentar primero con template aprobado (obligatorio para mensajes proactivos)
+            # Template params: {{1}}=máquina, {{2}}=horas_due, {{3}}=tarea
+            tarea_desc = item.get("task_nombre", item["task_code"])
+            if item.get("requires_workshop"):
+                tarea_desc += " ⚠️ (requiere taller autorizado)"
+            template_params = [
+                item["maquina_nombre"],
+                str(int(item["next_due_hours"])),
+                tarea_desc,
+            ]
+            ok, ext_id = _send_whatsapp_template(telefono, template_params)
+            if not ok:
+                # Fallback a texto libre (funciona dentro de ventana 24h)
+                logger.warning("Template falló (%s), intentando texto libre", ext_id)
+                ok, ext_id = _send_whatsapp(telefono, mensaje)
             if ok:
                 resumen["enviadas_whatsapp"] += 1
             else:
