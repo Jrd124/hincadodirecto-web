@@ -254,12 +254,21 @@ function _verPoliza(id) {
       }
 
       // Docs section
+      var _docTipoPill = function (t) {
+        var m = { poliza: "#DBEAFE;color:#1E40AF", recibo: "#DCFCE7;color:#166534", certificado: "#EDE9FE;color:#5B21B6", siniestro: "#FEE2E2;color:#991B1B", otro: "#F3F4F6;color:#4B5563" };
+        var labels = { poliza: "P\u00f3liza", recibo: "Pago", certificado: "Certificado", siniestro: "Siniestro", otro: "Otro" };
+        var s = m[t] || m.otro;
+        return '<span style="padding:1px 6px;border-radius:8px;font-size:10px;font-weight:500;background:' + s + ';">' + (labels[t] || t) + '</span>';
+      };
+      var trashSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>';
       var docsHtml = "";
       if (p.documentos && p.documentos.length) {
         docsHtml = p.documentos.map(function (d) {
-          return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;">' +
-            '<a href="/api/archivo?ruta=' + encodeURIComponent(d.ruta_archivo || "") + '" target="_blank">' + (d.nombre_archivo || "doc") + '</a>' +
-            '<span style="color:var(--color-text-secondary);">(' + (d.tipo || "") + ')</span></div>';
+          return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;border-bottom:1px solid #F3F4F6;">' +
+            '<a href="/api/archivo?ruta=' + encodeURIComponent(d.ruta_archivo || "") + '" target="_blank" style="flex:1;">' + (d.nombre_archivo || "doc") + '</a>' +
+            _docTipoPill(d.tipo) +
+            '<span style="color:var(--color-text-secondary);font-size:11px;">' + (d.fecha_subida || "") + '</span>' +
+            '<button onclick="segurosEliminarDoc(' + d.id + ',' + p.id + ')" title="Eliminar" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--color-text-secondary);" onmouseover="this.style.color=\'#DC2626\'" onmouseout="this.style.color=\'var(--color-text-secondary)\'">' + trashSvg + '</button></div>';
         }).join("");
       } else {
         docsHtml = '<p style="font-size:12px;color:var(--color-text-secondary);font-style:italic;">Sin documentos.</p>';
@@ -282,7 +291,11 @@ function _verPoliza(id) {
           '</div>' +
           '<div style="border-left:3px solid #7C3AED;padding-left:12px;margin-bottom:16px;">' +
             '<div style="font-size:13px;font-weight:600;color:#7C3AED;margin-bottom:8px;">Documentos</div>' + docsHtml +
-            '<div style="margin-top:8px;"><input type="file" id="seg-doc-file" style="font-size:12px;"><button style="margin-left:8px;padding:4px 12px;font-size:12px;color:var(--color-primary);background:transparent;border:1px solid var(--color-primary);border-radius:6px;cursor:pointer;" onclick="_subirDocSeguro(' + p.id + ')">Subir</button></div>' +
+            '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;">' +
+              '<input type="file" id="seg-doc-file" style="font-size:12px;">' +
+              '<select id="seg-doc-tipo" class="form-select" style="font-size:12px;padding:4px 8px;"><option value="poliza">P\u00f3liza</option><option value="recibo">Justificante de pago</option><option value="certificado">Certificado</option><option value="siniestro">Parte de siniestro</option><option value="otro">Otro</option></select>' +
+              '<button style="padding:4px 12px;font-size:12px;color:var(--color-primary);background:transparent;border:1px solid var(--color-primary);border-radius:6px;cursor:pointer;" onclick="_subirDocSeguro(' + p.id + ')">Subir</button>' +
+            '</div>' +
           '</div>' +
           '<div style="display:flex;justify-content:flex-end;gap:8px;">' +
             '<button class="secondary" onclick="document.getElementById(\'modal-poliza-ver\').remove()">Cerrar</button>' +
@@ -314,9 +327,11 @@ window._nuevoSiniestro = function (polizaId) {
 window._subirDocSeguro = function (polizaId) {
   var fileInput = document.getElementById("seg-doc-file");
   if (!fileInput || !fileInput.files.length) return;
+  var tipoSel = document.getElementById("seg-doc-tipo");
+  var tipo = tipoSel ? tipoSel.value : "poliza";
   var fd = new FormData();
   fd.append("archivo", fileInput.files[0]);
-  fd.append("tipo", "poliza");
+  fd.append("tipo", tipo);
   fetch("/api/seguros/polizas/" + polizaId + "/documentos", { method: "POST", body: fd })
     .then(function (r) { return r.json(); })
     .then(function () {
@@ -324,4 +339,16 @@ window._subirDocSeguro = function (polizaId) {
       var m = document.getElementById("modal-poliza-ver"); if (m) m.remove();
       _verPoliza(polizaId);
     });
+};
+
+window.segurosEliminarDoc = function (docId, polizaId) {
+  if (!confirm("\u00bfEliminar este documento?")) return;
+  fetch("/api/seguros/documentos/" + docId, { method: "DELETE" })
+    .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+    .then(function () {
+      if (typeof mostrarToast === "function") mostrarToast("Documento eliminado.", "success");
+      var m = document.getElementById("modal-poliza-ver"); if (m) m.remove();
+      _verPoliza(polizaId);
+    })
+    .catch(function () { if (typeof mostrarToast === "function") mostrarToast("Error al eliminar.", "error"); });
 };
