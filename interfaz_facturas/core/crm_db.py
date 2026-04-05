@@ -812,6 +812,19 @@ def eliminar_interaccion(interaccion_id: int) -> bool:
     return n > 0
 
 
+def eliminar_interacciones_batch(ids: list[int]) -> int:
+    """Elimina múltiples interacciones de una vez. Devuelve el nº eliminadas."""
+    if not ids:
+        return 0
+    init_crm_db()
+    placeholders = ",".join("?" * len(ids))
+    with _conectar() as conn:
+        n = conn.execute(
+            f"DELETE FROM crm_interacciones WHERE id IN ({placeholders})", ids
+        ).rowcount
+    return n
+
+
 def interacciones_pendientes() -> list[dict[str, Any]]:
     init_crm_db()
     import datetime

@@ -253,6 +253,20 @@ def crm_eliminar_interaccion(interaccion_id: int):
   return jsonify({"ok": True})
 
 
+@crm_bp.delete("/api/crm/interacciones/batch")
+def crm_eliminar_interacciones_batch():
+  """Elimina múltiples interacciones. Body: {"ids": [1, 2, 3]}"""
+  data = request.get_json(silent=True) or {}
+  ids = data.get("ids", [])
+  if not ids or not isinstance(ids, list):
+    return jsonify({"error": "ids requerido (lista)"}), 400
+  ids_int = [int(i) for i in ids if str(i).isdigit()]
+  if not ids_int:
+    return jsonify({"error": "ids inválidos"}), 400
+  eliminadas = crm_db.eliminar_interacciones_batch(ids_int)
+  return jsonify({"ok": True, "eliminadas": eliminadas})
+
+
 @crm_bp.get("/api/crm/interacciones/pendientes")
 def crm_interacciones_pendientes():
   return jsonify({"interacciones": crm_db.interacciones_pendientes()})

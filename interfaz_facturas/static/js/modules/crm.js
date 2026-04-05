@@ -203,6 +203,45 @@
           return fechaStr.substring(0, 10);
         }
 
+        // ── Modo selección (bulk delete) ──────────────────────────────────────
+        var _tlModoSeleccion = false;
+        var _tlSeleccionados = new Set();
+
+        function _tlActualizarBarraSeleccion() {
+          var batchBar = document.getElementById("crm-tl-batch-bar");
+          var selCount = document.getElementById("crm-tl-sel-count");
+          var btnElim = document.getElementById("btn-tl-eliminar-sel");
+          var checkAll = document.getElementById("crm-tl-check-all");
+          var n = _tlSeleccionados.size;
+          if (selCount) selCount.textContent = n > 0 ? n + " seleccionada" + (n !== 1 ? "s" : "") : "Ninguna seleccionada";
+          if (btnElim) btnElim.disabled = n === 0;
+          if (checkAll) {
+            var visibles = intEl ? intEl.querySelectorAll("[data-int-id]") : [];
+            checkAll.indeterminate = n > 0 && n < visibles.length;
+            checkAll.checked = n > 0 && n === visibles.length;
+          }
+          if (batchBar) batchBar.style.display = _tlModoSeleccion ? "flex" : "none";
+        }
+
+        function _tlEntrarModoSeleccion() {
+          _tlModoSeleccion = true;
+          _tlSeleccionados.clear();
+          var btnSel = document.getElementById("btn-tl-seleccionar");
+          if (btnSel) btnSel.style.display = "none";
+          _tlRender();
+          _tlActualizarBarraSeleccion();
+        }
+
+        function _tlSalirModoSeleccion() {
+          _tlModoSeleccion = false;
+          _tlSeleccionados.clear();
+          var btnSel = document.getElementById("btn-tl-seleccionar");
+          if (btnSel) btnSel.style.display = "";
+          _tlRender();
+          var batchBar = document.getElementById("crm-tl-batch-bar");
+          if (batchBar) batchBar.style.display = "none";
+        }
+
         function _tlRenderItem(i) {
           var icon = _tlIcon[i.tipo] || "📌";
           var fechaRel = _tlFechaRelativa(i.fecha);
@@ -210,9 +249,16 @@
             ? '<span class="crm-timeline-source-badge">' + _esc(i.source) + '</span>' : "";
           var desc = (i.descripcion && i.descripcion !== i.asunto && i.descripcion !== "Última interacción (import)")
             ? '<div class="crm-timeline-desc">' + _esc((i.descripcion || "").substring(0, 120)) + '</div>' : "";
-          return '<div class="crm-timeline-item" style="cursor:pointer;" data-int-id="' + i.id + '" data-tipo="' + _esc(i.tipo) + '">' +
+          var checkbox = _tlModoSeleccion
+            ? '<input type="checkbox" class="crm-tl-check" data-int-id="' + i.id + '" ' +
+              (_tlSeleccionados.has(i.id) ? 'checked' : '') +
+              ' style="width:16px;height:16px;flex-shrink:0;cursor:pointer;" onclick="event.stopPropagation();">'
+            : "";
+          return '<div class="crm-timeline-item' + (_tlSeleccionados.has(i.id) ? " crm-tl-selected" : "") +
+            '" data-int-id="' + i.id + '" data-tipo="' + _esc(i.tipo) + '" style="cursor:pointer;display:flex;align-items:flex-start;gap:8px;">' +
+            checkbox +
             '<span class="crm-timeline-icon">' + icon + '</span>' +
-            '<div class="crm-timeline-body">' +
+            '<div class="crm-timeline-body" style="flex:1;min-width:0;">' +
               '<div class="crm-timeline-header">' +
                 '<span class="crm-timeline-tipo">' + _esc(i.tipo) + '</span>' +
                 '<span class="crm-timeline-fecha" title="' + _esc(i.fecha || "") + '">' + fechaRel + '</span>' +
@@ -232,16 +278,106 @@
           if (visible.length > 0) {
             intEl.innerHTML = visible.map(_tlRenderItem).join("");
             intEl.querySelectorAll("[data-int-id]").forEach(function (el) {
-              el.addEventListener("click", function () {
-                if (window._intAbrirModalEditar) _intAbrirModalEditar(parseInt(el.getAttribute("data-int-id")));
+              el.addEventListener("click", function (e) {
+                var id = parseInt(el.getAttribute("data-int-id"));
+                if (_tlModoSeleccion) {
+                  // Toggle selección
+                  if (_tlSeleccionados.has(id)) _tlSeleccionados.delete(id);
+                  else _tlSeleccionados.add(id);
+                  el.classList.toggle("crm-tl-selected", _tlSeleccionados.has(id));
+                  var cb = el.querySelector(".crm-tl-check");
+                  if (cb) cb.checked = _tlSeleccionados.has(id);
+                  _tlActualizarBarraSeleccion();
+                } else {
+                  if (window._intAbrirModalEditar) _intAbrirModalEditar(id);
+                }
               });
+              // Checkbox click independiente
+              var cb = el.querySelector(".crm-tl-check");
+              if (cb) {
+                cb.addEventListener("change", function (e) {
+                  var id = parseInt(cb.getAttribute("data-int-id"));
+                  if (cb.checked) _tlSeleccionados.add(id);
+                  else _tlSeleccionados.delete(id);
+                  el.classList.toggle("crm-tl-selected", cb.checked);
+                  _tlActualizarBarraSeleccion();
+                });
+              }
             });
           } else {
             intEl.innerHTML = '<p class="crm-sin-datos">' +
               (_tlFiltroActivo ? "Sin actividades de tipo «" + _tlFiltroActivo + "»" : "Sin actividades") + '</p>';
           }
+          _tlActualizarBarraSeleccion();
         }
         _tlRender();
+
+        // Botón "Seleccionar"
+        var btnTlSel = document.getElementById("btn-tl-seleccionar");
+        if (btnTlSel) {
+          // Reemplazar listener cada vez que se carga una empresa (clonar nodo)
+          var btnTlSelNew = btnTlSel.cloneNode(true);
+          btnTlSel.parentNode.replaceChild(btnTlSelNew, btnTlSel);
+          btnTlSelNew.addEventListener("click", _tlEntrarModoSeleccion);
+        }
+
+        // Botón "Cancelar"
+        var btnTlCancel = document.getElementById("btn-tl-cancelar-sel");
+        if (btnTlCancel) {
+          var btnTlCancelNew = btnTlCancel.cloneNode(true);
+          btnTlCancel.parentNode.replaceChild(btnTlCancelNew, btnTlCancel);
+          btnTlCancelNew.addEventListener("click", _tlSalirModoSeleccion);
+        }
+
+        // Checkbox "Seleccionar todas"
+        var checkAll = document.getElementById("crm-tl-check-all");
+        if (checkAll) {
+          var checkAllNew = checkAll.cloneNode(true);
+          checkAll.parentNode.replaceChild(checkAllNew, checkAll);
+          checkAllNew.addEventListener("change", function () {
+            var visibles = intEl ? intEl.querySelectorAll("[data-int-id]") : [];
+            visibles.forEach(function (el) {
+              var id = parseInt(el.getAttribute("data-int-id"));
+              if (checkAllNew.checked) { _tlSeleccionados.add(id); el.classList.add("crm-tl-selected"); }
+              else { _tlSeleccionados.delete(id); el.classList.remove("crm-tl-selected"); }
+              var cb = el.querySelector(".crm-tl-check");
+              if (cb) cb.checked = checkAllNew.checked;
+            });
+            _tlActualizarBarraSeleccion();
+          });
+        }
+
+        // Botón "Eliminar seleccionadas"
+        var btnElimSel = document.getElementById("btn-tl-eliminar-sel");
+        if (btnElimSel) {
+          var btnElimSelNew = btnElimSel.cloneNode(true);
+          btnElimSel.parentNode.replaceChild(btnElimSelNew, btnElimSel);
+          btnElimSelNew.addEventListener("click", function () {
+            var ids = Array.from(_tlSeleccionados);
+            if (ids.length === 0) return;
+            if (!confirm("¿Eliminar " + ids.length + " actividad" + (ids.length !== 1 ? "es" : "") + "? Esta acción no se puede deshacer.")) return;
+            btnElimSelNew.disabled = true;
+            btnElimSelNew.textContent = "⏳ Eliminando…";
+            fetch("/api/crm/interacciones/batch", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ids: ids })
+            })
+              .then(function (r) { return r.json(); })
+              .then(function (res) {
+                _tlSalirModoSeleccion();
+                if (typeof mostrarToast === "function") {
+                  mostrarToast((res.eliminadas || ids.length) + " actividad(es) eliminada(s).", "success");
+                }
+                if (_crmEmpresaSeleccionada) _crmSeleccionarEmpresa(_crmEmpresaSeleccionada);
+              })
+              .catch(function () {
+                btnElimSelNew.disabled = false;
+                btnElimSelNew.textContent = "🗑 Eliminar seleccionadas";
+                alert("Error al eliminar. Inténtalo de nuevo.");
+              });
+          });
+        }
 
         // Filtros tipo (pills)
         var filtrosEl = document.getElementById("crm-timeline-filtros");
