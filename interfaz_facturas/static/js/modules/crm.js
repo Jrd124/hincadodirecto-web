@@ -1692,6 +1692,62 @@
     if (_crmPanelInicioObs.classList.contains("visible")) _gmailComprobarEstado();
   }
 
+  // ─── Seguimiento CRM — Fase 4B ───────────────────────────────────────────
+  var _TIPO_ICON = { cliente: "🏢", lead: "🎯", proveedor: "🔧", colaborador: "🤝", otro: "📌" };
+  var _INT_ICON  = { llamada: "📞", email: "✉️", reunion: "🤝", nota: "📝", whatsapp: "💬", visita: "🏢", gmail: "📧" };
+
+  function _seguimientoDias(n) {
+    if (!n || n < 0) return "nunca";
+    if (n === 0) return "hoy";
+    if (n === 1) return "ayer";
+    if (n < 30) return n + "d";
+    if (n < 365) return Math.floor(n / 30) + "m";
+    return Math.floor(n / 365) + "a";
+  }
+
+  var _btnSeguimiento = document.getElementById("btn-seguimiento-consultar");
+  if (_btnSeguimiento) {
+    _btnSeguimiento.addEventListener("click", function () {
+      var dias = parseInt(document.getElementById("crm-seguimiento-dias").value) || 30;
+      var resultadoEl = document.getElementById("crm-seguimiento-resultado");
+      var listaEl = document.getElementById("crm-seguimiento-lista");
+      _btnSeguimiento.disabled = true;
+      _btnSeguimiento.textContent = "⏳ Consultando…";
+      fetch("/api/crm/seguimiento/empresas-frias?dias=" + dias + "&excluir=proveedor&limit=50")
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          _btnSeguimiento.disabled = false;
+          _btnSeguimiento.textContent = "Ver empresas frías";
+          var empresas = data.empresas || [];
+          if (resultadoEl) resultadoEl.style.display = "block";
+          if (!listaEl) return;
+          if (empresas.length === 0) {
+            listaEl.innerHTML = '<p style="color:var(--color-text-secondary);font-size:0.85rem;padding:8px 0;">✅ Todas las empresas tienen actividad en los últimos ' + dias + ' días.</p>';
+            return;
+          }
+          var header = '<div style="font-size:0.8rem;font-weight:600;color:var(--color-text-secondary);margin-bottom:6px;">' +
+            data.total + ' empresa' + (data.total !== 1 ? "s" : "") + ' sin actividad > ' + dias + ' días</div>';
+          var rows = empresas.map(function (e) {
+            var icon = _TIPO_ICON[e.tipo] || "📌";
+            var ult = _INT_ICON[e.ultima_interaccion_tipo] || "❓";
+            var dias_str = _seguimientoDias(e.dias_sin_actividad);
+            return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border,#E2E8F0);cursor:pointer;" ' +
+              'onclick="window.navegarAEmpresaCRM(' + e.id + ')" title="Ir a la ficha de ' + _esc(e.nombre) + '">' +
+              '<span>' + icon + '</span>' +
+              '<span style="flex:1;font-size:0.85rem;font-weight:500;color:var(--color-text);">' + _esc(e.nombre) + '</span>' +
+              '<span style="font-size:0.78rem;color:var(--color-text-secondary);">' + ult + ' ' + dias_str + '</span>' +
+              '</div>';
+          }).join("");
+          listaEl.innerHTML = header + rows;
+        })
+        .catch(function () {
+          _btnSeguimiento.disabled = false;
+          _btnSeguimiento.textContent = "Ver empresas frías";
+          if (listaEl) listaEl.innerHTML = '<p style="color:#dc2626;font-size:0.85rem;">Error al consultar.</p>';
+        });
+    });
+  }
+
   // ─── Navegación desde otros módulos → Empresa CRM (Fase 1) ───────────────
   window.navegarAEmpresaCRM = function (empresaId) {
     // Navega al panel CRM empresas y selecciona la empresa indicada

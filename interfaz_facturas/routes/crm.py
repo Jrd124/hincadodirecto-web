@@ -342,3 +342,23 @@ def crm_cambiar_estado_oportunidad(oportunidad_id: int):
 @crm_bp.get("/api/crm/oportunidades/pipeline")
 def crm_pipeline_oportunidades():
   return jsonify({"pipeline": crm_db.pipeline_oportunidades()})
+
+
+@crm_bp.get("/api/crm/seguimiento/empresas-frias")
+def crm_empresas_frias():
+  """Empresas sin actividad en los últimos N días.
+
+  Query params:
+    dias (int, default 30): umbral de inactividad.
+    tipos (str, comma-separated): filtrar por tipo de empresa.
+    excluir (str, comma-separated): excluir tipos.
+    limit (int, default 50): máximo de resultados.
+  """
+  dias = request.args.get("dias", 30, type=int)
+  tipos_raw = request.args.get("tipos", "")
+  excluir_raw = request.args.get("excluir", "")
+  limit = request.args.get("limit", 50, type=int)
+  tipos = [t.strip() for t in tipos_raw.split(",") if t.strip()] or None
+  excluir = [t.strip() for t in excluir_raw.split(",") if t.strip()] or None
+  empresas = crm_db.empresas_sin_actividad(dias=dias, tipos=tipos, excluir_estados=excluir)
+  return jsonify({"empresas": empresas[:limit], "total": len(empresas), "dias_umbral": dias})

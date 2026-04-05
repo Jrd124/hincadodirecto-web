@@ -825,6 +825,64 @@ def eliminar_interacciones_batch(ids: list[int]) -> int:
     return n
 
 
+def empresas_sin_actividad(
+    dias: int = 30,
+    tipos: list[str] | None = None,
+    excluir_estados: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Devuelve empresas que no han tenido ninguna interacción en los últimos `dias` días.
+
+    Args:
+        dias: Umbral de inactividad en días (default 30).
+        tipos: Filtrar por tipo de empresa, p.ej. ['cliente', 'lead']. None = todos.
+        excluir_estados: Tipos de empresa a excluir, p.ej. ['proveedor'].
+
+    Returns:
+        Lista de dicts con id, nombre, tipo, email, telefono, dias_sin_actividad,
+        ultima_interaccion_fecha, ultima_interaccion_tipo.
+    """
+    import datetime
+    init_crm_db()
+    umbral = (datetime.datetime.utcnow() - datetime.timedelta(days=dias)).strftime("%Y-%m-%d")
+
+    condiciones = ["(e.activo IS NULL OR e.activo = 1)"]
+    params: list[Any] = []
+
+    if tipos:
+        condiciones.append("e.tipo IN (" + ",".join("?" * len(tipos)) + ")")
+        params.extend(tipos)
+    if excluir_estados:
+        condiciones.append("e.tipo NOT IN (" + ",".join("?" * len(excluir_estados)) + ")")
+        params.extend(excluir_estados)
+
+    where = " AND ".join(condiciones)
+
+    with _conectar() as conn:
+        rows = conn.execute(f"""
+            SELECT
+                e.id,
+                e.nombre,
+                e.tipo,
+                e.email,
+                e.telefono,
+                e.dominio,
+                MAX(i.fecha) AS ultima_interaccion_fecha,
+                (SELECT tipo FROM crm_interacciones
+                 WHERE empresa_id = e.id ORDER BY fecha DESC LIMIT 1) AS ultima_interaccion_tipo,
+                CAST(
+                    julianday('now') -
+                    julianday(COALESCE(MAX(i.fecha), e.created_at, '2000-01-01'))
+                AS INTEGER) AS dias_sin_actividad
+            FROM crm_empresas e
+            LEFT JOIN crm_interacciones i ON i.empresa_id = e.id
+            WHERE {where}
+            GROUP BY e.id
+            HAVING COALESCE(MAX(i.fecha), '1970-01-01') < ?
+            ORDER BY dias_sin_actividad DESC
+        """, params + [umbral]).fetchall()
+    return [dict(r) for r in rows]
+
+
 def interacciones_pendientes() -> list[dict[str, Any]]:
     init_crm_db()
     import datetime

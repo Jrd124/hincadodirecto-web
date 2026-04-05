@@ -1497,6 +1497,24 @@
             </div>
             <div id="crm-gmail-sync-resultado" style="margin-top:10px;font-size:0.82rem;color:var(--color-text-secondary,#64748B);display:none;"></div>
           </div>
+
+          <!-- Seguimiento — Fase 4B -->
+          <div style="margin-top:20px;padding:16px 20px;background:var(--color-surface,#F8FAFC);border:1px solid var(--border,#E2E8F0);border-radius:10px;">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+              <span style="font-size:1.2rem;">🎯</span>
+              <div style="flex:1;min-width:180px;">
+                <div style="font-size:0.95rem;font-weight:600;color:var(--color-text,#1E293B);">Empresas sin actividad</div>
+                <div style="font-size:0.8rem;color:var(--color-text-secondary,#64748B);margin-top:2px;">Clientes y leads que necesitan seguimiento</div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <label style="font-size:0.8rem;color:var(--color-text-secondary,#64748B);">+<input type="number" id="crm-seguimiento-dias" value="30" min="7" max="365" style="width:48px;border:1px solid var(--border,#E2E8F0);border-radius:4px;padding:2px 6px;font-size:0.8rem;"> días</label>
+                <button type="button" id="btn-seguimiento-consultar" style="font-size:0.82rem;padding:6px 14px;background:var(--color-primary,#4F46E5);color:#fff;border:none;border-radius:6px;cursor:pointer;">Ver empresas frías</button>
+              </div>
+            </div>
+            <div id="crm-seguimiento-resultado" style="display:none;">
+              <div id="crm-seguimiento-lista" style="max-height:260px;overflow-y:auto;border-top:1px solid var(--border,#E2E8F0);padding-top:8px;"></div>
+            </div>
+          </div>
         </div>
       </div>
 
