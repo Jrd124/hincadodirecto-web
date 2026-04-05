@@ -1,7 +1,7 @@
 """Motor de notificaciones de mantenimiento de maquinaria.
 
 Calcula tareas de mantenimiento pendientes por máquina,
-controla anti-spam semanal, y envía avisos por WhatsApp/SMS via Twilio.
+controla anti-spam semanal, y envía avisos por WhatsApp via Meta Cloud API.
 """
 from __future__ import annotations
 
@@ -15,11 +15,11 @@ from core.db import conectar as _conectar, now_iso as _now
 
 logger = logging.getLogger("erp.notificaciones")
 
-# ── Config Twilio (variables de entorno) ─────────────────────────────────────
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
-TWILIO_WHATSAPP_FROM = os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")  # Sandbox default
-TWILIO_SMS_FROM = os.getenv("TWILIO_SMS_FROM", "")
+# ── Config Meta Cloud API (variables de entorno) ──────────────────────────────
+META_WA_TOKEN = os.getenv("META_WA_TOKEN", "")
+META_WA_PHONE_NUMBER_ID = os.getenv("META_WA_PHONE_NUMBER_ID", "")
+META_WA_TEMPLATE_NAME = os.getenv("META_WA_TEMPLATE_NAME", "mantenimiento_maquinaria")
+META_WA_TEMPLATE_LANG = os.getenv("META_WA_TEMPLATE_LANG", "es")
 ERP_BASE_URL = os.getenv("ERP_BASE_URL", "https://erp.hincadodirecto.com")
 NOTIFICACIONES_ENABLED = os.getenv("NOTIFICACIONES_MAQUINARIA_ENABLED", "false").lower() == "true"
 
@@ -43,39 +43,42 @@ def listar_maintenance_tasks() -> list:
         ).fetchall()]
 
 
-# ── Intervalos definidos en el manual Orteco HD 800-1000 ──────────────────────
-INTERVALOS_MANTENIMIENTO = [100, 250, 500, 1000, 2000]
+# ── Intervalos por marca ──────────────────────────────────────────────────────
+INTERVALOS_POR_MARCA: dict[str, list[int]] = {
+    "ORTECO": [100, 250, 500, 1000, 2000],
+    "FAGA":   [250, 500, 1500, 2000],
+}
+# Mantener retrocompatibilidad
+INTERVALOS_MANTENIMIENTO = INTERVALOS_POR_MARCA["ORTECO"]
 
 
-def calcular_intervalos_cascada(due_hours: float) -> list[int]:
-    """Dado un umbral de horas due, devuelve los intervalos cuyas tareas se deben
-    incluir en el formulario combinado de revisión.
+def calcular_intervalos_cascada(due_hours: float, marca: str = "ORTECO") -> list[int]:
+    """Dado un umbral de horas due y la marca de la máquina, devuelve los intervalos
+    cuyas tareas se deben incluir en el formulario combinado de revisión.
 
     Lógica: un intervalo I se incluye si due_hours es múltiplo exacto de I.
-    Ejemplo:  due_hours=6000 → [500, 1000, 2000]  (6000/500=12, 6000/1000=6, 6000/2000=3)
-              due_hours=1500 → [500]               (1500/500=3, 1500/1000=1.5✗)
-              due_hours=1000 → [500, 1000]          (1000/500=2, 1000/1000=1)
-              due_hours=2000 → [500, 1000, 2000]
-              due_hours=250  → [250]
-              due_hours=500  → [250, 500]           (500/250=2)
-              due_hours=100  → [100]
 
-    Los intervalos más pequeños (100h, 250h) solo se incluyen si due_hours coincide
-    con un múltiplo exacto de su intervalo.
+    ORTECO (intervalos: 100, 250, 500, 1000, 2000):
+      due_hours=1000 → [250, 500, 1000]
+      due_hours=2000 → [250, 500, 1000, 2000]
+
+    FAGA (intervalos: 250, 500, 1500, 2000):
+      due_hours=1500 → [250, 500, 1500]  (1500/250=6, 1500/500=3, 1500/1500=1)
+      due_hours=2000 → [250, 500, 2000]  (2000/1500≠entero → 1500 no incluido)
+      due_hours=3000 → [250, 500, 1500]
+      due_hours=4000 → [250, 500, 2000]
     """
     if due_hours <= 0:
         return []
-    resultado = []
-    for intervalo in INTERVALOS_MANTENIMIENTO:
-        if due_hours >= intervalo and due_hours % intervalo == 0:
-            resultado.append(intervalo)
-    return resultado
+    intervalos = INTERVALOS_POR_MARCA.get(marca, INTERVALOS_POR_MARCA["ORTECO"])
+    return [i for i in intervalos if due_hours >= i and due_hours % i == 0]
 
 
 def obtener_tasks_agrupadas_por_intervalo(intervalos: list[int]) -> dict[int, list[dict]]:
     """Devuelve las tareas de mantenimiento agrupadas por intervalo horario.
 
     Parámetro intervalos: lista de intervalos a incluir (ej. [500, 1000, 2000]).
+    Parámetro marca: filtra las tareas por marca (ORTECO / FAGA).
     Returns dict con clave=intervalo, valor=lista de tasks con checklist parseado.
     """
     tasks = listar_maintenance_tasks()
@@ -83,7 +86,7 @@ def obtener_tasks_agrupadas_por_intervalo(intervalos: list[int]) -> dict[int, li
     for interval in sorted(intervalos):
         grupo = []
         for t in tasks:
-            if t["intervalo_horas"] == interval:
+            if t["intervalo_horas"] == interval and t.get("marca", "ORTECO") == marca:
                 t = dict(t)  # copia
                 t["checklist"] = json.loads(t.get("checklist_json") or "[]")
                 grupo.append(t)
@@ -92,7 +95,7 @@ def obtener_tasks_agrupadas_por_intervalo(intervalos: list[int]) -> dict[int, li
     return agrupadas
 
 
-def calcular_revision_combinada(maquina_id: int, due_hours: float) -> dict:
+def calcular_revision_combinada(maquina_id: int, due_hours: float, marca: str = "ORTECO") -> dict:
     """Calcula la revisión combinada (cascading) para una máquina a un umbral dado.
 
     Returns dict con:
@@ -101,8 +104,8 @@ def calcular_revision_combinada(maquina_id: int, due_hours: float) -> dict:
       - total_tareas: número total de tareas
       - tiene_taller: True si alguna tarea requiere taller autorizado
     """
-    intervalos = calcular_intervalos_cascada(due_hours)
-    tasks_agrupadas = obtener_tasks_agrupadas_por_intervalo(intervalos)
+    intervalos = calcular_intervalos_cascada(due_hours, marca)
+    tasks_agrupadas = obtener_tasks_agrupadas_por_intervalo(intervalos, marca)
     total = sum(len(v) for v in tasks_agrupadas.values())
     tiene_taller = any(
         t.get("requires_workshop")
@@ -131,10 +134,14 @@ def calcular_tareas_due(maquina_id: int | None = None) -> list:
     results = []
 
     with _conectar() as conn:
-        # Cargar tareas activas
-        tasks = [dict(r) for r in conn.execute(
+        # Cargar tareas activas agrupadas por marca para lookup eficiente
+        all_tasks = [dict(r) for r in conn.execute(
             "SELECT * FROM maquinaria_maintenance_tasks WHERE activo = 1"
         ).fetchall()]
+        tasks_por_marca: dict[str, list[dict]] = {}
+        for t in all_tasks:
+            m = t.get("marca", "ORTECO")
+            tasks_por_marca.setdefault(m, []).append(t)
 
         # Cargar máquinas activas
         q = "SELECT * FROM maquinas WHERE activa = 1"
@@ -146,6 +153,10 @@ def calcular_tareas_due(maquina_id: int | None = None) -> list:
 
         for maq in maquinas:
             horo = maq["horometro_actual"] or 0
+            marca_maq = maq.get("marca", "ORTECO")
+
+            # Solo procesar tareas que correspondan a la marca de la máquina
+            tasks = tasks_por_marca.get(marca_maq, [])
 
             for task in tasks:
                 intervalo = task["intervalo_horas"]
@@ -220,6 +231,7 @@ def calcular_tareas_due(maquina_id: int | None = None) -> list:
                     "maquina_id": maq["id"],
                     "maquina_nombre": maq["nombre"],
                     "maquina_internal_id": maq["internal_id"],
+                    "maquina_marca": marca_maq,
                     "horometro_actual": horo,
                     "task_code": code,
                     "task_nombre": task["nombre"],
@@ -258,9 +270,10 @@ def _build_notification_message(item: dict) -> str:
 
     token = item.get("token", {}) or {}
     token_str = token.get("token", "")
+    marca = item.get("maquina_marca", "ORTECO")
 
-    # Calcular qué intervalos incluirá la revisión combinada
-    intervalos = calcular_intervalos_cascada(due)
+    # Calcular qué intervalos incluirá la revisión combinada (según marca)
+    intervalos = calcular_intervalos_cascada(due, marca)
     if len(intervalos) > 1:
         intervalos_str = " + ".join(f"{i}h" for i in intervalos)
         link = f"{ERP_BASE_URL}/w/{token_str}/revision?machine={item['maquina_id']}&due={int(due)}"
@@ -280,47 +293,122 @@ def _build_notification_message(item: dict) -> str:
     return msg.strip()
 
 
-def _send_whatsapp(telefono: str, mensaje: str) -> tuple[bool, str]:
-    """Envía mensaje por WhatsApp via Twilio. Returns (success, external_id)."""
-    if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN:
-        logger.warning("Twilio no configurado — mensaje no enviado")
-        return False, "TWILIO_NOT_CONFIGURED"
+def _normalizar_telefono(telefono: str) -> str:
+    """Normaliza un número de teléfono al formato E.164 sin '+' para la API de Meta.
 
+    Ejemplos:
+      '+34 641 438 126' → '34641438126'
+      '641438126'       → '34641438126'  (asume España)
+      '0034641438126'   → '34641438126'
+    """
+    import re
+    digitos = re.sub(r"[^0-9]", "", telefono)
+    if digitos.startswith("0034"):
+        digitos = digitos[2:]            # quitar 00 → 34…
+    elif len(digitos) == 9 and digitos.startswith(("6", "7", "9")):
+        digitos = "34" + digitos         # número español sin prefijo
+    return digitos
+
+
+def _send_whatsapp(telefono: str, mensaje: str) -> tuple[bool, str]:
+    """Envía mensaje de texto libre por WhatsApp via Meta Cloud API.
+
+    NOTA: Meta permite mensajes de texto libre solo dentro de la ventana de 24 h
+    después de que el usuario haya escrito. Para notificaciones proactivas
+    (fuera de esa ventana) se necesita un template aprobado. Usa
+    _send_whatsapp_template() en ese caso una vez el template esté aprobado.
+
+    Returns (success, message_id_or_error).
+    """
+    import urllib.request
+    import json as _json
+
+    if not META_WA_TOKEN or not META_WA_PHONE_NUMBER_ID:
+        logger.warning("Meta Cloud API no configurado (META_WA_TOKEN / META_WA_PHONE_NUMBER_ID vacíos)")
+        return False, "META_NOT_CONFIGURED"
+
+    to = _normalizar_telefono(telefono)
+    url = f"https://graph.facebook.com/v22.0/{META_WA_PHONE_NUMBER_ID}/messages"
+    payload = _json.dumps({
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "text",
+        "text": {"body": mensaje},
+    }).encode()
+
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {META_WA_TOKEN}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
     try:
-        from twilio.rest import Client
-        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        msg = client.messages.create(
-            body=mensaje,
-            from_=TWILIO_WHATSAPP_FROM,
-            to=f"whatsapp:{telefono}",
-        )
-        logger.info("WhatsApp enviado a %s — SID: %s", telefono, msg.sid)
-        return True, msg.sid
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = _json.loads(resp.read())
+        msg_id = data.get("messages", [{}])[0].get("id", "")
+        logger.info("WhatsApp enviado a %s — ID: %s", to, msg_id)
+        return True, msg_id
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="replace")
+        logger.error("Meta API HTTP %s enviando a %s: %s", e.code, to, body)
+        return False, f"HTTP_{e.code}: {body[:200]}"
     except Exception as e:
-        logger.error("Error enviando WhatsApp a %s: %s", telefono, e)
+        logger.error("Error enviando WhatsApp a %s: %s", to, e)
         return False, str(e)
 
 
-def _send_sms(telefono: str, mensaje: str) -> tuple[bool, str]:
-    """Envía SMS via Twilio como fallback."""
-    if not TWILIO_ACCOUNT_SID or not TWILIO_AUTH_TOKEN or not TWILIO_SMS_FROM:
-        logger.warning("Twilio SMS no configurado")
-        return False, "TWILIO_SMS_NOT_CONFIGURED"
+def _send_whatsapp_template(telefono: str, params: list[str]) -> tuple[bool, str]:
+    """Envía mensaje de template aprobado por Meta (notificaciones proactivas).
 
+    params: lista de valores para los placeholders {{1}}, {{2}}, … del template.
+    El template 'mantenimiento_maquinaria' espera: [maquina, horas, tareas_resumen]
+    """
+    import urllib.request
+    import json as _json
+
+    if not META_WA_TOKEN or not META_WA_PHONE_NUMBER_ID:
+        return False, "META_NOT_CONFIGURED"
+
+    to = _normalizar_telefono(telefono)
+    url = f"https://graph.facebook.com/v22.0/{META_WA_PHONE_NUMBER_ID}/messages"
+    payload = _json.dumps({
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "template",
+        "template": {
+            "name": META_WA_TEMPLATE_NAME,
+            "language": {"code": META_WA_TEMPLATE_LANG},
+            "components": [{
+                "type": "body",
+                "parameters": [{"type": "text", "text": p} for p in params],
+            }],
+        },
+    }).encode()
+
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {META_WA_TOKEN}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
     try:
-        from twilio.rest import Client
-        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        # SMS no soporta markdown, limpiar
-        plain = mensaje.replace("*", "").replace("🔧", "").replace("⚠️", "[!]")
-        msg = client.messages.create(
-            body=plain,
-            from_=TWILIO_SMS_FROM,
-            to=telefono,
-        )
-        logger.info("SMS enviado a %s — SID: %s", telefono, msg.sid)
-        return True, msg.sid
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = _json.loads(resp.read())
+        msg_id = data.get("messages", [{}])[0].get("id", "")
+        logger.info("WhatsApp template enviado a %s — ID: %s", to, msg_id)
+        return True, msg_id
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="replace")
+        logger.error("Meta API HTTP %s (template) a %s: %s", e.code, to, body)
+        return False, f"HTTP_{e.code}: {body[:200]}"
     except Exception as e:
-        logger.error("Error enviando SMS a %s: %s", telefono, e)
+        logger.error("Error enviando template a %s: %s", to, e)
         return False, str(e)
 
 
@@ -389,15 +477,21 @@ def ejecutar_ciclo_notificaciones(dry_run: bool = False) -> dict:
             resumen["detalles"].append(detail)
             continue
 
-        # Skip si no hay token/contacto
-        if not token or not token.get("telefono"):
+        # Determinar teléfono destino: responsable asignado tiene prioridad
+        responsable_tel = item.get("responsable_telefono")
+        token_tel = token.get("telefono") if token else None
+        telefono = responsable_tel or token_tel
+
+        # Skip si no hay contacto por ninguna vía
+        if not telefono:
             resumen["sin_contacto"] += 1
             detail["resultado"] = "sin_contacto"
+            detail["fuente"] = item.get("fuente_contacto")
             resumen["detalles"].append(detail)
             continue
 
-        # Skip si notificaciones desactivadas
-        if not token.get("notificaciones_activas", 1):
+        # Skip si notificaciones desactivadas (solo aplica a token_contacto)
+        if not responsable_tel and not token.get("notificaciones_activas", 1):
             resumen["notificaciones_off"] += 1
             detail["resultado"] = "notificaciones_desactivadas"
             resumen["detalles"].append(detail)
@@ -405,8 +499,9 @@ def ejecutar_ciclo_notificaciones(dry_run: bool = False) -> dict:
 
         # Construir mensaje
         mensaje = _build_notification_message(item)
-        canal = token.get("canal_preferido", "whatsapp")
-        telefono = token["telefono"]
+        canal = "whatsapp"  # responsable siempre por WhatsApp
+        if not responsable_tel:
+            canal = token.get("canal_preferido", "whatsapp")
 
         if dry_run:
             detail["resultado"] = "dry_run"
@@ -416,23 +511,26 @@ def ejecutar_ciclo_notificaciones(dry_run: bool = False) -> dict:
             resumen["detalles"].append(detail)
             continue
 
-        # Enviar
-        if canal == "whatsapp":
-            ok, ext_id = _send_whatsapp(telefono, mensaje)
+        # Enviar — WhatsApp via Meta Cloud API
+        if canal in ("whatsapp", "sms"):
+            canal = "whatsapp"
+            # Intentar primero con template aprobado (obligatorio para mensajes proactivos)
+            # Template params: {{1}}=máquina, {{2}}=horas_due, {{3}}=tarea
+            tarea_desc = item.get("task_nombre", item["task_code"])
+            if item.get("requires_workshop"):
+                tarea_desc += " ⚠️ (requiere taller autorizado)"
+            template_params = [
+                item["maquina_nombre"],
+                str(int(item["next_due_hours"])),
+                tarea_desc,
+            ]
+            ok, ext_id = _send_whatsapp_template(telefono, template_params)
+            if not ok:
+                # Fallback a texto libre (funciona dentro de ventana 24h)
+                logger.warning("Template falló (%s), intentando texto libre", ext_id)
+                ok, ext_id = _send_whatsapp(telefono, mensaje)
             if ok:
                 resumen["enviadas_whatsapp"] += 1
-            else:
-                # Fallback a SMS
-                ok, ext_id = _send_sms(telefono, mensaje)
-                canal = "sms"
-                if ok:
-                    resumen["enviadas_sms"] += 1
-                else:
-                    resumen["fallidas"] += 1
-        elif canal == "sms":
-            ok, ext_id = _send_sms(telefono, mensaje)
-            if ok:
-                resumen["enviadas_sms"] += 1
             else:
                 resumen["fallidas"] += 1
         else:

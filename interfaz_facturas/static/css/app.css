@@ -4509,22 +4509,85 @@
         border-radius: 6px;
         font-size: 0.85rem;
         border-left: 3px solid #4f46e5;
+        align-items: flex-start;
+        transition: background 0.15s;
+      }
+      .crm-timeline-item:hover { background: #f1f5f9; }
+      .crm-timeline-item[data-tipo="llamada"] { border-left-color: #2563eb; }
+      .crm-timeline-item[data-tipo="email"]   { border-left-color: #7c3aed; }
+      .crm-timeline-item[data-tipo="reunion"] { border-left-color: #059669; }
+      .crm-timeline-item[data-tipo="nota"]    { border-left-color: #d97706; }
+      .crm-timeline-item[data-tipo="whatsapp"]{ border-left-color: #25d366; }
+      .crm-timeline-item[data-tipo="visita"]  { border-left-color: #dc2626; }
+      .crm-timeline-item[data-tipo="gmail"]   { border-left-color: #ea4335; }
+      .crm-timeline-item.crm-tl-selected { background: #EFF6FF; border-left-color: #2563eb; outline: 1px solid #BFDBFE; }
+      .crm-timeline-icon {
+        font-size: 1rem;
+        line-height: 1.3;
+        flex-shrink: 0;
+      }
+      .crm-timeline-body {
+        flex: 1;
+        min-width: 0;
+      }
+      .crm-timeline-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 2px;
       }
       .crm-timeline-fecha {
         color: #94a3b8;
-        font-size: 0.78rem;
+        font-size: 0.75rem;
         white-space: nowrap;
-        min-width: 70px;
       }
       .crm-timeline-tipo {
         font-weight: 600;
         color: #4f46e5;
-        font-size: 0.78rem;
+        font-size: 0.72rem;
         text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      .crm-timeline-source-badge {
+        font-size: 0.65rem;
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: #fef3c7;
+        color: #92400e;
       }
       .crm-timeline-asunto {
-        color: #334155;
-        flex: 1;
+        color: #1e293b;
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .crm-timeline-desc {
+        color: #64748b;
+        font-size: 0.8rem;
+        margin-top: 2px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      /* Filtros tipo timeline */
+      .crm-tl-filtro {
+        font-size: 0.72rem;
+        padding: 2px 8px;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+        color: #64748b;
+        cursor: pointer;
+        transition: all 0.12s;
+        white-space: nowrap;
+      }
+      .crm-tl-filtro:hover { background: #e2e8f0; color: #334155; }
+      .crm-tl-filtro--activo {
+        background: #4f46e5;
+        color: #fff;
+        border-color: #4f46e5;
       }
       .crm-paginacion {
         display: flex;

@@ -10,10 +10,11 @@ function cargarMaquinaria() {
       var maq = data.maquinas || [];
       var nDisp = 0, nProy = 0, nTaller = 0, nBaja = 0;
       maq.forEach(function (m) {
-        if (m.estado === "disponible") nDisp++;
-        else if (m.estado === "en_proyecto") nProy++;
-        else if (m.estado === "en_taller") nTaller++;
-        else if (m.estado === "baja") nBaja++;
+        var est = m.estado_computado || m.estado;
+        if (est === "disponible") nDisp++;
+        else if (est === "en_proyecto") nProy++;
+        else if (est === "en_taller") nTaller++;
+        else if (est === "baja") nBaja++;
       });
 
       var estadoColors = { disponible: "#16A34A", en_proyecto: "#2563EB", en_taller: "#CA8A04", baja: "#DC2626" };

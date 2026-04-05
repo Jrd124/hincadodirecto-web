@@ -140,6 +140,34 @@
         document.getElementById("crm-empresa-web").textContent = emp.web || "";
         document.getElementById("crm-empresa-notas").textContent = emp.notas || "Sin notas";
 
+        // Card resumen — última interacción (Fase 1)
+        var resumenCard = document.getElementById("crm-empresa-resumen-card");
+        if (resumenCard) {
+          fetch("/api/crm/empresas/" + id + "/resumen")
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+              var iconoTipo = { llamada: "📞", email: "✉️", reunion: "🤝", nota: "📝", whatsapp: "💬", visita: "🏢" };
+              var ui = res.ultima_interaccion;
+              if (ui) {
+                resumenCard.style.display = "flex";
+                document.getElementById("crm-resumen-tipo-icon").textContent = iconoTipo[ui.tipo] || "📌";
+                var fecha = ui.fecha ? ui.fecha.slice(0, 10) : "";
+                document.getElementById("crm-resumen-fecha").textContent = fecha;
+                document.getElementById("crm-resumen-asunto").textContent = ui.asunto || ui.descripcion || "—";
+              } else {
+                resumenCard.style.display = "none";
+              }
+              var cnt = [];
+              if (res.num_contactos) cnt.push(res.num_contactos + " contacto" + (res.num_contactos !== 1 ? "s" : ""));
+              if (res.num_oportunidades_abiertas) cnt.push(res.num_oportunidades_abiertas + " oport.");
+              if (res.num_interacciones) cnt.push(res.num_interacciones + " interact.");
+              var cntEl = document.getElementById("crm-resumen-contadores");
+              if (cntEl) cntEl.textContent = cnt.join(" · ");
+              if (!ui && cnt.length) resumenCard.style.display = "flex";
+            })
+            .catch(function () { if (resumenCard) resumenCard.style.display = "none"; });
+        }
+
         // Contactos
         var contEl = document.getElementById("crm-empresa-contactos-lista");
         if (emp.contactos && emp.contactos.length > 0) {
@@ -156,23 +184,214 @@
           contEl.innerHTML = '<p class="crm-sin-datos">Sin contactos</p>';
         }
 
-        // Interacciones
-        var _tlI = { llamada: "\u260E", email: "\u2709", whatsapp: "\uD83D\uDCAC", reunion: "\uD83D\uDC65", nota: "\uD83D\uDCDD", visita: "\uD83D\uDCCD" };
+        // Actividades / Interacciones — timeline mejorado (Fase 2)
+        var _tlIcon = { llamada: "📞", email: "✉️", whatsapp: "💬", reunion: "🤝", nota: "📝", visita: "🏢", gmail: "📧" };
+        var _tlColor = { llamada: "#2563eb", email: "#7c3aed", reunion: "#059669", nota: "#d97706", whatsapp: "#25d366", visita: "#dc2626", gmail: "#ea4335" };
+        var _tlInteracciones = emp.interacciones || [];
+        var _tlFiltroActivo = "";
+
+        function _tlFechaRelativa(fechaStr) {
+          if (!fechaStr) return "";
+          var d = new Date(fechaStr.substring(0, 10));
+          var hoy = new Date(); hoy.setHours(0, 0, 0, 0); d.setHours(0, 0, 0, 0);
+          var diff = Math.round((hoy - d) / 86400000);
+          if (diff === 0) return "Hoy";
+          if (diff === 1) return "Ayer";
+          if (diff < 7) return "Hace " + diff + " días";
+          if (diff < 30) return "Hace " + Math.floor(diff / 7) + " sem.";
+          if (diff < 365) return "Hace " + Math.floor(diff / 30) + " mes" + (Math.floor(diff / 30) > 1 ? "es" : "");
+          return fechaStr.substring(0, 10);
+        }
+
+        // ── Modo selección (bulk delete) ──────────────────────────────────────
+        var _tlModoSeleccion = false;
+        var _tlSeleccionados = new Set();
+
+        function _tlActualizarBarraSeleccion() {
+          var batchBar = document.getElementById("crm-tl-batch-bar");
+          var selCount = document.getElementById("crm-tl-sel-count");
+          var btnElim = document.getElementById("btn-tl-eliminar-sel");
+          var checkAll = document.getElementById("crm-tl-check-all");
+          var n = _tlSeleccionados.size;
+          if (selCount) selCount.textContent = n > 0 ? n + " seleccionada" + (n !== 1 ? "s" : "") : "Ninguna seleccionada";
+          if (btnElim) btnElim.disabled = n === 0;
+          if (checkAll) {
+            var visibles = intEl ? intEl.querySelectorAll("[data-int-id]") : [];
+            checkAll.indeterminate = n > 0 && n < visibles.length;
+            checkAll.checked = n > 0 && n === visibles.length;
+          }
+          if (batchBar) batchBar.style.display = _tlModoSeleccion ? "flex" : "none";
+        }
+
+        function _tlEntrarModoSeleccion() {
+          _tlModoSeleccion = true;
+          _tlSeleccionados.clear();
+          var btnSel = document.getElementById("btn-tl-seleccionar");
+          if (btnSel) btnSel.style.display = "none";
+          _tlRender();
+          _tlActualizarBarraSeleccion();
+        }
+
+        function _tlSalirModoSeleccion() {
+          _tlModoSeleccion = false;
+          _tlSeleccionados.clear();
+          var btnSel = document.getElementById("btn-tl-seleccionar");
+          if (btnSel) btnSel.style.display = "";
+          _tlRender();
+          var batchBar = document.getElementById("crm-tl-batch-bar");
+          if (batchBar) batchBar.style.display = "none";
+        }
+
+        function _tlRenderItem(i) {
+          var icon = _tlIcon[i.tipo] || "📌";
+          var fechaRel = _tlFechaRelativa(i.fecha);
+          var sourceBadge = (i.source && i.source !== "manual")
+            ? '<span class="crm-timeline-source-badge">' + _esc(i.source) + '</span>' : "";
+          var desc = (i.descripcion && i.descripcion !== i.asunto && i.descripcion !== "Última interacción (import)")
+            ? '<div class="crm-timeline-desc">' + _esc((i.descripcion || "").substring(0, 120)) + '</div>' : "";
+          var checkbox = _tlModoSeleccion
+            ? '<input type="checkbox" class="crm-tl-check" data-int-id="' + i.id + '" ' +
+              (_tlSeleccionados.has(i.id) ? 'checked' : '') +
+              ' style="width:16px;height:16px;flex-shrink:0;cursor:pointer;" onclick="event.stopPropagation();">'
+            : "";
+          return '<div class="crm-timeline-item' + (_tlSeleccionados.has(i.id) ? " crm-tl-selected" : "") +
+            '" data-int-id="' + i.id + '" data-tipo="' + _esc(i.tipo) + '" style="cursor:pointer;display:flex;align-items:flex-start;gap:8px;">' +
+            checkbox +
+            '<span class="crm-timeline-icon">' + icon + '</span>' +
+            '<div class="crm-timeline-body" style="flex:1;min-width:0;">' +
+              '<div class="crm-timeline-header">' +
+                '<span class="crm-timeline-tipo">' + _esc(i.tipo) + '</span>' +
+                '<span class="crm-timeline-fecha" title="' + _esc(i.fecha || "") + '">' + fechaRel + '</span>' +
+                sourceBadge +
+              '</div>' +
+              '<div class="crm-timeline-asunto">' + _esc(i.asunto || i.descripcion || "(sin asunto)") + '</div>' +
+              desc +
+            '</div>' +
+          '</div>';
+        }
+
         var intEl = document.getElementById("crm-empresa-interacciones-lista");
-        if (emp.interacciones && emp.interacciones.length > 0) {
-          intEl.innerHTML = emp.interacciones.map(function (i) {
-            return '<div class="crm-timeline-item" style="cursor:pointer;" data-int-id="' + i.id + '">' +
-              '<span class="crm-timeline-fecha">' + _esc((i.fecha || "").substring(0, 10)) + '</span>' +
-              '<span class="crm-timeline-tipo">' + (_tlI[i.tipo] || "") + ' ' + _esc(i.tipo) + '</span>' +
-              '<span class="crm-timeline-asunto">' + _esc(i.asunto || i.descripcion || "") + '</span>' +
-              (i.resultado ? '<span class="status-badge status-badge--lead" style="font-size:0.65rem;">' + _esc(i.resultado) + '</span>' : '') +
-              '</div>';
-          }).join("");
-          intEl.querySelectorAll("[data-int-id]").forEach(function (el) {
-            el.addEventListener("click", function () { if (window._intAbrirModalEditar) _intAbrirModalEditar(parseInt(el.getAttribute("data-int-id"))); });
+        function _tlRender() {
+          var visible = _tlFiltroActivo
+            ? _tlInteracciones.filter(function (i) { return i.tipo === _tlFiltroActivo; })
+            : _tlInteracciones;
+          if (visible.length > 0) {
+            intEl.innerHTML = visible.map(_tlRenderItem).join("");
+            intEl.querySelectorAll("[data-int-id]").forEach(function (el) {
+              el.addEventListener("click", function (e) {
+                var id = parseInt(el.getAttribute("data-int-id"));
+                if (_tlModoSeleccion) {
+                  // Toggle selección
+                  if (_tlSeleccionados.has(id)) _tlSeleccionados.delete(id);
+                  else _tlSeleccionados.add(id);
+                  el.classList.toggle("crm-tl-selected", _tlSeleccionados.has(id));
+                  var cb = el.querySelector(".crm-tl-check");
+                  if (cb) cb.checked = _tlSeleccionados.has(id);
+                  _tlActualizarBarraSeleccion();
+                } else {
+                  if (window._intAbrirModalEditar) _intAbrirModalEditar(id);
+                }
+              });
+              // Checkbox click independiente
+              var cb = el.querySelector(".crm-tl-check");
+              if (cb) {
+                cb.addEventListener("change", function (e) {
+                  var id = parseInt(cb.getAttribute("data-int-id"));
+                  if (cb.checked) _tlSeleccionados.add(id);
+                  else _tlSeleccionados.delete(id);
+                  el.classList.toggle("crm-tl-selected", cb.checked);
+                  _tlActualizarBarraSeleccion();
+                });
+              }
+            });
+          } else {
+            intEl.innerHTML = '<p class="crm-sin-datos">' +
+              (_tlFiltroActivo ? "Sin actividades de tipo «" + _tlFiltroActivo + "»" : "Sin actividades") + '</p>';
+          }
+          _tlActualizarBarraSeleccion();
+        }
+        _tlRender();
+
+        // Botón "Seleccionar"
+        var btnTlSel = document.getElementById("btn-tl-seleccionar");
+        if (btnTlSel) {
+          // Reemplazar listener cada vez que se carga una empresa (clonar nodo)
+          var btnTlSelNew = btnTlSel.cloneNode(true);
+          btnTlSel.parentNode.replaceChild(btnTlSelNew, btnTlSel);
+          btnTlSelNew.addEventListener("click", _tlEntrarModoSeleccion);
+        }
+
+        // Botón "Cancelar"
+        var btnTlCancel = document.getElementById("btn-tl-cancelar-sel");
+        if (btnTlCancel) {
+          var btnTlCancelNew = btnTlCancel.cloneNode(true);
+          btnTlCancel.parentNode.replaceChild(btnTlCancelNew, btnTlCancel);
+          btnTlCancelNew.addEventListener("click", _tlSalirModoSeleccion);
+        }
+
+        // Checkbox "Seleccionar todas"
+        var checkAll = document.getElementById("crm-tl-check-all");
+        if (checkAll) {
+          var checkAllNew = checkAll.cloneNode(true);
+          checkAll.parentNode.replaceChild(checkAllNew, checkAll);
+          checkAllNew.addEventListener("change", function () {
+            var visibles = intEl ? intEl.querySelectorAll("[data-int-id]") : [];
+            visibles.forEach(function (el) {
+              var id = parseInt(el.getAttribute("data-int-id"));
+              if (checkAllNew.checked) { _tlSeleccionados.add(id); el.classList.add("crm-tl-selected"); }
+              else { _tlSeleccionados.delete(id); el.classList.remove("crm-tl-selected"); }
+              var cb = el.querySelector(".crm-tl-check");
+              if (cb) cb.checked = checkAllNew.checked;
+            });
+            _tlActualizarBarraSeleccion();
           });
-        } else {
-          intEl.innerHTML = '<p class="crm-sin-datos">Sin interacciones</p>';
+        }
+
+        // Botón "Eliminar seleccionadas"
+        var btnElimSel = document.getElementById("btn-tl-eliminar-sel");
+        if (btnElimSel) {
+          var btnElimSelNew = btnElimSel.cloneNode(true);
+          btnElimSel.parentNode.replaceChild(btnElimSelNew, btnElimSel);
+          btnElimSelNew.addEventListener("click", function () {
+            var ids = Array.from(_tlSeleccionados);
+            if (ids.length === 0) return;
+            if (!confirm("¿Eliminar " + ids.length + " actividad" + (ids.length !== 1 ? "es" : "") + "? Esta acción no se puede deshacer.")) return;
+            btnElimSelNew.disabled = true;
+            btnElimSelNew.textContent = "⏳ Eliminando…";
+            fetch("/api/crm/interacciones/batch", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ids: ids })
+            })
+              .then(function (r) { return r.json(); })
+              .then(function (res) {
+                _tlSalirModoSeleccion();
+                if (typeof mostrarToast === "function") {
+                  mostrarToast((res.eliminadas || ids.length) + " actividad(es) eliminada(s).", "success");
+                }
+                if (_crmEmpresaSeleccionada) _crmSeleccionarEmpresa(_crmEmpresaSeleccionada);
+              })
+              .catch(function () {
+                btnElimSelNew.disabled = false;
+                btnElimSelNew.textContent = "🗑 Eliminar seleccionadas";
+                alert("Error al eliminar. Inténtalo de nuevo.");
+              });
+          });
+        }
+
+        // Filtros tipo (pills)
+        var filtrosEl = document.getElementById("crm-timeline-filtros");
+        if (filtrosEl) {
+          filtrosEl.querySelectorAll(".crm-tl-filtro").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+              filtrosEl.querySelectorAll(".crm-tl-filtro").forEach(function (b) {
+                b.classList.remove("crm-tl-filtro--activo");
+              });
+              btn.classList.add("crm-tl-filtro--activo");
+              _tlFiltroActivo = btn.getAttribute("data-tipo") || "";
+              _tlRender();
+            });
+          });
         }
 
         // Oportunidades
@@ -259,6 +478,8 @@
     document.getElementById("crm-emp-telefono").value = emp ? emp.telefono || "" : "";
     document.getElementById("crm-emp-email").value = emp ? emp.email || "" : "";
     document.getElementById("crm-emp-web").value = emp ? emp.web || "" : "";
+    var dominioEl = document.getElementById("crm-emp-dominio");
+    if (dominioEl) dominioEl.value = emp ? emp.dominio || "" : "";
     document.getElementById("crm-emp-sector").value = emp ? emp.sector || "" : "";
     document.getElementById("crm-emp-notas").value = emp ? emp.notas || "" : "";
     modalEl.classList.add("visible");
@@ -297,6 +518,7 @@
       telefono: document.getElementById("crm-emp-telefono").value,
       email: document.getElementById("crm-emp-email").value,
       web: document.getElementById("crm-emp-web").value,
+      dominio: (document.getElementById("crm-emp-dominio") || {}).value || "",
       sector: document.getElementById("crm-emp-sector").value,
       notas: document.getElementById("crm-emp-notas").value,
     };
@@ -1339,4 +1561,215 @@
   var _initPanelInicio = document.getElementById("panel-crm-inicio");
   if (_initPanelInicio && _initPanelInicio.classList.contains("visible")) _crmCargarStats();
   if (_initPanelEmpresas && _initPanelEmpresas.classList.contains("visible")) _crmCargarEmpresas();
+
+  // ─── Gmail Sync — Fase 3 ─────────────────────────────────────────────────
+
+  /** Comprueba si Gmail está disponible y actualiza UI del panel inicio */
+  function _gmailComprobarEstado() {
+    fetch("/api/gmail/estado")
+      .then(function (r) { return r.json(); })
+      .then(function (estado) {
+        var card = document.getElementById("crm-gmail-admin-card");
+        var txt = document.getElementById("crm-gmail-estado-txt");
+        if (!card) return;
+        card.style.display = "block";
+        if (estado.disponible) {
+          if (txt) txt.textContent = "Conectado como " + (estado.cuenta || "—");
+          var btnGlobal = document.getElementById("btn-gmail-sync-global");
+          if (btnGlobal) btnGlobal.disabled = false;
+        } else {
+          if (txt) txt.textContent = "No configurado: " + (estado.motivo || "");
+          var btnGlobal2 = document.getElementById("btn-gmail-sync-global");
+          if (btnGlobal2) btnGlobal2.disabled = true;
+        }
+      })
+      .catch(function () {
+        var card = document.getElementById("crm-gmail-admin-card");
+        if (card) card.style.display = "none";
+      });
+  }
+
+  /** Sincroniza Gmail para una empresa concreta y actualiza el timeline */
+  function _gmailSyncEmpresa(empresaId, btn) {
+    if (!empresaId) return;
+    var orig = btn ? btn.textContent : "";
+    if (btn) { btn.disabled = true; btn.textContent = "⏳ Sincronizando…"; }
+    fetch("/api/gmail/sync/empresa/" + empresaId, { method: "POST" })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (btn) { btn.disabled = false; btn.textContent = orig; }
+        if (res.error) {
+          alert("Error Gmail sync: " + res.error);
+          return;
+        }
+        var msg = "Gmail: " + res.hilos_encontrados + " hilo(s) encontrado(s), " +
+          res.interacciones_creadas + " nueva(s).";
+        if (res.interacciones_creadas > 0) {
+          // Recargar empresa para mostrar nuevas actividades
+          if (typeof _crmSeleccionarEmpresa === "function") {
+            _crmSeleccionarEmpresa(empresaId);
+          }
+          // Pequeño toast
+          var toast = document.createElement("div");
+          toast.textContent = msg;
+          Object.assign(toast.style, {
+            position: "fixed", bottom: "24px", right: "24px",
+            background: "#1e293b", color: "#fff", padding: "10px 18px",
+            borderRadius: "8px", fontSize: "0.85rem", zIndex: "9999",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.2)"
+          });
+          document.body.appendChild(toast);
+          setTimeout(function () { toast.remove(); }, 4000);
+        } else {
+          alert(msg);
+        }
+      })
+      .catch(function (err) {
+        if (btn) { btn.disabled = false; btn.textContent = orig; }
+        alert("Error de red al sincronizar Gmail: " + err);
+      });
+  }
+
+  // Botón Sync Gmail por empresa (se muestra cuando hay empresa seleccionada)
+  var _btnGmailEmpresa = document.getElementById("btn-gmail-sync-empresa");
+  if (_btnGmailEmpresa) {
+    _btnGmailEmpresa.addEventListener("click", function () {
+      _gmailSyncEmpresa(_crmEmpresaSeleccionada, _btnGmailEmpresa);
+    });
+    // Mostrar solo cuando Gmail está disponible
+    fetch("/api/gmail/estado")
+      .then(function (r) { return r.json(); })
+      .then(function (e) {
+        if (e.disponible) _btnGmailEmpresa.style.display = "";
+      })
+      .catch(function () {});
+  }
+
+  // Botón Sync Gmail global (en panel inicio CRM)
+  var _btnGmailGlobal = document.getElementById("btn-gmail-sync-global");
+  if (_btnGmailGlobal) {
+    _btnGmailGlobal.addEventListener("click", function () {
+      var btn = _btnGmailGlobal;
+      var orig = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "⏳ Sincronizando…";
+      var res2El = document.getElementById("crm-gmail-sync-resultado");
+      if (res2El) { res2El.style.display = "none"; res2El.textContent = ""; }
+      fetch("/api/gmail/sync/global", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ solo_con_dominio: false }) })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          btn.disabled = false;
+          btn.textContent = orig;
+          if (res.error) {
+            if (res2El) { res2El.style.display = "block"; res2El.textContent = "Error: " + res.error; }
+            return;
+          }
+          var txt = "✓ " + res.empresas_procesadas + " empresa(s) procesadas · " +
+            res.hilos_encontrados + " hilo(s) · " +
+            res.interacciones_creadas + " actividad(es) nueva(s)";
+          if (res.errores && res.errores.length) txt += " · " + res.errores.length + " error(es)";
+          if (res2El) { res2El.style.display = "block"; res2El.textContent = txt; }
+        })
+        .catch(function (err) {
+          btn.disabled = false;
+          btn.textContent = orig;
+          if (res2El) { res2El.style.display = "block"; res2El.textContent = "Error de red: " + err; }
+        });
+    });
+  }
+
+  // Cargar estado Gmail cuando se abre el panel inicio CRM
+  var _crmPanelInicioObs = document.getElementById("panel-crm-inicio");
+  if (_crmPanelInicioObs) {
+    new MutationObserver(function (muts) {
+      muts.forEach(function (m) {
+        if (m.type === "attributes" && _crmPanelInicioObs.classList.contains("visible")) {
+          _gmailComprobarEstado();
+        }
+      });
+    }).observe(_crmPanelInicioObs, { attributes: true, attributeFilter: ["class"] });
+    // Si ya está visible al cargar
+    if (_crmPanelInicioObs.classList.contains("visible")) _gmailComprobarEstado();
+  }
+
+  // ─── Seguimiento CRM — Fase 4B ───────────────────────────────────────────
+  var _TIPO_ICON = { cliente: "🏢", lead: "🎯", proveedor: "🔧", colaborador: "🤝", otro: "📌" };
+  var _INT_ICON  = { llamada: "📞", email: "✉️", reunion: "🤝", nota: "📝", whatsapp: "💬", visita: "🏢", gmail: "📧" };
+
+  function _seguimientoDias(n) {
+    if (!n || n < 0) return "nunca";
+    if (n === 0) return "hoy";
+    if (n === 1) return "ayer";
+    if (n < 30) return n + "d";
+    if (n < 365) return Math.floor(n / 30) + "m";
+    return Math.floor(n / 365) + "a";
+  }
+
+  var _btnSeguimiento = document.getElementById("btn-seguimiento-consultar");
+  if (_btnSeguimiento) {
+    _btnSeguimiento.addEventListener("click", function () {
+      var dias = parseInt(document.getElementById("crm-seguimiento-dias").value) || 30;
+      var resultadoEl = document.getElementById("crm-seguimiento-resultado");
+      var listaEl = document.getElementById("crm-seguimiento-lista");
+      _btnSeguimiento.disabled = true;
+      _btnSeguimiento.textContent = "⏳ Consultando…";
+      fetch("/api/crm/seguimiento/empresas-frias?dias=" + dias + "&excluir=proveedor&limit=50")
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          _btnSeguimiento.disabled = false;
+          _btnSeguimiento.textContent = "Ver empresas frías";
+          var empresas = data.empresas || [];
+          if (resultadoEl) resultadoEl.style.display = "block";
+          if (!listaEl) return;
+          if (empresas.length === 0) {
+            listaEl.innerHTML = '<p style="color:var(--color-text-secondary);font-size:0.85rem;padding:8px 0;">✅ Todas las empresas tienen actividad en los últimos ' + dias + ' días.</p>';
+            return;
+          }
+          var header = '<div style="font-size:0.8rem;font-weight:600;color:var(--color-text-secondary);margin-bottom:6px;">' +
+            data.total + ' empresa' + (data.total !== 1 ? "s" : "") + ' sin actividad > ' + dias + ' días</div>';
+          var rows = empresas.map(function (e) {
+            var icon = _TIPO_ICON[e.tipo] || "📌";
+            var ult = _INT_ICON[e.ultima_interaccion_tipo] || "❓";
+            var dias_str = _seguimientoDias(e.dias_sin_actividad);
+            return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border,#E2E8F0);cursor:pointer;" ' +
+              'onclick="window.navegarAEmpresaCRM(' + e.id + ')" title="Ir a la ficha de ' + _esc(e.nombre) + '">' +
+              '<span>' + icon + '</span>' +
+              '<span style="flex:1;font-size:0.85rem;font-weight:500;color:var(--color-text);">' + _esc(e.nombre) + '</span>' +
+              '<span style="font-size:0.78rem;color:var(--color-text-secondary);">' + ult + ' ' + dias_str + '</span>' +
+              '</div>';
+          }).join("");
+          listaEl.innerHTML = header + rows;
+        })
+        .catch(function () {
+          _btnSeguimiento.disabled = false;
+          _btnSeguimiento.textContent = "Ver empresas frías";
+          if (listaEl) listaEl.innerHTML = '<p style="color:#dc2626;font-size:0.85rem;">Error al consultar.</p>';
+        });
+    });
+  }
+
+  // ─── Navegación desde otros módulos → Empresa CRM (Fase 1) ───────────────
+  window.navegarAEmpresaCRM = function (empresaId) {
+    // Navega al panel CRM empresas y selecciona la empresa indicada
+    if (typeof activarSubpanel === "function") {
+      activarSubpanel("crm", "empresas");
+    } else {
+      // fallback: activar módulo CRM manualmente
+      var navCRM = document.getElementById("nav-crm-modulo");
+      if (navCRM) navCRM.click();
+      var navEmpresas = document.getElementById("nav-crm-empresas");
+      if (navEmpresas) setTimeout(function () { navEmpresas.click(); }, 150);
+    }
+    setTimeout(function () {
+      if (typeof _crmCargarEmpresas === "function") _crmCargarEmpresas();
+      setTimeout(function () {
+        if (typeof _crmSeleccionarEmpresa === "function") {
+          _crmSeleccionarEmpresa(empresaId);
+        }
+        // Scroll al detalle
+        var det = document.getElementById("crm-empresa-detalle");
+        if (det) det.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 400);
+    }, 300);
+  };
 })();

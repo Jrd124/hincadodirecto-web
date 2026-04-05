@@ -1539,6 +1539,36 @@
               <p>Pipeline de ventas</p>
             </div>
           </div>
+          <!-- Gmail Sync — Fase 3 -->
+          <div id="crm-gmail-admin-card" style="margin-top:28px;padding:16px 20px;background:var(--color-surface,#F8FAFC);border:1px solid var(--border,#E2E8F0);border-radius:10px;display:none;">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+              <span style="font-size:1.2rem;">✉️</span>
+              <div style="flex:1;min-width:180px;">
+                <div style="font-size:0.95rem;font-weight:600;color:var(--color-text,#1E293B);">Gmail Sync</div>
+                <div id="crm-gmail-estado-txt" style="font-size:0.8rem;color:var(--color-text-secondary,#64748B);margin-top:2px;">Comprobando estado…</div>
+              </div>
+              <button type="button" id="btn-gmail-sync-global" style="font-size:0.82rem;padding:6px 16px;background:var(--color-primary,#4F46E5);color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap;">🔄 Sync global (todas las empresas)</button>
+            </div>
+            <div id="crm-gmail-sync-resultado" style="margin-top:10px;font-size:0.82rem;color:var(--color-text-secondary,#64748B);display:none;"></div>
+          </div>
+
+          <!-- Seguimiento — Fase 4B -->
+          <div style="margin-top:20px;padding:16px 20px;background:var(--color-surface,#F8FAFC);border:1px solid var(--border,#E2E8F0);border-radius:10px;">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+              <span style="font-size:1.2rem;">🎯</span>
+              <div style="flex:1;min-width:180px;">
+                <div style="font-size:0.95rem;font-weight:600;color:var(--color-text,#1E293B);">Empresas sin actividad</div>
+                <div style="font-size:0.8rem;color:var(--color-text-secondary,#64748B);margin-top:2px;">Clientes y leads que necesitan seguimiento</div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <label style="font-size:0.8rem;color:var(--color-text-secondary,#64748B);">+<input type="number" id="crm-seguimiento-dias" value="30" min="7" max="365" style="width:48px;border:1px solid var(--border,#E2E8F0);border-radius:4px;padding:2px 6px;font-size:0.8rem;"> días</label>
+                <button type="button" id="btn-seguimiento-consultar" style="font-size:0.82rem;padding:6px 14px;background:var(--color-primary,#4F46E5);color:#fff;border:none;border-radius:6px;cursor:pointer;">Ver empresas frías</button>
+              </div>
+            </div>
+            <div id="crm-seguimiento-resultado" style="display:none;">
+              <div id="crm-seguimiento-lista" style="max-height:260px;overflow-y:auto;border-top:1px solid var(--border,#E2E8F0);padding-top:8px;"></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1578,6 +1608,14 @@
                   </div>
                   <button type="button" class="secondary" id="btn-editar-empresa-crm" style="font-size:0.8rem;padding:4px 12px;">Editar</button>
                 </div>
+                <!-- Card última interacción (Fase 1) -->
+                <div id="crm-empresa-resumen-card" style="display:none;margin:8px 0 4px;padding:10px 14px;background:var(--color-surface,#F8FAFC);border:1px solid var(--border,#E2E8F0);border-radius:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                  <span style="font-size:0.78rem;font-weight:600;color:var(--color-text-secondary,#64748B);white-space:nowrap;">Última interacción</span>
+                  <span id="crm-resumen-tipo-icon" style="font-size:1.1rem;"></span>
+                  <span id="crm-resumen-fecha" style="font-size:0.82rem;color:var(--color-text-secondary,#64748B);white-space:nowrap;"></span>
+                  <span id="crm-resumen-asunto" style="font-size:0.85rem;color:var(--color-text,#1E293B);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+                  <span id="crm-resumen-contadores" style="font-size:0.78rem;color:var(--color-text-secondary,#64748B);white-space:nowrap;margin-left:auto;"></span>
+                </div>
                 <div class="crm-empresa-datos">
                   <div class="crm-empresa-datos-col">
                     <h4>Datos de contacto</h4>
@@ -1602,12 +1640,35 @@
                     </div>
                   </div>
                   <div class="crm-seccion">
-                    <div style="display:flex;align-items:center;justify-content:space-between;">
-                      <h4>Ultimas interacciones</h4>
-                      <button type="button" class="primary" id="btn-add-interaccion-empresa" style="font-size:0.75rem;padding:2px 10px;">+ Interaccion</button>
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+                      <h4 style="margin:0;">Actividades</h4>
+                      <div style="display:flex;gap:6px;align-items:center;">
+                        <button type="button" id="btn-gmail-sync-empresa" style="font-size:0.75rem;padding:2px 10px;background:var(--color-surface,#F8FAFC);border:1px solid var(--border,#E2E8F0);border-radius:6px;cursor:pointer;display:none;" title="Sincronizar emails de Gmail para esta empresa">🔄 Sync Gmail</button>
+                        <button type="button" id="btn-tl-seleccionar" style="font-size:0.75rem;padding:2px 10px;background:var(--color-surface,#F8FAFC);border:1px solid var(--border,#E2E8F0);border-radius:6px;cursor:pointer;">☑ Seleccionar</button>
+                        <button type="button" class="primary" id="btn-add-interaccion-empresa" style="font-size:0.75rem;padding:2px 10px;">+ Actividad</button>
+                      </div>
+                    </div>
+                    <!-- Filtros por tipo -->
+                    <div id="crm-timeline-filtros" style="display:flex;gap:4px;flex-wrap:wrap;margin:8px 0 4px;">
+                      <button class="crm-tl-filtro crm-tl-filtro--activo" data-tipo="">Todas</button>
+                      <button class="crm-tl-filtro" data-tipo="llamada">📞 Llamada</button>
+                      <button class="crm-tl-filtro" data-tipo="email">✉️ Email</button>
+                      <button class="crm-tl-filtro" data-tipo="reunion">🤝 Reunión</button>
+                      <button class="crm-tl-filtro" data-tipo="nota">📝 Nota</button>
+                      <button class="crm-tl-filtro" data-tipo="whatsapp">💬 WhatsApp</button>
+                      <button class="crm-tl-filtro" data-tipo="visita">🏢 Visita</button>
+                    </div>
+                    <!-- Barra acción en modo selección -->
+                    <div id="crm-tl-batch-bar" style="display:none;align-items:center;gap:10px;padding:6px 10px;background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;margin-bottom:6px;">
+                      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer;">
+                        <input type="checkbox" id="crm-tl-check-all" style="width:15px;height:15px;"> Seleccionar todas
+                      </label>
+                      <span id="crm-tl-sel-count" style="font-size:0.82rem;color:#64748B;flex:1;"></span>
+                      <button type="button" id="btn-tl-eliminar-sel" style="font-size:0.8rem;padding:4px 14px;background:#DC2626;color:#fff;border:none;border-radius:6px;cursor:pointer;" disabled>🗑 Eliminar seleccionadas</button>
+                      <button type="button" id="btn-tl-cancelar-sel" style="font-size:0.8rem;padding:4px 10px;background:none;border:1px solid #CBD5E1;border-radius:6px;cursor:pointer;">Cancelar</button>
                     </div>
                     <div id="crm-empresa-interacciones-lista" class="crm-timeline">
-                      <p class="crm-sin-datos">Sin interacciones</p>
+                      <p class="crm-sin-datos">Sin actividades</p>
                     </div>
                   </div>
                   <div class="crm-seccion">
@@ -1862,6 +1923,10 @@
           </div>
           <div id="presup-oportunidad-badge" style="display:none;margin-bottom:16px;padding:10px 14px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;font-size:13px;cursor:pointer;" onclick="var oid=this.getAttribute('data-oportunidad-id');if(oid)navegarAOportunidad(parseInt(oid));">
             <span style="margin-right:4px;">&#11088;</span> Oportunidad CRM: <strong id="presup-oportunidad-badge-nombre"></strong>
+          </div>
+          <div id="presup-crm-empresa-badge" style="display:none;margin-bottom:16px;padding:10px 14px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;font-size:13px;cursor:pointer;" onclick="var eid=this.getAttribute('data-crm-empresa-id');if(eid)navegarAEmpresaCRM(parseInt(eid));">
+            <span style="margin-right:4px;">🏢</span> Empresa CRM: <strong class="presup-crm-empresa-nombre"></strong>
+            <span style="font-size:11px;color:var(--color-text-secondary);margin-left:6px;">→ Ver ficha</span>
           </div>
 
           <form id="presupuesto-form" onsubmit="return false;">
@@ -2242,6 +2307,12 @@
                 <label for="crm-emp-web">Web</label>
                 <input type="text" id="crm-emp-web" name="web" />
               </div>
+              <div class="form-group">
+                <label for="crm-emp-dominio" title="Dominio de email corporativo (p.ej. empresa.com). Se usará para sincronización Gmail.">Dominio <span style="font-size:0.75em;color:var(--color-text-secondary);">(Gmail sync)</span></label>
+                <input type="text" id="crm-emp-dominio" name="dominio" placeholder="empresa.com" />
+              </div>
+            </div>
+            <div class="form-row">
               <div class="form-group">
                 <label for="crm-emp-sector">Sector</label>
                 <input type="text" id="crm-emp-sector" name="sector" />
@@ -3462,7 +3533,7 @@
     <script src="/static/js/modules/proyectos.js?v=27"></script>
     <script src="/static/js/modules/presupuestos.js?v=27"></script>
     <script src="/static/js/modules/crm.js?v=27"></script>
-    <script src="/static/js/modules/maquinaria.js?v=31"></script>
+    <script src="/static/js/modules/maquinaria.js?v=32"></script>
     <script src="/static/js/modules/certificaciones.js?v=27"></script>
     <script src="/static/js/modules/usuarios.js?v=27"></script>
     <script src="/static/js/modules/transporte.js?v=27"></script>

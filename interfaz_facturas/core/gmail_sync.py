@@ -1,0 +1,397 @@
+"""
+gmail_sync.py — Fase 3: Sincronización Gmail → CRM (on-demand, readonly).
+
+Diseño:
+  - OAuth2 con scope gmail.readonly. Tokens en variables de entorno.
+  - Por empresa: busca hilos por dominio + emails de contactos conocidos.
+  - Solo guarda metadata (threadId, subject, date, participants, snippet ≤200 chars).
+  - Genera resumen ≤5 líneas via LLM solo si hay cambios desde last_sync.
+  - No guarda contenido completo del email.
+  - Límite: 10 hilos por empresa, 20 empresas por run global.
+"""
+from __future__ import annotations
+
+import base64
+import logging
+import os
+import re
+from datetime import datetime, timezone
+from typing import Any
+
+logger = logging.getLogger(__name__)
+
+# ── Intentar importar dependencias Google ─────────────────────────────────────
+try:
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+    from googleapiclient.discovery import build
+    _GOOGLE_LIBS_OK = True
+except ImportError:
+    _GOOGLE_LIBS_OK = False
+    logger.warning(
+        "Librerías Google no instaladas. Ejecuta: "
+        "pip install google-auth google-auth-oauthlib google-api-python-client"
+    )
+
+# ── Config desde entorno ───────────────────────────────────────────────────────
+GMAIL_CLIENT_ID     = os.getenv("GMAIL_CLIENT_ID", "")
+GMAIL_CLIENT_SECRET = os.getenv("GMAIL_CLIENT_SECRET", "")
+GMAIL_REFRESH_TOKEN = os.getenv("GMAIL_REFRESH_TOKEN", "")
+GMAIL_ACCOUNT       = os.getenv("GMAIL_ACCOUNT", "direccion@hincadodirecto.com")
+CRM_GMAIL_BATCH_SIZE = int(os.getenv("CRM_GMAIL_BATCH_SIZE", "20"))
+CRM_GMAIL_MAX_THREADS = int(os.getenv("CRM_GMAIL_MAX_THREADS", "10"))
+
+_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+
+
+# ── Auth ───────────────────────────────────────────────────────────────────────
+
+def _get_credentials() -> "Credentials":
+    """Devuelve credenciales válidas, refrescando el access_token si hace falta."""
+    if not _GOOGLE_LIBS_OK:
+        raise RuntimeError("Librerías Google no instaladas.")
+    if not all([GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN]):
+        raise RuntimeError(
+            "Faltan variables de entorno: GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN. "
+            "Ejecuta: python scripts/gmail_oauth_setup.py"
+        )
+    creds = Credentials(
+        token=None,
+        refresh_token=GMAIL_REFRESH_TOKEN,
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=GMAIL_CLIENT_ID,
+        client_secret=GMAIL_CLIENT_SECRET,
+        scopes=_SCOPES,
+    )
+    # Refrescar si el token está expirado (se hace automáticamente)
+    if not creds.valid:
+        creds.refresh(Request())
+    return creds
+
+
+def _build_service():
+    """Construye el cliente Gmail API."""
+    return build("gmail", "v1", credentials=_get_credentials(), cache_discovery=False)
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _header(headers: list[dict], name: str) -> str:
+    for h in headers:
+        if h.get("name", "").lower() == name.lower():
+            return h.get("value", "")
+    return ""
+
+
+def _ts_to_date(ts_ms: str | int | None) -> str:
+    """Convierte timestamp Gmail (ms epoch) a fecha ISO."""
+    if not ts_ms:
+        return ""
+    try:
+        dt = datetime.fromtimestamp(int(ts_ms) / 1000, tz=timezone.utc)
+        return dt.strftime("%Y-%m-%d")
+    except Exception:
+        return ""
+
+
+def _clean_snippet(snippet: str) -> str:
+    """Limpia el snippet de Gmail (entidades HTML, espacios)."""
+    if not snippet:
+        return ""
+    snippet = re.sub(r"&amp;", "&", snippet)
+    snippet = re.sub(r"&lt;", "<", snippet)
+    snippet = re.sub(r"&gt;", ">", snippet)
+    snippet = re.sub(r"&quot;", '"', snippet)
+    snippet = re.sub(r"&#39;", "'", snippet)
+    snippet = re.sub(r"\s+", " ", snippet).strip()
+    return snippet[:200]
+
+
+def _build_query(empresa: dict, contactos: list[dict]) -> str | None:
+    """Construye la query Gmail para una empresa."""
+    parts = []
+    dominio = (empresa.get("dominio") or "").strip()
+    if dominio:
+        parts.append(f"(from:@{dominio} OR to:@{dominio})")
+    for c in contactos:
+        email = (c.get("email") or "").strip().lower()
+        if email:
+            parts.append(f"(from:{email} OR to:{email})")
+    if not parts:
+        # Fallback: nombre de empresa entre comillas (menos preciso)
+        nombre = (empresa.get("nombre") or "").strip()
+        if nombre and len(nombre) > 3:
+            parts.append(f'"{nombre}"')
+    return " OR ".join(parts) if parts else None
+
+
+# ── Sync por empresa ───────────────────────────────────────────────────────────
+
+def sync_empresa(
+    empresa: dict,
+    contactos: list[dict],
+    service=None,
+    max_threads: int = CRM_GMAIL_MAX_THREADS,
+) -> list[dict]:
+    """
+    Busca hilos Gmail para una empresa y devuelve lista de metadatos.
+    No escribe en la BD — eso lo hace el llamador.
+
+    Returns:
+        Lista de dicts con keys:
+          gmail_thread_id, subject, date, participants, snippet, empresa_id
+    """
+    if service is None:
+        service = _build_service()
+
+    query = _build_query(empresa, contactos)
+    if not query:
+        logger.info("Empresa %s sin dominio ni emails de contacto — omitida", empresa.get("nombre"))
+        return []
+
+    try:
+        resp = service.users().threads().list(
+            userId="me",
+            q=query,
+            maxResults=max_threads,
+        ).execute()
+    except Exception as exc:
+        logger.error("Error buscando hilos para empresa %s: %s", empresa.get("nombre"), exc)
+        return []
+
+    threads_meta = resp.get("threads", [])
+    results = []
+
+    for t in threads_meta:
+        thread_id = t["id"]
+        try:
+            # Obtener solo metadata del último mensaje del hilo
+            thread = service.users().threads().get(
+                userId="me",
+                id=thread_id,
+                format="metadata",
+                metadataHeaders=["Subject", "From", "To", "Date"],
+            ).execute()
+        except Exception as exc:
+            logger.warning("Error leyendo hilo %s: %s", thread_id, exc)
+            continue
+
+        messages = thread.get("messages", [])
+        if not messages:
+            continue
+
+        # Tomamos el último mensaje del hilo
+        last_msg = messages[-1]
+        headers = last_msg.get("payload", {}).get("headers", [])
+        snippet = _clean_snippet(last_msg.get("snippet", ""))
+        ts = last_msg.get("internalDate")
+
+        subject = _header(headers, "Subject") or "(sin asunto)"
+        from_addr = _header(headers, "From")
+        to_addr = _header(headers, "To")
+        date_str = _ts_to_date(ts)
+
+        participants = ", ".join(filter(None, [from_addr, to_addr]))[:200]
+
+        results.append({
+            "gmail_thread_id": thread_id,
+            "subject": subject,
+            "date": date_str,
+            "participants": participants,
+            "snippet": snippet,
+            "empresa_id": empresa["id"],
+            "num_messages": len(messages),
+        })
+
+    logger.info(
+        "Empresa '%s': %d hilo(s) encontrados (query: %s...)",
+        empresa.get("nombre"), len(results), query[:60]
+    )
+    return results
+
+
+# ── Resumen LLM ────────────────────────────────────────────────────────────────
+
+def resumir_hilo(subject: str, snippet: str, empresa_nombre: str) -> str:
+    """
+    Genera un resumen corto (≤5 líneas) del último hilo usando el LLM existente.
+    Solo se llama si hay cambios desde el último sync.
+    """
+    try:
+        from config import client as openai_client
+        if not openai_client:
+            return snippet[:200]
+        prompt = (
+            f"Eres asistente de CRM de una empresa de instalación solar (Hincado Directo).\n"
+            f"Resume en máximo 3 líneas la última interacción con '{empresa_nombre}' "
+            f"basándote en este email:\n\n"
+            f"Asunto: {subject}\n"
+            f"Extracto: {snippet}\n\n"
+            f"Responde en español, sin inventar información no presente en el texto."
+        )
+        resp = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=150,
+            temperature=0,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as exc:
+        logger.warning("Error generando resumen LLM: %s", exc)
+        return snippet[:200]
+
+
+# ── Guardar en BD ──────────────────────────────────────────────────────────────
+
+def guardar_hilo_como_interaccion(
+    hilo: dict,
+    empresa_id: int,
+    generar_resumen: bool = True,
+    empresa_nombre: str = "",
+) -> dict | None:
+    """
+    Guarda un hilo Gmail como crm_interaccion si no existe ya.
+    Idempotente por gmail_thread_id + empresa_id.
+    """
+    from core.db import conectar
+    from core.crm_db import init_crm_db
+    init_crm_db()
+
+    thread_id = hilo["gmail_thread_id"]
+    snippet = hilo.get("snippet", "")
+    subject = hilo.get("subject", "(sin asunto)")
+    date = hilo.get("date", "")
+
+    with conectar() as conn:
+        # Idempotencia: no duplicar
+        existing = conn.execute(
+            "SELECT id FROM crm_interacciones WHERE gmail_thread_id = ? AND empresa_id = ?",
+            (thread_id, empresa_id)
+        ).fetchone()
+        if existing:
+            return None  # ya existe
+
+        descripcion = snippet
+        if generar_resumen and snippet:
+            descripcion = resumir_hilo(subject, snippet, empresa_nombre)
+
+        from datetime import datetime as dt_
+        ahora = dt_.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+
+        conn.execute("""
+            INSERT INTO crm_interacciones
+                (empresa_id, tipo, asunto, descripcion, fecha, source,
+                 gmail_thread_id, gmail_snippet, creado_por, fecha_creacion)
+            VALUES (?, 'email', ?, ?, ?, 'gmail', ?, ?, 'gmail_sync', ?)
+        """, (
+            empresa_id,
+            subject[:255],
+            descripcion,
+            date or ahora[:10],
+            thread_id,
+            snippet,
+            ahora,
+        ))
+        new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        return {"id": new_id, "gmail_thread_id": thread_id, "asunto": subject}
+
+
+# ── Job global (batch) ────────────────────────────────────────────────────────
+
+def sync_global_batch(
+    batch_size: int = CRM_GMAIL_BATCH_SIZE,
+    solo_con_dominio: bool = False,
+) -> dict[str, Any]:
+    """
+    Sync global: procesa hasta `batch_size` empresas con dominio o contactos con email.
+    Diseñado para ejecución manual (botón admin) 1-2 veces al día.
+
+    Returns: resumen de la operación.
+    """
+    from core.db import conectar
+    from core.crm_db import init_crm_db, listar_contactos
+    init_crm_db()
+
+    service = _build_service()
+
+    with conectar() as conn:
+        # Priorizar empresas con dominio; luego las que tienen contactos con email
+        if solo_con_dominio:
+            empresas = conn.execute("""
+                SELECT * FROM crm_empresas
+                WHERE activo = 1 AND dominio IS NOT NULL AND dominio != ''
+                ORDER BY nombre
+                LIMIT ?
+            """, (batch_size,)).fetchall()
+        else:
+            empresas = conn.execute("""
+                SELECT DISTINCT e.*
+                FROM crm_empresas e
+                WHERE e.activo = 1
+                  AND (
+                    (e.dominio IS NOT NULL AND e.dominio != '')
+                    OR EXISTS (
+                        SELECT 1 FROM crm_contactos c
+                        WHERE c.empresa_vinculada_id = e.id
+                          AND c.email IS NOT NULL AND c.email != ''
+                          AND c.activo = 1
+                    )
+                  )
+                ORDER BY e.nombre
+                LIMIT ?
+            """, (batch_size,)).fetchall()
+
+    stats = {
+        "empresas_procesadas": 0,
+        "hilos_encontrados": 0,
+        "interacciones_creadas": 0,
+        "errores": [],
+    }
+
+    for emp_row in empresas:
+        emp = dict(emp_row)
+        empresa_id = emp["id"]
+        try:
+            contactos_data = listar_contactos(empresa_id=empresa_id)
+            contactos = contactos_data.get("contactos", [])
+            hilos = sync_empresa(emp, contactos, service=service)
+            stats["hilos_encontrados"] += len(hilos)
+            stats["empresas_procesadas"] += 1
+            for h in hilos:
+                # Solo resumir el hilo más reciente (primero en la lista)
+                generar_res = (h == hilos[0])
+                result = guardar_hilo_como_interaccion(
+                    h, empresa_id,
+                    generar_resumen=generar_res,
+                    empresa_nombre=emp.get("nombre", ""),
+                )
+                if result:
+                    stats["interacciones_creadas"] += 1
+        except Exception as exc:
+            msg = f"{emp.get('nombre')}: {exc}"
+            logger.error("Error en sync_global empresa %s: %s", empresa_id, exc)
+            stats["errores"].append(msg)
+
+    return stats
+
+
+# ── Check de disponibilidad ────────────────────────────────────────────────────
+
+def gmail_disponible() -> dict[str, Any]:
+    """Devuelve estado del módulo Gmail para el frontend."""
+    if not _GOOGLE_LIBS_OK:
+        return {
+            "disponible": False,
+            "motivo": "Librerías Google no instaladas. Ejecuta: pip install google-auth google-auth-oauthlib google-api-python-client",
+        }
+    if not all([GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN]):
+        faltantes = [k for k, v in {
+            "GMAIL_CLIENT_ID": GMAIL_CLIENT_ID,
+            "GMAIL_CLIENT_SECRET": GMAIL_CLIENT_SECRET,
+            "GMAIL_REFRESH_TOKEN": GMAIL_REFRESH_TOKEN,
+        }.items() if not v]
+        return {
+            "disponible": False,
+            "motivo": f"Variables de entorno no configuradas: {', '.join(faltantes)}",
+        }
+    return {"disponible": True, "cuenta": GMAIL_ACCOUNT}

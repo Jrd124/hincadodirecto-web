@@ -26,9 +26,10 @@ def crm_listar_empresas():
   q = (request.args.get("q") or "").strip() or None
   activo_raw = request.args.get("activo")
   activo = int(activo_raw) if activo_raw is not None and activo_raw.strip() != "" else None
+  tercero_id = request.args.get("tercero_id", type=int) or None
   limit = min(int(request.args.get("limit") or 50), 200)
   offset = int(request.args.get("offset") or 0)
-  resultado = crm_db.listar_empresas(tipo=tipo, q=q, activo=activo, limit=limit, offset=offset)
+  resultado = crm_db.listar_empresas(tipo=tipo, q=q, activo=activo, tercero_id=tercero_id, limit=limit, offset=offset)
   return jsonify(resultado)
 
 
@@ -63,6 +64,15 @@ def crm_actualizar_empresa(empresa_id: int):
   if not empresa:
     return jsonify({"error": "Empresa CRM no encontrada"}), 404
   return jsonify(empresa)
+
+
+@crm_bp.get("/api/crm/empresas/<int:empresa_id>/resumen")
+def crm_resumen_empresa(empresa_id: int):
+  """Devuelve resumen ligero: última interacción + contadores. Usado por card cabecera."""
+  resumen = crm_db.resumen_empresa(empresa_id)
+  if not resumen:
+    return jsonify({"error": "Empresa CRM no encontrada"}), 404
+  return jsonify(resumen)
 
 
 @crm_bp.get("/api/crm/stats")
@@ -243,6 +253,20 @@ def crm_eliminar_interaccion(interaccion_id: int):
   return jsonify({"ok": True})
 
 
+@crm_bp.delete("/api/crm/interacciones/batch")
+def crm_eliminar_interacciones_batch():
+  """Elimina múltiples interacciones. Body: {"ids": [1, 2, 3]}"""
+  data = request.get_json(silent=True) or {}
+  ids = data.get("ids", [])
+  if not ids or not isinstance(ids, list):
+    return jsonify({"error": "ids requerido (lista)"}), 400
+  ids_int = [int(i) for i in ids if str(i).isdigit()]
+  if not ids_int:
+    return jsonify({"error": "ids inválidos"}), 400
+  eliminadas = crm_db.eliminar_interacciones_batch(ids_int)
+  return jsonify({"ok": True, "eliminadas": eliminadas})
+
+
 @crm_bp.get("/api/crm/interacciones/pendientes")
 def crm_interacciones_pendientes():
   return jsonify({"interacciones": crm_db.interacciones_pendientes()})
@@ -318,3 +342,23 @@ def crm_cambiar_estado_oportunidad(oportunidad_id: int):
 @crm_bp.get("/api/crm/oportunidades/pipeline")
 def crm_pipeline_oportunidades():
   return jsonify({"pipeline": crm_db.pipeline_oportunidades()})
+
+
+@crm_bp.get("/api/crm/seguimiento/empresas-frias")
+def crm_empresas_frias():
+  """Empresas sin actividad en los últimos N días.
+
+  Query params:
+    dias (int, default 30): umbral de inactividad.
+    tipos (str, comma-separated): filtrar por tipo de empresa.
+    excluir (str, comma-separated): excluir tipos.
+    limit (int, default 50): máximo de resultados.
+  """
+  dias = request.args.get("dias", 30, type=int)
+  tipos_raw = request.args.get("tipos", "")
+  excluir_raw = request.args.get("excluir", "")
+  limit = request.args.get("limit", 50, type=int)
+  tipos = [t.strip() for t in tipos_raw.split(",") if t.strip()] or None
+  excluir = [t.strip() for t in excluir_raw.split(",") if t.strip()] or None
+  empresas = crm_db.empresas_sin_actividad(dias=dias, tipos=tipos, excluir_estados=excluir)
+  return jsonify({"empresas": empresas[:limit], "total": len(empresas), "dias_umbral": dias})
