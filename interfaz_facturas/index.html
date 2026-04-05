@@ -1485,6 +1485,18 @@
               <p>Pipeline de ventas</p>
             </div>
           </div>
+          <!-- Gmail Sync — Fase 3 -->
+          <div id="crm-gmail-admin-card" style="margin-top:28px;padding:16px 20px;background:var(--color-surface,#F8FAFC);border:1px solid var(--border,#E2E8F0);border-radius:10px;display:none;">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+              <span style="font-size:1.2rem;">✉️</span>
+              <div style="flex:1;min-width:180px;">
+                <div style="font-size:0.95rem;font-weight:600;color:var(--color-text,#1E293B);">Gmail Sync</div>
+                <div id="crm-gmail-estado-txt" style="font-size:0.8rem;color:var(--color-text-secondary,#64748B);margin-top:2px;">Comprobando estado…</div>
+              </div>
+              <button type="button" id="btn-gmail-sync-global" style="font-size:0.82rem;padding:6px 16px;background:var(--color-primary,#4F46E5);color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap;">🔄 Sync global (todas las empresas)</button>
+            </div>
+            <div id="crm-gmail-sync-resultado" style="margin-top:10px;font-size:0.82rem;color:var(--color-text-secondary,#64748B);display:none;"></div>
+          </div>
         </div>
       </div>
 
@@ -1558,7 +1570,10 @@
                   <div class="crm-seccion">
                     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
                       <h4 style="margin:0;">Actividades</h4>
-                      <button type="button" class="primary" id="btn-add-interaccion-empresa" style="font-size:0.75rem;padding:2px 10px;">+ Actividad</button>
+                      <div style="display:flex;gap:6px;align-items:center;">
+                        <button type="button" id="btn-gmail-sync-empresa" style="font-size:0.75rem;padding:2px 10px;background:var(--color-surface,#F8FAFC);border:1px solid var(--border,#E2E8F0);border-radius:6px;cursor:pointer;display:none;" title="Sincronizar emails de Gmail para esta empresa">🔄 Sync Gmail</button>
+                        <button type="button" class="primary" id="btn-add-interaccion-empresa" style="font-size:0.75rem;padding:2px 10px;">+ Actividad</button>
+                      </div>
                     </div>
                     <!-- Filtros por tipo -->
                     <div id="crm-timeline-filtros" style="display:flex;gap:4px;flex-wrap:wrap;margin:8px 0 4px;">

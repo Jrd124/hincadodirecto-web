@@ -1426,6 +1426,136 @@
   if (_initPanelInicio && _initPanelInicio.classList.contains("visible")) _crmCargarStats();
   if (_initPanelEmpresas && _initPanelEmpresas.classList.contains("visible")) _crmCargarEmpresas();
 
+  // ─── Gmail Sync — Fase 3 ─────────────────────────────────────────────────
+
+  /** Comprueba si Gmail está disponible y actualiza UI del panel inicio */
+  function _gmailComprobarEstado() {
+    fetch("/api/gmail/estado")
+      .then(function (r) { return r.json(); })
+      .then(function (estado) {
+        var card = document.getElementById("crm-gmail-admin-card");
+        var txt = document.getElementById("crm-gmail-estado-txt");
+        if (!card) return;
+        card.style.display = "block";
+        if (estado.disponible) {
+          if (txt) txt.textContent = "Conectado como " + (estado.cuenta || "—");
+          var btnGlobal = document.getElementById("btn-gmail-sync-global");
+          if (btnGlobal) btnGlobal.disabled = false;
+        } else {
+          if (txt) txt.textContent = "No configurado: " + (estado.motivo || "");
+          var btnGlobal2 = document.getElementById("btn-gmail-sync-global");
+          if (btnGlobal2) btnGlobal2.disabled = true;
+        }
+      })
+      .catch(function () {
+        var card = document.getElementById("crm-gmail-admin-card");
+        if (card) card.style.display = "none";
+      });
+  }
+
+  /** Sincroniza Gmail para una empresa concreta y actualiza el timeline */
+  function _gmailSyncEmpresa(empresaId, btn) {
+    if (!empresaId) return;
+    var orig = btn ? btn.textContent : "";
+    if (btn) { btn.disabled = true; btn.textContent = "⏳ Sincronizando…"; }
+    fetch("/api/gmail/sync/empresa/" + empresaId, { method: "POST" })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (btn) { btn.disabled = false; btn.textContent = orig; }
+        if (res.error) {
+          alert("Error Gmail sync: " + res.error);
+          return;
+        }
+        var msg = "Gmail: " + res.hilos_encontrados + " hilo(s) encontrado(s), " +
+          res.interacciones_creadas + " nueva(s).";
+        if (res.interacciones_creadas > 0) {
+          // Recargar empresa para mostrar nuevas actividades
+          if (typeof _crmSeleccionarEmpresa === "function") {
+            _crmSeleccionarEmpresa(empresaId);
+          }
+          // Pequeño toast
+          var toast = document.createElement("div");
+          toast.textContent = msg;
+          Object.assign(toast.style, {
+            position: "fixed", bottom: "24px", right: "24px",
+            background: "#1e293b", color: "#fff", padding: "10px 18px",
+            borderRadius: "8px", fontSize: "0.85rem", zIndex: "9999",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.2)"
+          });
+          document.body.appendChild(toast);
+          setTimeout(function () { toast.remove(); }, 4000);
+        } else {
+          alert(msg);
+        }
+      })
+      .catch(function (err) {
+        if (btn) { btn.disabled = false; btn.textContent = orig; }
+        alert("Error de red al sincronizar Gmail: " + err);
+      });
+  }
+
+  // Botón Sync Gmail por empresa (se muestra cuando hay empresa seleccionada)
+  var _btnGmailEmpresa = document.getElementById("btn-gmail-sync-empresa");
+  if (_btnGmailEmpresa) {
+    _btnGmailEmpresa.addEventListener("click", function () {
+      _gmailSyncEmpresa(_crmEmpresaSeleccionada, _btnGmailEmpresa);
+    });
+    // Mostrar solo cuando Gmail está disponible
+    fetch("/api/gmail/estado")
+      .then(function (r) { return r.json(); })
+      .then(function (e) {
+        if (e.disponible) _btnGmailEmpresa.style.display = "";
+      })
+      .catch(function () {});
+  }
+
+  // Botón Sync Gmail global (en panel inicio CRM)
+  var _btnGmailGlobal = document.getElementById("btn-gmail-sync-global");
+  if (_btnGmailGlobal) {
+    _btnGmailGlobal.addEventListener("click", function () {
+      var btn = _btnGmailGlobal;
+      var orig = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "⏳ Sincronizando…";
+      var res2El = document.getElementById("crm-gmail-sync-resultado");
+      if (res2El) { res2El.style.display = "none"; res2El.textContent = ""; }
+      fetch("/api/gmail/sync/global", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ solo_con_dominio: false }) })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          btn.disabled = false;
+          btn.textContent = orig;
+          if (res.error) {
+            if (res2El) { res2El.style.display = "block"; res2El.textContent = "Error: " + res.error; }
+            return;
+          }
+          var txt = "✓ " + res.empresas_procesadas + " empresa(s) procesadas · " +
+            res.hilos_encontrados + " hilo(s) · " +
+            res.interacciones_creadas + " actividad(es) nueva(s)";
+          if (res.errores && res.errores.length) txt += " · " + res.errores.length + " error(es)";
+          if (res2El) { res2El.style.display = "block"; res2El.textContent = txt; }
+        })
+        .catch(function (err) {
+          btn.disabled = false;
+          btn.textContent = orig;
+          if (res2El) { res2El.style.display = "block"; res2El.textContent = "Error de red: " + err; }
+        });
+    });
+  }
+
+  // Cargar estado Gmail cuando se abre el panel inicio CRM
+  var _crmPanelInicioObs = document.getElementById("panel-crm-inicio");
+  if (_crmPanelInicioObs) {
+    new MutationObserver(function (muts) {
+      muts.forEach(function (m) {
+        if (m.type === "attributes" && _crmPanelInicioObs.classList.contains("visible")) {
+          _gmailComprobarEstado();
+        }
+      });
+    }).observe(_crmPanelInicioObs, { attributes: true, attributeFilter: ["class"] });
+    // Si ya está visible al cargar
+    if (_crmPanelInicioObs.classList.contains("visible")) _gmailComprobarEstado();
+  }
+
   // ─── Navegación desde otros módulos → Empresa CRM (Fase 1) ───────────────
   window.navegarAEmpresaCRM = function (empresaId) {
     // Navega al panel CRM empresas y selecciona la empresa indicada
