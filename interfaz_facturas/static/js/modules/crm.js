@@ -184,23 +184,78 @@
           contEl.innerHTML = '<p class="crm-sin-datos">Sin contactos</p>';
         }
 
-        // Interacciones
-        var _tlI = { llamada: "\u260E", email: "\u2709", whatsapp: "\uD83D\uDCAC", reunion: "\uD83D\uDC65", nota: "\uD83D\uDCDD", visita: "\uD83D\uDCCD" };
+        // Actividades / Interacciones — timeline mejorado (Fase 2)
+        var _tlIcon = { llamada: "📞", email: "✉️", whatsapp: "💬", reunion: "🤝", nota: "📝", visita: "🏢", gmail: "📧" };
+        var _tlColor = { llamada: "#2563eb", email: "#7c3aed", reunion: "#059669", nota: "#d97706", whatsapp: "#25d366", visita: "#dc2626", gmail: "#ea4335" };
+        var _tlInteracciones = emp.interacciones || [];
+        var _tlFiltroActivo = "";
+
+        function _tlFechaRelativa(fechaStr) {
+          if (!fechaStr) return "";
+          var d = new Date(fechaStr.substring(0, 10));
+          var hoy = new Date(); hoy.setHours(0, 0, 0, 0); d.setHours(0, 0, 0, 0);
+          var diff = Math.round((hoy - d) / 86400000);
+          if (diff === 0) return "Hoy";
+          if (diff === 1) return "Ayer";
+          if (diff < 7) return "Hace " + diff + " días";
+          if (diff < 30) return "Hace " + Math.floor(diff / 7) + " sem.";
+          if (diff < 365) return "Hace " + Math.floor(diff / 30) + " mes" + (Math.floor(diff / 30) > 1 ? "es" : "");
+          return fechaStr.substring(0, 10);
+        }
+
+        function _tlRenderItem(i) {
+          var icon = _tlIcon[i.tipo] || "📌";
+          var fechaRel = _tlFechaRelativa(i.fecha);
+          var sourceBadge = (i.source && i.source !== "manual")
+            ? '<span class="crm-timeline-source-badge">' + _esc(i.source) + '</span>' : "";
+          var desc = (i.descripcion && i.descripcion !== i.asunto && i.descripcion !== "Última interacción (import)")
+            ? '<div class="crm-timeline-desc">' + _esc((i.descripcion || "").substring(0, 120)) + '</div>' : "";
+          return '<div class="crm-timeline-item" style="cursor:pointer;" data-int-id="' + i.id + '" data-tipo="' + _esc(i.tipo) + '">' +
+            '<span class="crm-timeline-icon">' + icon + '</span>' +
+            '<div class="crm-timeline-body">' +
+              '<div class="crm-timeline-header">' +
+                '<span class="crm-timeline-tipo">' + _esc(i.tipo) + '</span>' +
+                '<span class="crm-timeline-fecha" title="' + _esc(i.fecha || "") + '">' + fechaRel + '</span>' +
+                sourceBadge +
+              '</div>' +
+              '<div class="crm-timeline-asunto">' + _esc(i.asunto || i.descripcion || "(sin asunto)") + '</div>' +
+              desc +
+            '</div>' +
+          '</div>';
+        }
+
         var intEl = document.getElementById("crm-empresa-interacciones-lista");
-        if (emp.interacciones && emp.interacciones.length > 0) {
-          intEl.innerHTML = emp.interacciones.map(function (i) {
-            return '<div class="crm-timeline-item" style="cursor:pointer;" data-int-id="' + i.id + '">' +
-              '<span class="crm-timeline-fecha">' + _esc((i.fecha || "").substring(0, 10)) + '</span>' +
-              '<span class="crm-timeline-tipo">' + (_tlI[i.tipo] || "") + ' ' + _esc(i.tipo) + '</span>' +
-              '<span class="crm-timeline-asunto">' + _esc(i.asunto || i.descripcion || "") + '</span>' +
-              (i.resultado ? '<span class="status-badge status-badge--lead" style="font-size:0.65rem;">' + _esc(i.resultado) + '</span>' : '') +
-              '</div>';
-          }).join("");
-          intEl.querySelectorAll("[data-int-id]").forEach(function (el) {
-            el.addEventListener("click", function () { if (window._intAbrirModalEditar) _intAbrirModalEditar(parseInt(el.getAttribute("data-int-id"))); });
+        function _tlRender() {
+          var visible = _tlFiltroActivo
+            ? _tlInteracciones.filter(function (i) { return i.tipo === _tlFiltroActivo; })
+            : _tlInteracciones;
+          if (visible.length > 0) {
+            intEl.innerHTML = visible.map(_tlRenderItem).join("");
+            intEl.querySelectorAll("[data-int-id]").forEach(function (el) {
+              el.addEventListener("click", function () {
+                if (window._intAbrirModalEditar) _intAbrirModalEditar(parseInt(el.getAttribute("data-int-id")));
+              });
+            });
+          } else {
+            intEl.innerHTML = '<p class="crm-sin-datos">' +
+              (_tlFiltroActivo ? "Sin actividades de tipo «" + _tlFiltroActivo + "»" : "Sin actividades") + '</p>';
+          }
+        }
+        _tlRender();
+
+        // Filtros tipo (pills)
+        var filtrosEl = document.getElementById("crm-timeline-filtros");
+        if (filtrosEl) {
+          filtrosEl.querySelectorAll(".crm-tl-filtro").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+              filtrosEl.querySelectorAll(".crm-tl-filtro").forEach(function (b) {
+                b.classList.remove("crm-tl-filtro--activo");
+              });
+              btn.classList.add("crm-tl-filtro--activo");
+              _tlFiltroActivo = btn.getAttribute("data-tipo") || "";
+              _tlRender();
+            });
           });
-        } else {
-          intEl.innerHTML = '<p class="crm-sin-datos">Sin interacciones</p>';
         }
 
         // Oportunidades

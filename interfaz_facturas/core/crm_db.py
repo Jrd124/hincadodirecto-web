@@ -173,6 +173,20 @@ def init_crm_db() -> None:
         except Exception:
             pass
 
+        # Migration: add activity fields to crm_interacciones (Fase 2)
+        try:
+            int_cols = {r[1] for r in conn.execute("PRAGMA table_info(crm_interacciones)").fetchall()}
+            if "source" not in int_cols:
+                conn.execute(
+                    "ALTER TABLE crm_interacciones ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'"
+                )
+            if "gmail_thread_id" not in int_cols:
+                conn.execute("ALTER TABLE crm_interacciones ADD COLUMN gmail_thread_id TEXT")
+            if "gmail_snippet" not in int_cols:
+                conn.execute("ALTER TABLE crm_interacciones ADD COLUMN gmail_snippet TEXT")
+        except Exception:
+            pass
+
         # ── Tablas auxiliares para duplicados ────────────────────────────────
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS terceros_fusiones_log (
@@ -348,7 +362,7 @@ def obtener_empresa(empresa_id: int) -> dict[str, Any] | None:
         empresa["contactos"] = [dict(c) for c in contactos]
 
         interacciones = conn.execute(
-            "SELECT * FROM crm_interacciones WHERE empresa_id = ? ORDER BY fecha DESC LIMIT 10",
+            "SELECT * FROM crm_interacciones WHERE empresa_id = ? ORDER BY fecha DESC LIMIT 25",
             (empresa_id,)
         ).fetchall()
         empresa["interacciones"] = [dict(i) for i in interacciones]
@@ -723,8 +737,8 @@ def crear_interaccion(data: dict) -> dict:
         conn.execute("""
             INSERT INTO crm_interacciones (contacto_id, empresa_id, tipo, asunto, descripcion,
                 fecha, duracion_minutos, resultado, siguiente_accion, fecha_siguiente_accion,
-                oportunidad_id, creado_por, fecha_creacion)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                oportunidad_id, creado_por, fecha_creacion, source, gmail_thread_id, gmail_snippet)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             data.get("contacto_id") or None,
             data.get("empresa_id") or None,
@@ -739,6 +753,9 @@ def crear_interaccion(data: dict) -> dict:
             data.get("oportunidad_id") or None,
             (data.get("creado_por") or "").strip() or None,
             ahora,
+            (data.get("source") or "manual").strip(),
+            data.get("gmail_thread_id") or None,
+            data.get("gmail_snippet") or None,
         ))
         new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         return dict(conn.execute("""
@@ -761,7 +778,7 @@ def actualizar_interaccion(interaccion_id: int, data: dict) -> dict | None:
             UPDATE crm_interacciones SET
                 contacto_id = ?, empresa_id = ?, tipo = ?, asunto = ?, descripcion = ?,
                 fecha = ?, duracion_minutos = ?, resultado = ?, siguiente_accion = ?,
-                fecha_siguiente_accion = ?, oportunidad_id = ?
+                fecha_siguiente_accion = ?, oportunidad_id = ?, source = ?
             WHERE id = ?
         """, (
             data.get("contacto_id") or None,
@@ -775,6 +792,7 @@ def actualizar_interaccion(interaccion_id: int, data: dict) -> dict | None:
             (data.get("siguiente_accion") or "").strip() or None,
             (data.get("fecha_siguiente_accion") or "").strip() or None,
             data.get("oportunidad_id") or None,
+            (data.get("source") or "manual").strip(),
             interaccion_id,
         ))
         return dict(conn.execute("""

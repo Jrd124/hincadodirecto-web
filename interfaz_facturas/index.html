@@ -1556,12 +1556,22 @@
                     </div>
                   </div>
                   <div class="crm-seccion">
-                    <div style="display:flex;align-items:center;justify-content:space-between;">
-                      <h4>Ultimas interacciones</h4>
-                      <button type="button" class="primary" id="btn-add-interaccion-empresa" style="font-size:0.75rem;padding:2px 10px;">+ Interaccion</button>
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+                      <h4 style="margin:0;">Actividades</h4>
+                      <button type="button" class="primary" id="btn-add-interaccion-empresa" style="font-size:0.75rem;padding:2px 10px;">+ Actividad</button>
+                    </div>
+                    <!-- Filtros por tipo -->
+                    <div id="crm-timeline-filtros" style="display:flex;gap:4px;flex-wrap:wrap;margin:8px 0 4px;">
+                      <button class="crm-tl-filtro crm-tl-filtro--activo" data-tipo="">Todas</button>
+                      <button class="crm-tl-filtro" data-tipo="llamada">📞 Llamada</button>
+                      <button class="crm-tl-filtro" data-tipo="email">✉️ Email</button>
+                      <button class="crm-tl-filtro" data-tipo="reunion">🤝 Reunión</button>
+                      <button class="crm-tl-filtro" data-tipo="nota">📝 Nota</button>
+                      <button class="crm-tl-filtro" data-tipo="whatsapp">💬 WhatsApp</button>
+                      <button class="crm-tl-filtro" data-tipo="visita">🏢 Visita</button>
                     </div>
                     <div id="crm-empresa-interacciones-lista" class="crm-timeline">
-                      <p class="crm-sin-datos">Sin interacciones</p>
+                      <p class="crm-sin-datos">Sin actividades</p>
                     </div>
                   </div>
                   <div class="crm-seccion">
