@@ -818,7 +818,7 @@ function renderPaginacionBancos(container, actual, total) {
               if (!fid) return;
               overlay.classList.remove("visible");
               // Fetch factura and open edit modal
-              fetch("/api/facturas_clientes?empresa_id=" + encodeURIComponent(multiEmpresaId || ""))
+              fetch("/api/facturas_clientes?empresa_id=" + encodeURIComponent(multiEmpresaId || "") + "&_t=" + Date.now(), {cache: "no-store"})
                 .then(function (r) { return r.json(); })
                 .then(function (data) {
                   var fac = (data.facturas || []).find(function (f) { return String(f.id) === String(fid); });
@@ -1181,7 +1181,7 @@ function renderPaginacionBancos(container, actual, total) {
     if (tbodyConciliarFacturas) tbodyConciliarFacturas.innerHTML = "<tr><td colspan=\"7\" class=\"sin-datos\">Cargando facturas…</td></tr>";
     if (modalConciliarFactura) { modalConciliarFactura.classList.add("visible"); modalConciliarFactura.setAttribute("aria-hidden", "false"); }
     if (conciliarFacturaEsEntrada) {
-      fetch("/api/facturas_clientes?empresa_id=" + encodeURIComponent(empresaId) + "&solo_pendientes_vinculacion=1").then(function (r) { return r.json(); }).then(function (data) {
+      fetch("/api/facturas_clientes?empresa_id=" + encodeURIComponent(empresaId) + "&solo_pendientes_vinculacion=1&_t=" + Date.now(), {cache: "no-store"}).then(function (r) { return r.json(); }).then(function (data) {
         conciliarFacturaLista = data.facturas || [];
         renderConciliarFacturasLista(conciliarFacturaLista);
       }).catch(function () {
@@ -1189,7 +1189,7 @@ function renderPaginacionBancos(container, actual, total) {
         if (tbodyConciliarFacturas) tbodyConciliarFacturas.innerHTML = "<tr><td colspan=\"7\" class=\"sin-datos\">Error al cargar facturas de clientes.</td></tr>";
       });
     } else {
-      fetch("/api/facturas?empresa_id=" + encodeURIComponent(empresaId)).then(function (r) { return r.json(); }).then(function (data) {
+      fetch("/api/facturas?empresa_id=" + encodeURIComponent(empresaId) + "&_t=" + Date.now(), {cache: "no-store"}).then(function (r) { return r.json(); }).then(function (data) {
         var todas = data.facturas || [];
         conciliarFacturaLista = todas.filter(function (f) { var ep = (f.estado_pago || "").toString().trim().toLowerCase(); return ep === "pendiente" || ep === "parcial"; });
         renderConciliarFacturasLista(conciliarFacturaLista);
@@ -2908,7 +2908,7 @@ async function cargarListado(empresaId, preservarFiltros) {
   if (btnCargar) { btnCargar.classList.add("btn-loading"); }
 
   try {
-    const resp = await fetch("/api/facturas?empresa_id=" + encodeURIComponent(empresaId));
+    const resp = await fetch("/api/facturas?empresa_id=" + encodeURIComponent(empresaId) + "&_t=" + Date.now(), {cache: "no-store"});
     const json = await resp.json();
     const facturas = json.facturas || [];
     FACTURAS_ACTUALES = facturas;
@@ -2980,7 +2980,7 @@ async function cargarListadoFiltradoPorIds(empresaId, ids, tipo) {
   ids.forEach(function (id) { idsSet[id] = true; });
   try {
     if (tipo === "clientes") {
-      var resp = await fetch("/api/facturas_clientes?empresa_id=" + encodeURIComponent(empresaId));
+      var resp = await fetch("/api/facturas_clientes?empresa_id=" + encodeURIComponent(empresaId) + "&_t=" + Date.now(), {cache: "no-store"});
       var json = await resp.json();
       var todas = json.facturas || [];
       var nuevas = todas.filter(function (f) { return idsSet[f.id]; });
@@ -3004,7 +3004,7 @@ async function cargarListadoFiltradoPorIds(empresaId, ids, tipo) {
         bannerEl.style.display = "block";
       }
     } else {
-      var resp = await fetch("/api/facturas?empresa_id=" + encodeURIComponent(empresaId));
+      var resp = await fetch("/api/facturas?empresa_id=" + encodeURIComponent(empresaId) + "&_t=" + Date.now(), {cache: "no-store"});
       var json = await resp.json();
       var todas = json.facturas || [];
       var nuevas = todas.filter(function (f) { return idsSet[f.id]; });
@@ -4328,7 +4328,7 @@ async function cargarListadoCli(empresaId, preservarFiltros) {
   document.getElementById("cli-btn-eliminar").classList.remove("visible");
   if (btnCargarCli) { btnCargarCli.classList.add("btn-loading"); }
   try {
-    const resp = await fetch("/api/facturas_clientes?empresa_id=" + encodeURIComponent(empresaId));
+    const resp = await fetch("/api/facturas_clientes?empresa_id=" + encodeURIComponent(empresaId) + "&_t=" + Date.now(), {cache: "no-store"});
     const json = await resp.json();
     CLI_FACTURAS = json.facturas || [];
     poblarFiltroAnioCli();
