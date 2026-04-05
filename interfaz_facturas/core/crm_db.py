@@ -157,13 +157,19 @@ def init_crm_db() -> None:
             );
             CREATE INDEX IF NOT EXISTS ix_crm_oph_oportunidad ON crm_oportunidades_historial(oportunidad_id);
         """)
-        # Migration: add CAE columns to crm_empresas
+        # Migration: add CAE columns + dominio to crm_empresas
         try:
             emp_cols = {r[1] for r in conn.execute("PRAGMA table_info(crm_empresas)").fetchall()}
             if "cae_plataforma" not in emp_cols:
                 conn.execute("ALTER TABLE crm_empresas ADD COLUMN cae_plataforma TEXT")
             if "cae_url" not in emp_cols:
                 conn.execute("ALTER TABLE crm_empresas ADD COLUMN cae_url TEXT")
+            if "dominio" not in emp_cols:
+                # dominio: usado por Fase 3 (Gmail sync) para buscar hilos por dominio
+                conn.execute("ALTER TABLE crm_empresas ADD COLUMN dominio TEXT")
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS ix_crm_empresas_dominio ON crm_empresas(dominio)"
+                )
         except Exception:
             pass
 
@@ -282,6 +288,7 @@ def listar_empresas(
     tipo: str | None = None,
     q: str | None = None,
     activo: int | None = None,
+    tercero_id: int | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> dict[str, Any]:
@@ -298,6 +305,9 @@ def listar_empresas(
     if activo is not None:
         where_parts.append("e.activo = ?")
         params.append(activo)
+    if tercero_id is not None:
+        where_parts.append("e.tercero_id = ?")
+        params.append(tercero_id)
     where = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
 
     with _conectar() as conn:
@@ -352,14 +362,83 @@ def obtener_empresa(empresa_id: int) -> dict[str, Any] | None:
         return empresa
 
 
+def resumen_empresa(empresa_id: int) -> dict[str, Any] | None:
+    """Devuelve un resumen ligero de la empresa: última interacción + contadores.
+    Usado por el card de cabecera en la ficha empresa (Fase 1).
+    """
+    init_crm_db()
+    with _conectar() as conn:
+        row = conn.execute(
+            "SELECT id FROM crm_empresas WHERE id = ?", (empresa_id,)
+        ).fetchone()
+        if not row:
+            return None
+
+        ultima = conn.execute("""
+            SELECT tipo, asunto, descripcion, fecha
+            FROM crm_interacciones
+            WHERE empresa_id = ?
+            ORDER BY fecha DESC
+            LIMIT 1
+        """, (empresa_id,)).fetchone()
+
+        num_contactos = conn.execute(
+            "SELECT COUNT(*) FROM crm_contactos WHERE empresa_vinculada_id = ? AND activo = 1",
+            (empresa_id,)
+        ).fetchone()[0]
+        num_oportunidades = conn.execute(
+            "SELECT COUNT(*) FROM crm_oportunidades WHERE empresa_id = ? AND estado NOT IN ('ganada','perdida')",
+            (empresa_id,)
+        ).fetchone()[0]
+        num_interacciones = conn.execute(
+            "SELECT COUNT(*) FROM crm_interacciones WHERE empresa_id = ?",
+            (empresa_id,)
+        ).fetchone()[0]
+
+        return {
+            "empresa_id": empresa_id,
+            "ultima_interaccion": dict(ultima) if ultima else None,
+            "num_contactos": num_contactos,
+            "num_oportunidades_abiertas": num_oportunidades,
+            "num_interacciones": num_interacciones,
+        }
+
+
+def _extraer_dominio(email: str | None, web: str | None, dominio: str | None) -> str | None:
+    """Extrae dominio: usa el campo explícito, o lo infiere del email/web."""
+    if dominio and dominio.strip():
+        return dominio.strip().lower()
+    for src in [email, web]:
+        if not src:
+            continue
+        src = src.strip().lower()
+        # quitar protocolo
+        if "://" in src:
+            src = src.split("://", 1)[1]
+        # quitar paths
+        src = src.split("/")[0].split("?")[0]
+        # quitar www.
+        if src.startswith("www."):
+            src = src[4:]
+        # quitar usuario@ de emails
+        if "@" in src:
+            src = src.split("@", 1)[1]
+        if "." in src and len(src) > 3:
+            return src
+    return None
+
+
 def crear_empresa(data: dict) -> dict:
     init_crm_db()
     ahora = _now()
+    email = (data.get("email") or "").strip() or None
+    web = (data.get("web") or "").strip() or None
+    dominio = _extraer_dominio(email, web, data.get("dominio"))
     with _conectar() as conn:
         conn.execute("""
             INSERT INTO crm_empresas (nombre, cif, direccion, localidad, provincia, pais,
-                telefono, email, web, sector, tipo, tercero_id, notas, fecha_creacion, activo)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                telefono, email, web, sector, tipo, tercero_id, notas, dominio, fecha_creacion, activo)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
         """, (
             (data.get("nombre") or "").strip(),
             (data.get("cif") or "").strip() or None,
@@ -367,13 +446,14 @@ def crear_empresa(data: dict) -> dict:
             (data.get("localidad") or "").strip() or None,
             (data.get("provincia") or "").strip() or None,
             (data.get("pais") or "").strip() or None,
-            (data.get("telefono") or "").strip() or None,
-            (data.get("email") or "").strip() or None,
+            email,
+            (data.get("web") or "").strip() or None,
             (data.get("web") or "").strip() or None,
             (data.get("sector") or "").strip() or None,
             (data.get("tipo") or "lead").strip(),
             data.get("tercero_id"),
             (data.get("notas") or "").strip() or None,
+            dominio,
             ahora,
         ))
         new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -388,11 +468,14 @@ def actualizar_empresa(empresa_id: int, data: dict) -> dict | None:
             return None
         nombre = (data.get("nombre") or "").strip()
         cif = (data.get("cif") or "").strip() or None
+        email = (data.get("email") or "").strip() or None
+        web = (data.get("web") or "").strip() or None
+        dominio = _extraer_dominio(email, web, data.get("dominio"))
         conn.execute("""
             UPDATE crm_empresas SET
                 nombre = ?, cif = ?, direccion = ?, localidad = ?, provincia = ?, pais = ?,
                 telefono = ?, email = ?, web = ?, sector = ?, tipo = ?, tercero_id = ?,
-                notas = ?, activo = ?
+                notas = ?, dominio = ?, activo = ?
             WHERE id = ?
         """, (
             nombre,
@@ -401,13 +484,14 @@ def actualizar_empresa(empresa_id: int, data: dict) -> dict | None:
             (data.get("localidad") or "").strip() or None,
             (data.get("provincia") or "").strip() or None,
             (data.get("pais") or "").strip() or None,
-            (data.get("telefono") or "").strip() or None,
-            (data.get("email") or "").strip() or None,
+            email,
+            web,
             (data.get("web") or "").strip() or None,
             (data.get("sector") or "").strip() or None,
             (data.get("tipo") or "lead").strip(),
             data.get("tercero_id"),
             (data.get("notas") or "").strip() or None,
+            dominio,
             1 if data.get("activo", True) else 0,
             empresa_id,
         ))

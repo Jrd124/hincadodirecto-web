@@ -145,6 +145,27 @@
         _presupCargarSelectTerceros(data.tercero_id);
         _presupCargarSelectOportunidades(data.oportunidad_id);
 
+        // Badge "Ver empresa en CRM" (Fase 1)
+        var crmBadge = document.getElementById("presup-crm-empresa-badge");
+        if (crmBadge && data.tercero_id) {
+          fetch("/api/crm/empresas?tercero_id=" + data.tercero_id + "&limit=1")
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+              var emp = (d.empresas || [])[0];
+              if (emp) {
+                crmBadge.style.display = "inline-flex";
+                crmBadge.setAttribute("data-crm-empresa-id", emp.id);
+                var nameEl = crmBadge.querySelector(".presup-crm-empresa-nombre");
+                if (nameEl) nameEl.textContent = emp.nombre;
+              } else {
+                crmBadge.style.display = "none";
+              }
+            })
+            .catch(function () { if (crmBadge) crmBadge.style.display = "none"; });
+        } else if (crmBadge) {
+          crmBadge.style.display = "none";
+        }
+
         // Poblar selector de versiones
         var versiones = data.versiones || [];
         var vSel = document.getElementById("presup-version-select");

@@ -26,9 +26,10 @@ def crm_listar_empresas():
   q = (request.args.get("q") or "").strip() or None
   activo_raw = request.args.get("activo")
   activo = int(activo_raw) if activo_raw is not None and activo_raw.strip() != "" else None
+  tercero_id = request.args.get("tercero_id", type=int) or None
   limit = min(int(request.args.get("limit") or 50), 200)
   offset = int(request.args.get("offset") or 0)
-  resultado = crm_db.listar_empresas(tipo=tipo, q=q, activo=activo, limit=limit, offset=offset)
+  resultado = crm_db.listar_empresas(tipo=tipo, q=q, activo=activo, tercero_id=tercero_id, limit=limit, offset=offset)
   return jsonify(resultado)
 
 
@@ -63,6 +64,15 @@ def crm_actualizar_empresa(empresa_id: int):
   if not empresa:
     return jsonify({"error": "Empresa CRM no encontrada"}), 404
   return jsonify(empresa)
+
+
+@crm_bp.get("/api/crm/empresas/<int:empresa_id>/resumen")
+def crm_resumen_empresa(empresa_id: int):
+  """Devuelve resumen ligero: última interacción + contadores. Usado por card cabecera."""
+  resumen = crm_db.resumen_empresa(empresa_id)
+  if not resumen:
+    return jsonify({"error": "Empresa CRM no encontrada"}), 404
+  return jsonify(resumen)
 
 
 @crm_bp.get("/api/crm/stats")
