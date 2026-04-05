@@ -251,6 +251,15 @@ def init_maquinaria_db() -> None:
         if "responsable_id" not in cols:
             conn.execute("ALTER TABLE maquinas ADD COLUMN responsable_id INTEGER REFERENCES empleados(id)")
 
+        # Añadir marca a maquinas si no existe (ORTECO por defecto)
+        if "marca" not in cols:
+            conn.execute("ALTER TABLE maquinas ADD COLUMN marca TEXT NOT NULL DEFAULT 'ORTECO'")
+
+        # Añadir marca a maquinaria_maintenance_tasks si no existe
+        task_cols = [r[1] for r in conn.execute("PRAGMA table_info(maquinaria_maintenance_tasks)").fetchall()]
+        if "marca" not in task_cols:
+            conn.execute("ALTER TABLE maquinaria_maintenance_tasks ADD COLUMN marca TEXT NOT NULL DEFAULT 'ORTECO'")
+
         _seed_maquinas(conn)
         _seed_checklist_templates(conn)
         _seed_maintenance_tasks(conn)
@@ -650,9 +659,9 @@ def listar_maquinas(solo_activas: bool = True) -> list:
             # Mini-versión de _computar_estado sin cargar todas las incidencias
             if not maq.get("activa", 1) or maq.get("estado") == "baja":
                 maq["estado_computado"] = "baja"
-            elif inc_graves > 0:
+            elif inc_graves > 0 or maq.get("estado") == "en_taller":
                 maq["estado_computado"] = "en_taller"
-            elif maq.get("proyecto_id"):
+            elif maq.get("proyecto_id") or maq.get("estado") == "en_proyecto":
                 maq["estado_computado"] = "en_proyecto"
             else:
                 maq["estado_computado"] = "disponible"
@@ -758,13 +767,18 @@ def _computar_estado(maq: dict) -> str:
     if maq.get("estado") == "baja":
         return "baja"
 
-    # Incidencias abiertas graves → en taller
+    # Incidencias abiertas graves → en taller (prioridad sobre estado manual)
     incidencias = maq.get("incidencias", [])
     for inc in incidencias:
         if inc.get("severidad") in ("alta", "seguridad") and inc.get("estado") != "cerrada":
             return "en_taller"
 
-    if maq.get("proyecto_id"):
+    # Estado manual en_taller (sin incidencia grave abierta, ej: revisión preventiva)
+    if maq.get("estado") == "en_taller":
+        return "en_taller"
+
+    # En proyecto: por FK o por estado manual
+    if maq.get("proyecto_id") or maq.get("estado") == "en_proyecto":
         return "en_proyecto"
 
     return "disponible"
