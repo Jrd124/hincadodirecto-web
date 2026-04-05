@@ -452,6 +452,15 @@ def consultar_alertas() -> str:
         for r in rows:
             alertas.append(f"⚠️ {r['nombre']}: sin partes desde {r['ultimo'] or 'nunca'}")
 
+        # Seguros: pólizas vencidas o próximas
+        try:
+            from core.seguros_db import alertas_seguros
+            for sa in alertas_seguros():
+                emoji = "🔴" if sa["severidad"] == "alta" else "🟠" if sa["severidad"] == "media" else "🟡"
+                alertas.append(f"{emoji} {sa['mensaje']}")
+        except Exception:
+            pass
+
         if not alertas:
             return "✅ No hay alertas pendientes."
         return "🚨 *Alertas:*\n\n" + "\n".join(alertas)

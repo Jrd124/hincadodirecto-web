@@ -5226,6 +5226,9 @@ app.register_blueprint(impuestos_routes_bp)
 from routes.albaranes import albaranes_bp as albaranes_routes_bp
 app.register_blueprint(albaranes_routes_bp)
 
+from routes.seguros import seguros_bp as seguros_routes_bp
+app.register_blueprint(seguros_routes_bp)
+
 from core import impuestos_db
 impuestos_db.init_impuestos_db()
 

@@ -135,6 +135,13 @@
             <span class="sidebar-label">Impuestos</span>
           </a>
         </div>
+        <!-- Seguros -->
+        <div class="sidebar-group">
+          <a href="#" class="sidebar-item" id="nav-seguros-modulo" data-group="seguros">
+            <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 1L2 4v5c0 3.3 2.6 5.5 6 7 3.4-1.5 6-3.7 6-7V4L8 1z"/><path d="M6 8l2 2 3-3"/></svg>
+            <span class="sidebar-label">Seguros</span>
+          </a>
+        </div>
         <!-- CRM -->
         <div class="sidebar-group">
           <a href="#" class="sidebar-item sidebar-parent" id="nav-crm-modulo" data-group="crm">
@@ -1439,6 +1446,52 @@
             </div>
           </div>
           <div id="impuestos-dashboard-content"></div>
+        </div>
+      </div>
+
+      <!-- ═══ SEGUROS ═══════════════════════════════════════════════════════ -->
+      <div id="panel-seguros-inicio" class="content-panel">
+        <div style="max-width:1100px;margin:0 auto;padding:24px 20px;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+            <h1 style="margin:0;font-size:20px;font-weight:600;">Seguros</h1>
+            <span style="margin-right:auto;font-size:13px;color:var(--color-text-secondary);">Control de pólizas, vencimientos y siniestros</span>
+            <select id="seg-filtro-tipo" class="form-select" style="font-size:12px;padding:4px 24px 4px 8px;">
+              <option value="">Todos los tipos</option>
+              <option value="maquinaria">Maquinaria</option>
+              <option value="vehiculo">Vehículo</option>
+              <option value="responsabilidad_civil">RC</option>
+              <option value="accidentes_convenio">Accidentes</option>
+              <option value="dyo">D&amp;O</option>
+              <option value="otro">Otro</option>
+            </select>
+            <select id="seg-filtro-estado" class="form-select" style="font-size:12px;padding:4px 24px 4px 8px;">
+              <option value="">Todos los estados</option>
+              <option value="vigente">Vigente</option>
+              <option value="vencida">Vencida</option>
+              <option value="en_renovacion">En renovación</option>
+              <option value="cancelada">Cancelada</option>
+            </select>
+            <button id="btn-nueva-poliza" class="primary" style="padding:6px 14px;font-size:13px;">+ Nueva póliza</button>
+          </div>
+          <div id="seg-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;"></div>
+          <div class="tabla-wrapper">
+            <table class="tabla-generica" id="tabla-polizas">
+              <thead>
+                <tr>
+                  <th>Tipo</th>
+                  <th>N&ordm; Póliza</th>
+                  <th>Aseguradora</th>
+                  <th>Recurso</th>
+                  <th>Vencimiento</th>
+                  <th class="numero">Prima anual</th>
+                  <th>Estado</th>
+                  <th class="col-acciones">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-polizas"></tbody>
+            </table>
+          </div>
+          <p id="seg-sin-datos" class="sin-datos" style="display:none;">No hay pólizas.</p>
         </div>
       </div>
 
@@ -3418,6 +3471,7 @@
     <script src="/static/js/modules/impuestos.js?v=1"></script>
     <script src="/static/js/modules/eeff.js?v=1"></script>
     <script src="/static/js/modules/albaranes.js?v=1"></script>
+    <script src="/static/js/modules/seguros.js?v=1"></script>
     <script src="/static/js/app.js?v=30"></script>
   </body>
 </html>

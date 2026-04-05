@@ -84,6 +84,12 @@ const MODULOS = {
     subNavLinks: {},
     defecto: "inicio",
   },
+  seguros: {
+    linkId: "nav-seguros-modulo",
+    paneles: { inicio: "panel-seguros-inicio" },
+    subNavLinks: {},
+    defecto: "inicio",
+  },
   presupuestos: {
     linkId: "nav-presupuestos-modulo",
     submenuId: "submenu-presupuestos",
@@ -746,6 +752,13 @@ if (navImpuestos) navImpuestos.addEventListener("click", function (e) {
   e.preventDefault();
   activarModulo("impuestos");
   if (typeof cargarImpuestos === "function") cargarImpuestos();
+});
+
+var navSeguros = document.getElementById("nav-seguros-modulo");
+if (navSeguros) navSeguros.addEventListener("click", function (e) {
+  e.preventDefault();
+  activarModulo("seguros");
+  if (typeof cargarSeguros === "function") cargarSeguros();
 });
 
 var navMaquinaria = document.getElementById("nav-maquinaria-modulo");

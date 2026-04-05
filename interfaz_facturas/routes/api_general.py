@@ -412,6 +412,19 @@ def api_dashboard_director():
             "link": f"#proyectos/dashboard/{v['id']}",
           })
 
+      # Seguros: pólizas vencidas o próximas a vencer
+      try:
+        from core.seguros_db import alertas_seguros
+        for sa in alertas_seguros():
+          orden = 1 if sa["severidad"] == "alta" else 2 if sa["severidad"] == "media" else 3
+          alertas.append({
+            "mensaje": sa["mensaje"],
+            "severidad": sa["severidad"], "orden": orden,
+            "link": "#seguros",
+          })
+      except Exception:
+        pass
+
       # Ordenar por severidad y limitar
       alertas.sort(key=lambda a: a["orden"])
       result["alertas"] = alertas[:10]
