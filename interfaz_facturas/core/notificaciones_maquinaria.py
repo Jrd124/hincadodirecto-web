@@ -1,7 +1,7 @@
 """Motor de notificaciones de mantenimiento de maquinaria.
 
 Calcula tareas de mantenimiento pendientes por máquina,
-controla anti-spam semanal, y envía avisos por WhatsApp via Meta Cloud API.
+controla anti-spam semanal, y envía avisos por WhatsApp (Meta Cloud API).
 """
 from __future__ import annotations
 
@@ -15,12 +15,12 @@ from core.db import conectar as _conectar, now_iso as _now
 
 logger = logging.getLogger("erp.notificaciones")
 
-# ── Config Meta Cloud API (variables de entorno) ──────────────────────────────
-META_WA_TOKEN = os.getenv("META_WA_TOKEN", "")
-META_WA_PHONE_NUMBER_ID = os.getenv("META_WA_PHONE_NUMBER_ID", "")
-META_WA_TEMPLATE_NAME = os.getenv("META_WA_TEMPLATE_NAME", "mantenimiento_maquinaria")
+# ── Config Meta Cloud API (variables de entorno) ─────────────────────────────
+META_WA_TOKEN        = os.getenv("META_WA_TOKEN", "")
+META_WA_PHONE_ID     = os.getenv("META_WA_PHONE_NUMBER_ID", "")
+META_WA_TEMPLATE     = os.getenv("META_WA_TEMPLATE_NAME", "mantenimiento_maquinaria")
 META_WA_TEMPLATE_LANG = os.getenv("META_WA_TEMPLATE_LANG", "es")
-ERP_BASE_URL = os.getenv("ERP_BASE_URL", "https://erp.hincadodirecto.com")
+ERP_BASE_URL         = os.getenv("ERP_BASE_URL", "https://erp.hincadodirecto.com")
 NOTIFICACIONES_ENABLED = os.getenv("NOTIFICACIONES_MAQUINARIA_ENABLED", "false").lower() == "true"
 
 
@@ -294,54 +294,50 @@ def _build_notification_message(item: dict) -> str:
 
 
 def _normalizar_telefono(telefono: str) -> str:
-    """Normaliza un número de teléfono al formato E.164 sin '+' para la API de Meta.
+    """Normaliza un número de teléfono al formato E.164 sin el '+'.
 
+    Meta Cloud API acepta números en formato E.164 sin el símbolo '+'.
     Ejemplos:
-      '+34 641 438 126' → '34641438126'
-      '641438126'       → '34641438126'  (asume España)
-      '0034641438126'   → '34641438126'
+      "+34 612 345 678" → "34612345678"
+      "0034 612345678"  → "34612345678"
+      "612345678"       → "34612345678"  (asume España)
     """
     import re
-    digitos = re.sub(r"[^0-9]", "", telefono)
-    if digitos.startswith("0034"):
-        digitos = digitos[2:]            # quitar 00 → 34…
-    elif len(digitos) == 9 and digitos.startswith(("6", "7", "9")):
-        digitos = "34" + digitos         # número español sin prefijo
-    return digitos
+    digits = re.sub(r"\D", "", telefono)
+    if digits.startswith("0034"):
+        digits = digits[2:]       # quitar el 00
+    if digits.startswith("34") and len(digits) == 11:
+        return digits             # ya tiene prefijo ES
+    if len(digits) == 9:
+        return "34" + digits      # añadir prefijo ES
+    return digits                 # devolver tal cual si formato desconocido
 
 
-def _send_whatsapp(telefono: str, mensaje: str) -> tuple[bool, str]:
-    """Envía mensaje de texto libre por WhatsApp via Meta Cloud API.
-
-    NOTA: Meta permite mensajes de texto libre solo dentro de la ventana de 24 h
-    después de que el usuario haya escrito. Para notificaciones proactivas
-    (fuera de esa ventana) se necesita un template aprobado. Usa
-    _send_whatsapp_template() en ese caso una vez el template esté aprobado.
+def _send_whatsapp(to: str, body: str) -> tuple[bool, str]:
+    """Envía un mensaje de texto libre por Meta Cloud API (solo para ventana 24h).
 
     Returns (success, message_id_or_error).
     """
     import urllib.request
     import json as _json
 
-    if not META_WA_TOKEN or not META_WA_PHONE_NUMBER_ID:
-        logger.warning("Meta Cloud API no configurado (META_WA_TOKEN / META_WA_PHONE_NUMBER_ID vacíos)")
+    if not META_WA_TOKEN or not META_WA_PHONE_ID:
+        logger.warning("Meta Cloud API no configurada — token o phone_id vacíos")
         return False, "META_NOT_CONFIGURED"
 
-    to = _normalizar_telefono(telefono)
-    url = f"https://graph.facebook.com/v22.0/{META_WA_PHONE_NUMBER_ID}/messages"
+    url = f"https://graph.facebook.com/v19.0/{META_WA_PHONE_ID}/messages"
     payload = _json.dumps({
         "messaging_product": "whatsapp",
-        "to": to,
+        "to": _normalizar_telefono(to),
         "type": "text",
-        "text": {"body": mensaje},
+        "text": {"body": body},
     }).encode()
-
     req = urllib.request.Request(
         url,
         data=payload,
         headers={
-            "Authorization": f"Bearer {META_WA_TOKEN}",
             "Content-Type": "application/json",
+            "Authorization": f"Bearer {META_WA_TOKEN}",
         },
         method="POST",
     )
@@ -349,51 +345,47 @@ def _send_whatsapp(telefono: str, mensaje: str) -> tuple[bool, str]:
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = _json.loads(resp.read())
         msg_id = data.get("messages", [{}])[0].get("id", "")
-        logger.info("WhatsApp enviado a %s — ID: %s", to, msg_id)
+        logger.info("WhatsApp enviado a %s — msg_id: %s", to, msg_id)
         return True, msg_id
     except urllib.error.HTTPError as e:
-        body = e.read().decode(errors="replace")
-        logger.error("Meta API HTTP %s enviando a %s: %s", e.code, to, body)
-        return False, f"HTTP_{e.code}: {body[:200]}"
+        body_err = e.read().decode(errors="replace")
+        logger.error("Meta API HTTP %s enviando a %s: %s", e.code, to, body_err)
+        return False, f"HTTP_{e.code}: {body_err[:200]}"
     except Exception as e:
         logger.error("Error enviando WhatsApp a %s: %s", to, e)
         return False, str(e)
 
 
-def _send_whatsapp_template(telefono: str, params: list[str]) -> tuple[bool, str]:
-    """Envía mensaje de template aprobado por Meta (notificaciones proactivas).
+def _send_whatsapp_template(to: str, template_name: str, lang: str,
+                             components: list | None = None) -> tuple[bool, str]:
+    """Envía un mensaje usando una plantilla aprobada por Meta.
 
-    params: lista de valores para los placeholders {{1}}, {{2}}, … del template.
-    El template 'mantenimiento_maquinaria' espera: [maquina, horas, tareas_resumen]
+    Las plantillas son obligatorias para mensajes proactivos (fuera de ventana 24h).
+    Returns (success, message_id_or_error).
     """
     import urllib.request
     import json as _json
 
-    if not META_WA_TOKEN or not META_WA_PHONE_NUMBER_ID:
+    if not META_WA_TOKEN or not META_WA_PHONE_ID:
+        logger.warning("Meta Cloud API no configurada — token o phone_id vacíos")
         return False, "META_NOT_CONFIGURED"
 
-    to = _normalizar_telefono(telefono)
-    url = f"https://graph.facebook.com/v22.0/{META_WA_PHONE_NUMBER_ID}/messages"
+    url = f"https://graph.facebook.com/v19.0/{META_WA_PHONE_ID}/messages"
+    tmpl: dict = {"name": template_name, "language": {"code": lang}}
+    if components:
+        tmpl["components"] = components
     payload = _json.dumps({
         "messaging_product": "whatsapp",
-        "to": to,
+        "to": _normalizar_telefono(to),
         "type": "template",
-        "template": {
-            "name": META_WA_TEMPLATE_NAME,
-            "language": {"code": META_WA_TEMPLATE_LANG},
-            "components": [{
-                "type": "body",
-                "parameters": [{"type": "text", "text": p} for p in params],
-            }],
-        },
+        "template": tmpl,
     }).encode()
-
     req = urllib.request.Request(
         url,
         data=payload,
         headers={
-            "Authorization": f"Bearer {META_WA_TOKEN}",
             "Content-Type": "application/json",
+            "Authorization": f"Bearer {META_WA_TOKEN}",
         },
         method="POST",
     )
@@ -401,14 +393,14 @@ def _send_whatsapp_template(telefono: str, params: list[str]) -> tuple[bool, str
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = _json.loads(resp.read())
         msg_id = data.get("messages", [{}])[0].get("id", "")
-        logger.info("WhatsApp template enviado a %s — ID: %s", to, msg_id)
+        logger.info("WhatsApp template '%s' enviado a %s — msg_id: %s", template_name, to, msg_id)
         return True, msg_id
     except urllib.error.HTTPError as e:
-        body = e.read().decode(errors="replace")
-        logger.error("Meta API HTTP %s (template) a %s: %s", e.code, to, body)
-        return False, f"HTTP_{e.code}: {body[:200]}"
+        body_err = e.read().decode(errors="replace")
+        logger.error("Meta template HTTP %s enviando a %s: %s", e.code, to, body_err)
+        return False, f"HTTP_{e.code}: {body_err[:200]}"
     except Exception as e:
-        logger.error("Error enviando template a %s: %s", to, e)
+        logger.error("Error enviando template WhatsApp a %s: %s", to, e)
         return False, str(e)
 
 
@@ -477,12 +469,12 @@ def ejecutar_ciclo_notificaciones(dry_run: bool = False) -> dict:
             resumen["detalles"].append(detail)
             continue
 
-        # Determinar teléfono destino: responsable asignado tiene prioridad
+        # Determinar teléfono destino: responsable tiene prioridad sobre token
         responsable_tel = item.get("responsable_telefono")
         token_tel = token.get("telefono") if token else None
         telefono = responsable_tel or token_tel
 
-        # Skip si no hay contacto por ninguna vía
+        # Skip si no hay teléfono configurado
         if not telefono:
             resumen["sin_contacto"] += 1
             detail["resultado"] = "sin_contacto"
@@ -499,9 +491,7 @@ def ejecutar_ciclo_notificaciones(dry_run: bool = False) -> dict:
 
         # Construir mensaje
         mensaje = _build_notification_message(item)
-        canal = "whatsapp"  # responsable siempre por WhatsApp
-        if not responsable_tel:
-            canal = token.get("canal_preferido", "whatsapp")
+        canal = "whatsapp"
 
         if dry_run:
             detail["resultado"] = "dry_run"
@@ -511,30 +501,26 @@ def ejecutar_ciclo_notificaciones(dry_run: bool = False) -> dict:
             resumen["detalles"].append(detail)
             continue
 
-        # Enviar — WhatsApp via Meta Cloud API
-        if canal in ("whatsapp", "sms"):
-            canal = "whatsapp"
-            # Intentar primero con template aprobado (obligatorio para mensajes proactivos)
-            # Template params: {{1}}=máquina, {{2}}=horas_due, {{3}}=tarea
-            tarea_desc = item.get("task_nombre", item["task_code"])
-            if item.get("requires_workshop"):
-                tarea_desc += " ⚠️ (requiere taller autorizado)"
-            template_params = [
-                item["maquina_nombre"],
-                str(int(item["next_due_hours"])),
-                tarea_desc,
-            ]
-            ok, ext_id = _send_whatsapp_template(telefono, template_params)
-            if not ok:
-                # Fallback a texto libre (funciona dentro de ventana 24h)
-                logger.warning("Template falló (%s), intentando texto libre", ext_id)
-                ok, ext_id = _send_whatsapp(telefono, mensaje)
-            if ok:
-                resumen["enviadas_whatsapp"] += 1
-            else:
-                resumen["fallidas"] += 1
+        # Intentar con plantilla aprobada (obligatoria para mensajes proactivos)
+        ok, ext_id = _send_whatsapp_template(
+            telefono, META_WA_TEMPLATE, META_WA_TEMPLATE_LANG,
+            components=[{
+                "type": "body",
+                "parameters": [
+                    {"type": "text", "text": item["maquina_nombre"]},
+                    {"type": "text", "text": item["task_nombre"]},
+                    {"type": "text", "text": str(int(item["next_due_hours"]))},
+                ],
+            }],
+        )
+        # Fallback a texto libre si la plantilla falla (ej. ventana 24h abierta)
+        if not ok:
+            logger.info("Template falló para %s — intentando texto libre", telefono)
+            ok, ext_id = _send_whatsapp(telefono, mensaje)
+
+        if ok:
+            resumen["enviadas_whatsapp"] += 1
         else:
-            ok, ext_id = False, "canal_no_soportado"
             resumen["fallidas"] += 1
 
         estado = "enviado" if ok else "fallido"
@@ -545,6 +531,7 @@ def ejecutar_ciclo_notificaciones(dry_run: bool = False) -> dict:
 
         detail["resultado"] = estado
         detail["canal"] = canal
+        detail["telefono"] = telefono
         detail["external_id"] = ext_id
         resumen["detalles"].append(detail)
 
