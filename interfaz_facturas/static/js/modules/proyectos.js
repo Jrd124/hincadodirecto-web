@@ -784,41 +784,19 @@
   };
 
   window.desasignarRecurso = function (proyectoId, tipo, recursoId, nombre) {
-    var modal = document.createElement("div");
-    modal.className = "modal-overlay visible";
-    modal.style.zIndex = "110";
-    modal.addEventListener("click", function (ev) { if (ev.target === modal) modal.remove(); });
-    var nombreEsc = nombre.replace(/</g, "&lt;");
-    modal.innerHTML =
-      '<div class="modal-editar" style="max-width:400px;padding:24px;">' +
-        '<h3 style="margin:0 0 12px;">Desasignar ' + nombreEsc + '</h3>' +
-        '<p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:16px;">\u00bfQu\u00e9 asignaciones quieres eliminar?</p>' +
-        '<div style="display:flex;flex-direction:column;gap:8px;">' +
-          '<button class="desasig-btn-futuro" style="padding:10px;font-size:13px;border:1px solid var(--color-border-tertiary, #E5E7EB);border-radius:8px;background:var(--color-bg-page, #F8FAFC);cursor:pointer;text-align:left;">\uD83D\uDCC5 Solo asignaciones futuras (desde hoy)</button>' +
-          '<button class="desasig-btn-todo" style="padding:10px;font-size:13px;border:1px solid #DC2626;border-radius:8px;background:#FEF2F2;cursor:pointer;text-align:left;color:#991B1B;">\uD83D\uDDD1\uFE0F Todas las asignaciones (pasadas y futuras)</button>' +
-          '<button class="desasig-btn-cancelar" style="padding:8px;font-size:13px;border:none;background:none;cursor:pointer;color:var(--color-text-secondary);">Cancelar</button>' +
-        '</div>' +
-      '</div>';
-    document.body.appendChild(modal);
-    modal.querySelector(".desasig-btn-cancelar").addEventListener("click", function () { modal.remove(); });
-    modal.querySelector(".desasig-btn-futuro").addEventListener("click", function () { modal.remove(); _ejecutarDesasignacion(proyectoId, tipo, recursoId, nombre, "futuro"); });
-    modal.querySelector(".desasig-btn-todo").addEventListener("click", function () { modal.remove(); _ejecutarDesasignacion(proyectoId, tipo, recursoId, nombre, "todo"); });
-  };
-
-  function _ejecutarDesasignacion(proyectoId, tipo, recursoId, nombre, modo) {
-    var desde = modo === "todo" ? "2000-01-01" : new Date().toISOString().slice(0, 10);
+    if (!confirm("\u00bfEliminar " + nombre + " de este proyecto? Se borrar\u00e1n todas sus asignaciones.")) return;
     fetch("/api/proyectos/" + proyectoId + "/asignaciones", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recurso_tipo: tipo, recurso_id: recursoId, fecha: desde, fecha_hasta: "2099-12-31" }),
+      body: JSON.stringify({ recurso_tipo: tipo, recurso_id: recursoId, fecha: "2000-01-01", fecha_hasta: "2099-12-31" }),
     }).then(function (r) { return r.json(); })
       .then(function (d) {
         if (d.error) { mostrarToast(d.error, "error"); return; }
-        mostrarToast(nombre + " desasignado.", "success");
-        _renderRecursosCalendario(proyectoId);
+        mostrarToast(nombre + " eliminado del proyecto.", "success");
+        proyectoDashboard(proyectoId);
       })
-      .catch(function () { mostrarToast("Error al desasignar.", "error"); });
-  }
+      .catch(function () { mostrarToast("Error al eliminar.", "error"); });
+  };
 
   window.desasignarDia = function (proyectoId, tipo, recursoId, fecha, nombre) {
     if (!confirm("\u00bfDesasignar " + nombre + " el " + fecha + "?")) return;
@@ -835,58 +813,207 @@
       .catch(function () { mostrarToast("Error al desasignar.", "error"); });
   };
 
+  // ── Modal calendario edición de asignaciones ──
   window.editarAsignacion = function (proyectoId, tipo, recursoId, nombre) {
+    Promise.all([
+      fetch("/api/proyectos/" + proyectoId).then(function (r) { return r.json(); }),
+      fetch("/api/proyectos/" + proyectoId + "/asignaciones?recurso_tipo=" + tipo + "&recurso_id=" + recursoId).then(function (r) { return r.json(); }),
+    ]).then(function (results) {
+      var proy = results[0];
+      var asigs = results[1].asignaciones || [];
+      _abrirModalCalendarioRecurso(proyectoId, tipo, recursoId, nombre, proy, asigs);
+    });
+  };
+
+  function _abrirModalCalendarioRecurso(proyectoId, tipo, recursoId, nombre, proy, asigs) {
     var existing = document.getElementById("modal-editar-asignacion");
     if (existing) existing.remove();
+    // Determine project date range
+    var inicio = proy.fecha_inicio_real || proy.fecha_inicio_estimada || new Date().toISOString().slice(0, 10);
+    var fin = proy.fecha_fin_real || proy.fecha_fin_estimada || "";
+    if (!fin) {
+      var d = new Date(inicio); d.setMonth(d.getMonth() + 3);
+      fin = d.toISOString().slice(0, 10);
+    }
+    // Build set of assigned dates
+    var asigSet = {};
+    asigs.forEach(function (a) { asigSet[a.fecha] = true; });
+
     var modal = document.createElement("div");
     modal.className = "modal-overlay visible";
     modal.id = "modal-editar-asignacion";
     modal.style.zIndex = "110";
     modal.addEventListener("click", function (ev) { if (ev.target === modal) modal.remove(); });
-    var hoy = new Date().toISOString().slice(0, 10);
-    modal.innerHTML =
-      '<div class="modal-editar" role="dialog" style="max-width:400px;">' +
-        '<h2 style="margin:0 0 16px;font-size:16px;">Editar asignaci\u00f3n de ' + nombre + '</h2>' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">' +
-          '<div><label style="font-size:12px;">Desde</label><input type="date" id="edit-asig-desde" class="form-input" style="font-size:13px;" value="' + hoy + '"></div>' +
-          '<div><label style="font-size:12px;">Hasta</label><input type="date" id="edit-asig-hasta" class="form-input" style="font-size:13px;"></div>' +
-        '</div>' +
-        '<div style="display:flex;justify-content:flex-end;gap:8px;">' +
-          '<button type="button" class="secondary" onclick="document.getElementById(\'modal-editar-asignacion\').remove()">Cancelar</button>' +
-          '<button type="button" class="primary" id="btn-guardar-editar-asig">Guardar</button>' +
-        '</div>' +
-      '</div>';
-    document.body.appendChild(modal);
-    document.getElementById("btn-guardar-editar-asig").addEventListener("click", function () {
-      var desde = document.getElementById("edit-asig-desde").value;
-      var hasta = document.getElementById("edit-asig-hasta").value;
-      if (!desde || !hasta) { mostrarToast("Selecciona ambas fechas.", "error"); return; }
-      this.disabled = true;
-      this.textContent = "Guardando\u2026";
-      // 1. Delete future assignments
-      fetch("/api/proyectos/" + proyectoId + "/asignaciones", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recurso_tipo: tipo, recurso_id: recursoId, fecha: hoy, fecha_hasta: "2099-12-31" }),
-      }).then(function (r) { return r.json(); })
-        .then(function () {
-          // 2. Create new range
-          return fetch("/api/proyectos/" + proyectoId + "/asignaciones", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ recurso_tipo: tipo, recurso_id: recursoId, recurso_nombre: nombre, fecha: desde, fecha_hasta: hasta }),
-          });
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          if (d.error) { mostrarToast(d.error, "error"); return; }
-          document.getElementById("modal-editar-asignacion").remove();
-          mostrarToast("Asignaci\u00f3n actualizada.", "success");
-          _renderRecursosCalendario(proyectoId);
-        })
-        .catch(function () { mostrarToast("Error al guardar.", "error"); });
-    });
-  };
+
+    // Parse month for navigation
+    var inicioDate = new Date(inicio + "T00:00:00");
+    var finDate = new Date(fin + "T00:00:00");
+    var curYear = inicioDate.getFullYear(), curMonth = inicioDate.getMonth();
+
+    function renderModal() {
+      var meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+      var diasNom = ["L","M","X","J","V","S","D"];
+      // Count totals
+      var allCells = [];
+      var totalLaborables = 0;
+      var d = new Date(curYear, curMonth, 1);
+      var lastDay = new Date(curYear, curMonth + 1, 0).getDate();
+      var primerDow = (d.getDay() + 6) % 7; // 0=Mon
+
+      var calHtml = '<div style="display:grid;grid-template-columns:repeat(7,36px);gap:4px;justify-content:center;">';
+      // Day headers
+      for (var h = 0; h < 7; h++) {
+        calHtml += '<div style="text-align:center;font-size:11px;font-weight:600;color:var(--color-text-secondary);padding:4px 0;">' + diasNom[h] + '</div>';
+      }
+      // Empty cells before first day
+      for (var e = 0; e < primerDow; e++) {
+        calHtml += '<div></div>';
+      }
+      // Days
+      for (var day = 1; day <= lastDay; day++) {
+        var dd = new Date(curYear, curMonth, day);
+        var fecha = dd.toISOString().slice(0, 10);
+        var dow = dd.getDay(); // 0=Sun
+        var esFinDeSemana = dow === 0 || dow === 6;
+        var enRango = dd >= inicioDate && dd <= finDate;
+
+        if (esFinDeSemana || !enRango) {
+          calHtml += '<div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:12px;background:#F3F4F6;color:#9CA3AF;opacity:0.5;">' + day + '</div>';
+        } else {
+          totalLaborables++;
+          var asig = !!asigSet[fecha];
+          var bg = asig ? '#DCFCE7' : 'var(--color-bg-page, #F8FAFC)';
+          var col = asig ? '#166534' : 'var(--color-text-secondary)';
+          var brd = asig ? '#16A34A' : 'var(--color-border-tertiary, #E5E7EB)';
+          calHtml += '<div class="cal-dia-recurso" data-fecha="' + fecha + '" data-asignado="' + (asig ? '1' : '0') + '" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;background:' + bg + ';color:' + col + ';border:1px solid ' + brd + ';">' + day + '</div>';
+        }
+      }
+      calHtml += '</div>';
+
+      var seleccionados = 0;
+      for (var k in asigSet) { if (asigSet[k]) seleccionados++; }
+
+      modal.innerHTML =
+        '<div class="modal-editar" role="dialog" style="max-width:380px;">' +
+          '<h2 style="margin:0 0 4px;font-size:16px;">Asignaci\u00f3n de ' + _esc(nombre) + '</h2>' +
+          '<p style="margin:0 0 12px;font-size:12px;color:var(--color-text-secondary);">' + _esc(proy.nombre || '') + '</p>' +
+          '<div style="display:flex;gap:6px;margin-bottom:12px;">' +
+            '<button class="btn-small cal-btn-selall">Seleccionar todo</button>' +
+            '<button class="btn-small cal-btn-quitall">Quitar todo</button>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
+            '<button class="btn-small cal-btn-prev" style="padding:2px 8px;">\u2190</button>' +
+            '<span style="font-size:13px;font-weight:600;">' + meses[curMonth] + ' ' + curYear + '</span>' +
+            '<button class="btn-small cal-btn-next" style="padding:2px 8px;">\u2192</button>' +
+          '</div>' +
+          calHtml +
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;">' +
+            '<span id="cal-resumen" style="font-size:12px;color:var(--color-text-secondary);">' + seleccionados + ' d\u00edas seleccionados</span>' +
+            '<div style="display:flex;gap:8px;">' +
+              '<button type="button" class="secondary cal-btn-cancelar">Cancelar</button>' +
+              '<button type="button" class="primary cal-btn-guardar">Guardar</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(modal);
+      _bindCalEvents();
+    }
+
+    function _updateResumen() {
+      var n = 0;
+      for (var k in asigSet) { if (asigSet[k]) n++; }
+      var el = document.getElementById("cal-resumen");
+      if (el) el.textContent = n + " d\u00edas seleccionados";
+    }
+
+    function _bindCalEvents() {
+      // Toggle days
+      modal.querySelectorAll(".cal-dia-recurso").forEach(function (el) {
+        el.addEventListener("click", function () {
+          var fecha = this.dataset.fecha;
+          var asig = this.dataset.asignado === "1";
+          if (asig) {
+            this.dataset.asignado = "0";
+            this.style.background = "var(--color-bg-page, #F8FAFC)";
+            this.style.color = "var(--color-text-secondary)";
+            this.style.borderColor = "var(--color-border-tertiary, #E5E7EB)";
+            delete asigSet[fecha];
+          } else {
+            this.dataset.asignado = "1";
+            this.style.background = "#DCFCE7";
+            this.style.color = "#166534";
+            this.style.borderColor = "#16A34A";
+            asigSet[fecha] = true;
+          }
+          _updateResumen();
+        });
+      });
+      // Select all / clear all
+      var btnSelAll = modal.querySelector(".cal-btn-selall");
+      var btnQuitAll = modal.querySelector(".cal-btn-quitall");
+      if (btnSelAll) btnSelAll.addEventListener("click", function () {
+        modal.querySelectorAll(".cal-dia-recurso").forEach(function (el) {
+          el.dataset.asignado = "1";
+          el.style.background = "#DCFCE7";
+          el.style.color = "#166534";
+          el.style.borderColor = "#16A34A";
+          asigSet[el.dataset.fecha] = true;
+        });
+        _updateResumen();
+      });
+      if (btnQuitAll) btnQuitAll.addEventListener("click", function () {
+        modal.querySelectorAll(".cal-dia-recurso").forEach(function (el) {
+          el.dataset.asignado = "0";
+          el.style.background = "var(--color-bg-page, #F8FAFC)";
+          el.style.color = "var(--color-text-secondary)";
+          el.style.borderColor = "var(--color-border-tertiary, #E5E7EB)";
+          delete asigSet[el.dataset.fecha];
+        });
+        _updateResumen();
+      });
+      // Month navigation
+      var btnPrev = modal.querySelector(".cal-btn-prev");
+      var btnNext = modal.querySelector(".cal-btn-next");
+      if (btnPrev) btnPrev.addEventListener("click", function () {
+        curMonth--;
+        if (curMonth < 0) { curMonth = 11; curYear--; }
+        modal.remove();
+        renderModal();
+      });
+      if (btnNext) btnNext.addEventListener("click", function () {
+        curMonth++;
+        if (curMonth > 11) { curMonth = 0; curYear++; }
+        modal.remove();
+        renderModal();
+      });
+      // Cancel
+      var btnCancel = modal.querySelector(".cal-btn-cancelar");
+      if (btnCancel) btnCancel.addEventListener("click", function () { modal.remove(); });
+      // Save
+      var btnGuardar = modal.querySelector(".cal-btn-guardar");
+      if (btnGuardar) btnGuardar.addEventListener("click", function () {
+        var fechas = [];
+        for (var k in asigSet) { if (asigSet[k]) fechas.push(k); }
+        fechas.sort();
+        btnGuardar.disabled = true;
+        btnGuardar.textContent = "Guardando\u2026";
+        fetch("/api/proyectos/" + proyectoId + "/asignaciones/bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recurso_tipo: tipo, recurso_id: recursoId, recurso_nombre: nombre, fechas: fechas }),
+        }).then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d.error) { mostrarToast(d.error, "error"); btnGuardar.disabled = false; btnGuardar.textContent = "Guardar"; return; }
+            modal.remove();
+            mostrarToast("Asignaci\u00f3n actualizada (" + fechas.length + " d\u00edas).", "success");
+            _renderRecursosCalendario(proyectoId);
+          })
+          .catch(function () { mostrarToast("Error al guardar.", "error"); btnGuardar.disabled = false; btnGuardar.textContent = "Guardar"; });
+      });
+    }
+
+    renderModal();
+  }
 
   window.proyectoAddDocumento = function (proyectoId) {
     var existing = document.getElementById("modal-add-documento");

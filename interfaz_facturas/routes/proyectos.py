@@ -462,7 +462,10 @@ def api_guardar_parte_ocr():
 def api_asignaciones_proyecto(proyecto_id):
   desde = request.args.get("desde", "")
   hasta = request.args.get("hasta", "")
-  rows = proyectos_db.obtener_asignaciones_proyecto(proyecto_id, desde, hasta)
+  recurso_tipo = request.args.get("recurso_tipo", "")
+  recurso_id = request.args.get("recurso_id", type=int)
+  rows = proyectos_db.obtener_asignaciones_proyecto(proyecto_id, desde, hasta,
+                                                     recurso_tipo=recurso_tipo, recurso_id=recurso_id)
   return jsonify({"asignaciones": rows})
 
 
@@ -505,6 +508,23 @@ def api_delete_proyecto_asignaciones(proyecto_id):
   else:
     n = 1 if proyectos_db.desasignar(proyecto_id, tipo, int(rid), fecha) else 0
   return jsonify({"ok": True, "eliminados": n})
+
+
+@proyectos_bp.post("/api/proyectos/<int:proyecto_id>/asignaciones/bulk")
+def api_bulk_asignaciones(proyecto_id):
+  """Replace all assignments for a resource: delete existing, insert new dates."""
+  data = request.get_json(silent=True) or {}
+  tipo = data.get("recurso_tipo", "")
+  rid = data.get("recurso_id")
+  nombre = data.get("recurso_nombre", "")
+  fechas = data.get("fechas", [])
+  if not tipo or rid is None or not nombre:
+    return jsonify({"error": "recurso_tipo, recurso_id y recurso_nombre requeridos"}), 400
+  # Delete all existing assignments for this resource in this project
+  proyectos_db.desasignar_rango(proyecto_id, tipo, int(rid), "2000-01-01", "2099-12-31")
+  # Insert new dates
+  n = proyectos_db.asignar_fechas(proyecto_id, tipo, int(rid), nombre, fechas)
+  return jsonify({"ok": True, "asignaciones_creadas": n})
 
 
 @proyectos_bp.get("/api/proyectos/<int:proyecto_id>/recursos")

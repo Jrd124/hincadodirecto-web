@@ -970,6 +970,27 @@ def asignar_rango(proyecto_id: int, recurso_tipo: str, recurso_id: int,
     return count
 
 
+def asignar_fechas(proyecto_id: int, recurso_tipo: str, recurso_id: int,
+                   recurso_nombre: str, fechas: list[str]) -> int:
+    """Insert assignments for a list of specific dates. Returns count inserted."""
+    init_proyectos_db()
+    ahora = _now()
+    count = 0
+    with _conectar() as conn:
+        for fecha in fechas:
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO proyecto_asignaciones"
+                    " (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, created_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?)",
+                    (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, ahora),
+                )
+                count += 1
+            except Exception:
+                pass
+    return count
+
+
 def desasignar(proyecto_id: int, recurso_tipo: str, recurso_id: int, fecha: str) -> bool:
     init_proyectos_db()
     with _conectar() as conn:
@@ -992,7 +1013,8 @@ def desasignar_rango(proyecto_id: int, recurso_tipo: str, recurso_id: int,
         return n
 
 
-def obtener_asignaciones_proyecto(proyecto_id: int, fecha_desde: str = "", fecha_hasta: str = "") -> list[dict]:
+def obtener_asignaciones_proyecto(proyecto_id: int, fecha_desde: str = "", fecha_hasta: str = "",
+                                  recurso_tipo: str = "", recurso_id: int | None = None) -> list[dict]:
     init_proyectos_db()
     conn = _get_conn()
     try:
@@ -1004,6 +1026,12 @@ def obtener_asignaciones_proyecto(proyecto_id: int, fecha_desde: str = "", fecha
         if fecha_hasta:
             where += " AND fecha <= ?"
             params.append(fecha_hasta)
+        if recurso_tipo:
+            where += " AND recurso_tipo = ?"
+            params.append(recurso_tipo)
+        if recurso_id is not None:
+            where += " AND recurso_id = ?"
+            params.append(recurso_id)
         rows = conn.execute(
             f"SELECT * FROM proyecto_asignaciones WHERE {where} ORDER BY fecha, recurso_tipo, recurso_nombre",
             params,
