@@ -1104,9 +1104,9 @@ async def _handle_parte_corregir_hincas(update: Update, context: ContextTypes.DE
     texto = update.message.text.strip()
     if texto != "/ok":
         try:
-            datos["total_hincas"] = int(texto)
-        except ValueError:
-            return await update.message.reply_text("❌ Escribe un número o /ok")
+            datos["total_hincas"] = int(float(texto.replace(",", ".")))
+        except (ValueError, TypeError):
+            return await update.message.reply_text("❌ Escribe un número válido (ej: 150) o /ok para mantener:")
     set_estado(tid, "parte_corregir_horas", datos)
     await update.message.reply_text(
         f"⏱ Horas admin actuales: *{datos.get('horas_admin', 0)}*\n"
@@ -1123,9 +1123,9 @@ async def _handle_parte_corregir_horas(update: Update, context: ContextTypes.DEF
     texto = update.message.text.strip()
     if texto != "/ok":
         try:
-            datos["horas_admin"] = float(texto)
-        except ValueError:
-            return await update.message.reply_text("❌ Escribe un número o /ok")
+            datos["horas_admin"] = float(texto.replace(",", "."))
+        except (ValueError, TypeError):
+            return await update.message.reply_text("❌ Escribe un número válido (ej: 8.5 o 8,5) o /ok para mantener:")
     lineas = datos.get("lineas", [])
     operadores_txt = ", ".join(f"{l.get('operador', '?')} con {l.get('maquina', '?')}" for l in lineas) or "ninguno"
     set_estado(tid, "parte_corregir_operadores", datos)
@@ -1950,8 +1950,8 @@ async def manual_proyecto(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def manual_hincas(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        n = int(update.message.text.strip())
-    except ValueError:
+        n = int(float(update.message.text.strip().replace(",", ".")))
+    except (ValueError, TypeError):
         await update.message.reply_text("Escribe un número.")
         return MANUAL_HINCAS
     context.user_data["manual"]["hincas"] = n
@@ -1972,7 +1972,7 @@ async def manual_horas_admin(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def manual_hincadoras(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        n = int(update.message.text.strip())
+        n = int(float(update.message.text.strip().replace(",", ".")))
     except ValueError:
         await update.message.reply_text("Escribe un número.")
         return MANUAL_HINCADORAS
