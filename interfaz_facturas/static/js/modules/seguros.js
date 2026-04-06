@@ -331,6 +331,7 @@ function _verPoliza(id) {
 }
 
 window._abrirModalPoliza = _abrirModalPoliza;
+window.segurosVerDetalle = _verPoliza;
 
 window._nuevoSiniestro = function (polizaId) {
   var desc = prompt("Descripci\u00f3n del siniestro:");

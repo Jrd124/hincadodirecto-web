@@ -576,7 +576,7 @@ function renderPaginacionBancos(container, actual, total) {
       // Seguro conciliado
       var seguroPolizaId = m.seguro_poliza_id;
       if (seguroPolizaId && conciliadoAt) {
-        vincParts.push("<span class=\"cel-flex\"><span class=\"badge-conciliado\" style=\"background:#DCFCE7;color:#166534;\">Seguro</span><button type=\"button\" class=\"btn-small bancos-btn-desvincular-seguro\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" data-poliza-id=\"" + seguroPolizaId + "\" title=\"Desvincular seguro\">Desvincular</button></span>");
+        vincParts.push("<span class=\"cel-flex\"><span class=\"badge-conciliado\" style=\"background:#EDE9FE;color:#5B21B6;\">Seguro</span><button type=\"button\" onclick=\"segurosVerDetalle(" + seguroPolizaId + ")\" style=\"background:none;border:none;cursor:pointer;padding:2px 6px;color:var(--color-primary);font-size:12px;\" onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">Ver</button><button type=\"button\" class=\"btn-small bancos-btn-desvincular-seguro\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" data-poliza-id=\"" + seguroPolizaId + "\" title=\"Desvincular seguro\">Desvincular</button></span>");
       }
       // Tarjeta agrupación
       var tarjetaId = m.tarjeta_id != null ? m.tarjeta_id : "";
@@ -1392,7 +1392,7 @@ function renderPaginacionBancos(container, actual, total) {
     modal.style.zIndex = "110";
     modal.addEventListener("click", function (ev) { if (ev.target === modal) modal.remove(); });
     modal.innerHTML =
-      '<div class="modal-editar" role="dialog" style="max-width:600px;max-height:85vh;overflow-y:auto;">' +
+      '<div class="modal-editar" role="dialog" style="max-width:500px;max-height:85vh;overflow-y:auto;">' +
         '<h2 style="margin:0 0 12px;font-size:18px;">Conciliar con póliza de seguro</h2>' +
         '<div style="padding:10px 12px;background:#F8FAFC;border-radius:8px;margin-bottom:16px;font-size:13px;">' +
           '<strong>Cargo:</strong> ' + formatNumero(importe) + ' &mdash; ' + (fecha || '—') + ' &mdash; ' + (concepto || '—').replace(/</g, '&lt;') +
@@ -1419,14 +1419,14 @@ function renderPaginacionBancos(container, actual, total) {
         polizas.forEach(function (p) {
           var prima = Number(p.prima_anual || 0);
           var coincide = Math.abs(prima - absImporte) < 0.02;
-          var borderStyle = coincide ? "border:2px solid #16A34A;background:#F0FDF4;" : "border:1px solid #E5E7EB;";
-          html += '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;margin-bottom:6px;cursor:pointer;' + borderStyle + '">' +
+          var borderStyle = coincide ? "border-color:#16A34A;background:#F0FDF4;" : "";
+          html += '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--color-border-tertiary, #E5E7EB);border-radius:8px;cursor:pointer;margin-bottom:6px;' + borderStyle + '">' +
             '<input type="radio" name="seg-poliza-sel" value="' + p.id + '" style="flex-shrink:0;">' +
-            '<div style="flex:1;font-size:13px;">' +
-              '<div style="font-weight:600;">' + (iconos[p.tipo] || '') + ' ' + (p.tipo || '').replace(/_/g, ' ') + (p.recurso_nombre ? ' — ' + p.recurso_nombre : '') + '</div>' +
-              '<div style="color:var(--color-text-secondary);font-size:12px;">Prima: ' + prima.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + ' € — ' + (p.aseguradora || '') + (p.numero_poliza ? ' — ' + p.numero_poliza : '') + '</div>' +
+            '<div style="flex:1;min-width:0;">' +
+              '<div style="font-size:13px;font-weight:500;">' + (iconos[p.tipo] || '') + ' ' + (p.descripcion || (p.tipo || '').replace(/_/g, ' ')) + (p.recurso_nombre ? ' \u2014 ' + p.recurso_nombre : '') + '</div>' +
+              '<div style="font-size:12px;color:var(--color-text-secondary);">' + (p.aseguradora || '') + ' \u00B7 N\u00BA ' + (p.numero_poliza || '\u2014') + ' \u00B7 Prima: ' + prima.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + ' \u20AC</div>' +
             '</div>' +
-            (coincide ? '<span style="font-size:11px;font-weight:600;color:#16A34A;">✓ Coincide</span>' : '') +
+            (coincide ? '<span style="flex-shrink:0;font-size:11px;font-weight:600;color:#16A34A;">\u2713 Coincide</span>' : '') +
           '</label>';
         });
         container.innerHTML = html;
