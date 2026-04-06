@@ -1422,20 +1422,28 @@ function renderPaginacionBancos(container, actual, total) {
           var prima = Number(p.prima_anual || 0);
           var coincide = Math.abs(prima - absImporte) < 0.02;
           var borderExtra = coincide ? "border-color:#16A34A;background:#F0FDF4;" : "";
-          html += '<label style="display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--color-border-tertiary, #E5E7EB);border-radius:8px;cursor:pointer;margin-bottom:8px;' + borderExtra + '">' +
-            '<input type="radio" name="seg-poliza-sel" value="' + p.id + '" style="flex-shrink:0;margin-top:2px;"' + (coincide ? ' checked' : '') + '>' +
-            '<div style="flex:1;min-width:0;">' +
-              '<div style="font-size:14px;font-weight:500;margin-bottom:4px;">' + (iconos[p.tipo] || '') + ' ' + (p.descripcion || (p.tipo || '').replace(/_/g, ' ')) + (p.recurso_nombre ? ' \u2014 ' + p.recurso_nombre : '') + '</div>' +
-              '<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">' + (p.aseguradora || '') + ' \u00B7 N\u00BA ' + (p.numero_poliza || '\u2014') + '</div>' +
+          html += '<div class="seg-poliza-card" data-id="' + p.id + '" style="display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--color-border-tertiary, #E5E7EB);border-radius:8px;cursor:pointer;margin-bottom:8px;' + borderExtra + '">' +
+            '<input type="radio" name="seg-poliza-sel" value="' + p.id + '" style="flex-shrink:0;margin-top:3px;"' + (coincide ? ' checked' : '') + '>' +
+            '<div style="flex:1;min-width:0;font-weight:normal;">' +
+              '<div style="font-size:14px !important;font-weight:500 !important;margin-bottom:4px;">' + (iconos[p.tipo] || '') + ' ' + (p.descripcion || (p.tipo || '').replace(/_/g, ' ')) + (p.recurso_nombre ? ' \u2014 ' + p.recurso_nombre : '') + '</div>' +
+              '<div style="font-size:12px !important;font-weight:400 !important;color:var(--color-text-secondary);margin-bottom:4px;">' + (p.aseguradora || '') + ' \u00B7 N\u00BA ' + (p.numero_poliza || '\u2014') + '</div>' +
               '<div style="display:flex;align-items:center;gap:8px;">' +
                 '<span style="font-size:13px;font-weight:500;">Prima: ' + prima.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + ' \u20AC</span>' +
-                (coincide ? '<span style="font-size:11px;padding:2px 8px;background:#DCFCE7;color:#166534;border-radius:10px;">\u2713 Coincide</span>' : '') +
+                (coincide ? '<span style="font-size:11px;font-weight:600;padding:2px 8px;background:#DCFCE7;color:#166534;border-radius:10px;">\u2713 Coincide</span>' : '') +
               '</div>' +
             '</div>' +
-          '</label>';
+          '</div>';
         });
         container.innerHTML = html;
         var btnConfirmar = document.getElementById("btn-confirmar-conciliar-seguro");
+        // Click on card selects the radio
+        container.querySelectorAll(".seg-poliza-card").forEach(function (card) {
+          card.addEventListener("click", function (ev) {
+            if (ev.target.tagName === "INPUT") return; // already handled
+            var radio = card.querySelector('input[type="radio"]');
+            if (radio) { radio.checked = true; btnConfirmar.disabled = false; }
+          });
+        });
         // Enable button when a radio is selected
         container.addEventListener("change", function () {
           btnConfirmar.disabled = false;
