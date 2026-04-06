@@ -500,6 +500,105 @@ def consultar_equipo(empleado_nombre: str | None = None) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+#  SEGUROS — consultas desde Telegram
+# ═══════════════════════════════════════════════════════════════════════════
+
+def consultar_seguros(tipo=None, recurso_nombre=None, incluir_documentos=False):
+    """Consulta pólizas de seguros del ERP."""
+    from core.seguros_db import init_seguros_db
+    init_seguros_db()
+    conn = get_conn()
+    try:
+        query = "SELECT * FROM polizas WHERE 1=1"
+        params = []
+        if tipo:
+            query += " AND tipo = ?"
+            params.append(tipo)
+        if recurso_nombre:
+            query += " AND recurso_nombre LIKE ?"
+            params.append(f"%{recurso_nombre}%")
+        polizas = conn.execute(query + " ORDER BY fecha_vencimiento", params).fetchall()
+        if not polizas:
+            return "No se encontraron pólizas con esos criterios."
+        iconos = {"maquinaria": "🏗️", "vehiculo": "🚗", "responsabilidad_civil": "🏢", "accidentes_convenio": "👷", "dyo": "👔", "otro": "📋"}
+        resultado = []
+        for row in polizas:
+            p = dict(row)
+            linea = iconos.get(p.get("tipo", ""), "📋") + " "
+            linea += p.get("descripcion") or p.get("tipo", "")
+            if p.get("recurso_nombre"):
+                linea += f" — {p['recurso_nombre']}"
+            linea += f"\n  Aseguradora: {p.get('aseguradora', '—')}"
+            linea += f"\n  Nº póliza: {p.get('numero_poliza') or '—'}"
+            prima = float(p.get("prima_anual") or 0)
+            linea += f"\n  Prima anual: {prima:,.2f} €"
+            linea += f"\n  Vencimiento: {p.get('fecha_vencimiento', '—')}"
+            linea += f"\n  Estado: {p.get('estado', '—')} | Pago: {p.get('estado_pago') or 'pendiente'}"
+            if incluir_documentos:
+                docs = conn.execute(
+                    "SELECT id, nombre_archivo, tipo, ruta_archivo FROM seguros_documentos WHERE poliza_id = ?",
+                    [p["id"]],
+                ).fetchall()
+                if docs:
+                    linea += f"\n  📎 Documentos: {len(docs)}"
+                    for d in docs:
+                        linea += f"\n    - [{d['id']}] {d['nombre_archivo']} ({d['tipo']})"
+                else:
+                    linea += "\n  📎 Sin documentos adjuntos"
+            siniestros = conn.execute(
+                "SELECT COUNT(*) as n FROM siniestros WHERE poliza_id = ? AND estado IN ('abierto','en_tramite')",
+                [p["id"]],
+            ).fetchone()
+            if siniestros and siniestros["n"] > 0:
+                linea += f"\n  ⚠️ {siniestros['n']} siniestro(s) abierto(s)"
+            resultado.append(linea)
+        return "\n\n".join(resultado)
+    finally:
+        conn.close()
+
+
+# Pending documents to send via Telegram (filled by enviar_documento_seguro, consumed by handler)
+_pending_docs: list[dict] = []
+
+
+def enviar_documento_seguro(poliza_id, tipo_documento=None):
+    """Prepara documentos de una póliza para envío por Telegram."""
+    from core.seguros_db import init_seguros_db
+    init_seguros_db()
+    conn = get_conn()
+    try:
+        query = "SELECT id, nombre_archivo, tipo, ruta_archivo FROM seguros_documentos WHERE poliza_id = ?"
+        params = [int(poliza_id)]
+        if tipo_documento:
+            query += " AND tipo = ?"
+            params.append(tipo_documento)
+        docs = conn.execute(query, params).fetchall()
+        if not docs:
+            return "No hay documentos adjuntos a esta póliza."
+        enviados = []
+        for d in docs:
+            ruta = d["ruta_archivo"]
+            if ruta:
+                ruta_completa = str(DATOS_DIR / ruta)
+                if os.path.exists(ruta_completa):
+                    _pending_docs.append({
+                        "ruta": ruta_completa,
+                        "nombre": d["nombre_archivo"],
+                        "tipo": d["tipo"],
+                    })
+                    enviados.append(d["nombre_archivo"])
+                else:
+                    enviados.append(f"⚠️ No encontrado: {d['nombre_archivo']}")
+            else:
+                enviados.append(f"⚠️ Sin ruta: {d['nombre_archivo']}")
+        if any(doc for doc in _pending_docs):
+            return f"Enviando {len([e for e in enviados if not e.startswith('⚠️')])} documento(s) al usuario por Telegram: " + ", ".join(enviados)
+        return "No se pudieron localizar los archivos."
+    finally:
+        conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 #  GPT-4 FUNCTION CALLING (superadmin natural language)
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -571,6 +670,30 @@ _GPT_FUNCTIONS = [
             },
         },
     },
+    {
+        "name": "consultar_seguros",
+        "description": "Obtiene información de pólizas de seguros: vigentes, vencimientos, primas, estado de pago, siniestros, documentos adjuntos. Puede buscar por tipo (maquinaria, vehiculo, responsabilidad_civil, accidentes_convenio, dyo), por recurso (nombre de máquina o vehículo), por aseguradora, o listar todas.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "tipo": {"type": "string", "description": "Tipo de seguro: maquinaria, vehiculo, responsabilidad_civil, accidentes_convenio, dyo, o vacío para todos"},
+                "recurso_nombre": {"type": "string", "description": "Nombre del recurso asegurado (ej: Nicoletta, Carmela) — opcional"},
+                "incluir_documentos": {"type": "boolean", "description": "Si true, incluir lista de documentos adjuntos", "default": False},
+            },
+        },
+    },
+    {
+        "name": "enviar_documento_seguro",
+        "description": "Envía un documento PDF de una póliza de seguros al usuario por Telegram. Usar cuando el usuario pida explícitamente que le manden/envíen un documento.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "poliza_id": {"type": "integer", "description": "ID de la póliza"},
+                "tipo_documento": {"type": "string", "description": "Tipo: poliza, recibo, certificado, siniestro, otro. Vacío para todos."},
+            },
+            "required": ["poliza_id"],
+        },
+    },
 ]
 
 _FN_MAP = {
@@ -580,6 +703,8 @@ _FN_MAP = {
     "consultar_maquinaria": consultar_maquinaria,
     "consultar_alertas": consultar_alertas,
     "consultar_equipo": consultar_equipo,
+    "consultar_seguros": consultar_seguros,
+    "enviar_documento_seguro": enviar_documento_seguro,
 }
 
 
@@ -771,9 +896,25 @@ async def handle_text_superadmin(update: Update, context: ContextTypes.DEFAULT_T
             )
         return  # Operarios: text is handled by conversation or ignored
     await update.message.reply_text("⏳ Consultando...")
+    # Clear pending docs before query
+    _pending_docs.clear()
     answer = await _run_sync(_gpt_query_sync, update.message.text)
     for chunk in _split_msg(answer):
         await update.message.reply_text(chunk, parse_mode=ParseMode.MARKDOWN)
+    # Send any pending documents from enviar_documento_seguro
+    if _pending_docs:
+        for doc in _pending_docs:
+            try:
+                with open(doc["ruta"], "rb") as f:
+                    await update.message.reply_document(
+                        document=f,
+                        filename=doc["nombre"],
+                        caption=f"📄 {(doc.get('tipo') or 'documento').title()} — {doc['nombre']}",
+                    )
+            except Exception as exc:
+                logger.warning("Error enviando documento %s: %s", doc["nombre"], exc)
+                await update.message.reply_text(f"⚠️ No se pudo enviar: {doc['nombre']}")
+        _pending_docs.clear()
 
 
 # ═══════════════════════════════════════════════════════════════════════════

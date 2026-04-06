@@ -573,6 +573,11 @@ function renderPaginacionBancos(container, actual, total) {
         fLine += "</span>";
         vincParts.push(fLine);
       }
+      // Seguro conciliado
+      var seguroPolizaId = m.seguro_poliza_id;
+      if (seguroPolizaId && conciliadoAt) {
+        vincParts.push("<span class=\"cel-flex\"><span class=\"badge-conciliado\" style=\"background:#EDE9FE;color:#5B21B6;\">Seguro</span><button type=\"button\" onclick=\"segurosVerDetalle(" + seguroPolizaId + ")\" style=\"background:none;border:none;cursor:pointer;padding:2px 6px;color:var(--color-primary);font-size:12px;\" onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">Ver</button><button type=\"button\" class=\"btn-small bancos-btn-desvincular-seguro\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" data-poliza-id=\"" + seguroPolizaId + "\" title=\"Desvincular seguro\">Desvincular</button></span>");
+      }
       // Tarjeta agrupación
       var tarjetaId = m.tarjeta_id != null ? m.tarjeta_id : "";
       var liquidacionPeriodo = (m.liquidacion_periodo || "").trim();
@@ -595,21 +600,38 @@ function renderPaginacionBancos(container, actual, total) {
       if (vincParts.length === 0 && !conciliadoAt) {
         var conceptoLower = ((m.concepto || "") + "").toLowerCase();
         var impNum = Number(m.importe) || 0;
-        var excluido = false;
-        if (impNum > 0) {
-          // COBROS: only exclude transfers
-          excluido = conceptoLower.indexOf("traspaso") >= 0 || conceptoLower.indexOf("transferencia propia") >= 0;
-        } else {
-          // PAGOS: exclude payroll, taxes, cards, transfers
-          var pagosExcluir = ["nomina", "nómina", "salario", "ss empresa", "seguridad social",
-            "adelanto empleado", "liquidación tarjeta", "liquidacion tarjeta", "cargo tarjeta",
-            "traspaso", "transferencia propia", "recibo seguro", "impuesto", "hacienda", "aeat", "tgss"];
-          for (var ei = 0; ei < pagosExcluir.length; ei++) {
-            if (conceptoLower.indexOf(pagosExcluir[ei]) >= 0) { excluido = true; break; }
-          }
+        var _segKw = ["diaz saco", "brokers", "correduria de seguros", "correduría de seguros",
+          "mutua madrilena", "mutua madrileña", "mutua",
+          "mapfre", "allianz", "axa", "zurich", "generali", "liberty",
+          "catalana occidente", "pelayo", "linea directa", "línea directa",
+          "seguro", "prima seguro", "recibo seguro"];
+        var esSeguro = false;
+        for (var ski = 0; ski < _segKw.length; ski++) {
+          if (conceptoLower.indexOf(_segKw[ski]) >= 0) { esSeguro = true; break; }
         }
-        if (!excluido) {
-          vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-conciliar-factura\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" data-empresa-id=\"" + ((m.empresa_id || "") + "").replace(/\"/g, "&quot;") + "\" data-concepto=\"" + ((m.concepto || "") + "").replace(/\"/g, "&quot;") + "\" data-fecha=\"" + ((m.fecha_operacion || "") + "").replace(/\"/g, "&quot;") + "\" data-importe=\"" + (m.importe != null ? String(m.importe) : "").replace(/\"/g, "&quot;") + "\" title=\"Vincular a factura\">Conciliar</button>");
+        var movDataAttrs = " data-mov-id=\"" + (m.id != null ? m.id : "") + "\" data-empresa-id=\"" + ((m.empresa_id || "") + "").replace(/\"/g, "&quot;") + "\" data-concepto=\"" + ((m.concepto || "") + "").replace(/\"/g, "&quot;") + "\" data-fecha=\"" + ((m.fecha_operacion || "") + "").replace(/\"/g, "&quot;") + "\" data-importe=\"" + (m.importe != null ? String(m.importe) : "").replace(/\"/g, "&quot;") + "\"";
+        if (esSeguro && impNum < 0) {
+          // Cargo de seguro → conciliar con póliza
+          vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-conciliar-seguro\"" + movDataAttrs + " title=\"Conciliar con póliza de seguro\" style=\"background:#7C3AED;color:white;\">Conciliar póliza</button>");
+        } else {
+          var excluido = false;
+          if (impNum > 0) {
+            excluido = conceptoLower.indexOf("traspaso") >= 0 || conceptoLower.indexOf("transferencia propia") >= 0;
+          } else {
+            var pagosExcluir = ["nomina", "nómina", "salario", "ss empresa", "seguridad social",
+              "adelanto empleado", "liquidación tarjeta", "liquidacion tarjeta", "cargo tarjeta",
+              "traspaso", "transferencia propia", "impuesto", "hacienda", "aeat", "tgss"];
+            for (var ei = 0; ei < pagosExcluir.length; ei++) {
+              if (conceptoLower.indexOf(pagosExcluir[ei]) >= 0) { excluido = true; break; }
+            }
+          }
+          if (!excluido) {
+            vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-conciliar-factura\"" + movDataAttrs + " title=\"Vincular a factura\">Conciliar</button>");
+            // Botón secundario "¿Es un seguro?" para pagos no detectados automáticamente
+            if (impNum < 0) {
+              vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-conciliar-seguro\"" + movDataAttrs + " title=\"Conciliar con póliza de seguro\" style=\"font-size:11px;opacity:0.7;\">¿Seguro?</button>");
+            }
+          }
         }
       }
       var vincCel = vincParts.length > 0 ? vincParts.join("") : "<span style=\"color:#94A3B8\">—</span>";
@@ -1306,6 +1328,34 @@ function renderPaginacionBancos(container, actual, total) {
         }
         return;
       }
+      // ── Conciliar con póliza de seguro ──
+      var btnConciliarSeguro = e.target && e.target.closest && e.target.closest(".bancos-btn-conciliar-seguro");
+      if (btnConciliarSeguro) {
+        var sMovId = btnConciliarSeguro.getAttribute("data-mov-id");
+        var sConcepto = btnConciliarSeguro.getAttribute("data-concepto") || "";
+        var sFecha = btnConciliarSeguro.getAttribute("data-fecha") || "";
+        var sImporte = btnConciliarSeguro.getAttribute("data-importe") || "";
+        if (sMovId) _abrirModalConciliarSeguro(sMovId, sConcepto, sFecha, sImporte);
+        return;
+      }
+      // ── Desvincular seguro ──
+      var btnDesvincularSeg = e.target && e.target.closest && e.target.closest(".bancos-btn-desvincular-seguro");
+      if (btnDesvincularSeg) {
+        var dsPolizaId = btnDesvincularSeg.getAttribute("data-poliza-id");
+        if (!dsPolizaId) return;
+        if (!confirm("¿Desvincular este movimiento de la póliza de seguro?")) return;
+        btnDesvincularSeg.disabled = true;
+        fetch("/api/seguros/desconciliar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ poliza_id: parseInt(dsPolizaId, 10) }) })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d.error) { mostrarToast(d.error, "error"); return; }
+            cargarMovimientosBancos();
+            mostrarToast(d.mensaje || "Seguro desvinculado.", "success");
+          })
+          .catch(function () { mostrarToast("Error al desvincular.", "error"); })
+          .finally(function () { btnDesvincularSeg.disabled = false; });
+        return;
+      }
       var btnDesvincularExt = e.target && e.target.closest && e.target.closest(".bancos-btn-desvincular-extracto");
       if (btnDesvincularExt) {
         var movId = btnDesvincularExt.getAttribute("data-mov-id");
@@ -1328,6 +1378,93 @@ function renderPaginacionBancos(container, actual, total) {
           .finally(function () { btnDesvincularExt.disabled = false; });
         return;
       }
+    });
+  }
+
+  // ── Modal conciliar cargo bancario con póliza de seguro ──────────────
+  function _abrirModalConciliarSeguro(movId, concepto, fecha, importe) {
+    var existing = document.getElementById("modal-conciliar-seguro");
+    if (existing) existing.remove();
+    var absImporte = Math.abs(Number(importe) || 0);
+    var modal = document.createElement("div");
+    modal.className = "modal-overlay visible";
+    modal.id = "modal-conciliar-seguro";
+    modal.style.zIndex = "110";
+    modal.addEventListener("click", function (ev) { if (ev.target === modal) modal.remove(); });
+    modal.innerHTML =
+      '<div class="modal-editar" role="dialog" style="max-width:500px;max-height:85vh;overflow-y:auto;">' +
+        '<h2 style="margin:0 0 12px;font-size:18px;">Conciliar con póliza de seguro</h2>' +
+        '<div style="padding:10px 12px;background:#F8FAFC;border-radius:8px;margin-bottom:16px;font-size:13px;">' +
+          '<strong>Cargo:</strong> ' + formatNumero(importe) + ' &mdash; ' + (fecha || '—') + ' &mdash; ' + (concepto || '—').replace(/</g, '&lt;') +
+        '</div>' +
+        '<div id="seg-conciliar-lista" style="margin-bottom:16px;"><p style="color:var(--color-text-secondary);font-size:13px;">Cargando pólizas pendientes…</p></div>' +
+        '<div style="display:flex;justify-content:flex-end;gap:8px;">' +
+          '<button type="button" class="secondary" onclick="document.getElementById(\'modal-conciliar-seguro\').remove()">Cancelar</button>' +
+          '<button type="button" class="primary" id="btn-confirmar-conciliar-seguro" disabled>Conciliar</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+    // Cargar pólizas pendientes de pago
+    fetch("/api/seguros/polizas-pendientes-pago?_t=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var polizas = data.polizas || [];
+        var container = document.getElementById("seg-conciliar-lista");
+        if (!polizas.length) {
+          container.innerHTML = '<p style="color:var(--color-text-secondary);font-size:13px;font-style:italic;">No hay pólizas pendientes de pago.</p>';
+          return;
+        }
+        var iconos = { maquinaria: "\uD83C\uDFD7\uFE0F", vehiculo: "\uD83D\uDE97", responsabilidad_civil: "\uD83C\uDFE2", accidentes_convenio: "\uD83D\uDC77", dyo: "\uD83D\uDC54", otro: "\uD83D\uDCCB" };
+        var html = '';
+        polizas.forEach(function (p) {
+          var prima = Number(p.prima_anual || 0);
+          var coincide = Math.abs(prima - absImporte) < 0.02;
+          var borderStyle = coincide ? "border-color:#16A34A;background:#F0FDF4;" : "";
+          html += '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--color-border-tertiary, #E5E7EB);border-radius:8px;cursor:pointer;margin-bottom:6px;' + borderStyle + '">' +
+            '<input type="radio" name="seg-poliza-sel" value="' + p.id + '" style="flex-shrink:0;">' +
+            '<div style="flex:1;min-width:0;">' +
+              '<div style="font-size:13px;font-weight:500;">' + (iconos[p.tipo] || '') + ' ' + (p.descripcion || (p.tipo || '').replace(/_/g, ' ')) + (p.recurso_nombre ? ' \u2014 ' + p.recurso_nombre : '') + '</div>' +
+              '<div style="font-size:12px;color:var(--color-text-secondary);">' + (p.aseguradora || '') + ' \u00B7 N\u00BA ' + (p.numero_poliza || '\u2014') + ' \u00B7 Prima: ' + prima.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + ' \u20AC</div>' +
+            '</div>' +
+            (coincide ? '<span style="flex-shrink:0;font-size:11px;font-weight:600;color:#16A34A;">\u2713 Coincide</span>' : '') +
+          '</label>';
+        });
+        container.innerHTML = html;
+        // Auto-select si solo hay una que coincide
+        var radios = container.querySelectorAll('input[name="seg-poliza-sel"]');
+        var coincidentes = polizas.filter(function (p) { return Math.abs(Number(p.prima_anual || 0) - absImporte) < 0.02; });
+        if (coincidentes.length === 1) {
+          for (var ri = 0; ri < radios.length; ri++) {
+            if (radios[ri].value === String(coincidentes[0].id)) { radios[ri].checked = true; break; }
+          }
+        }
+        var btnConfirmar = document.getElementById("btn-confirmar-conciliar-seguro");
+        // Enable button when a radio is selected
+        container.addEventListener("change", function () {
+          btnConfirmar.disabled = false;
+        });
+        // Enable if auto-selected
+        if (coincidentes.length === 1) btnConfirmar.disabled = false;
+      });
+    // Confirmar conciliación
+    document.getElementById("btn-confirmar-conciliar-seguro").addEventListener("click", function () {
+      var sel = document.querySelector('input[name="seg-poliza-sel"]:checked');
+      if (!sel) return;
+      this.disabled = true;
+      this.textContent = "Conciliando…";
+      fetch("/api/seguros/conciliar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ movimiento_id: parseInt(movId, 10), poliza_id: parseInt(sel.value, 10), movimiento_fecha: fecha, movimiento_importe: importe }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.error) { mostrarToast(d.error, "error"); return; }
+          var m = document.getElementById("modal-conciliar-seguro"); if (m) m.remove();
+          cargarMovimientosBancos();
+          mostrarToast(d.mensaje || "Póliza conciliada.", "success");
+        })
+        .catch(function () { mostrarToast("Error al conciliar.", "error"); });
     });
   }
 

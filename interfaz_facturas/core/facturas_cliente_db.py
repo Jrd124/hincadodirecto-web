@@ -326,12 +326,14 @@ def delete_facturas_cliente_por_indices(empresa_id: str, indices: list[int]) -> 
 
 
 def recalcular_todos_estados_cobro() -> dict:
-  """Recalcula estado_cobro de todas las facturas basándose en cobros conciliados.
+  """Recalcula estado_cobro de TODAS las facturas de cliente basándose en cobros conciliados.
 
-  Solo actualiza si el nuevo estado es 'mejor' que el actual:
-  - Empty/pendiente → parcial/cobrada (upgrade based on payments)
-  - parcial → cobrada (upgrade if fully paid)
-  - NEVER downgrades cobrada → pendiente (manual override respected)
+  Para cada factura:
+  - Suma cobros directos (movimientos.db WHERE factura_cliente_id = X)
+  - Suma cobros por clave compuesta (movimientos.db WHERE factura_cliente_key = clave, legacy)
+  - Suma cobros múltiples (conciliacion_multiple WHERE factura_cliente_id = X)
+  - Compara con total_a_pagar: cobrado >= total - 1€ → 'cobrada', cobrado > 0 → 'parcial', else 'pendiente'
+  - Actualiza SOLO si el estado calculado difiere del actual
 
   Returns {"actualizadas": int, "detalle": [...]}.
   """
@@ -341,40 +343,64 @@ def recalcular_todos_estados_cobro() -> dict:
 
   init_facturas_cliente_db()
 
-  # Build cobrado map from movimientos.db
-  cobrado_map = {}
+  # 1. Build cobrado map by factura_cliente_id from movimientos.db
+  cobrado_by_id = {}
+  cobrado_by_key = {}
   try:
     conn_b = sqlite3.connect(str(MOVIMIENTOS_DB))
     conn_b.row_factory = sqlite3.Row
+    # By ID (modern conciliation)
     for row in conn_b.execute(
-      "SELECT factura_cliente_id, SUM(ABS(importe)) as t"
-      " FROM movimientos WHERE factura_cliente_id IS NOT NULL AND factura_cliente_id > 0 GROUP BY factura_cliente_id"
+      "SELECT factura_cliente_id, SUM(ABS(CAST(importe AS REAL))) as t"
+      " FROM movimientos WHERE factura_cliente_id IS NOT NULL AND factura_cliente_id > 0"
+      " AND conciliado_at IS NOT NULL GROUP BY factura_cliente_id"
     ).fetchall():
-      cobrado_map[row["factura_cliente_id"]] = float(row["t"] or 0)
+      cobrado_by_id[row["factura_cliente_id"]] = float(row["t"] or 0)
+    # By key (legacy conciliation — factura_cliente_key set but factura_cliente_id may be NULL)
+    for row in conn_b.execute(
+      "SELECT factura_cliente_key, SUM(ABS(CAST(importe AS REAL))) as t"
+      " FROM movimientos WHERE factura_cliente_key IS NOT NULL AND factura_cliente_key != 'MULTI'"
+      " AND conciliado_at IS NOT NULL AND (factura_cliente_id IS NULL OR factura_cliente_id <= 0)"
+      " GROUP BY factura_cliente_key"
+    ).fetchall():
+      cobrado_by_key[row["factura_cliente_key"]] = float(row["t"] or 0)
     conn_b.close()
   except Exception:
     pass
 
-  # Also conciliacion_multiple
+  # 2. Conciliacion_multiple from gestion.db
+  cobrado_multi = {}
   with _conectar() as conn:
     try:
       for row in conn.execute(
         "SELECT factura_cliente_id, SUM(importe_aplicado) as t"
         " FROM conciliacion_multiple GROUP BY factura_cliente_id"
       ).fetchall():
-        fid = row["factura_cliente_id"]
-        cobrado_map[fid] = cobrado_map.get(fid, 0) + float(row["t"] or 0)
+        cobrado_multi[row["factura_cliente_id"]] = float(row["t"] or 0)
     except Exception:
       pass
 
-  # Recalculate
+  # 3. Recalculate every invoice
   actualizadas = 0
   detalle = []
   with _conectar() as conn:
-    facturas = conn.execute("SELECT id, total_a_pagar, estado_cobro FROM facturas_cliente").fetchall()
+    facturas = conn.execute(
+      "SELECT id, numero_factura, fecha_factura, cliente, total_a_pagar, estado_cobro FROM facturas_cliente"
+    ).fetchall()
     for f in facturas:
+      fid = f["id"]
       total = _parse_importe_es(f["total_a_pagar"])
-      cobrado = cobrado_map.get(f["id"], 0)
+      # Sum all sources of payment
+      cobrado = cobrado_by_id.get(fid, 0)
+      # Legacy key-based lookup
+      num = (f["numero_factura"] or "").strip()
+      fecha = (f["fecha_factura"] or "").strip()[:10]
+      cli = (f["cliente"] or "").strip()
+      key = f"{num}|{fecha}|{cli}"
+      cobrado += cobrado_by_key.get(key, 0)
+      # Multi conciliation
+      cobrado += cobrado_multi.get(fid, 0)
+
       old = (f["estado_cobro"] or "").strip().lower()
 
       if total > 0 and cobrado >= total - 1.0:
@@ -384,16 +410,10 @@ def recalcular_todos_estados_cobro() -> dict:
       else:
         new = "pendiente"
 
-      # Only upgrade, never downgrade
-      rank = {"": 0, "pendiente": 0, "parcial": 1, "cobrada": 2}
-      if rank.get(new, 0) > rank.get(old, 0):
-        conn.execute("UPDATE facturas_cliente SET estado_cobro = ? WHERE id = ?", (new, f["id"]))
+      # Update if different
+      if new != old:
+        conn.execute("UPDATE facturas_cliente SET estado_cobro = ? WHERE id = ?", (new, fid))
         actualizadas += 1
-        detalle.append({"id": f["id"], "old": old or "(empty)", "new": new})
-      elif old == "" and new == "pendiente":
-        # Fix empty → pendiente (same rank but cleaner)
-        conn.execute("UPDATE facturas_cliente SET estado_cobro = 'pendiente' WHERE id = ?", (f["id"],))
-        actualizadas += 1
-        detalle.append({"id": f["id"], "old": "(empty)", "new": "pendiente"})
+        detalle.append({"id": fid, "numero_factura": num, "cliente": cli, "old": old or "(empty)", "new": new, "cobrado": round(cobrado, 2), "total": round(total, 2)})
 
   return {"actualizadas": actualizadas, "detalle": detalle}

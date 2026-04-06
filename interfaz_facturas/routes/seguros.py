@@ -133,6 +133,82 @@ def api_eliminar_documento(doc_id):
     return jsonify({"ok": True})
 
 
+@seguros_bp.get("/api/seguros/polizas-pendientes-pago")
+@login_required
+def api_polizas_pendientes_pago():
+    rows = seguros_db.listar_polizas_pendientes_pago()
+    return jsonify({"polizas": rows})
+
+
+@seguros_bp.post("/api/seguros/conciliar")
+@login_required
+def api_conciliar_seguro():
+    data = request.get_json(silent=True) or {}
+    poliza_id = data.get("poliza_id")
+    movimiento_id = data.get("movimiento_id")
+    movimiento_fecha = data.get("movimiento_fecha", "")
+    if not poliza_id or movimiento_id is None:
+        return jsonify({"error": "poliza_id y movimiento_id requeridos"}), 400
+    # Marcar póliza como pagada
+    row = seguros_db.conciliar_poliza(int(poliza_id), str(movimiento_id), movimiento_fecha)
+    if not row:
+        return jsonify({"error": "Póliza no encontrada"}), 404
+    # Marcar movimiento en movimientos.db como conciliado
+    try:
+        import sqlite3
+        from config import MOVIMIENTOS_DB
+        conn = sqlite3.connect(str(MOVIMIENTOS_DB))
+        try:
+            from datetime import datetime
+            now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+            # Add seguro_poliza_id column if missing
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(movimientos)").fetchall()}
+            if "seguro_poliza_id" not in cols:
+                conn.execute("ALTER TABLE movimientos ADD COLUMN seguro_poliza_id INTEGER")
+            conn.execute(
+                "UPDATE movimientos SET seguro_poliza_id = ?, conciliado_at = ? WHERE id = ?",
+                (int(poliza_id), now, int(movimiento_id)),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.warning("No se pudo marcar movimiento %s como conciliado: %s", movimiento_id, exc)
+    return jsonify({"ok": True, "mensaje": "Póliza conciliada con movimiento bancario."})
+
+
+@seguros_bp.post("/api/seguros/desconciliar")
+@login_required
+def api_desconciliar_seguro():
+    data = request.get_json(silent=True) or {}
+    poliza_id = data.get("poliza_id")
+    if not poliza_id:
+        return jsonify({"error": "poliza_id requerido"}), 400
+    # Obtener movimiento_id antes de limpiar
+    poliza = seguros_db.obtener_poliza(int(poliza_id))
+    mov_id = poliza.get("movimiento_banco_id") if poliza else None
+    row = seguros_db.desconciliar_poliza(int(poliza_id))
+    if not row:
+        return jsonify({"error": "Póliza no encontrada"}), 404
+    # Limpiar movimiento bancario
+    if mov_id:
+        try:
+            import sqlite3
+            from config import MOVIMIENTOS_DB
+            conn = sqlite3.connect(str(MOVIMIENTOS_DB))
+            try:
+                conn.execute(
+                    "UPDATE movimientos SET seguro_poliza_id = NULL, conciliado_at = NULL WHERE id = ?",
+                    (int(mov_id),),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception as exc:
+            logger.warning("No se pudo limpiar movimiento %s: %s", mov_id, exc)
+    return jsonify({"ok": True, "mensaje": "Pago desvinculado."})
+
+
 @seguros_bp.get("/api/seguros/resumen")
 @login_required
 def api_resumen_seguros():

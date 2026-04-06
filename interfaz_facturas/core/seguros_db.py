@@ -73,6 +73,16 @@ def init_seguros_db():
         conn.execute("CREATE INDEX IF NOT EXISTS ix_polizas_sociedad ON polizas(sociedad)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_polizas_tipo ON polizas(tipo)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_siniestros_poliza ON siniestros(poliza_id)")
+        # Migración: columnas de pago/conciliación bancaria
+        cur = conn.execute("PRAGMA table_info(polizas)")
+        cols_existentes = {row[1] for row in cur.fetchall()}
+        for col, sql in [
+            ("movimiento_banco_id", "TEXT"),
+            ("fecha_pago", "TEXT"),
+            ("estado_pago", "TEXT DEFAULT 'pendiente'"),
+        ]:
+            if col not in cols_existentes:
+                conn.execute(f"ALTER TABLE polizas ADD COLUMN {col} {sql}")
     _initialized = True
 
 
@@ -297,6 +307,43 @@ def eliminar_documento(doc_id: int) -> bool:
 
 # ── Resumen y alertas ─────────────────────────────────────────────────────
 
+def listar_polizas_pendientes_pago() -> list[dict]:
+    """Devuelve pólizas vigentes sin pago conciliado."""
+    init_seguros_db()
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM polizas WHERE estado = 'vigente' AND (estado_pago IS NULL OR estado_pago = 'pendiente') ORDER BY prima_anual DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def conciliar_poliza(poliza_id: int, movimiento_id: str, fecha_pago: str) -> dict | None:
+    """Marca una póliza como pagada vinculándola a un movimiento bancario."""
+    init_seguros_db()
+    with conectar() as conn:
+        conn.execute(
+            "UPDATE polizas SET movimiento_banco_id = ?, fecha_pago = ?, estado_pago = 'pagada', updated_at = ? WHERE id = ?",
+            (movimiento_id, fecha_pago, _now(), poliza_id),
+        )
+        row = conn.execute("SELECT * FROM polizas WHERE id = ?", (poliza_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def desconciliar_poliza(poliza_id: int) -> dict | None:
+    """Quita la vinculación de pago de una póliza."""
+    init_seguros_db()
+    with conectar() as conn:
+        conn.execute(
+            "UPDATE polizas SET movimiento_banco_id = NULL, fecha_pago = NULL, estado_pago = 'pendiente', updated_at = ? WHERE id = ?",
+            (_now(), poliza_id),
+        )
+        row = conn.execute("SELECT * FROM polizas WHERE id = ?", (poliza_id,)).fetchone()
+        return dict(row) if row else None
+
+
 def resumen_seguros() -> dict:
     init_seguros_db()
     conn = get_conn()
@@ -310,12 +357,15 @@ def resumen_seguros() -> dict:
             (en_30, hoy),
         ).fetchone()[0]
         coste_anual = conn.execute("SELECT COALESCE(SUM(prima_anual), 0) FROM polizas WHERE estado = 'vigente'").fetchone()[0]
+        coste_pagado = conn.execute("SELECT COALESCE(SUM(prima_anual), 0) FROM polizas WHERE estado = 'vigente' AND estado_pago = 'pagada'").fetchone()[0]
         siniestros_abiertos = conn.execute("SELECT COUNT(*) FROM siniestros WHERE estado IN ('abierto','en_tramite')").fetchone()[0]
 
         return {
             "vigentes": vigentes,
             "por_vencer_30d": por_vencer,
             "coste_anual": round(coste_anual, 2),
+            "coste_pagado": round(coste_pagado, 2),
+            "coste_pendiente": round(coste_anual - coste_pagado, 2),
             "siniestros_abiertos": siniestros_abiertos,
         }
     finally:
