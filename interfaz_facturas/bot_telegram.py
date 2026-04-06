@@ -1010,8 +1010,24 @@ async def callback_foto_tipo(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await _procesar_foto_factura_cli(query, context, content, tid)
 
 
+def _resumen_parte_texto(datos):
+    """Genera texto de resumen de un parte a partir de los datos OCR/corregidos."""
+    lineas_txt = ""
+    for l in datos.get("lineas", []):
+        lineas_txt += f"👷 {l.get('operador', '?')} con {l.get('maquina', '?')}: {l.get('horas', '?')}h\n"
+    conf_emoji = {"alta": "🟢", "media": "🟡", "baja": "🔴"}.get(datos.get("confianza", "?"), "⚪")
+    return (
+        f"📋 *Parte detectado:* {conf_emoji}\n"
+        f"🗓 Fecha: {datos.get('fecha', '?')}\n"
+        f"{lineas_txt}"
+        f"🔨 Total hincas: {datos.get('total_hincas', 0)}\n"
+        f"⏱ Horas admin: {datos.get('horas_admin', 0)}\n"
+        f"📝 Incidencias: {datos.get('incidencias') or 'ninguna'}"
+    )
+
+
 async def _procesar_foto_parte(query, context, content, tid):
-    """Process photo as parte de trabajo."""
+    """Process photo as parte de trabajo — OCR + ask to confirm/correct."""
     b64 = base64.b64encode(content).decode("utf-8")
 
     try:
@@ -1043,31 +1059,180 @@ async def _procesar_foto_parte(query, context, content, tid):
     ruta_subidas.mkdir(parents=True, exist_ok=True)
     (ruta_subidas / nombre_archivo).write_bytes(content)
 
-    lineas_txt = ""
-    for l in datos.get("lineas", []):
-        lineas_txt += f"👷 {l.get('operador', '?')} con {l.get('maquina', '?')}: {l.get('horas', '?')}h\n"
+    datos["_imagen_archivo"] = "subidas/" + nombre_archivo
+    set_estado(tid, "parte_confirmar_datos", datos)
 
-    conf_emoji = {"alta": "🟢", "media": "🟡", "baja": "🔴"}.get(datos.get("confianza", "?"), "⚪")
-    texto_resumen = (
-        f"📋 *Parte detectado:* {conf_emoji}\n"
-        f"🗓 Fecha: {datos.get('fecha', '?')}\n"
-        f"🏗 Obra: {datos.get('obra', '?')}\n"
-        f"{lineas_txt}"
-        f"🔨 Total hincas: {datos.get('total_hincas', 0)}\n"
-        f"📝 Incidencias: {datos.get('incidencias') or 'ninguna'}\n\n"
-        f"¿Está firmado por el jefe de obra?"
+    texto_resumen = _resumen_parte_texto(datos) + "\n\n¿Los datos son correctos?"
+    kb = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Correcto", callback_data="parte_datos_ok"),
+            InlineKeyboardButton("✏️ Corregir", callback_data="parte_datos_corregir"),
+        ]
+    ])
+    await context.bot.send_message(chat_id=tid, text=texto_resumen, reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+
+
+async def callback_parte_datos(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle Correcto / Corregir response after OCR."""
+    query = update.callback_query
+    await query.answer()
+    tid = query.from_user.id
+    estado = get_estado(tid)
+    if not estado or estado["estado"] != "parte_confirmar_datos":
+        return await query.edit_message_text("⚠️ No hay parte pendiente.")
+    datos = estado["datos"]
+
+    if query.data == "parte_datos_ok":
+        # Data confirmed — go to project selection
+        await query.edit_message_text("✅ Datos confirmados.")
+        await _enviar_selector_proyecto_parte(tid, context, datos)
+    else:
+        # Start correction flow — step 1: hincas
+        set_estado(tid, "parte_corregir_hincas", datos)
+        await query.edit_message_text(
+            f"🔨 Hincas actuales: *{datos.get('total_hincas', 0)}*\n"
+            f"Escribe el número correcto o /ok para mantener:",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+
+async def _handle_parte_corregir_hincas(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Correction step 1: hincas."""
+    tid = update.effective_user.id
+    estado = get_estado(tid)
+    datos = estado["datos"]
+    texto = update.message.text.strip()
+    if texto != "/ok":
+        try:
+            datos["total_hincas"] = int(texto)
+        except ValueError:
+            return await update.message.reply_text("❌ Escribe un número o /ok")
+    set_estado(tid, "parte_corregir_horas", datos)
+    await update.message.reply_text(
+        f"⏱ Horas admin actuales: *{datos.get('horas_admin', 0)}*\n"
+        f"Escribe las horas o /ok para mantener:",
+        parse_mode=ParseMode.MARKDOWN,
     )
 
-    datos["_imagen_archivo"] = "subidas/" + nombre_archivo
-    set_estado(tid, "esperando_firma", datos)
 
+async def _handle_parte_corregir_horas(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Correction step 2: horas admin."""
+    tid = update.effective_user.id
+    estado = get_estado(tid)
+    datos = estado["datos"]
+    texto = update.message.text.strip()
+    if texto != "/ok":
+        try:
+            datos["horas_admin"] = float(texto)
+        except ValueError:
+            return await update.message.reply_text("❌ Escribe un número o /ok")
+    lineas = datos.get("lineas", [])
+    operadores_txt = ", ".join(f"{l.get('operador', '?')} con {l.get('maquina', '?')}" for l in lineas) or "ninguno"
+    set_estado(tid, "parte_corregir_operadores", datos)
+    await update.message.reply_text(
+        f"👷 Operadores actuales: *{operadores_txt}*\n"
+        f"Escribe la corrección (ej: Diego con Carmela 10h, Manuel con Nicoletta 10h) o /ok para mantener:",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+async def _handle_parte_corregir_operadores(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Correction step 3: operadores."""
+    tid = update.effective_user.id
+    estado = get_estado(tid)
+    datos = estado["datos"]
+    texto = update.message.text.strip()
+    if texto != "/ok":
+        # Parse simple format: "Diego con Carmela 10h, Manuel con Nicoletta 10h"
+        import re
+        nuevas_lineas = []
+        for parte in texto.split(","):
+            parte = parte.strip()
+            m = re.match(r"(\w+)\s+con\s+(\w+)\s*(\d+)?h?", parte, re.IGNORECASE)
+            if m:
+                nuevas_lineas.append({
+                    "operador": m.group(1),
+                    "maquina": m.group(2),
+                    "horas": int(m.group(3)) if m.group(3) else 10,
+                    "rol": "operador",
+                })
+        if nuevas_lineas:
+            datos["lineas"] = nuevas_lineas
+    set_estado(tid, "parte_corregir_incidencias", datos)
+    await update.message.reply_text(
+        f"📝 Incidencias actuales: *{datos.get('incidencias') or 'ninguna'}*\n"
+        f"Escribe las incidencias o /ok para mantener:",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+async def _handle_parte_corregir_incidencias(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Correction step 4: incidencias — then show summary and go to project."""
+    tid = update.effective_user.id
+    estado = get_estado(tid)
+    datos = estado["datos"]
+    texto = update.message.text.strip()
+    if texto != "/ok":
+        datos["incidencias"] = texto
+    # Show corrected summary then go to project selection
+    resumen = _resumen_parte_texto(datos) + "\n\n✅ Datos corregidos."
+    set_estado(tid, "parte_seleccionar_proyecto", datos)
+    await update.message.reply_text(resumen, parse_mode=ParseMode.MARKDOWN)
+    await _enviar_selector_proyecto_parte(tid, context, datos)
+
+
+async def _enviar_selector_proyecto_parte(tid, context, datos):
+    """Show active projects as inline buttons for parte assignment."""
+    conn = get_conn()
+    try:
+        rows = conn.execute("SELECT id, nombre FROM proyectos WHERE estado = 'en_curso' ORDER BY nombre").fetchall()
+    finally:
+        conn.close()
+    if not rows:
+        clear_estado(tid)
+        return await context.bot.send_message(chat_id=tid, text="❌ No hay proyectos activos. Usa /manual.")
+    buttons = [[InlineKeyboardButton(r["nombre"], callback_data=f"parteproy_{r['id']}")] for r in rows]
+    set_estado(tid, "parte_seleccionar_proyecto", datos)
+    await context.bot.send_message(
+        chat_id=tid,
+        text="🏗 *¿En qué proyecto es este parte?*",
+        reply_markup=InlineKeyboardMarkup(buttons),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+async def callback_parte_proyecto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle project selection for parte."""
+    query = update.callback_query
+    await query.answer()
+    tid = query.from_user.id
+    estado = get_estado(tid)
+    if not estado or estado["estado"] != "parte_seleccionar_proyecto":
+        return await query.edit_message_text("⚠️ No hay parte pendiente.")
+    datos = estado["datos"]
+    proyecto_id = int(query.data.split("_")[1])
+    # Look up project name
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT nombre FROM proyectos WHERE id = ?", (proyecto_id,)).fetchone()
+    finally:
+        conn.close()
+    proyecto_nombre = row["nombre"] if row else "?"
+    datos["_proyecto_id"] = proyecto_id
+    datos["_proyecto_nombre"] = proyecto_nombre
+    set_estado(tid, "esperando_firma", datos)
+    await query.edit_message_text(f"🏗 Proyecto: *{proyecto_nombre}*", parse_mode=ParseMode.MARKDOWN)
     kb = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("✅ Sí, firmado", callback_data="firma_firmado"),
             InlineKeyboardButton("📝 No, es borrador", callback_data="firma_borrador"),
         ]
     ])
-    await context.bot.send_message(chat_id=tid, text=texto_resumen, reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+    await context.bot.send_message(
+        chat_id=tid,
+        text="¿Está firmado por el jefe de obra?",
+        reply_markup=kb,
+    )
 
 
 async def _procesar_foto_albaran(query, context, content, tid):
@@ -1648,19 +1813,23 @@ async def callback_firma(update: Update, context: ContextTypes.DEFAULT_TYPE):
     es_firmado = query.data == "firma_firmado"
     estado_firma = "firmado" if es_firmado else "borrador"
 
-    # Find project
-    conn = get_conn()
-    try:
-        obra = datos.get("obra", "")
-        row = conn.execute("SELECT id FROM proyectos WHERE nombre LIKE ? LIMIT 1", (f"%{obra}%",)).fetchone()
-        if not row:
-            clear_estado(tid)
-            return await query.edit_message_text(
-                f"❌ No encontré el proyecto '{obra}'. Usa /manual para introducir los datos."
-            )
-        proyecto_id = row["id"]
-    finally:
-        conn.close()
+    # Project: use selected project (new flow) or fallback to OCR obra match (legacy)
+    proyecto_id = datos.get("_proyecto_id")
+    proyecto_nombre = datos.get("_proyecto_nombre", "")
+    if not proyecto_id:
+        conn = get_conn()
+        try:
+            obra = datos.get("obra", "")
+            row = conn.execute("SELECT id, nombre FROM proyectos WHERE nombre LIKE ? LIMIT 1", (f"%{obra}%",)).fetchone()
+            if not row:
+                clear_estado(tid)
+                return await query.edit_message_text(
+                    f"❌ No encontré el proyecto '{obra}'. Usa /manual para introducir los datos."
+                )
+            proyecto_id = row["id"]
+            proyecto_nombre = row["nombre"]
+        finally:
+            conn.close()
 
     lineas = datos.get("lineas", [])
     operadores = [l for l in lineas if l.get("rol") != "ayudante"]
@@ -1735,7 +1904,8 @@ async def callback_firma(update: Update, context: ContextTypes.DEFAULT_TYPE):
             (estado_firma, parte_data.get("imagen_firmado"), parte_data.get("fecha_firma"), nuevo["id"]),
         )
     clear_estado(tid)
-    await query.edit_message_text("✅ Parte registrado correctamente en el ERP.")
+    hincas = datos.get("total_hincas", 0)
+    await query.edit_message_text(f"✅ Parte registrado en {proyecto_nombre} ({hincas} hincas)")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2040,6 +2210,8 @@ def main():
     # Callbacks
     app.add_handler(CallbackQueryHandler(callback_aprobar, pattern=r"^aprobar_"))
     app.add_handler(CallbackQueryHandler(callback_foto_tipo, pattern=r"^foto_tipo_"))
+    app.add_handler(CallbackQueryHandler(callback_parte_datos, pattern=r"^parte_datos_"))
+    app.add_handler(CallbackQueryHandler(callback_parte_proyecto, pattern=r"^parteproy_"))
     app.add_handler(CallbackQueryHandler(callback_firma, pattern=r"^firma_"))
     app.add_handler(CallbackQueryHandler(callback_albaran_pago, pattern=r"^albpago_"))
     app.add_handler(CallbackQueryHandler(callback_factura_confirmar, pattern=r"^facconf_"))
@@ -2050,14 +2222,25 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
     # Text handlers for correction flows (BEFORE superadmin fallback)
+    _parte_corregir_handlers = {
+        "parte_corregir_hincas": _handle_parte_corregir_hincas,
+        "parte_corregir_horas": _handle_parte_corregir_horas,
+        "parte_corregir_operadores": _handle_parte_corregir_operadores,
+        "parte_corregir_incidencias": _handle_parte_corregir_incidencias,
+    }
+
     async def _text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Route text to correction flow if active, else to superadmin GPT-4."""
         tid = update.effective_user.id
         estado = get_estado(tid)
-        if estado and estado["estado"] == "factura_corregir":
-            return await handle_correccion_factura(update, context)
-        if estado and estado["estado"] == "factura_pago_nombre":
-            return await handle_factura_pago_nombre(update, context)
+        if estado:
+            handler = _parte_corregir_handlers.get(estado["estado"])
+            if handler:
+                return await handler(update, context)
+            if estado["estado"] == "factura_corregir":
+                return await handle_correccion_factura(update, context)
+            if estado["estado"] == "factura_pago_nombre":
+                return await handle_factura_pago_nombre(update, context)
         return await handle_text_superadmin(update, context)
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _text_router))
