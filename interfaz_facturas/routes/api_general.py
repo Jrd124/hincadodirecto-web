@@ -215,58 +215,11 @@ def api_dashboard_director():
       result["finanzas"]["facturado_año"] = round(r["t"], 2) if r else 0
 
       # Pendiente cobro (clientes) — net of partial collections
-      facturas_pte = conn.execute(
-        "SELECT id, total_a_pagar, estado_cobro FROM facturas_cliente"
-        " WHERE LOWER(TRIM(COALESCE(estado_cobro,''))) IN ('pendiente','','parcial')"
-      ).fetchall()
-      # Get collected amounts from movimientos.db + conciliacion_multiple
-      cobrado_por_factura = {}
-      try:
-        import sqlite3 as _sq
-        from config import MOVIMIENTOS_DB
-        conn_b = _sq.connect(str(MOVIMIENTOS_DB))
-        conn_b.row_factory = _sq.Row
-        for row in conn_b.execute(
-          "SELECT factura_cliente_id, SUM(ABS(importe)) as total"
-          " FROM movimientos WHERE factura_cliente_id IS NOT NULL GROUP BY factura_cliente_id"
-        ).fetchall():
-          cobrado_por_factura[row["factura_cliente_id"]] = float(row["total"] or 0)
-        conn_b.close()
-      except Exception:
-        pass
-      # Also from conciliacion_multiple
-      try:
-        for row in conn.execute(
-          "SELECT factura_cliente_id, SUM(importe_aplicado) as total"
-          " FROM conciliacion_multiple GROUP BY factura_cliente_id"
-        ).fetchall():
-          fid = row["factura_cliente_id"]
-          cobrado_por_factura[fid] = cobrado_por_factura.get(fid, 0) + float(row["total"] or 0)
-      except Exception:
-        pass
-
-      total_pte_cobro = 0.0
-      n_pendientes = 0
-      n_parciales = 0
-      for f in facturas_pte:
-        total_fac = _parse_importe_es(f["total_a_pagar"])
-        cobrado = cobrado_por_factura.get(f["id"], 0)
-        estado = (f["estado_cobro"] or "").strip().lower()
-        neto = max(0, total_fac - cobrado)
-        if neto > 0.01:
-          total_pte_cobro += neto
-          if estado == "parcial":
-            n_parciales += 1
-          else:
-            n_pendientes += 1
-      result["finanzas"]["pendiente_cobro"] = round(total_pte_cobro, 2)
-      result["finanzas"]["pendiente_cobro_count"] = n_pendientes + n_parciales
-      parts = []
-      if n_pendientes:
-        parts.append(f"{n_pendientes} factura{'s' if n_pendientes != 1 else ''}")
-      if n_parciales:
-        parts.append(f"{n_parciales} parcial{'es' if n_parciales != 1 else ''}")
-      result["finanzas"]["pendiente_cobro_texto"] = " + ".join(parts) if parts else "0 facturas"
+      from routes.helpers import calcular_pendiente_cobro_neto
+      pte_cobro = calcular_pendiente_cobro_neto(conn)
+      result["finanzas"]["pendiente_cobro"] = pte_cobro["total"]
+      result["finanzas"]["pendiente_cobro_count"] = pte_cobro["num"]
+      result["finanzas"]["pendiente_cobro_texto"] = pte_cobro["texto"]
 
       # Cobrado mes (clientes)
       r = conn.execute(
@@ -574,12 +527,10 @@ def api_finanzas_dashboard():
         "total": _sum_importes(rows, "total_a_pagar"), "num": len(rows),
       }
 
-      rows = conn.execute(
-        "SELECT total_a_pagar FROM facturas_cliente "
-        "WHERE estado_cobro IS NULL OR estado_cobro IN ('pendiente','parcial','')"
-      ).fetchall()
+      from routes.helpers import calcular_pendiente_cobro_neto
+      pte = calcular_pendiente_cobro_neto(conn)
       result["cobros_pendientes"] = {
-        "total": _sum_importes(rows, "total_a_pagar"), "num": len(rows),
+        "total": pte["total"], "num": pte["num"],
       }
 
       rows = conn.execute(

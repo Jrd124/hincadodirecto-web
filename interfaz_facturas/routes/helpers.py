@@ -72,3 +72,92 @@ def _sum_importes(rows, *cols):
         total += _parse_importe_es(v)
         break
   return round(total, 2)
+
+
+def calcular_pendiente_cobro_neto(conn_gestion) -> dict:
+  """Calcula el pendiente de cobro NETO descontando cobros parciales.
+
+  Busca en movimientos.db (por factura_cliente_id Y factura_cliente_key legacy)
+  y en conciliacion_multiple. Devuelve:
+    {"total": float, "num": int, "n_pendientes": int, "n_parciales": int, "texto": str}
+  """
+  import sqlite3 as _sq
+  from config import MOVIMIENTOS_DB
+
+  facturas_pte = conn_gestion.execute(
+    "SELECT id, numero_factura, fecha_factura, cliente, total_a_pagar, estado_cobro"
+    " FROM facturas_cliente"
+    " WHERE LOWER(TRIM(COALESCE(estado_cobro,''))) IN ('pendiente','','parcial')"
+  ).fetchall()
+
+  # Build map: factura_id → total cobrado
+  cobrado_por_id = {}
+  cobrado_por_key = {}
+  try:
+    conn_b = _sq.connect(str(MOVIMIENTOS_DB))
+    conn_b.row_factory = _sq.Row
+    # By factura_cliente_id (modern)
+    for row in conn_b.execute(
+      "SELECT factura_cliente_id, SUM(ABS(CAST(importe AS REAL))) as total"
+      " FROM movimientos WHERE factura_cliente_id IS NOT NULL AND factura_cliente_id > 0"
+      " AND conciliado_at IS NOT NULL GROUP BY factura_cliente_id"
+    ).fetchall():
+      cobrado_por_id[row["factura_cliente_id"]] = float(row["total"] or 0)
+    # By factura_cliente_key (legacy — factura_cliente_id NULL)
+    for row in conn_b.execute(
+      "SELECT factura_cliente_key, SUM(ABS(CAST(importe AS REAL))) as total"
+      " FROM movimientos WHERE factura_cliente_key IS NOT NULL AND factura_cliente_key != 'MULTI'"
+      " AND conciliado_at IS NOT NULL AND (factura_cliente_id IS NULL OR factura_cliente_id <= 0)"
+      " GROUP BY factura_cliente_key"
+    ).fetchall():
+      cobrado_por_key[row["factura_cliente_key"]] = float(row["total"] or 0)
+    conn_b.close()
+  except Exception:
+    pass
+
+  # Also from conciliacion_multiple
+  try:
+    for row in conn_gestion.execute(
+      "SELECT factura_cliente_id, SUM(importe_aplicado) as total"
+      " FROM conciliacion_multiple GROUP BY factura_cliente_id"
+    ).fetchall():
+      fid = row["factura_cliente_id"]
+      cobrado_por_id[fid] = cobrado_por_id.get(fid, 0) + float(row["total"] or 0)
+  except Exception:
+    pass
+
+  total_pte = 0.0
+  n_pendientes = 0
+  n_parciales = 0
+  for f in facturas_pte:
+    total_fac = _parse_importe_es(f["total_a_pagar"])
+    cobrado = cobrado_por_id.get(f["id"], 0)
+    # Legacy key lookup
+    num = (f["numero_factura"] or "").strip()
+    fecha = (f["fecha_factura"] or "").strip()[:10]
+    cli = (f["cliente"] or "").strip()
+    key = f"{num}|{fecha}|{cli}"
+    cobrado += cobrado_por_key.get(key, 0)
+
+    neto = max(0, total_fac - cobrado)
+    if neto > 0.01:
+      total_pte += neto
+      estado = (f["estado_cobro"] or "").strip().lower()
+      if estado == "parcial":
+        n_parciales += 1
+      else:
+        n_pendientes += 1
+
+  parts = []
+  if n_pendientes:
+    parts.append(f"{n_pendientes} factura{'s' if n_pendientes != 1 else ''}")
+  if n_parciales:
+    parts.append(f"{n_parciales} parcial{'es' if n_parciales != 1 else ''}")
+
+  return {
+    "total": round(total_pte, 2),
+    "num": n_pendientes + n_parciales,
+    "n_pendientes": n_pendientes,
+    "n_parciales": n_parciales,
+    "texto": " + ".join(parts) if parts else "0 facturas",
+  }
