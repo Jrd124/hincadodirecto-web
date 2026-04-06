@@ -3129,6 +3129,13 @@ def eliminar_facturas_clientes():
   return jsonify({"ok": True, "eliminadas": eliminadas, "mensaje": f"{eliminadas} factura(s) de cliente eliminada(s)."})
 
 
+@facturas_clientes_bp.post("/api/facturas_clientes/recalcular-cobros")
+def recalcular_cobros_clientes():
+  """Recalcula el estado_cobro de TODAS las facturas de cliente basándose en conciliaciones."""
+  result = facturas_cliente_db.recalcular_todos_estados_cobro()
+  return jsonify(result)
+
+
 @control_calidad_bp.post("/api/control-calidad/analizar")
 def control_calidad_analizar():
   """
@@ -4299,13 +4306,21 @@ def _recalcular_estado_cobro_cliente(factura_cli_id: int, factura: dict | None =
 
   total_fac = _parse_importe_es(factura.get("total_a_pagar"))
 
+  # Build the composite key for this invoice (for legacy key-only movements)
+  fck = _factura_cliente_key(
+    factura.get("numero_factura"), factura.get("fecha_factura"), factura.get("cliente")
+  )
+
   # Sum from direct 1:1 conciliation in movimientos.db
+  # Match by factura_cliente_id OR by factura_cliente_key (legacy movements)
   _init_movimientos_db()
   conn_bancos = _get_bancos_db()
   try:
     row_sum = conn_bancos.execute(
-      "SELECT COALESCE(SUM(ABS(CAST(importe AS REAL))), 0) FROM movimientos WHERE factura_cliente_id = ?",
-      (factura_cli_id,),
+      "SELECT COALESCE(SUM(ABS(CAST(importe AS REAL))), 0) FROM movimientos"
+      " WHERE (factura_cliente_id = ? OR (factura_cliente_key = ? AND factura_cliente_key != 'MULTI'))"
+      " AND conciliado_at IS NOT NULL",
+      (factura_cli_id, fck),
     ).fetchone()
     total_cobrado = float(row_sum[0] or 0) if row_sum else 0.0
   finally:
@@ -4325,7 +4340,7 @@ def _recalcular_estado_cobro_cliente(factura_cli_id: int, factura: dict | None =
 
   if total_cobrado < 0.01:
     estado = "pendiente"
-  elif total_fac > 0 and total_cobrado >= total_fac - 0.02:
+  elif total_fac > 0 and total_cobrado >= total_fac - 1.0:
     estado = "cobrada"
   else:
     estado = "parcial"
