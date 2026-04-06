@@ -63,7 +63,16 @@
       "Bash(node -e \"require\\(''fs''\\).readFileSync\\(''static/js/modules/proyectos.js'',''utf8''\\)\")",
       "Bash(node -e \"require\\(''fs''\\).readFileSync\\(''static/js/modules/certificaciones.js'',''utf8''\\)\")",
       "Bash(node -e \"require\\(''fs''\\).readFileSync\\(''static/js/modules/impuestos.js'',''utf8''\\)\")",
-      "Bash(node -e \"require\\(''fs''\\).readFileSync\\(''static/js/app.js'',''utf8''\\)\")"
+      "Bash(node -e \"require\\(''fs''\\).readFileSync\\(''static/js/app.js'',''utf8''\\)\")",
+      "Bash([ -f /c/Users/javie/Desktop/cursor_test/interfaz_facturas/.env ])",
+      "Bash(pip3 install:*)",
+      "Bash(tasklist)",
+      "Bash(wmic process:*)",
+      "Bash(taskkill //PID 39568 //F)",
+      "Bash(taskkill //PID 35172 //F)",
+      "Bash(taskkill //PID 42592 //F)",
+      "Bash(taskkill //PID 43812 //F)",
+      "Bash(taskkill:*)"
     ]
   }
 }

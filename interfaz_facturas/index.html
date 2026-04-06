@@ -1452,26 +1452,37 @@
       <!-- ═══ SEGUROS ═══════════════════════════════════════════════════════ -->
       <div id="panel-seguros-inicio" class="content-panel">
         <div style="max-width:1100px;margin:0 auto;padding:24px 20px;">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
-            <h1 style="margin:0;font-size:20px;font-weight:600;">Seguros</h1>
-            <span style="margin-right:auto;font-size:13px;color:var(--color-text-secondary);">Control de pólizas, vencimientos y siniestros</span>
-            <select id="seg-filtro-tipo" class="form-select" style="font-size:12px;padding:4px 24px 4px 8px;">
-              <option value="">Todos los tipos</option>
-              <option value="maquinaria">Maquinaria</option>
-              <option value="vehiculo">Vehículo</option>
-              <option value="responsabilidad_civil">RC</option>
-              <option value="accidentes_convenio">Accidentes</option>
-              <option value="dyo">D&amp;O</option>
-              <option value="otro">Otro</option>
-            </select>
-            <select id="seg-filtro-estado" class="form-select" style="font-size:12px;padding:4px 24px 4px 8px;">
-              <option value="">Todos los estados</option>
-              <option value="vigente">Vigente</option>
-              <option value="vencida">Vencida</option>
-              <option value="en_renovacion">En renovación</option>
-              <option value="cancelada">Cancelada</option>
-            </select>
-            <button id="btn-nueva-poliza" class="primary" style="padding:6px 14px;font-size:13px;">+ Nueva póliza</button>
+          <div style="margin-bottom:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <div>
+                <h2 style="margin:0;font-size:20px;font-weight:600;">Seguros</h2>
+                <span style="font-size:13px;color:var(--color-text-secondary);">Control de pólizas, vencimientos y siniestros</span>
+              </div>
+              <button id="btn-nueva-poliza" style="padding:6px 16px;font-size:13px;font-weight:500;color:white;background:var(--color-primary);border:none;border-radius:6px;cursor:pointer;">+ Nueva póliza</button>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <select id="seg-filtro-sociedad" class="form-select" style="font-size:12px;padding:4px 24px 4px 8px;" onchange="cargarSeguros()">
+                <option value="">Todas las sociedades</option>
+                <option value="hincado_directo">Hincado Directo</option>
+                <option value="global_nutria">Global Nutria</option>
+              </select>
+              <select id="seg-filtro-tipo" class="form-select" style="font-size:12px;padding:4px 24px 4px 8px;">
+                <option value="">Todos los tipos</option>
+                <option value="maquinaria">🏗️ Maquinaria</option>
+                <option value="vehiculo">🚗 Vehículo</option>
+                <option value="responsabilidad_civil">🏢 Responsabilidad Civil</option>
+                <option value="accidentes_convenio">👷 Accidentes/Convenio</option>
+                <option value="dyo">👔 D&amp;O</option>
+                <option value="otro">📋 Otro</option>
+              </select>
+              <select id="seg-filtro-estado" class="form-select" style="font-size:12px;padding:4px 24px 4px 8px;">
+                <option value="">Todos los estados</option>
+                <option value="vigente">Vigente</option>
+                <option value="vencida">Vencida</option>
+                <option value="en_renovacion">En renovación</option>
+                <option value="cancelada">Cancelada</option>
+              </select>
+            </div>
           </div>
           <div id="seg-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;"></div>
           <div class="tabla-wrapper">

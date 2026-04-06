@@ -13,6 +13,7 @@ function cargarSeguros() {
 function _initSeguros() {
   if (_segInit) return;
   _segInit = true;
+  document.getElementById("seg-filtro-sociedad").addEventListener("change", _buscarPolizas);
   document.getElementById("seg-filtro-tipo").addEventListener("change", _buscarPolizas);
   document.getElementById("seg-filtro-estado").addEventListener("change", _buscarPolizas);
   document.getElementById("btn-nueva-poliza").addEventListener("click", function () { _abrirModalPoliza(null); });
@@ -47,9 +48,11 @@ function _kpiCard(label, value, color, bg) {
 }
 
 function _buscarPolizas() {
+  var sociedad = document.getElementById("seg-filtro-sociedad").value;
   var tipo = document.getElementById("seg-filtro-tipo").value;
   var estado = document.getElementById("seg-filtro-estado").value;
   var url = "/api/seguros/polizas?_t=" + Date.now();
+  if (sociedad) url += "&sociedad=" + sociedad;
   if (tipo) url += "&tipo=" + tipo;
   if (estado) url += "&estado=" + estado;
   fetch(url, { cache: "no-store" })
