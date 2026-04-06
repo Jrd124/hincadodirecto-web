@@ -315,7 +315,7 @@ def listar_polizas_pendientes_pago() -> list[dict]:
     conn = get_conn()
     try:
         rows = conn.execute(
-            "SELECT * FROM polizas WHERE estado = 'vigente' AND (estado_pago IS NULL OR estado_pago = '' OR estado_pago = 'pendiente') ORDER BY prima_anual DESC"
+            "SELECT * FROM polizas WHERE estado IN ('vigente','vencida','en_renovacion') AND (estado_pago IS NULL OR estado_pago = '' OR estado_pago = 'pendiente') ORDER BY prima_anual DESC"
         ).fetchall()
         return [dict(r) for r in rows]
     finally:
