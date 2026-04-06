@@ -1091,7 +1091,7 @@ async def callback_parte_datos(update: Update, context: ContextTypes.DEFAULT_TYP
         set_estado(tid, "parte_corregir_hincas", datos)
         await query.edit_message_text(
             f"🔨 Hincas actuales: *{datos.get('total_hincas', 0)}*\n"
-            f"Escribe el número correcto o /ok para mantener:",
+            f"Escribe el número correcto o *ok* para mantener:",
             parse_mode=ParseMode.MARKDOWN,
         )
 
@@ -1102,15 +1102,15 @@ async def _handle_parte_corregir_hincas(update: Update, context: ContextTypes.DE
     estado = get_estado(tid)
     datos = estado["datos"]
     texto = update.message.text.strip()
-    if texto != "/ok":
+    if texto.lower() not in ("/ok", "ok"):
         try:
             datos["total_hincas"] = int(float(texto.replace(",", ".")))
         except (ValueError, TypeError):
-            return await update.message.reply_text("❌ Escribe un número válido (ej: 150) o /ok para mantener:")
+            return await update.message.reply_text("❌ Escribe un número válido (ej: 150) o *ok* para mantener:")
     set_estado(tid, "parte_corregir_horas", datos)
     await update.message.reply_text(
         f"⏱ Horas admin actuales: *{datos.get('horas_admin', 0)}*\n"
-        f"Escribe las horas o /ok para mantener:",
+        f"Escribe las horas o *ok* para mantener:",
         parse_mode=ParseMode.MARKDOWN,
     )
 
@@ -1121,17 +1121,17 @@ async def _handle_parte_corregir_horas(update: Update, context: ContextTypes.DEF
     estado = get_estado(tid)
     datos = estado["datos"]
     texto = update.message.text.strip()
-    if texto != "/ok":
+    if texto.lower() not in ("/ok", "ok"):
         try:
             datos["horas_admin"] = float(texto.replace(",", "."))
         except (ValueError, TypeError):
-            return await update.message.reply_text("❌ Escribe un número válido (ej: 8.5 o 8,5) o /ok para mantener:")
+            return await update.message.reply_text("❌ Escribe un número válido (ej: 8.5 o 8,5) o *ok* para mantener:")
     lineas = datos.get("lineas", [])
     operadores_txt = ", ".join(f"{l.get('operador', '?')} con {l.get('maquina', '?')}" for l in lineas) or "ninguno"
     set_estado(tid, "parte_corregir_operadores", datos)
     await update.message.reply_text(
         f"👷 Operadores actuales: *{operadores_txt}*\n"
-        f"Escribe la corrección (ej: Diego con Carmela 10h, Manuel con Nicoletta 10h) o /ok para mantener:",
+        f"Escribe la corrección (ej: Diego con Carmela 10h, Manuel con Nicoletta 10h) o *ok* para mantener:",
         parse_mode=ParseMode.MARKDOWN,
     )
 
@@ -1142,7 +1142,7 @@ async def _handle_parte_corregir_operadores(update: Update, context: ContextType
     estado = get_estado(tid)
     datos = estado["datos"]
     texto = update.message.text.strip()
-    if texto != "/ok":
+    if texto.lower() not in ("/ok", "ok"):
         # Parse simple format: "Diego con Carmela 10h, Manuel con Nicoletta 10h"
         import re
         nuevas_lineas = []
@@ -1161,7 +1161,7 @@ async def _handle_parte_corregir_operadores(update: Update, context: ContextType
     set_estado(tid, "parte_corregir_incidencias", datos)
     await update.message.reply_text(
         f"📝 Incidencias actuales: *{datos.get('incidencias') or 'ninguna'}*\n"
-        f"Escribe las incidencias o /ok para mantener:",
+        f"Escribe las incidencias o *ok* para mantener:",
         parse_mode=ParseMode.MARKDOWN,
     )
 
@@ -1172,7 +1172,7 @@ async def _handle_parte_corregir_incidencias(update: Update, context: ContextTyp
     estado = get_estado(tid)
     datos = estado["datos"]
     texto = update.message.text.strip()
-    if texto != "/ok":
+    if texto.lower() not in ("/ok", "ok"):
         datos["incidencias"] = texto
     # Show corrected summary then go to project selection
     resumen = _resumen_parte_texto(datos) + "\n\n✅ Datos corregidos."
@@ -1488,7 +1488,7 @@ async def callback_factura_confirmar(update: Update, context: ContextTypes.DEFAU
         campo = "proveedor" if datos.get("_tipo") == "proveedor" else "cliente"
         valor = datos.get(campo, "?")
         await query.edit_message_text(
-            f"🏢 {campo.title()} actual: *{valor}*\nEscribe el nombre correcto o /ok si es correcto:",
+            f"🏢 {campo.title()} actual: *{valor}*\nEscribe el nombre correcto o *ok* si es correcto:",
             parse_mode=ParseMode.MARKDOWN,
         )
 
@@ -1514,13 +1514,13 @@ async def handle_correccion_factura(update: Update, context: ContextTypes.DEFAUL
     ]
 
     # Apply correction for current step
-    if txt != "/ok":
+    if txt.lower() not in ("/ok", "ok"):
         campo_key = campos[paso][0]
         if paso >= 3:  # Numeric fields
             try:
                 datos[campo_key] = float(txt.replace(".", "").replace(",", "."))
             except ValueError:
-                await update.message.reply_text("Escribe un número válido o /ok:")
+                await update.message.reply_text("Escribe un número válido o *ok*:")
                 return
         else:
             datos[campo_key] = txt
@@ -1536,7 +1536,7 @@ async def handle_correccion_factura(update: Update, context: ContextTypes.DEFAUL
             valor = _fmt_eur(valor)
         set_estado(tid, "factura_corregir", datos)
         await update.message.reply_text(
-            f"{label} actual: *{valor}*\nEscribe el valor correcto o /ok:",
+            f"{label} actual: *{valor}*\nEscribe el valor correcto o *ok*:",
             parse_mode=ParseMode.MARKDOWN,
         )
     else:
