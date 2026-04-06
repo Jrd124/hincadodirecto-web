@@ -784,12 +784,33 @@
   };
 
   window.desasignarRecurso = function (proyectoId, tipo, recursoId, nombre) {
-    if (!confirm("\u00bfDesasignar " + nombre + " de este proyecto? Se eliminar\u00e1n todas sus asignaciones futuras.")) return;
-    var hoy = new Date().toISOString().slice(0, 10);
+    var modal = document.createElement("div");
+    modal.className = "modal-overlay visible";
+    modal.style.zIndex = "110";
+    modal.addEventListener("click", function (ev) { if (ev.target === modal) modal.remove(); });
+    var nombreEsc = nombre.replace(/</g, "&lt;");
+    modal.innerHTML =
+      '<div class="modal-editar" style="max-width:400px;padding:24px;">' +
+        '<h3 style="margin:0 0 12px;">Desasignar ' + nombreEsc + '</h3>' +
+        '<p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:16px;">\u00bfQu\u00e9 asignaciones quieres eliminar?</p>' +
+        '<div style="display:flex;flex-direction:column;gap:8px;">' +
+          '<button class="desasig-btn-futuro" style="padding:10px;font-size:13px;border:1px solid var(--color-border-tertiary, #E5E7EB);border-radius:8px;background:var(--color-bg-page, #F8FAFC);cursor:pointer;text-align:left;">\uD83D\uDCC5 Solo asignaciones futuras (desde hoy)</button>' +
+          '<button class="desasig-btn-todo" style="padding:10px;font-size:13px;border:1px solid #DC2626;border-radius:8px;background:#FEF2F2;cursor:pointer;text-align:left;color:#991B1B;">\uD83D\uDDD1\uFE0F Todas las asignaciones (pasadas y futuras)</button>' +
+          '<button class="desasig-btn-cancelar" style="padding:8px;font-size:13px;border:none;background:none;cursor:pointer;color:var(--color-text-secondary);">Cancelar</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+    modal.querySelector(".desasig-btn-cancelar").addEventListener("click", function () { modal.remove(); });
+    modal.querySelector(".desasig-btn-futuro").addEventListener("click", function () { modal.remove(); _ejecutarDesasignacion(proyectoId, tipo, recursoId, nombre, "futuro"); });
+    modal.querySelector(".desasig-btn-todo").addEventListener("click", function () { modal.remove(); _ejecutarDesasignacion(proyectoId, tipo, recursoId, nombre, "todo"); });
+  };
+
+  function _ejecutarDesasignacion(proyectoId, tipo, recursoId, nombre, modo) {
+    var desde = modo === "todo" ? "2000-01-01" : new Date().toISOString().slice(0, 10);
     fetch("/api/proyectos/" + proyectoId + "/asignaciones", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recurso_tipo: tipo, recurso_id: recursoId, fecha: hoy, fecha_hasta: "2099-12-31" }),
+      body: JSON.stringify({ recurso_tipo: tipo, recurso_id: recursoId, fecha: desde, fecha_hasta: "2099-12-31" }),
     }).then(function (r) { return r.json(); })
       .then(function (d) {
         if (d.error) { mostrarToast(d.error, "error"); return; }
@@ -797,7 +818,7 @@
         _renderRecursosCalendario(proyectoId);
       })
       .catch(function () { mostrarToast("Error al desasignar.", "error"); });
-  };
+  }
 
   window.desasignarDia = function (proyectoId, tipo, recursoId, fecha, nombre) {
     if (!confirm("\u00bfDesasignar " + nombre + " el " + fecha + "?")) return;
