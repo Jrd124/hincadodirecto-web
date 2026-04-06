@@ -332,33 +332,39 @@ def consultar_partes(proyecto_nombre: str | None = None, fecha: str | None = Non
 
 def consultar_finanzas(tipo: str = "resumen") -> str:
     _init_all()
+    from routes.helpers import _parse_importe_es, calcular_pendiente_cobro_neto
     conn = get_conn()
     try:
         hoy = datetime.now()
         mes_prefix = hoy.strftime("%Y-%m")
         anio_prefix = hoy.strftime("%Y")
-        _P = "CASE WHEN total_a_pagar LIKE '%,%' THEN CAST(REPLACE(REPLACE(COALESCE(total_a_pagar,'0'),'.',''),',','.') AS REAL) ELSE CAST(COALESCE(total_a_pagar,'0') AS REAL) END"
 
-        fact_mes = _safe_scalar(conn,
-            f"SELECT COALESCE(SUM({_P}),0) FROM facturas_cliente WHERE fecha_factura LIKE ?",
-            (mes_prefix + "%",))
-        fact_anio = _safe_scalar(conn,
-            f"SELECT COALESCE(SUM({_P}),0) FROM facturas_cliente WHERE fecha_factura LIKE ?",
-            (anio_prefix + "%",))
+        # Facturado mes/año — parse with _parse_importe_es
+        rows_mes = conn.execute(
+            "SELECT total_a_pagar FROM facturas_cliente WHERE fecha_factura LIKE ?",
+            (mes_prefix + "%",),
+        ).fetchall()
+        fact_mes = sum(_parse_importe_es(r["total_a_pagar"]) for r in rows_mes)
 
-        r = conn.execute(
-            f"SELECT COUNT(*) as c, COALESCE(SUM({_P}),0) as t"
-            " FROM facturas_cliente WHERE LOWER(TRIM(COALESCE(estado_cobro,''))) IN ('pendiente','','parcial')"
-        ).fetchone() if _table_exists(conn, "facturas_cliente") else None
-        pte_cobro = r["t"] if r else 0
-        pte_cobro_n = r["c"] if r else 0
+        rows_anio = conn.execute(
+            "SELECT total_a_pagar FROM facturas_cliente WHERE fecha_factura LIKE ?",
+            (anio_prefix + "%",),
+        ).fetchall()
+        fact_anio = sum(_parse_importe_es(r["total_a_pagar"]) for r in rows_anio)
 
-        r = conn.execute(
-            f"SELECT COUNT(*) as c, COALESCE(SUM({_P}),0) as t"
-            " FROM facturas_proveedor WHERE LOWER(TRIM(COALESCE(estado_pago,''))) = 'pendiente'"
-        ).fetchone() if _table_exists(conn, "facturas_proveedor") else None
-        pte_pago = r["t"] if r else 0
-        pte_pago_n = r["c"] if r else 0
+        # Pendiente cobro — net of partial collections (shared function)
+        pte = calcular_pendiente_cobro_neto(conn)
+        pte_cobro = pte["total"]
+        pte_cobro_n = pte["num"]
+        pte_cobro_txt = pte["texto"]
+
+        # Pendiente pago — parse with _parse_importe_es
+        rows_pago = conn.execute(
+            "SELECT total, total_a_pagar FROM facturas_proveedor"
+            " WHERE LOWER(TRIM(COALESCE(estado_pago,''))) IN ('pendiente','',  'parcial')"
+        ).fetchall() if _table_exists(conn, "facturas_proveedor") else []
+        pte_pago = sum(_parse_importe_es(r["total_a_pagar"] or r["total"]) for r in rows_pago)
+        pte_pago_n = len(rows_pago)
 
         def fmt(v):
             return f"{v:,.0f} €".replace(",", ".")
@@ -367,7 +373,7 @@ def consultar_finanzas(tipo: str = "resumen") -> str:
             f"💰 *Finanzas*\n\n"
             f"📊 Facturado mes: *{fmt(fact_mes)}*\n"
             f"📊 Facturado año: *{fmt(fact_anio)}*\n"
-            f"🟢 Pendiente cobro: *{fmt(pte_cobro)}* ({pte_cobro_n} facturas)\n"
+            f"🟢 Pendiente cobro: *{fmt(pte_cobro)}* ({pte_cobro_txt})\n"
             f"🔴 Pendiente pago: *{fmt(pte_pago)}* ({pte_pago_n} facturas)"
         )
     finally:
