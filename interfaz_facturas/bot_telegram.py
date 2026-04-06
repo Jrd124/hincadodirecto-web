@@ -1185,7 +1185,7 @@ async def _enviar_selector_proyecto_parte(tid, context, datos):
     """Show active projects as inline buttons for parte assignment."""
     conn = get_conn()
     try:
-        rows = conn.execute("SELECT id, nombre FROM proyectos WHERE estado = 'en_curso' ORDER BY nombre").fetchall()
+        rows = conn.execute("SELECT id, nombre FROM proyectos WHERE estado IN ('vivo','en_curso') ORDER BY nombre").fetchall()
     finally:
         conn.close()
     if not rows:
@@ -1922,7 +1922,7 @@ async def cmd_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     conn = get_conn()
     try:
-        rows = conn.execute("SELECT id, nombre FROM proyectos WHERE estado = 'en_curso' ORDER BY nombre").fetchall()
+        rows = conn.execute("SELECT id, nombre FROM proyectos WHERE estado IN ('vivo','en_curso') ORDER BY nombre").fetchall()
     finally:
         conn.close()
 
