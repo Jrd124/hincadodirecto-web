@@ -664,7 +664,8 @@
         asigs.forEach(function (a) {
           var bg = a.recurso_tipo === 'empleado' ? '#DCFCE7' : a.recurso_tipo === 'maquina' ? '#DBEAFE' : '#FEF3C7';
           var icon = a.recurso_tipo === 'empleado' ? '\uD83D\uDC77' : a.recurso_tipo === 'maquina' ? '\uD83C\uDFD7\uFE0F' : '\uD83D\uDE97';
-          html += '<div style="padding:3px 6px;font-size:10px;background:' + bg + ';border-radius:4px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + icon + ' ' + _esc(a.recurso_nombre) + '</div>';
+          var nombreEsc = _esc(a.recurso_nombre).replace(/'/g, "\\'");
+          html += '<div onclick="desasignarDia(' + _recProyId + ',\'' + a.recurso_tipo + '\',' + a.recurso_id + ',\'' + fecha + '\',\'' + nombreEsc + '\')" style="padding:3px 6px;font-size:10px;background:' + bg + ';border-radius:4px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;" title="Click para desasignar este d\u00eda">' + icon + ' ' + _esc(a.recurso_nombre) + '</div>';
         });
       } else {
         html += '<div style="font-size:10px;color:#CBD5E1;text-align:center;padding:8px 0;">\u2014</div>';
@@ -675,6 +676,20 @@
     el.innerHTML = html;
   }
 
+  var _svgTrash = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>';
+  var _svgPencil = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+
+  function _sidebarRecursoHtml(r, proyectoId) {
+    var icon = r.recurso_tipo === 'empleado' ? '\uD83D\uDC77' : '\uD83C\uDFD7\uFE0F';
+    var nombreEsc = _esc(r.recurso_nombre).replace(/'/g, "\\'");
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;">' +
+      '<span style="font-size:12px;">' + icon + ' ' + _esc(r.recurso_nombre) + ' <span style="color:#94A3B8;">(' + r.dias_asignados + 'd)</span></span>' +
+      '<div style="display:flex;gap:2px;align-items:center;">' +
+        '<button onclick="editarAsignacion(' + proyectoId + ',\'' + r.recurso_tipo + '\',' + r.recurso_id + ',\'' + nombreEsc + '\')" title="Editar fechas" style="background:none;border:none;cursor:pointer;padding:2px;color:var(--color-text-secondary);" onmouseover="this.style.color=\'var(--color-primary)\'" onmouseout="this.style.color=\'var(--color-text-secondary)\'">' + _svgPencil + '</button>' +
+        '<button onclick="desasignarRecurso(' + proyectoId + ',\'' + r.recurso_tipo + '\',' + r.recurso_id + ',\'' + nombreEsc + '\')" title="Desasignar" style="background:none;border:none;cursor:pointer;padding:2px;color:var(--color-text-secondary);" onmouseover="this.style.color=\'#DC2626\'" onmouseout="this.style.color=\'var(--color-text-secondary)\'">' + _svgTrash + '</button>' +
+      '</div></div>';
+  }
+
   function _pintarSidebar(recursos, proyectoId) {
     var el = document.getElementById("proy-recursos-sidebar");
     if (!el) return;
@@ -683,15 +698,11 @@
     var html = '';
     if (emps.length) {
       html += '<div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:6px;">\uD83D\uDC77 Equipo</div>';
-      emps.forEach(function (r) {
-        html += '<div style="padding:4px 0;font-size:12px;">' + _esc(r.recurso_nombre) + ' <span style="color:#94A3B8;">(' + r.dias_asignados + 'd)</span></div>';
-      });
+      emps.forEach(function (r) { html += _sidebarRecursoHtml(r, proyectoId); });
     }
     if (maqs.length) {
       html += '<div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;margin-top:12px;margin-bottom:6px;">\uD83C\uDFD7\uFE0F Máquinas</div>';
-      maqs.forEach(function (r) {
-        html += '<div style="padding:4px 0;font-size:12px;">' + _esc(r.recurso_nombre) + ' <span style="color:#94A3B8;">(' + r.dias_asignados + 'd)</span></div>';
-      });
+      maqs.forEach(function (r) { html += _sidebarRecursoHtml(r, proyectoId); });
     }
     if (!recursos.length) {
       html = '<p style="font-size:12px;color:var(--color-text-secondary);font-style:italic;">Sin recursos asignados</p>';
@@ -769,6 +780,90 @@
           _renderRecursosCalendario(proyectoId);
         })
         .catch(function () { mostrarToast("Error.", "error"); });
+    });
+  };
+
+  window.desasignarRecurso = function (proyectoId, tipo, recursoId, nombre) {
+    if (!confirm("\u00bfDesasignar " + nombre + " de este proyecto? Se eliminar\u00e1n todas sus asignaciones futuras.")) return;
+    var hoy = new Date().toISOString().slice(0, 10);
+    fetch("/api/proyectos/" + proyectoId + "/asignaciones", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recurso_tipo: tipo, recurso_id: recursoId, fecha: hoy, fecha_hasta: "2099-12-31" }),
+    }).then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.error) { mostrarToast(d.error, "error"); return; }
+        mostrarToast(nombre + " desasignado.", "success");
+        _renderRecursosCalendario(proyectoId);
+      })
+      .catch(function () { mostrarToast("Error al desasignar.", "error"); });
+  };
+
+  window.desasignarDia = function (proyectoId, tipo, recursoId, fecha, nombre) {
+    if (!confirm("\u00bfDesasignar " + nombre + " el " + fecha + "?")) return;
+    fetch("/api/proyectos/" + proyectoId + "/asignaciones", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recurso_tipo: tipo, recurso_id: recursoId, fecha: fecha }),
+    }).then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.error) { mostrarToast(d.error, "error"); return; }
+        mostrarToast(nombre + " desasignado el " + fecha + ".", "success");
+        _renderRecursosCalendario(proyectoId);
+      })
+      .catch(function () { mostrarToast("Error al desasignar.", "error"); });
+  };
+
+  window.editarAsignacion = function (proyectoId, tipo, recursoId, nombre) {
+    var existing = document.getElementById("modal-editar-asignacion");
+    if (existing) existing.remove();
+    var modal = document.createElement("div");
+    modal.className = "modal-overlay visible";
+    modal.id = "modal-editar-asignacion";
+    modal.style.zIndex = "110";
+    modal.addEventListener("click", function (ev) { if (ev.target === modal) modal.remove(); });
+    var hoy = new Date().toISOString().slice(0, 10);
+    modal.innerHTML =
+      '<div class="modal-editar" role="dialog" style="max-width:400px;">' +
+        '<h2 style="margin:0 0 16px;font-size:16px;">Editar asignaci\u00f3n de ' + nombre + '</h2>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">' +
+          '<div><label style="font-size:12px;">Desde</label><input type="date" id="edit-asig-desde" class="form-input" style="font-size:13px;" value="' + hoy + '"></div>' +
+          '<div><label style="font-size:12px;">Hasta</label><input type="date" id="edit-asig-hasta" class="form-input" style="font-size:13px;"></div>' +
+        '</div>' +
+        '<div style="display:flex;justify-content:flex-end;gap:8px;">' +
+          '<button type="button" class="secondary" onclick="document.getElementById(\'modal-editar-asignacion\').remove()">Cancelar</button>' +
+          '<button type="button" class="primary" id="btn-guardar-editar-asig">Guardar</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+    document.getElementById("btn-guardar-editar-asig").addEventListener("click", function () {
+      var desde = document.getElementById("edit-asig-desde").value;
+      var hasta = document.getElementById("edit-asig-hasta").value;
+      if (!desde || !hasta) { mostrarToast("Selecciona ambas fechas.", "error"); return; }
+      this.disabled = true;
+      this.textContent = "Guardando\u2026";
+      // 1. Delete future assignments
+      fetch("/api/proyectos/" + proyectoId + "/asignaciones", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recurso_tipo: tipo, recurso_id: recursoId, fecha: hoy, fecha_hasta: "2099-12-31" }),
+      }).then(function (r) { return r.json(); })
+        .then(function () {
+          // 2. Create new range
+          return fetch("/api/proyectos/" + proyectoId + "/asignaciones", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ recurso_tipo: tipo, recurso_id: recursoId, recurso_nombre: nombre, fecha: desde, fecha_hasta: hasta }),
+          });
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.error) { mostrarToast(d.error, "error"); return; }
+          document.getElementById("modal-editar-asignacion").remove();
+          mostrarToast("Asignaci\u00f3n actualizada.", "success");
+          _renderRecursosCalendario(proyectoId);
+        })
+        .catch(function () { mostrarToast("Error al guardar.", "error"); });
     });
   };
 
