@@ -1393,11 +1393,13 @@ function renderPaginacionBancos(container, actual, total) {
     modal.addEventListener("click", function (ev) { if (ev.target === modal) modal.remove(); });
     modal.innerHTML =
       '<div class="modal-editar" role="dialog" style="max-width:500px;max-height:85vh;overflow-y:auto;">' +
-        '<h2 style="margin:0 0 12px;font-size:18px;">Conciliar con póliza de seguro</h2>' +
-        '<div style="padding:10px 12px;background:#F8FAFC;border-radius:8px;margin-bottom:16px;font-size:13px;">' +
-          '<strong>Cargo:</strong> ' + formatNumero(importe) + ' &mdash; ' + (fecha || '—') + ' &mdash; ' + (concepto || '—').replace(/</g, '&lt;') +
+        '<h2 style="margin:0 0 12px;font-size:18px;">Conciliar con p\u00f3liza de seguro</h2>' +
+        '<div style="background:var(--color-bg-page, #F8FAFC);padding:12px;border-radius:8px;margin-bottom:16px;">' +
+          '<div style="font-size:12px;color:var(--color-text-secondary);">Cargo bancario</div>' +
+          '<div style="font-size:18px;font-weight:600;">' + absImporte.toLocaleString("es-ES", { minimumFractionDigits: 2 }) + ' \u20AC</div>' +
+          '<div style="font-size:12px;color:var(--color-text-secondary);">' + (fecha || '\u2014') + ' \u00B7 ' + (concepto || '\u2014').replace(/</g, '&lt;') + '</div>' +
         '</div>' +
-        '<div id="seg-conciliar-lista" style="margin-bottom:16px;"><p style="color:var(--color-text-secondary);font-size:13px;">Cargando pólizas pendientes…</p></div>' +
+        '<div id="seg-conciliar-lista" style="margin-bottom:16px;"><p style="color:var(--color-text-secondary);font-size:13px;">Cargando p\u00f3lizas pendientes\u2026</p></div>' +
         '<div style="display:flex;justify-content:flex-end;gap:8px;">' +
           '<button type="button" class="secondary" onclick="document.getElementById(\'modal-conciliar-seguro\').remove()">Cancelar</button>' +
           '<button type="button" class="primary" id="btn-confirmar-conciliar-seguro" disabled>Conciliar</button>' +
@@ -1419,32 +1421,27 @@ function renderPaginacionBancos(container, actual, total) {
         polizas.forEach(function (p) {
           var prima = Number(p.prima_anual || 0);
           var coincide = Math.abs(prima - absImporte) < 0.02;
-          var borderStyle = coincide ? "border-color:#16A34A;background:#F0FDF4;" : "";
-          html += '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--color-border-tertiary, #E5E7EB);border-radius:8px;cursor:pointer;margin-bottom:6px;' + borderStyle + '">' +
-            '<input type="radio" name="seg-poliza-sel" value="' + p.id + '" style="flex-shrink:0;">' +
+          var borderExtra = coincide ? "border-color:#16A34A;background:#F0FDF4;" : "";
+          html += '<label style="display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--color-border-tertiary, #E5E7EB);border-radius:8px;cursor:pointer;margin-bottom:8px;' + borderExtra + '">' +
+            '<input type="radio" name="seg-poliza-sel" value="' + p.id + '" style="flex-shrink:0;margin-top:2px;"' + (coincide ? ' checked' : '') + '>' +
             '<div style="flex:1;min-width:0;">' +
-              '<div style="font-size:13px;font-weight:500;">' + (iconos[p.tipo] || '') + ' ' + (p.descripcion || (p.tipo || '').replace(/_/g, ' ')) + (p.recurso_nombre ? ' \u2014 ' + p.recurso_nombre : '') + '</div>' +
-              '<div style="font-size:12px;color:var(--color-text-secondary);">' + (p.aseguradora || '') + ' \u00B7 N\u00BA ' + (p.numero_poliza || '\u2014') + ' \u00B7 Prima: ' + prima.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + ' \u20AC</div>' +
+              '<div style="font-size:14px;font-weight:500;margin-bottom:4px;">' + (iconos[p.tipo] || '') + ' ' + (p.descripcion || (p.tipo || '').replace(/_/g, ' ')) + (p.recurso_nombre ? ' \u2014 ' + p.recurso_nombre : '') + '</div>' +
+              '<div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">' + (p.aseguradora || '') + ' \u00B7 N\u00BA ' + (p.numero_poliza || '\u2014') + '</div>' +
+              '<div style="display:flex;align-items:center;gap:8px;">' +
+                '<span style="font-size:13px;font-weight:500;">Prima: ' + prima.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + ' \u20AC</span>' +
+                (coincide ? '<span style="font-size:11px;padding:2px 8px;background:#DCFCE7;color:#166534;border-radius:10px;">\u2713 Coincide</span>' : '') +
+              '</div>' +
             '</div>' +
-            (coincide ? '<span style="flex-shrink:0;font-size:11px;font-weight:600;color:#16A34A;">\u2713 Coincide</span>' : '') +
           '</label>';
         });
         container.innerHTML = html;
-        // Auto-select si solo hay una que coincide
-        var radios = container.querySelectorAll('input[name="seg-poliza-sel"]');
-        var coincidentes = polizas.filter(function (p) { return Math.abs(Number(p.prima_anual || 0) - absImporte) < 0.02; });
-        if (coincidentes.length === 1) {
-          for (var ri = 0; ri < radios.length; ri++) {
-            if (radios[ri].value === String(coincidentes[0].id)) { radios[ri].checked = true; break; }
-          }
-        }
         var btnConfirmar = document.getElementById("btn-confirmar-conciliar-seguro");
         // Enable button when a radio is selected
         container.addEventListener("change", function () {
           btnConfirmar.disabled = false;
         });
-        // Enable if auto-selected
-        if (coincidentes.length === 1) btnConfirmar.disabled = false;
+        // Enable if any radio is pre-checked (coincident match)
+        if (container.querySelector('input[name="seg-poliza-sel"]:checked')) btnConfirmar.disabled = false;
       });
     // Confirmar conciliación
     document.getElementById("btn-confirmar-conciliar-seguro").addEventListener("click", function () {
