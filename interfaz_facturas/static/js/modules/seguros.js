@@ -33,10 +33,11 @@ function _cargarKPIs() {
     .then(function (r) { return r.json(); })
     .then(function (d) {
       var fmt = function (v) { return Number(v || 0).toLocaleString("es-ES", { minimumFractionDigits: 0 }) + " \u20AC"; };
+      var costeDetalle = fmt(d.coste_anual) + '<div style="font-size:10px;margin-top:2px;opacity:0.8;">' + fmt(d.coste_pagado) + ' pagado / ' + fmt(d.coste_pendiente) + ' pdte.</div>';
       document.getElementById("seg-kpis").innerHTML =
         _kpiCard("P\u00f3lizas vigentes", d.vigentes, "#16A34A", "#DCFCE7") +
         _kpiCard("Vencen en 30d", d.por_vencer_30d, "#D97706", "#FEF3C7") +
-        _kpiCard("Coste anual", fmt(d.coste_anual), "#2563EB", "#DBEAFE") +
+        _kpiCardHtml("Coste anual", costeDetalle, "#2563EB", "#DBEAFE") +
         _kpiCard("Siniestros abiertos", d.siniestros_abiertos, "#DC2626", "#FEE2E2");
     }).catch(function () {});
 }
@@ -44,6 +45,12 @@ function _cargarKPIs() {
 function _kpiCard(label, value, color, bg) {
   return '<div style="padding:16px;background:' + bg + ';border-radius:12px;border:1px solid ' + color + '20;">' +
     '<div style="font-size:24px;font-weight:700;color:' + color + ';">' + value + '</div>' +
+    '<div style="font-size:12px;color:' + color + ';opacity:0.8;">' + label + '</div></div>';
+}
+
+function _kpiCardHtml(label, htmlValue, color, bg) {
+  return '<div style="padding:16px;background:' + bg + ';border-radius:12px;border:1px solid ' + color + '20;">' +
+    '<div style="font-size:24px;font-weight:700;color:' + color + ';">' + htmlValue + '</div>' +
     '<div style="font-size:12px;color:' + color + ';opacity:0.8;">' + label + '</div></div>';
 }
 
@@ -90,6 +97,9 @@ function _renderTabla() {
     if (vencida) tr.style.background = "#FEF2F2";
     else if (proxima) tr.style.background = "#FFFBEB";
     var prima = p.prima_anual ? Number(p.prima_anual).toLocaleString("es-ES", { minimumFractionDigits: 2 }) + " \u20AC" : "\u2014";
+    var pagoPill = p.estado_pago === "pagada"
+      ? '<span style="padding:2px 8px;border-radius:10px;font-size:11px;background:#DCFCE7;color:#166534;">Pagada</span>'
+      : '<span style="padding:2px 8px;border-radius:10px;font-size:11px;background:#FEF3C7;color:#92400E;">Pendiente</span>';
     tr.innerHTML =
       '<td>' + (iconos[p.tipo] || "") + ' ' + (p.tipo || "").replace("_", " ") + '</td>' +
       '<td>' + (p.numero_poliza || "\u2014") + '</td>' +
@@ -98,6 +108,7 @@ function _renderTabla() {
       '<td>' + (p.fecha_vencimiento || "\u2014") + '</td>' +
       '<td class="numero">' + prima + '</td>' +
       '<td>' + estadoPill(p.estado, p.fecha_vencimiento) + '</td>' +
+      '<td>' + pagoPill + '</td>' +
       '<td class="col-acciones">' +
         '<button class="btn-small seg-btn-ver" data-id="' + p.id + '">Ver</button> ' +
         '<button class="btn-small seg-btn-editar" data-id="' + p.id + '">Editar</button> ' +
@@ -288,6 +299,16 @@ function _verPoliza(id) {
             '<div><div style="font-size:11px;color:var(--color-text-secondary);">Prima anual</div><div style="font-weight:600;">' + fmt(p.prima_anual) + '</div></div>' +
             '<div><div style="font-size:11px;color:var(--color-text-secondary);">Vencimiento</div><div style="font-weight:600;">' + (p.fecha_vencimiento || "\u2014") + '</div></div>' +
           '</div>' +
+          // Sección de pago
+          (p.estado_pago === "pagada"
+            ? '<div style="border-left:3px solid #16A34A;padding:10px 12px;margin-bottom:16px;background:#F0FDF4;border-radius:0 8px 8px 0;">' +
+                '<span style="font-size:13px;">\uD83D\uDCB3 Pago: ' + fmt(p.prima_anual) + ' \u2014 ' + (p.fecha_pago || '') + ' \u2014 Conciliado con movimiento bancario</span>' +
+                '<button style="margin-left:12px;padding:3px 10px;font-size:11px;color:#DC2626;background:transparent;border:1px solid #DC2626;border-radius:6px;cursor:pointer;" onclick="segurosDesconciliar(' + p.id + ')">Desvincular pago</button>' +
+              '</div>'
+            : '<div style="border-left:3px solid #D97706;padding:10px 12px;margin-bottom:16px;background:#FFFBEB;border-radius:0 8px 8px 0;">' +
+                '<span style="font-size:13px;">\u23F3 Pendiente de pago \u2014 Prima: ' + fmt(p.prima_anual) + '</span>' +
+              '</div>'
+          ) +
           '<div style="border-left:3px solid #DC2626;padding-left:12px;margin-bottom:16px;">' +
             '<div style="font-size:13px;font-weight:600;color:#DC2626;margin-bottom:8px;">Siniestros</div>' + sinHtml +
             '<button style="margin-top:8px;padding:4px 12px;font-size:12px;color:var(--color-primary);background:transparent;border:1px solid var(--color-primary);border-radius:6px;cursor:pointer;" onclick="_nuevoSiniestro(' + p.id + ')">+ Nuevo siniestro</button>' +
@@ -354,4 +375,17 @@ window.segurosEliminarDoc = function (docId, polizaId) {
       _verPoliza(polizaId);
     })
     .catch(function () { if (typeof mostrarToast === "function") mostrarToast("Error al eliminar.", "error"); });
+};
+
+window.segurosDesconciliar = function (polizaId) {
+  if (!confirm("\u00bfDesvincular el pago de esta p\u00f3liza?")) return;
+  fetch("/api/seguros/desconciliar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ poliza_id: polizaId }) })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (d.error) { if (typeof mostrarToast === "function") mostrarToast(d.error, "error"); return; }
+      if (typeof mostrarToast === "function") mostrarToast(d.mensaje || "Pago desvinculado.", "success");
+      var m = document.getElementById("modal-poliza-ver"); if (m) m.remove();
+      _cargarKPIs();
+      _buscarPolizas();
+    });
 };

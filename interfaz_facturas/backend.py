@@ -3283,6 +3283,8 @@ def _init_movimientos_db():
       # G.9: vínculo movimiento ↔ liquidación tarjeta
       ("tarjeta_id", "INTEGER"),
       ("liquidacion_periodo", "TEXT"),
+      # Seguros: vínculo movimiento ↔ póliza de seguro
+      ("seguro_poliza_id", "INTEGER"),
     ]:
       if col not in columnas_existentes:
         conn.execute(f"ALTER TABLE movimientos ADD COLUMN {col} {sql_type}")
