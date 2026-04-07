@@ -2651,6 +2651,7 @@ form.addEventListener("submit", async (event) => {
       } else {
         cargarListado(empresa);
       }
+      if (window._reactRefreshFacturasProveedores) window._reactRefreshFacturasProveedores();
     }
   } catch (err) {
     console.error(err);
@@ -4412,6 +4413,7 @@ document.getElementById("form-editar-factura").addEventListener("submit", async 
     cerrarModalEdicion();
     // Refresh the active view preserving filters (tarjeta, estado, año, mes)
     cargarListado(emp, true);
+    if (window._reactRefreshFacturasProveedores) window._reactRefreshFacturasProveedores();
     if (proveedorSeleccionadoNombre) {
       // If name changed, update the selected proveedor and reload its panel
       if (nuevoNombreProv && nuevoNombreProv !== proveedorSeleccionadoNombre) {

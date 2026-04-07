@@ -518,11 +518,20 @@ function activarFinanzasChild(child) {
     proveedoresSubpanel = "facturas";
     document.getElementById("panel-facturas").classList.add("visible");
     document.getElementById("nav-facturas").classList.add("activo");
-    // Reload facturas if table is empty but empresa is selected (e.g. after navigating away)
-    var _empSel = document.getElementById("empresa-listado");
-    var _tbody = document.getElementById("tbody-facturas");
-    if (_empSel && _empSel.value && _tbody && !_tbody.children.length) {
-      if (typeof cargarListado === "function") cargarListado(_empSel.value, true);
+    // React or vanilla
+    var _reactPanel = document.getElementById("panel-facturas-react");
+    var _vanillaPanel = document.getElementById("panel-facturas-vanilla");
+    if (window._reactReady && window._reactModules && window._reactModules["FacturasProveedores"]) {
+      if (_vanillaPanel) _vanillaPanel.style.display = "none";
+      window.mountReactModule("panel-facturas-react", "FacturasProveedores", { empresa: (document.getElementById("empresa-listado") || {}).value || "hincado_directo" });
+    } else {
+      if (_vanillaPanel) _vanillaPanel.style.display = "";
+      if (_reactPanel) _reactPanel.innerHTML = "";
+      var _empSel = document.getElementById("empresa-listado");
+      var _tbody = document.getElementById("tbody-facturas");
+      if (_empSel && _empSel.value && _tbody && !_tbody.children.length) {
+        if (typeof cargarListado === "function") cargarListado(_empSel.value, true);
+      }
     }
   } else if (child === "clientes") {
     clientesSubpanel = "clientes_facturas";
