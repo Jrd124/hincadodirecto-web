@@ -230,10 +230,6 @@
   // Register
   window._reactModules["DashboardDirector"] = DashboardDirector;
   console.log("[React] DashboardDirector registrado.");
-
-  // Auto-mount if the dashboard panel is currently visible (first load race condition)
-  var panel = document.getElementById("seccion-inicio");
-  if (panel && panel.classList.contains("visible") && window.mountReactModule) {
-    window.mountReactModule("seccion-inicio", "DashboardDirector");
-  }
+  // NOTE: no auto-mount on first load — let vanilla render first.
+  // React will take over on subsequent navigations to "Inicio" via app.js.
 })();

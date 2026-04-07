@@ -478,8 +478,9 @@ function activarModulo(nombre) {
   }
 
   if (nombre === "inicio") {
-    if (window._reactModules && window._reactModules["DashboardDirector"]) {
-      window.mountReactModule("seccion-inicio", "DashboardDirector");
+    if (window._reactReady && window._reactModules && window._reactModules["DashboardDirector"]) {
+      var ok = window.mountReactModule("seccion-inicio", "DashboardDirector");
+      if (!ok) cargarDashboardDirector();
     } else {
       cargarDashboardDirector();
     }
