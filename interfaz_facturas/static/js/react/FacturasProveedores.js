@@ -100,6 +100,10 @@
     var mes = stMes[0], setMes = stMes[1];
     var stEstado = useState("");
     var estado = stEstado[0], setEstado = stEstado[1];
+    var stBusqueda = useState("");
+    var busqueda = stBusqueda[0], setBusqueda = stBusqueda[1];
+    var stTarjetaFiltro = useState("");
+    var tarjetaFiltro = stTarjetaFiltro[0], setTarjetaFiltro = stTarjetaFiltro[1];
     var stSel = useState({});
     var sel = stSel[0], setSel = stSel[1];
     var stSort = useState({ key: "fecha_factura", dir: "desc" });
@@ -138,8 +142,21 @@
       return Object.keys(set).sort().reverse();
     }, [facturas]);
 
+    // Extract unique tarjeta options
+    var tarjetaOpciones = useMemo(function () {
+      var map = {};
+      facturas.forEach(function (f) {
+        var persona = (f.tarjeta_persona || "").trim();
+        var tid = f.tarjeta_id;
+        if (persona) map[persona] = persona;
+        else if (tid) map["t_" + tid] = "Tarjeta " + tid;
+      });
+      return Object.values(map).sort();
+    }, [facturas]);
+
     // Filter + sort
     var filtradas = useMemo(function () {
+      var q = busqueda.toLowerCase();
       var list = facturas.filter(function (f) {
         var fecha = (f.fecha_factura || "").toString();
         if (anio && !fecha.startsWith(anio)) return false;
@@ -148,21 +165,37 @@
           var ep = ((f.estado_pago || "").trim() || "pendiente").toLowerCase();
           if (ep !== estado) return false;
         }
+        if (tarjetaFiltro) {
+          var persona = (f.tarjeta_persona || "").trim();
+          if (tarjetaFiltro === "__banco__") {
+            if (persona || (f.tarjeta_id && String(f.tarjeta_id).trim() !== "0")) return false;
+          } else if (persona !== tarjetaFiltro) return false;
+        }
+        if (q) {
+          var prov = (f.proveedor || "").toLowerCase();
+          var num = (f.numero_factura || "").toLowerCase();
+          var conc = (f.resumen_concepto || "").toLowerCase();
+          if (prov.indexOf(q) < 0 && num.indexOf(q) < 0 && conc.indexOf(q) < 0) return false;
+        }
         return true;
       });
-      // Sort
       var k = sort.key, dir = sort.dir === "asc" ? 1 : -1;
       list.sort(function (a, b) {
         var va = a[k], vb = b[k];
         if (va == null) va = "";
         if (vb == null) vb = "";
-        // Try numeric
         var na = parseNum(va), nb = parseNum(vb);
         if (na || nb) return (na - nb) * dir;
         return String(va).localeCompare(String(vb), "es") * dir;
       });
       return list;
-    }, [facturas, anio, mes, estado, sort]);
+    }, [facturas, anio, mes, estado, tarjetaFiltro, busqueda, sort]);
+
+    var totalFiltrado = useMemo(function () {
+      var sum = 0;
+      filtradas.forEach(function (f) { sum += parseNum(f.total_a_pagar); });
+      return sum;
+    }, [filtradas]);
 
     var toggleSel = useCallback(function (id) {
       setSel(function (prev) {
@@ -239,32 +272,75 @@
       { key: "estado_pago", label: "Estado", num: false },
     ];
 
+    // Estado pill styles
+    var pillEstados = [
+      { value: "", label: "Todas", bg: "var(--color-text-primary)", color: "var(--color-background-primary)" },
+      { value: "pendiente", label: "Pendiente", bg: "#FEF3C7", color: "#92400E" },
+      { value: "pagada", label: "Pagada", bg: "#DCFCE7", color: "#166534" },
+      { value: "parcial", label: "Parcial", bg: "#DBEAFE", color: "#1E40AF" },
+    ];
+
+    var svgLupa = h("svg", { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", style: { position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--color-text-secondary)", pointerEvents: "none" } },
+      h("circle", { cx: 11, cy: 11, r: 8 }), h("line", { x1: 21, y1: 21, x2: 16.65, y2: 16.65 })
+    );
+
     return h("div", { style: { padding: "0" } },
-      // Filters bar
-      h("div", { style: { display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center", marginBottom: "12px" } },
-        h("select", { className: "form-select", style: { fontSize: "12px", padding: "4px 24px 4px 8px" }, value: empresa, onChange: function (e) { setEmpresa(e.target.value); } },
-          h("option", { value: "hincado_directo" }, "Hincado Directo"),
-          h("option", { value: "global_nutria" }, "Global Nutria")
+      // ── Fila 1: Título + contador + acciones ──
+      h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" } },
+        h("div", null,
+          h("div", { style: { display: "flex", alignItems: "center", gap: "8px" } },
+            h("div", { style: { fontSize: "18px", fontWeight: 500 } }, "Facturas de proveedores"),
+            h("select", { className: "form-select", style: { fontSize: "12px", padding: "3px 20px 3px 8px" }, value: empresa, onChange: function (e) { setEmpresa(e.target.value); } },
+              h("option", { value: "hincado_directo" }, "Hincado Directo"),
+              h("option", { value: "global_nutria" }, "Global Nutria")
+            )
+          ),
+          h("div", { style: { fontSize: "13px", color: "var(--color-text-secondary)", marginTop: "2px" } },
+            loading ? "Cargando\u2026"
+              : filtradas.length + " factura" + (filtradas.length !== 1 ? "s" : "") + " \u00B7 " + fmtNum(totalFiltrado) + " \u20AC"
+          )
         ),
-        h("select", { className: "form-select", style: { fontSize: "12px", padding: "4px 24px 4px 8px" }, value: anio, onChange: function (e) { setAnio(e.target.value); } },
+        h("div", { style: { display: "flex", gap: "8px", alignItems: "center" } },
+          nSel > 0 ? h("button", { onClick: eliminar, style: { padding: "6px 14px", fontSize: "13px", border: "1px solid #DC2626", borderRadius: "8px", background: "#FEF2F2", color: "#991B1B", cursor: "pointer", fontWeight: 500 } }, "Eliminar (" + nSel + ")") : null,
+          h("button", { onClick: cargar, title: "Recargar", style: { padding: "6px 10px", fontSize: "13px", border: "1px solid var(--color-border-tertiary, #E5E7EB)", borderRadius: "8px", background: "none", cursor: "pointer" } }, "\u21BB"),
+          h("button", { onClick: procesarFacturas, style: { padding: "6px 14px", fontSize: "13px", border: "none", borderRadius: "8px", background: "var(--color-primary)", color: "white", cursor: "pointer", fontWeight: 500 } }, "+ Procesar factura")
+        )
+      ),
+      // ── Fila 2: Búsqueda + pills de estado ──
+      h("div", { style: { display: "flex", gap: "8px", alignItems: "center", marginBottom: "10px" } },
+        h("div", { style: { position: "relative", flex: 1, minWidth: "200px" } },
+          svgLupa,
+          h("input", {
+            type: "text", value: busqueda,
+            placeholder: "Buscar por proveedor, n\u00BA factura, concepto\u2026",
+            onChange: function (e) { setBusqueda(e.target.value); },
+            style: { width: "100%", boxSizing: "border-box", padding: "7px 12px 7px 32px", fontSize: "13px", border: "0.5px solid var(--color-border-tertiary, #E5E7EB)", borderRadius: "8px", background: "var(--color-background-primary, white)" },
+          })
+        ),
+        h("div", { style: { display: "flex", gap: "0", background: "var(--color-background-primary, white)", borderRadius: "8px", padding: "3px", border: "0.5px solid var(--color-border-tertiary, #E5E7EB)" } },
+          pillEstados.map(function (p) {
+            var activo = estado === p.value;
+            var estilo = activo
+              ? { padding: "4px 12px", fontSize: "12px", fontWeight: 500, border: "none", borderRadius: "6px", cursor: "pointer", background: p.bg, color: p.color, whiteSpace: "nowrap" }
+              : { padding: "4px 12px", fontSize: "12px", fontWeight: 400, border: "none", borderRadius: "6px", cursor: "pointer", background: "transparent", color: "var(--color-text-secondary)", whiteSpace: "nowrap" };
+            return h("button", { key: p.value, style: estilo, onClick: function () { setEstado(p.value); } }, p.label);
+          })
+        )
+      ),
+      // ── Fila 3: Selects compactos ──
+      h("div", { style: { display: "flex", gap: "8px", alignItems: "center", marginBottom: "12px" } },
+        h("select", { className: "form-select", style: { fontSize: "12px", padding: "5px 24px 5px 8px" }, value: anio, onChange: function (e) { setAnio(e.target.value); } },
           h("option", { value: "" }, "Todos los a\u00f1os"),
           anios.map(function (y) { return h("option", { key: y, value: y }, y); })
         ),
-        h("select", { className: "form-select", style: { fontSize: "12px", padding: "4px 24px 4px 8px" }, value: mes, onChange: function (e) { setMes(e.target.value); } },
+        h("select", { className: "form-select", style: { fontSize: "12px", padding: "5px 24px 5px 8px" }, value: mes, onChange: function (e) { setMes(e.target.value); } },
           h("option", { value: "" }, "Todos los meses"),
           [1,2,3,4,5,6,7,8,9,10,11,12].map(function (m) { return h("option", { key: m, value: String(m).padStart(2, "0") }, MESES[m]); })
         ),
-        h("select", { className: "form-select", style: { fontSize: "12px", padding: "4px 24px 4px 8px" }, value: estado, onChange: function (e) { setEstado(e.target.value); } },
-          h("option", { value: "" }, "Todos los estados"),
-          h("option", { value: "pendiente" }, "Pendiente"),
-          h("option", { value: "parcial" }, "Parcial"),
-          h("option", { value: "pagada" }, "Pagada")
-        ),
-        h("button", { className: "btn-small", onClick: cargar, title: "Recargar" }, "\u21BB"),
-        h("button", { className: "btn-small", onClick: procesarFacturas, style: { background: "var(--color-primary)", color: "white", border: "none", borderRadius: "6px", padding: "4px 12px", cursor: "pointer" } }, "+ Procesar"),
-        nSel > 0 ? h("button", { className: "btn-small danger", onClick: eliminar }, "Eliminar (" + nSel + ")") : null,
-        h("span", { style: { fontSize: "12px", color: "var(--color-text-secondary)", marginLeft: "auto" } },
-          loading ? "Cargando\u2026" : filtradas.length + " factura" + (filtradas.length !== 1 ? "s" : "")
+        h("select", { className: "form-select", style: { fontSize: "12px", padding: "5px 24px 5px 8px" }, value: tarjetaFiltro, onChange: function (e) { setTarjetaFiltro(e.target.value); } },
+          h("option", { value: "" }, "Pagado v\u00eda"),
+          h("option", { value: "__banco__" }, "Banco (sin tarjeta)"),
+          tarjetaOpciones.map(function (t) { return h("option", { key: t, value: t }, t); })
         )
       ),
       // Table
