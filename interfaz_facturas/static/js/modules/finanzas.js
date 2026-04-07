@@ -3214,15 +3214,16 @@ document.getElementById("btn-eliminar-seleccionadas").addEventListener("click", 
   const n = checks.length;
   if (!confirm("¿Seguro que quieres eliminar " + n + (n === 1 ? " factura" : " facturas") + "? Esta acción no se puede deshacer.")) return;
   const rutas = Array.from(checks).map((cb) => cb.dataset.ruta).filter(Boolean);
-  if (!rutas.length) {
-    mostrarToast("Las facturas seleccionadas no tienen ruta identificable.", "error");
+  const ids = Array.from(checks).map((cb) => cb.dataset.id).filter(Boolean);
+  if (!rutas.length && !ids.length) {
+    mostrarToast("Las facturas seleccionadas no tienen identificador.", "error");
     return;
   }
   try {
     const resp = await fetch("/api/facturas", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ empresa_id: emp, rutas }),
+      body: JSON.stringify({ empresa_id: emp, rutas: rutas, ids: ids }),
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));

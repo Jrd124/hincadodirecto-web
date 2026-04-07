@@ -2355,15 +2355,25 @@ def eliminar_facturas():
   empresa_id, err = _validar_empresa_id_requerido(data.get("empresa_id"))
   if err:
     return err[0], err[1]
-  rutas_eliminar = data.get("rutas")
-  if not isinstance(rutas_eliminar, list) or not rutas_eliminar:
-    return _bad_request("Falta empresa_id o rutas")
+  rutas_eliminar = data.get("rutas", [])
+  ids_eliminar = data.get("ids", [])
+
+  if not isinstance(rutas_eliminar, list):
+    rutas_eliminar = []
+  if not isinstance(ids_eliminar, list):
+    ids_eliminar = []
 
   rutas_set = set(r.strip() for r in rutas_eliminar if isinstance(r, str) and r.strip())
-  if not rutas_set:
-    return _bad_request("No se proporcionaron rutas válidas")
+  ids_set = [int(i) for i in ids_eliminar if str(i).strip().isdigit()]
 
-  eliminadas = facturas_db.delete_facturas(empresa_id, list(rutas_set))
+  if not rutas_set and not ids_set:
+    return _bad_request("Falta empresa_id, rutas o ids")
+
+  eliminadas = 0
+  if rutas_set:
+    eliminadas += facturas_db.delete_facturas(empresa_id, list(rutas_set))
+  if ids_set:
+    eliminadas += facturas_db.delete_facturas_por_ids(empresa_id, ids_set)
   _sincronizar_proveedores_desde_facturas(empresa_id)
   _invalidar_cache_listado_proveedores(empresa_id)
   return jsonify({"ok": True, "eliminadas": eliminadas, "mensaje": f"{eliminadas} factura(s) eliminada(s)."})
