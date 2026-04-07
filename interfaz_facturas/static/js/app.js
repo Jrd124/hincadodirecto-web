@@ -478,7 +478,11 @@ function activarModulo(nombre) {
   }
 
   if (nombre === "inicio") {
-    cargarDashboardDirector();
+    if (window._reactModules && window._reactModules["DashboardDirector"]) {
+      window.mountReactModule("seccion-inicio", "DashboardDirector");
+    } else {
+      cargarDashboardDirector();
+    }
   } else if (nombre === "finanzas") {
     cargarFinanzasInicio();
   } else if (nombre === "usuarios") {
