@@ -614,6 +614,10 @@ document.getElementById("nav-finanzas-eeff").addEventListener("click", (e) => {
   e.preventDefault();
   activarFinanzasChild("eeff");
 });
+document.getElementById("nav-finanzas-albaranes").addEventListener("click", (e) => {
+  e.preventDefault();
+  activarFinanzasChild("albaranes");
+});
 
 // Apply container margin-left EARLY — before any navigation that might loop
 (function earlyContainerMargin() {
