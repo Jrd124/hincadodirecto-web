@@ -94,25 +94,30 @@ function _renderTablaAlbaranes() {
   if (!_albLista.length) { sinDatos.style.display = "block"; return; }
   sinDatos.style.display = "none";
 
-  var estadoBadge = { pendiente: "badge-warning", facturado: "badge-success", anulado: "badge-muted" };
   var metodoPago = { tarjeta: "Tarjeta", transferencia: "Transfer.", efectivo: "Efectivo", pendiente: "Pendiente" };
 
   _albLista.forEach(function (a) {
     var tr = document.createElement("tr");
-    var est = a.estado || "pendiente";
-    var metodo = metodoPago[a.metodo_pago] || a.metodo_pago || "—";
+    var metodo = metodoPago[a.metodo_pago] || a.metodo_pago || "\u2014";
     if (a.metodo_pago === "tarjeta" && a.tarjeta_persona) metodo += " (" + a.tarjeta_persona + ")";
-    var proy = a.proyecto_nombre || "—";
-    var total = a.total != null ? Number(a.total).toLocaleString("es-ES", { minimumFractionDigits: 2 }) + " \u20AC" : "—";
+    var proy = a.proyecto_nombre || "\u2014";
+    var total = a.total != null ? Number(a.total).toLocaleString("es-ES", { minimumFractionDigits: 2 }) + " \u20AC" : "\u2014";
+    // Estado: conciliado > facturado > pendiente > anulado
+    var estadoLabel, estadoClass;
+    if (a.estado === "anulado") { estadoLabel = "Anulado"; estadoClass = "badge-muted"; }
+    else if (a.conciliado) { estadoLabel = "Conciliado"; estadoClass = "badge-success"; }
+    else if (a.estado === "facturado") { estadoLabel = "Facturado"; estadoClass = "badge-info"; }
+    else if (a.metodo_pago && a.metodo_pago !== "pendiente") { estadoLabel = "Pagado"; estadoClass = "badge-warning"; }
+    else { estadoLabel = "Pendiente"; estadoClass = "badge-warning"; }
 
     tr.innerHTML =
-      '<td class="col-fecha">' + (a.fecha || "—") + '</td>' +
-      '<td>' + (a.numero_albaran || "—") + '</td>' +
-      '<td>' + (a.proveedor || "—") + '</td>' +
+      '<td class="col-fecha">' + (a.fecha || "\u2014") + '</td>' +
+      '<td>' + (a.numero_albaran || "\u2014") + '</td>' +
+      '<td>' + (a.proveedor || "\u2014") + '</td>' +
       '<td class="numero">' + total + '</td>' +
       '<td>' + metodo + '</td>' +
       '<td>' + proy + '</td>' +
-      '<td><span class="badge ' + (estadoBadge[est] || "") + '">' + est.charAt(0).toUpperCase() + est.slice(1) + '</span></td>' +
+      '<td><span class="badge ' + estadoClass + '">' + estadoLabel + '</span></td>' +
       '<td class="col-acciones">' +
         '<button class="btn-small alb-btn-editar" data-id="' + a.id + '" title="Editar">Editar</button> ' +
         '<button class="btn-small danger alb-btn-eliminar" data-id="' + a.id + '" title="Eliminar">Eliminar</button>' +

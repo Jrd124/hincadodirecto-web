@@ -44,6 +44,13 @@ def init_albaranes_db():
         conn.execute("CREATE INDEX IF NOT EXISTS ix_albaranes_proveedor ON albaranes(proveedor)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_albaranes_estado ON albaranes(estado)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_albaranes_factura ON albaranes(factura_id)")
+        # Migración: columnas de conciliación bancaria
+        cur = conn.execute("PRAGMA table_info(albaranes)")
+        cols = {row[1] for row in cur.fetchall()}
+        if "movimiento_banco_id" not in cols:
+            conn.execute("ALTER TABLE albaranes ADD COLUMN movimiento_banco_id TEXT")
+        if "conciliado" not in cols:
+            conn.execute("ALTER TABLE albaranes ADD COLUMN conciliado INTEGER DEFAULT 0")
     _initialized = True
 
 
@@ -213,3 +220,45 @@ def albaranes_sin_factura(proveedor: str | None = None) -> list[dict]:
         return [dict(r) for r in rows]
     finally:
         conn.close()
+
+
+def albaranes_sin_conciliar() -> list[dict]:
+    """Lista albaranes no conciliados con movimiento bancario y no anulados."""
+    init_albaranes_db()
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT a.*, p.nombre as proyecto_nombre FROM albaranes a"
+            " LEFT JOIN proyectos p ON a.proyecto_id = p.id"
+            " WHERE a.estado != 'anulado' AND (a.conciliado IS NULL OR a.conciliado = 0)"
+            " ORDER BY a.fecha DESC",
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def conciliar_albaranes(albaran_ids: list[int], movimiento_id: str) -> int:
+    """Marca albaranes como conciliados con un movimiento bancario."""
+    init_albaranes_db()
+    ahora = _now()
+    with conectar() as conn:
+        placeholders = ",".join("?" for _ in albaran_ids)
+        cur = conn.execute(
+            f"UPDATE albaranes SET movimiento_banco_id = ?, conciliado = 1, updated_at = ?"
+            f" WHERE id IN ({placeholders})",
+            [movimiento_id, ahora] + albaran_ids,
+        )
+        return cur.rowcount
+
+
+def desconciliar_albaranes_por_movimiento(movimiento_id: str) -> int:
+    """Quita la conciliación de albaranes vinculados a un movimiento."""
+    init_albaranes_db()
+    with conectar() as conn:
+        cur = conn.execute(
+            "UPDATE albaranes SET movimiento_banco_id = NULL, conciliado = 0, updated_at = ?"
+            " WHERE movimiento_banco_id = ?",
+            (_now(), str(movimiento_id)),
+        )
+        return cur.rowcount
