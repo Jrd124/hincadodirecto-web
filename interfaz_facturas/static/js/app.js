@@ -478,12 +478,8 @@ function activarModulo(nombre) {
   }
 
   if (nombre === "inicio") {
-    if (window._reactReady && window._reactModules && window._reactModules["DashboardDirector"]) {
-      var ok = window.mountReactModule("seccion-inicio", "DashboardDirector");
-      if (!ok) cargarDashboardDirector();
-    } else {
-      cargarDashboardDirector();
-    }
+    // React desactivado temporalmente — usar siempre vanilla
+    cargarDashboardDirector();
   } else if (nombre === "finanzas") {
     cargarFinanzasInicio();
   } else if (nombre === "usuarios") {
@@ -518,20 +514,13 @@ function activarFinanzasChild(child) {
     proveedoresSubpanel = "facturas";
     document.getElementById("panel-facturas").classList.add("visible");
     document.getElementById("nav-facturas").classList.add("activo");
-    // React or vanilla
-    var _reactPanel = document.getElementById("panel-facturas-react");
+    // React desactivado temporalmente — usar siempre vanilla
     var _vanillaPanel = document.getElementById("panel-facturas-vanilla");
-    if (window._reactReady && window._reactModules && window._reactModules["FacturasProveedores"]) {
-      if (_vanillaPanel) _vanillaPanel.style.display = "none";
-      window.mountReactModule("panel-facturas-react", "FacturasProveedores", { empresa: (document.getElementById("empresa-listado") || {}).value || "hincado_directo" });
-    } else {
-      if (_vanillaPanel) _vanillaPanel.style.display = "";
-      if (_reactPanel) _reactPanel.innerHTML = "";
-      var _empSel = document.getElementById("empresa-listado");
-      var _tbody = document.getElementById("tbody-facturas");
-      if (_empSel && _empSel.value && _tbody && !_tbody.children.length) {
-        if (typeof cargarListado === "function") cargarListado(_empSel.value, true);
-      }
+    if (_vanillaPanel) _vanillaPanel.style.display = "";
+    var _empSel = document.getElementById("empresa-listado");
+    var _tbody = document.getElementById("tbody-facturas");
+    if (_empSel && _empSel.value && _tbody && !_tbody.children.length) {
+      if (typeof cargarListado === "function") cargarListado(_empSel.value, true);
     }
   } else if (child === "clientes") {
     clientesSubpanel = "clientes_facturas";
