@@ -398,7 +398,7 @@ function restaurarDesdeHash() {
       activarModulo("rrhh");
     }
   } else if (mod === "inicio") {
-    activarModulo("inicio");
+    if (moduloActivo !== "inicio") activarModulo("inicio");
   } else if (mod === "onboarding") {
     activarModulo("onboarding");
   } else if (mod === "crm") {

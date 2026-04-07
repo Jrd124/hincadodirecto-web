@@ -25,22 +25,36 @@ window.mountReactModule = function (panelId, componentName, props) {
   }
 
   try {
-    // Si ya hay un root React en este panel, reutilizarlo
-    if (window._reactRoots[panelId]) {
+    // Pass a _mountKey to force re-fetch on re-navigation
+    props._mountKey = Date.now();
+
+    // Check if the React container div already exists in the DOM
+    var reactRootEl = document.getElementById(panelId + "-react");
+
+    // Si ya hay un root React Y su contenedor sigue en el DOM, reutilizar
+    if (window._reactRoots[panelId] && reactRootEl) {
       window._reactRoots[panelId].render(React.createElement(Component, props));
       return true;
     }
 
+    // Limpiar root huérfano si existía pero el DOM fue destruido
+    if (window._reactRoots[panelId]) {
+      try { window._reactRoots[panelId].unmount(); } catch (e) { /* ignore */ }
+      delete window._reactRoots[panelId];
+    }
+
     // Guardar HTML vanilla como backup antes de limpiar
-    container._vanillaBackup = container.innerHTML;
+    if (!container._vanillaBackup) {
+      container._vanillaBackup = container.innerHTML;
+    }
 
     // Crear contenedor React dentro del panel
-    var reactRoot = document.createElement("div");
-    reactRoot.id = panelId + "-react";
+    var newRoot = document.createElement("div");
+    newRoot.id = panelId + "-react";
     container.innerHTML = "";
-    container.appendChild(reactRoot);
+    container.appendChild(newRoot);
 
-    var root = createRoot(reactRoot);
+    var root = createRoot(newRoot);
     root.render(React.createElement(Component, props));
     window._reactRoots[panelId] = root;
     console.log("[React] Montado:", componentName, "en", panelId);

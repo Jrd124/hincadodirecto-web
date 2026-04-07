@@ -144,7 +144,7 @@
 
   // ── Main component ────────────────────────────────────────────────────
 
-  function DashboardDirector() {
+  function DashboardDirector(props) {
     var stateData = useState(null);
     var data = stateData[0], setData = stateData[1];
     var stateLoading = useState(true);
@@ -155,11 +155,13 @@
     var filtroAct = stateFiltro[0], setFiltroAct = stateFiltro[1];
 
     useEffect(function () {
+      setLoading(true);
+      setError(null);
       fetch("/api/dashboard/director?t=" + Date.now())
         .then(function (r) { return r.json(); })
         .then(function (d) { setData(d); setLoading(false); })
         .catch(function (e) { setError(e.message); setLoading(false); });
-    }, []);
+    }, [props._mountKey]);
 
     if (loading) {
       return h("div", { className: "react-dashboard-director", style: { padding: "40px", textAlign: "center", color: "var(--color-text-secondary)" } },
