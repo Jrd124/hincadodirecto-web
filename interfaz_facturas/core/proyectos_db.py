@@ -266,7 +266,7 @@ def _backfill_codigos(conn) -> None:
 
 _PROY_SELECT = """
     SELECT p.*,
-        t.nombre_canonico AS nombre_cliente,
+        COALESCE(t.nombre_canonico, ce.nombre) AS nombre_cliente,
         pres.referencia AS presupuesto_ref,
         oport.nombre AS oportunidad_nombre,
         CASE WHEN p.hincas_estimadas > 0
@@ -277,6 +277,7 @@ _PROY_SELECT = """
              ELSE 0 END AS dias_activo
     FROM proyectos p
     LEFT JOIN terceros t ON t.id = p.cliente_tercero_id
+    LEFT JOIN crm_empresas ce ON ce.tercero_id = p.cliente_tercero_id OR (t.id IS NULL AND ce.id = p.cliente_tercero_id)
     LEFT JOIN presupuestos pres ON pres.id = p.presupuesto_id
     LEFT JOIN crm_oportunidades oport ON oport.id = p.oportunidad_id
 """
@@ -373,14 +374,15 @@ def obtener_dashboard_proyecto(proyecto_id: int) -> dict | None:
     with _conectar() as conn:
         row = conn.execute("""
             SELECT p.*,
-                   t.nombre_canonico AS cliente_nombre,
-                   t.nif AS cliente_nif,
+                   COALESCE(t.nombre_canonico, ce.nombre) AS cliente_nombre,
+                   COALESCE(t.nif, ce.cif) AS cliente_nif,
                    pres.referencia AS presupuesto_ref,
                    pres.id AS presupuesto_id_vinculado,
                    o.nombre AS oportunidad_nombre,
                    o.id AS oportunidad_id_vinculado
             FROM proyectos p
             LEFT JOIN terceros t ON t.id = p.cliente_tercero_id
+            LEFT JOIN crm_empresas ce ON ce.tercero_id = p.cliente_tercero_id OR (t.id IS NULL AND ce.id = p.cliente_tercero_id)
             LEFT JOIN presupuestos pres ON pres.id = p.presupuesto_id
             LEFT JOIN crm_oportunidades o ON o.id = p.oportunidad_id
             WHERE p.id = ?
