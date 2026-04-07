@@ -162,12 +162,12 @@
     }, []);
 
     if (loading) {
-      return h("div", { className: "seccion-inicio", style: { padding: "40px", textAlign: "center", color: "var(--color-text-secondary)" } },
+      return h("div", { className: "react-dashboard-director", style: { padding: "40px", textAlign: "center", color: "var(--color-text-secondary)" } },
         "Cargando dashboard..."
       );
     }
     if (error) {
-      return h("div", { className: "seccion-inicio", style: { padding: "40px", textAlign: "center", color: "#DC2626" } },
+      return h("div", { className: "react-dashboard-director", style: { padding: "40px", textAlign: "center", color: "#DC2626" } },
         "\u274C Error: " + error
       );
     }
@@ -178,7 +178,7 @@
     var m = data.maquinaria || {};
     var nombre = (data.usuario || "").charAt(0).toUpperCase() + (data.usuario || "").slice(1);
 
-    return h("div", { className: "seccion-inicio" },
+    return h("div", { className: "react-dashboard-director", style: { paddingTop: "32px" } },
       // Header
       h("div", { className: "dashboard-header" },
         h("h1", { id: "dashboard-saludo" }, saludo() + ", " + nombre),
