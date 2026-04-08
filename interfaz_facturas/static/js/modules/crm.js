@@ -1552,14 +1552,14 @@
       var q = txt.value.trim().toLowerCase();
       var filtered = q
         ? items.filter(function (i) { return (i.nombre || i.label || "").toLowerCase().indexOf(q) !== -1; })
-        : items.slice(0, 30);
+        : items.slice(0, 80);
       _opShowDropdown(dd, filtered, onSelect, hid);
     });
     txt.addEventListener("focus", function () {
       var q = txt.value.trim().toLowerCase();
       var filtered = q
         ? items.filter(function (i) { return (i.nombre || i.label || "").toLowerCase().indexOf(q) !== -1; })
-        : items.slice(0, 30);
+        : items.slice(0, 80);
       _opShowDropdown(dd, filtered, onSelect, hid);
     });
     txt.addEventListener("keydown", function (e) {
