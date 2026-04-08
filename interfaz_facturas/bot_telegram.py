@@ -332,33 +332,39 @@ def consultar_partes(proyecto_nombre: str | None = None, fecha: str | None = Non
 
 def consultar_finanzas(tipo: str = "resumen") -> str:
     _init_all()
+    from routes.helpers import _parse_importe_es, calcular_pendiente_cobro_neto
     conn = get_conn()
     try:
         hoy = datetime.now()
         mes_prefix = hoy.strftime("%Y-%m")
         anio_prefix = hoy.strftime("%Y")
-        _P = "CASE WHEN total_a_pagar LIKE '%,%' THEN CAST(REPLACE(REPLACE(COALESCE(total_a_pagar,'0'),'.',''),',','.') AS REAL) ELSE CAST(COALESCE(total_a_pagar,'0') AS REAL) END"
 
-        fact_mes = _safe_scalar(conn,
-            f"SELECT COALESCE(SUM({_P}),0) FROM facturas_cliente WHERE fecha_factura LIKE ?",
-            (mes_prefix + "%",))
-        fact_anio = _safe_scalar(conn,
-            f"SELECT COALESCE(SUM({_P}),0) FROM facturas_cliente WHERE fecha_factura LIKE ?",
-            (anio_prefix + "%",))
+        # Facturado mes/año — parse with _parse_importe_es
+        rows_mes = conn.execute(
+            "SELECT total_a_pagar FROM facturas_cliente WHERE fecha_factura LIKE ?",
+            (mes_prefix + "%",),
+        ).fetchall()
+        fact_mes = sum(_parse_importe_es(r["total_a_pagar"]) for r in rows_mes)
 
-        r = conn.execute(
-            f"SELECT COUNT(*) as c, COALESCE(SUM({_P}),0) as t"
-            " FROM facturas_cliente WHERE LOWER(TRIM(COALESCE(estado_cobro,''))) IN ('pendiente','','parcial')"
-        ).fetchone() if _table_exists(conn, "facturas_cliente") else None
-        pte_cobro = r["t"] if r else 0
-        pte_cobro_n = r["c"] if r else 0
+        rows_anio = conn.execute(
+            "SELECT total_a_pagar FROM facturas_cliente WHERE fecha_factura LIKE ?",
+            (anio_prefix + "%",),
+        ).fetchall()
+        fact_anio = sum(_parse_importe_es(r["total_a_pagar"]) for r in rows_anio)
 
-        r = conn.execute(
-            f"SELECT COUNT(*) as c, COALESCE(SUM({_P}),0) as t"
-            " FROM facturas_proveedor WHERE LOWER(TRIM(COALESCE(estado_pago,''))) = 'pendiente'"
-        ).fetchone() if _table_exists(conn, "facturas_proveedor") else None
-        pte_pago = r["t"] if r else 0
-        pte_pago_n = r["c"] if r else 0
+        # Pendiente cobro — net of partial collections (shared function)
+        pte = calcular_pendiente_cobro_neto(conn)
+        pte_cobro = pte["total"]
+        pte_cobro_n = pte["num"]
+        pte_cobro_txt = pte["texto"]
+
+        # Pendiente pago — parse with _parse_importe_es
+        rows_pago = conn.execute(
+            "SELECT total, total_a_pagar FROM facturas_proveedor"
+            " WHERE LOWER(TRIM(COALESCE(estado_pago,''))) IN ('pendiente','',  'parcial')"
+        ).fetchall() if _table_exists(conn, "facturas_proveedor") else []
+        pte_pago = sum(_parse_importe_es(r["total_a_pagar"] or r["total"]) for r in rows_pago)
+        pte_pago_n = len(rows_pago)
 
         def fmt(v):
             return f"{v:,.0f} €".replace(",", ".")
@@ -367,7 +373,7 @@ def consultar_finanzas(tipo: str = "resumen") -> str:
             f"💰 *Finanzas*\n\n"
             f"📊 Facturado mes: *{fmt(fact_mes)}*\n"
             f"📊 Facturado año: *{fmt(fact_anio)}*\n"
-            f"🟢 Pendiente cobro: *{fmt(pte_cobro)}* ({pte_cobro_n} facturas)\n"
+            f"🟢 Pendiente cobro: *{fmt(pte_cobro)}* ({pte_cobro_txt})\n"
             f"🔴 Pendiente pago: *{fmt(pte_pago)}* ({pte_pago_n} facturas)"
         )
     finally:
@@ -1010,8 +1016,24 @@ async def callback_foto_tipo(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await _procesar_foto_factura_cli(query, context, content, tid)
 
 
+def _resumen_parte_texto(datos):
+    """Genera texto de resumen de un parte a partir de los datos OCR/corregidos."""
+    lineas_txt = ""
+    for l in datos.get("lineas", []):
+        lineas_txt += f"👷 {l.get('operador', '?')} con {l.get('maquina', '?')}: {l.get('horas', '?')}h\n"
+    conf_emoji = {"alta": "🟢", "media": "🟡", "baja": "🔴"}.get(datos.get("confianza", "?"), "⚪")
+    return (
+        f"📋 *Parte detectado:* {conf_emoji}\n"
+        f"🗓 Fecha: {datos.get('fecha', '?')}\n"
+        f"{lineas_txt}"
+        f"🔨 Total hincas: {datos.get('total_hincas', 0)}\n"
+        f"⏱ Horas admin: {datos.get('horas_admin', 0)}\n"
+        f"📝 Incidencias: {datos.get('incidencias') or 'ninguna'}"
+    )
+
+
 async def _procesar_foto_parte(query, context, content, tid):
-    """Process photo as parte de trabajo."""
+    """Process photo as parte de trabajo — OCR + ask to confirm/correct."""
     b64 = base64.b64encode(content).decode("utf-8")
 
     try:
@@ -1043,31 +1065,180 @@ async def _procesar_foto_parte(query, context, content, tid):
     ruta_subidas.mkdir(parents=True, exist_ok=True)
     (ruta_subidas / nombre_archivo).write_bytes(content)
 
-    lineas_txt = ""
-    for l in datos.get("lineas", []):
-        lineas_txt += f"👷 {l.get('operador', '?')} con {l.get('maquina', '?')}: {l.get('horas', '?')}h\n"
+    datos["_imagen_archivo"] = "subidas/" + nombre_archivo
+    set_estado(tid, "parte_confirmar_datos", datos)
 
-    conf_emoji = {"alta": "🟢", "media": "🟡", "baja": "🔴"}.get(datos.get("confianza", "?"), "⚪")
-    texto_resumen = (
-        f"📋 *Parte detectado:* {conf_emoji}\n"
-        f"🗓 Fecha: {datos.get('fecha', '?')}\n"
-        f"🏗 Obra: {datos.get('obra', '?')}\n"
-        f"{lineas_txt}"
-        f"🔨 Total hincas: {datos.get('total_hincas', 0)}\n"
-        f"📝 Incidencias: {datos.get('incidencias') or 'ninguna'}\n\n"
-        f"¿Está firmado por el jefe de obra?"
+    texto_resumen = _resumen_parte_texto(datos) + "\n\n¿Los datos son correctos?"
+    kb = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Correcto", callback_data="parte_datos_ok"),
+            InlineKeyboardButton("✏️ Corregir", callback_data="parte_datos_corregir"),
+        ]
+    ])
+    await context.bot.send_message(chat_id=tid, text=texto_resumen, reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+
+
+async def callback_parte_datos(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle Correcto / Corregir response after OCR."""
+    query = update.callback_query
+    await query.answer()
+    tid = query.from_user.id
+    estado = get_estado(tid)
+    if not estado or estado["estado"] != "parte_confirmar_datos":
+        return await query.edit_message_text("⚠️ No hay parte pendiente.")
+    datos = estado["datos"]
+
+    if query.data == "parte_datos_ok":
+        # Data confirmed — go to project selection
+        await query.edit_message_text("✅ Datos confirmados.")
+        await _enviar_selector_proyecto_parte(tid, context, datos)
+    else:
+        # Start correction flow — step 1: hincas
+        set_estado(tid, "parte_corregir_hincas", datos)
+        await query.edit_message_text(
+            f"🔨 Hincas actuales: *{datos.get('total_hincas', 0)}*\n"
+            f"Escribe el número correcto o *ok* para mantener:",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+
+
+async def _handle_parte_corregir_hincas(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Correction step 1: hincas."""
+    tid = update.effective_user.id
+    estado = get_estado(tid)
+    datos = estado["datos"]
+    texto = update.message.text.strip()
+    if texto.lower() not in ("/ok", "ok"):
+        try:
+            datos["total_hincas"] = int(float(texto.replace(",", ".")))
+        except (ValueError, TypeError):
+            return await update.message.reply_text("❌ Escribe un número válido (ej: 150) o *ok* para mantener:")
+    set_estado(tid, "parte_corregir_horas", datos)
+    await update.message.reply_text(
+        f"⏱ Horas admin actuales: *{datos.get('horas_admin', 0)}*\n"
+        f"Escribe las horas o *ok* para mantener:",
+        parse_mode=ParseMode.MARKDOWN,
     )
 
-    datos["_imagen_archivo"] = "subidas/" + nombre_archivo
-    set_estado(tid, "esperando_firma", datos)
 
+async def _handle_parte_corregir_horas(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Correction step 2: horas admin."""
+    tid = update.effective_user.id
+    estado = get_estado(tid)
+    datos = estado["datos"]
+    texto = update.message.text.strip()
+    if texto.lower() not in ("/ok", "ok"):
+        try:
+            datos["horas_admin"] = float(texto.replace(",", "."))
+        except (ValueError, TypeError):
+            return await update.message.reply_text("❌ Escribe un número válido (ej: 8.5 o 8,5) o *ok* para mantener:")
+    lineas = datos.get("lineas", [])
+    operadores_txt = ", ".join(f"{l.get('operador', '?')} con {l.get('maquina', '?')}" for l in lineas) or "ninguno"
+    set_estado(tid, "parte_corregir_operadores", datos)
+    await update.message.reply_text(
+        f"👷 Operadores actuales: *{operadores_txt}*\n"
+        f"Escribe la corrección (ej: Diego con Carmela 10h, Manuel con Nicoletta 10h) o *ok* para mantener:",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+async def _handle_parte_corregir_operadores(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Correction step 3: operadores."""
+    tid = update.effective_user.id
+    estado = get_estado(tid)
+    datos = estado["datos"]
+    texto = update.message.text.strip()
+    if texto.lower() not in ("/ok", "ok"):
+        # Parse simple format: "Diego con Carmela 10h, Manuel con Nicoletta 10h"
+        import re
+        nuevas_lineas = []
+        for parte in texto.split(","):
+            parte = parte.strip()
+            m = re.match(r"(\w+)\s+con\s+(\w+)\s*(\d+)?h?", parte, re.IGNORECASE)
+            if m:
+                nuevas_lineas.append({
+                    "operador": m.group(1),
+                    "maquina": m.group(2),
+                    "horas": int(m.group(3)) if m.group(3) else 10,
+                    "rol": "operador",
+                })
+        if nuevas_lineas:
+            datos["lineas"] = nuevas_lineas
+    set_estado(tid, "parte_corregir_incidencias", datos)
+    await update.message.reply_text(
+        f"📝 Incidencias actuales: *{datos.get('incidencias') or 'ninguna'}*\n"
+        f"Escribe las incidencias o *ok* para mantener:",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+async def _handle_parte_corregir_incidencias(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Correction step 4: incidencias — then show summary and go to project."""
+    tid = update.effective_user.id
+    estado = get_estado(tid)
+    datos = estado["datos"]
+    texto = update.message.text.strip()
+    if texto.lower() not in ("/ok", "ok"):
+        datos["incidencias"] = texto
+    # Show corrected summary then go to project selection
+    resumen = _resumen_parte_texto(datos) + "\n\n✅ Datos corregidos."
+    set_estado(tid, "parte_seleccionar_proyecto", datos)
+    await update.message.reply_text(resumen, parse_mode=ParseMode.MARKDOWN)
+    await _enviar_selector_proyecto_parte(tid, context, datos)
+
+
+async def _enviar_selector_proyecto_parte(tid, context, datos):
+    """Show active projects as inline buttons for parte assignment."""
+    conn = get_conn()
+    try:
+        rows = conn.execute("SELECT id, nombre FROM proyectos WHERE estado IN ('vivo','en_curso') ORDER BY nombre").fetchall()
+    finally:
+        conn.close()
+    if not rows:
+        clear_estado(tid)
+        return await context.bot.send_message(chat_id=tid, text="❌ No hay proyectos activos. Usa /manual.")
+    buttons = [[InlineKeyboardButton(r["nombre"], callback_data=f"parteproy_{r['id']}")] for r in rows]
+    set_estado(tid, "parte_seleccionar_proyecto", datos)
+    await context.bot.send_message(
+        chat_id=tid,
+        text="🏗 *¿En qué proyecto es este parte?*",
+        reply_markup=InlineKeyboardMarkup(buttons),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+async def callback_parte_proyecto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle project selection for parte."""
+    query = update.callback_query
+    await query.answer()
+    tid = query.from_user.id
+    estado = get_estado(tid)
+    if not estado or estado["estado"] != "parte_seleccionar_proyecto":
+        return await query.edit_message_text("⚠️ No hay parte pendiente.")
+    datos = estado["datos"]
+    proyecto_id = int(query.data.split("_")[1])
+    # Look up project name
+    conn = get_conn()
+    try:
+        row = conn.execute("SELECT nombre FROM proyectos WHERE id = ?", (proyecto_id,)).fetchone()
+    finally:
+        conn.close()
+    proyecto_nombre = row["nombre"] if row else "?"
+    datos["_proyecto_id"] = proyecto_id
+    datos["_proyecto_nombre"] = proyecto_nombre
+    set_estado(tid, "esperando_firma", datos)
+    await query.edit_message_text(f"🏗 Proyecto: *{proyecto_nombre}*", parse_mode=ParseMode.MARKDOWN)
     kb = InlineKeyboardMarkup([
         [
             InlineKeyboardButton("✅ Sí, firmado", callback_data="firma_firmado"),
             InlineKeyboardButton("📝 No, es borrador", callback_data="firma_borrador"),
         ]
     ])
-    await context.bot.send_message(chat_id=tid, text=texto_resumen, reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
+    await context.bot.send_message(
+        chat_id=tid,
+        text="¿Está firmado por el jefe de obra?",
+        reply_markup=kb,
+    )
 
 
 async def _procesar_foto_albaran(query, context, content, tid):
@@ -1323,7 +1494,7 @@ async def callback_factura_confirmar(update: Update, context: ContextTypes.DEFAU
         campo = "proveedor" if datos.get("_tipo") == "proveedor" else "cliente"
         valor = datos.get(campo, "?")
         await query.edit_message_text(
-            f"🏢 {campo.title()} actual: *{valor}*\nEscribe el nombre correcto o /ok si es correcto:",
+            f"🏢 {campo.title()} actual: *{valor}*\nEscribe el nombre correcto o *ok* si es correcto:",
             parse_mode=ParseMode.MARKDOWN,
         )
 
@@ -1349,13 +1520,13 @@ async def handle_correccion_factura(update: Update, context: ContextTypes.DEFAUL
     ]
 
     # Apply correction for current step
-    if txt != "/ok":
+    if txt.lower() not in ("/ok", "ok"):
         campo_key = campos[paso][0]
         if paso >= 3:  # Numeric fields
             try:
                 datos[campo_key] = float(txt.replace(".", "").replace(",", "."))
             except ValueError:
-                await update.message.reply_text("Escribe un número válido o /ok:")
+                await update.message.reply_text("Escribe un número válido o *ok*:")
                 return
         else:
             datos[campo_key] = txt
@@ -1371,7 +1542,7 @@ async def handle_correccion_factura(update: Update, context: ContextTypes.DEFAUL
             valor = _fmt_eur(valor)
         set_estado(tid, "factura_corregir", datos)
         await update.message.reply_text(
-            f"{label} actual: *{valor}*\nEscribe el valor correcto o /ok:",
+            f"{label} actual: *{valor}*\nEscribe el valor correcto o *ok*:",
             parse_mode=ParseMode.MARKDOWN,
         )
     else:
@@ -1648,19 +1819,23 @@ async def callback_firma(update: Update, context: ContextTypes.DEFAULT_TYPE):
     es_firmado = query.data == "firma_firmado"
     estado_firma = "firmado" if es_firmado else "borrador"
 
-    # Find project
-    conn = get_conn()
-    try:
-        obra = datos.get("obra", "")
-        row = conn.execute("SELECT id FROM proyectos WHERE nombre LIKE ? LIMIT 1", (f"%{obra}%",)).fetchone()
-        if not row:
-            clear_estado(tid)
-            return await query.edit_message_text(
-                f"❌ No encontré el proyecto '{obra}'. Usa /manual para introducir los datos."
-            )
-        proyecto_id = row["id"]
-    finally:
-        conn.close()
+    # Project: use selected project (new flow) or fallback to OCR obra match (legacy)
+    proyecto_id = datos.get("_proyecto_id")
+    proyecto_nombre = datos.get("_proyecto_nombre", "")
+    if not proyecto_id:
+        conn = get_conn()
+        try:
+            obra = datos.get("obra", "")
+            row = conn.execute("SELECT id, nombre FROM proyectos WHERE nombre LIKE ? LIMIT 1", (f"%{obra}%",)).fetchone()
+            if not row:
+                clear_estado(tid)
+                return await query.edit_message_text(
+                    f"❌ No encontré el proyecto '{obra}'. Usa /manual para introducir los datos."
+                )
+            proyecto_id = row["id"]
+            proyecto_nombre = row["nombre"]
+        finally:
+            conn.close()
 
     lineas = datos.get("lineas", [])
     operadores = [l for l in lineas if l.get("rol") != "ayudante"]
@@ -1735,7 +1910,8 @@ async def callback_firma(update: Update, context: ContextTypes.DEFAULT_TYPE):
             (estado_firma, parte_data.get("imagen_firmado"), parte_data.get("fecha_firma"), nuevo["id"]),
         )
     clear_estado(tid)
-    await query.edit_message_text("✅ Parte registrado correctamente en el ERP.")
+    hincas = datos.get("total_hincas", 0)
+    await query.edit_message_text(f"✅ Parte registrado en {proyecto_nombre} ({hincas} hincas)")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1752,7 +1928,7 @@ async def cmd_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     conn = get_conn()
     try:
-        rows = conn.execute("SELECT id, nombre FROM proyectos WHERE estado = 'en_curso' ORDER BY nombre").fetchall()
+        rows = conn.execute("SELECT id, nombre FROM proyectos WHERE estado IN ('vivo','en_curso') ORDER BY nombre").fetchall()
     finally:
         conn.close()
 
@@ -1780,8 +1956,8 @@ async def manual_proyecto(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def manual_hincas(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        n = int(update.message.text.strip())
-    except ValueError:
+        n = int(float(update.message.text.strip().replace(",", ".")))
+    except (ValueError, TypeError):
         await update.message.reply_text("Escribe un número.")
         return MANUAL_HINCAS
     context.user_data["manual"]["hincas"] = n
@@ -1802,7 +1978,7 @@ async def manual_horas_admin(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def manual_hincadoras(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        n = int(update.message.text.strip())
+        n = int(float(update.message.text.strip().replace(",", ".")))
     except ValueError:
         await update.message.reply_text("Escribe un número.")
         return MANUAL_HINCADORAS
@@ -2371,6 +2547,8 @@ def main():
     # Callbacks
     app.add_handler(CallbackQueryHandler(callback_aprobar, pattern=r"^aprobar_"))
     app.add_handler(CallbackQueryHandler(callback_foto_tipo, pattern=r"^foto_tipo_"))
+    app.add_handler(CallbackQueryHandler(callback_parte_datos, pattern=r"^parte_datos_"))
+    app.add_handler(CallbackQueryHandler(callback_parte_proyecto, pattern=r"^parteproy_"))
     app.add_handler(CallbackQueryHandler(callback_firma, pattern=r"^firma_"))
     app.add_handler(CallbackQueryHandler(callback_albaran_pago, pattern=r"^albpago_"))
     app.add_handler(CallbackQueryHandler(callback_factura_confirmar, pattern=r"^facconf_"))
@@ -2401,14 +2579,25 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
     # Text handlers for correction flows (BEFORE superadmin fallback)
+    _parte_corregir_handlers = {
+        "parte_corregir_hincas": _handle_parte_corregir_hincas,
+        "parte_corregir_horas": _handle_parte_corregir_horas,
+        "parte_corregir_operadores": _handle_parte_corregir_operadores,
+        "parte_corregir_incidencias": _handle_parte_corregir_incidencias,
+    }
+
     async def _text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Route text to correction flow if active, else to superadmin GPT-4."""
         tid = update.effective_user.id
         estado = get_estado(tid)
-        if estado and estado["estado"] == "factura_corregir":
-            return await handle_correccion_factura(update, context)
-        if estado and estado["estado"] == "factura_pago_nombre":
-            return await handle_factura_pago_nombre(update, context)
+        if estado:
+            handler = _parte_corregir_handlers.get(estado["estado"])
+            if handler:
+                return await handler(update, context)
+            if estado["estado"] == "factura_corregir":
+                return await handle_correccion_factura(update, context)
+            if estado["estado"] == "factura_pago_nombre":
+                return await handle_factura_pago_nombre(update, context)
         return await handle_text_superadmin(update, context)
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _text_router))

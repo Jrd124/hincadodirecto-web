@@ -1013,6 +1013,19 @@ def listar_tarjetas_por_empresa(empresa_id: str):
   return jsonify({"tarjetas": tarjetas, "empresa_id": empresa_id, "solo_activas": solo_activas})
 
 
+@bancos_bp.get("/api/tarjetas")
+def listar_todas_tarjetas():
+  """Listado de TODAS las tarjetas activas (sin filtro de empresa)."""
+  from core.tarjetas_db import _conectar, init_tarjetas_db
+  init_tarjetas_db()
+  with _conectar() as conn:
+    cur = conn.execute(
+      "SELECT id, empresa_id, banco, persona, ultimos4, alias, activa FROM tarjetas WHERE activa = 1 ORDER BY banco, persona"
+    )
+    tarjetas = [dict(r) for r in cur.fetchall()]
+  return jsonify({"tarjetas": tarjetas})
+
+
 @bancos_bp.post("/api/tarjetas")
 def crear_tarjeta():
   """
@@ -2355,15 +2368,25 @@ def eliminar_facturas():
   empresa_id, err = _validar_empresa_id_requerido(data.get("empresa_id"))
   if err:
     return err[0], err[1]
-  rutas_eliminar = data.get("rutas")
-  if not isinstance(rutas_eliminar, list) or not rutas_eliminar:
-    return _bad_request("Falta empresa_id o rutas")
+  rutas_eliminar = data.get("rutas", [])
+  ids_eliminar = data.get("ids", [])
+
+  if not isinstance(rutas_eliminar, list):
+    rutas_eliminar = []
+  if not isinstance(ids_eliminar, list):
+    ids_eliminar = []
 
   rutas_set = set(r.strip() for r in rutas_eliminar if isinstance(r, str) and r.strip())
-  if not rutas_set:
-    return _bad_request("No se proporcionaron rutas válidas")
+  ids_set = [int(i) for i in ids_eliminar if str(i).strip().isdigit()]
 
-  eliminadas = facturas_db.delete_facturas(empresa_id, list(rutas_set))
+  if not rutas_set and not ids_set:
+    return _bad_request("Falta empresa_id, rutas o ids")
+
+  eliminadas = 0
+  if rutas_set:
+    eliminadas += facturas_db.delete_facturas(empresa_id, list(rutas_set))
+  if ids_set:
+    eliminadas += facturas_db.delete_facturas_por_ids(empresa_id, ids_set)
   _sincronizar_proveedores_desde_facturas(empresa_id)
   _invalidar_cache_listado_proveedores(empresa_id)
   return jsonify({"ok": True, "eliminadas": eliminadas, "mensaje": f"{eliminadas} factura(s) eliminada(s)."})
@@ -3292,6 +3315,8 @@ def _init_movimientos_db():
       ("liquidacion_periodo", "TEXT"),
       # Seguros: vínculo movimiento ↔ póliza de seguro
       ("seguro_poliza_id", "INTEGER"),
+      # Albaranes: vínculo movimiento ↔ albaranes
+      ("albaran_ids", "TEXT"),
     ]:
       if col not in columnas_existentes:
         conn.execute(f"ALTER TABLE movimientos ADD COLUMN {col} {sql_type}")

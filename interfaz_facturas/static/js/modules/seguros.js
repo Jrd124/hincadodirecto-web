@@ -216,8 +216,12 @@ function _guardarPoliza() {
   var url = _segEditId ? "/api/seguros/polizas/" + _segEditId : "/api/seguros/polizas";
   var method = _segEditId ? "PUT" : "POST";
   fetch(url, { method: method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
-    .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
-    .then(function () {
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+    .then(function (res) {
+      if (!res.ok) {
+        if (typeof mostrarToast === "function") mostrarToast(res.data.error || "Error al guardar.", "error");
+        return;
+      }
       var m = document.getElementById("modal-poliza"); if (m) m.remove();
       if (typeof mostrarToast === "function") mostrarToast("P\u00f3liza guardada.", "success");
       _cargarKPIs();

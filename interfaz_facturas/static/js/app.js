@@ -398,7 +398,7 @@ function restaurarDesdeHash() {
       activarModulo("rrhh");
     }
   } else if (mod === "inicio") {
-    activarModulo("inicio");
+    if (moduloActivo !== "inicio") activarModulo("inicio");
   } else if (mod === "onboarding") {
     activarModulo("onboarding");
   } else if (mod === "crm") {
@@ -478,6 +478,7 @@ function activarModulo(nombre) {
   }
 
   if (nombre === "inicio") {
+    // React desactivado temporalmente — usar siempre vanilla
     cargarDashboardDirector();
   } else if (nombre === "finanzas") {
     cargarFinanzasInicio();
@@ -513,7 +514,9 @@ function activarFinanzasChild(child) {
     proveedoresSubpanel = "facturas";
     document.getElementById("panel-facturas").classList.add("visible");
     document.getElementById("nav-facturas").classList.add("activo");
-    // Reload facturas if table is empty but empresa is selected (e.g. after navigating away)
+    // React desactivado temporalmente — usar siempre vanilla
+    var _vanillaPanel = document.getElementById("panel-facturas-vanilla");
+    if (_vanillaPanel) _vanillaPanel.style.display = "";
     var _empSel = document.getElementById("empresa-listado");
     var _tbody = document.getElementById("tbody-facturas");
     if (_empSel && _empSel.value && _tbody && !_tbody.children.length) {
@@ -608,6 +611,10 @@ document.getElementById("nav-finanzas-tesoreria").addEventListener("click", (e) 
 document.getElementById("nav-finanzas-eeff").addEventListener("click", (e) => {
   e.preventDefault();
   activarFinanzasChild("eeff");
+});
+document.getElementById("nav-finanzas-albaranes").addEventListener("click", (e) => {
+  e.preventDefault();
+  activarFinanzasChild("albaranes");
 });
 
 // Apply container margin-left EARLY — before any navigation that might loop

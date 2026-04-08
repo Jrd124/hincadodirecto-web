@@ -310,8 +310,13 @@ def listar_empresas(
     where_parts: list[str] = []
     params: list[Any] = []
     if tipo:
-        where_parts.append("e.tipo = ?")
-        params.append(tipo)
+        if tipo == "cliente":
+            where_parts.append("e.tipo IN ('cliente', 'ambos')")
+        elif tipo == "proveedor":
+            where_parts.append("e.tipo IN ('proveedor', 'ambos')")
+        else:
+            where_parts.append("e.tipo = ?")
+            params.append(tipo)
     if q:
         where_parts.append("(e.nombre LIKE ? OR e.cif LIKE ?)")
         like = f"%{q}%"

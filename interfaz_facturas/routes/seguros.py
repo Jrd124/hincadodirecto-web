@@ -38,10 +38,17 @@ def api_obtener_poliza(poliza_id):
 @login_required
 def api_crear_poliza():
     data = request.get_json(silent=True) or {}
-    required = ["tipo", "aseguradora", "descripcion", "fecha_inicio", "fecha_vencimiento"]
+    logger.info("Crear poliza data: %s", {k: v for k, v in data.items() if k != "_t"})
+    required = ["tipo", "aseguradora", "fecha_inicio", "fecha_vencimiento"]
     for f in required:
         if not data.get(f):
             return jsonify({"error": f"Campo '{f}' requerido"}), 400
+    # Auto-generate descripcion from tipo if empty
+    if not (data.get("descripcion") or "").strip():
+        tipos_label = {"maquinaria": "Seguro maquinaria", "vehiculo": "Seguro vehículo",
+                       "responsabilidad_civil": "Responsabilidad Civil", "accidentes_convenio": "Accidentes/Convenio",
+                       "dyo": "D&O", "otro": "Otro seguro"}
+        data["descripcion"] = tipos_label.get(data.get("tipo", ""), "Póliza de seguro")
     row = seguros_db.crear_poliza(data)
     return jsonify(row), 201
 

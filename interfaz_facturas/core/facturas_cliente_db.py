@@ -264,8 +264,8 @@ def update_factura_cliente(empresa_id: str, factura: dict, clave_original: dict)
     if not row:
       return False
     vid = row[0]
-    # Preserve ruta_archivo and hash_archivo if not explicitly provided
-    _preserve = {"ruta_archivo", "hash_archivo"}
+    # Preserve ruta_archivo, hash_archivo and estado_cobro if not explicitly provided
+    _preserve = {"ruta_archivo", "hash_archivo", "estado_cobro"}
     existing = dict(conn.execute("SELECT * FROM facturas_cliente WHERE id = ?", (vid,)).fetchone())
     valores = []
     for c in CAMPOS_FACTURAS_CLIENTE:

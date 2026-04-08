@@ -263,6 +263,20 @@ def delete_facturas(empresa_id: str, rutas: list[str]) -> int:
     return cur.rowcount
 
 
+def delete_facturas_por_ids(empresa_id: str, ids: list[int]) -> int:
+  """Elimina facturas por sus IDs. Devuelve el número de filas eliminadas."""
+  if not ids:
+    return 0
+  init_facturas_db()
+  with _conectar() as conn:
+    placeholders = ",".join("?" * len(ids))
+    cur = conn.execute(
+      f"DELETE FROM facturas_proveedor WHERE empresa_id = ? AND id IN ({placeholders})",
+      (empresa_id,) + tuple(int(i) for i in ids),
+    )
+    return cur.rowcount
+
+
 def get_hashes_empresa_proveedor(empresa_id: str) -> set[str]:
   """Devuelve el conjunto de hash_archivo ya existentes para la empresa (para evitar duplicados)."""
   init_facturas_db()

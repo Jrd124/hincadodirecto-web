@@ -578,6 +578,11 @@ function renderPaginacionBancos(container, actual, total) {
       if (seguroPolizaId && conciliadoAt) {
         vincParts.push("<span class=\"cel-flex\"><span class=\"badge-conciliado\" style=\"background:#EDE9FE;color:#5B21B6;\">Seguro</span><button type=\"button\" onclick=\"segurosVerDetalle(" + seguroPolizaId + ")\" style=\"background:none;border:none;cursor:pointer;padding:2px 6px;color:var(--color-primary);font-size:12px;\" onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">Ver</button><button type=\"button\" class=\"btn-small bancos-btn-desvincular-seguro\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" data-poliza-id=\"" + seguroPolizaId + "\" title=\"Desvincular seguro\">Desvincular</button></span>");
       }
+      // Albarán conciliado
+      var albaranIds = m.albaran_ids;
+      if (albaranIds && conciliadoAt) {
+        vincParts.push("<span class=\"cel-flex\"><span class=\"badge-conciliado\" style=\"background:#FEF3C7;color:#92400E;\">Albar\u00e1n</span><button type=\"button\" class=\"btn-small bancos-btn-desvincular-albaran\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Desvincular albar\u00e1n\">Desvincular</button></span>");
+      }
       // Tarjeta agrupación
       var tarjetaId = m.tarjeta_id != null ? m.tarjeta_id : "";
       var liquidacionPeriodo = (m.liquidacion_periodo || "").trim();
@@ -627,9 +632,9 @@ function renderPaginacionBancos(container, actual, total) {
           }
           if (!excluido) {
             vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-conciliar-factura\"" + movDataAttrs + " title=\"Vincular a factura\">Conciliar</button>");
-            // Botón secundario "¿Es un seguro?" para pagos no detectados automáticamente
             if (impNum < 0) {
-              vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-conciliar-seguro\"" + movDataAttrs + " title=\"Conciliar con póliza de seguro\" style=\"font-size:11px;opacity:0.7;\">¿Seguro?</button>");
+              vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-conciliar-albaran\"" + movDataAttrs + " title=\"Conciliar con albar\u00e1n\" style=\"font-size:11px;opacity:0.7;\">Albar\u00e1n</button>");
+              vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-conciliar-seguro\"" + movDataAttrs + " title=\"Conciliar con p\u00f3liza de seguro\" style=\"font-size:11px;opacity:0.7;\">Seguro</button>");
             }
           }
         }
@@ -1356,6 +1361,34 @@ function renderPaginacionBancos(container, actual, total) {
           .finally(function () { btnDesvincularSeg.disabled = false; });
         return;
       }
+      // ── Conciliar con albarán ──
+      var btnConciliarAlbaran = e.target && e.target.closest && e.target.closest(".bancos-btn-conciliar-albaran");
+      if (btnConciliarAlbaran) {
+        var aMovId = btnConciliarAlbaran.getAttribute("data-mov-id");
+        var aConcepto = btnConciliarAlbaran.getAttribute("data-concepto") || "";
+        var aFecha = btnConciliarAlbaran.getAttribute("data-fecha") || "";
+        var aImporte = btnConciliarAlbaran.getAttribute("data-importe") || "";
+        if (aMovId) _abrirModalConciliarAlbaran(aMovId, aConcepto, aFecha, aImporte);
+        return;
+      }
+      // ── Desvincular albarán ──
+      var btnDesvincularAlb = e.target && e.target.closest && e.target.closest(".bancos-btn-desvincular-albaran");
+      if (btnDesvincularAlb) {
+        var daMovId = btnDesvincularAlb.getAttribute("data-mov-id");
+        if (!daMovId) return;
+        if (!confirm("\u00bfDesvincular albaranes de este movimiento?")) return;
+        btnDesvincularAlb.disabled = true;
+        fetch("/api/albaranes/desconciliar-banco", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ movimiento_id: parseInt(daMovId, 10) }) })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d.error) { mostrarToast(d.error, "error"); return; }
+            cargarMovimientosBancos();
+            mostrarToast(d.mensaje || "Albaranes desvinculados.", "success");
+          })
+          .catch(function () { mostrarToast("Error al desvincular.", "error"); })
+          .finally(function () { btnDesvincularAlb.disabled = false; });
+        return;
+      }
       var btnDesvincularExt = e.target && e.target.closest && e.target.closest(".bancos-btn-desvincular-extracto");
       if (btnDesvincularExt) {
         var movId = btnDesvincularExt.getAttribute("data-mov-id");
@@ -1393,11 +1426,13 @@ function renderPaginacionBancos(container, actual, total) {
     modal.addEventListener("click", function (ev) { if (ev.target === modal) modal.remove(); });
     modal.innerHTML =
       '<div class="modal-editar" role="dialog" style="max-width:500px;max-height:85vh;overflow-y:auto;">' +
-        '<h2 style="margin:0 0 12px;font-size:18px;">Conciliar con póliza de seguro</h2>' +
-        '<div style="padding:10px 12px;background:#F8FAFC;border-radius:8px;margin-bottom:16px;font-size:13px;">' +
-          '<strong>Cargo:</strong> ' + formatNumero(importe) + ' &mdash; ' + (fecha || '—') + ' &mdash; ' + (concepto || '—').replace(/</g, '&lt;') +
+        '<h2 style="margin:0 0 12px;font-size:18px;">Conciliar con p\u00f3liza de seguro</h2>' +
+        '<div style="background:var(--color-bg-page, #F8FAFC);padding:12px;border-radius:8px;margin-bottom:16px;">' +
+          '<div style="font-size:12px;color:var(--color-text-secondary);">Cargo bancario</div>' +
+          '<div style="font-size:18px;font-weight:600;">' + absImporte.toLocaleString("es-ES", { minimumFractionDigits: 2 }) + ' \u20AC</div>' +
+          '<div style="font-size:12px;color:var(--color-text-secondary);">' + (fecha || '\u2014') + ' \u00B7 ' + (concepto || '\u2014').replace(/</g, '&lt;') + '</div>' +
         '</div>' +
-        '<div id="seg-conciliar-lista" style="margin-bottom:16px;"><p style="color:var(--color-text-secondary);font-size:13px;">Cargando pólizas pendientes…</p></div>' +
+        '<div id="seg-conciliar-lista" style="margin-bottom:16px;"><p style="color:var(--color-text-secondary);font-size:13px;">Cargando p\u00f3lizas pendientes\u2026</p></div>' +
         '<div style="display:flex;justify-content:flex-end;gap:8px;">' +
           '<button type="button" class="secondary" onclick="document.getElementById(\'modal-conciliar-seguro\').remove()">Cancelar</button>' +
           '<button type="button" class="primary" id="btn-confirmar-conciliar-seguro" disabled>Conciliar</button>' +
@@ -1419,32 +1454,35 @@ function renderPaginacionBancos(container, actual, total) {
         polizas.forEach(function (p) {
           var prima = Number(p.prima_anual || 0);
           var coincide = Math.abs(prima - absImporte) < 0.02;
-          var borderStyle = coincide ? "border-color:#16A34A;background:#F0FDF4;" : "";
-          html += '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--color-border-tertiary, #E5E7EB);border-radius:8px;cursor:pointer;margin-bottom:6px;' + borderStyle + '">' +
-            '<input type="radio" name="seg-poliza-sel" value="' + p.id + '" style="flex-shrink:0;">' +
-            '<div style="flex:1;min-width:0;">' +
-              '<div style="font-size:13px;font-weight:500;">' + (iconos[p.tipo] || '') + ' ' + (p.descripcion || (p.tipo || '').replace(/_/g, ' ')) + (p.recurso_nombre ? ' \u2014 ' + p.recurso_nombre : '') + '</div>' +
-              '<div style="font-size:12px;color:var(--color-text-secondary);">' + (p.aseguradora || '') + ' \u00B7 N\u00BA ' + (p.numero_poliza || '\u2014') + ' \u00B7 Prima: ' + prima.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + ' \u20AC</div>' +
+          var borderExtra = coincide ? "border-color:#16A34A;background:#F0FDF4;" : "";
+          html += '<div class="seg-poliza-card" data-id="' + p.id + '" style="display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--color-border-tertiary, #E5E7EB);border-radius:8px;cursor:pointer;margin-bottom:8px;' + borderExtra + '">' +
+            '<input type="radio" name="seg-poliza-sel" value="' + p.id + '" style="flex-shrink:0;margin-top:3px;"' + (coincide ? ' checked' : '') + '>' +
+            '<div style="flex:1;min-width:0;font-weight:normal;">' +
+              '<div style="font-size:14px !important;font-weight:500 !important;margin-bottom:4px;">' + (iconos[p.tipo] || '') + ' ' + (p.descripcion || (p.tipo || '').replace(/_/g, ' ')) + (p.recurso_nombre ? ' \u2014 ' + p.recurso_nombre : '') + '</div>' +
+              '<div style="font-size:12px !important;font-weight:400 !important;color:var(--color-text-secondary);margin-bottom:4px;">' + (p.aseguradora || '') + ' \u00B7 N\u00BA ' + (p.numero_poliza || '\u2014') + '</div>' +
+              '<div style="display:flex;align-items:center;gap:8px;">' +
+                '<span style="font-size:13px;font-weight:500;">Prima: ' + prima.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + ' \u20AC</span>' +
+                (coincide ? '<span style="font-size:11px;font-weight:600;padding:2px 8px;background:#DCFCE7;color:#166534;border-radius:10px;">\u2713 Coincide</span>' : '') +
+              '</div>' +
             '</div>' +
-            (coincide ? '<span style="flex-shrink:0;font-size:11px;font-weight:600;color:#16A34A;">\u2713 Coincide</span>' : '') +
-          '</label>';
+          '</div>';
         });
         container.innerHTML = html;
-        // Auto-select si solo hay una que coincide
-        var radios = container.querySelectorAll('input[name="seg-poliza-sel"]');
-        var coincidentes = polizas.filter(function (p) { return Math.abs(Number(p.prima_anual || 0) - absImporte) < 0.02; });
-        if (coincidentes.length === 1) {
-          for (var ri = 0; ri < radios.length; ri++) {
-            if (radios[ri].value === String(coincidentes[0].id)) { radios[ri].checked = true; break; }
-          }
-        }
         var btnConfirmar = document.getElementById("btn-confirmar-conciliar-seguro");
+        // Click on card selects the radio
+        container.querySelectorAll(".seg-poliza-card").forEach(function (card) {
+          card.addEventListener("click", function (ev) {
+            if (ev.target.tagName === "INPUT") return; // already handled
+            var radio = card.querySelector('input[type="radio"]');
+            if (radio) { radio.checked = true; btnConfirmar.disabled = false; }
+          });
+        });
         // Enable button when a radio is selected
         container.addEventListener("change", function () {
           btnConfirmar.disabled = false;
         });
-        // Enable if auto-selected
-        if (coincidentes.length === 1) btnConfirmar.disabled = false;
+        // Enable if any radio is pre-checked (coincident match)
+        if (container.querySelector('input[name="seg-poliza-sel"]:checked')) btnConfirmar.disabled = false;
       });
     // Confirmar conciliación
     document.getElementById("btn-confirmar-conciliar-seguro").addEventListener("click", function () {
@@ -1463,6 +1501,92 @@ function renderPaginacionBancos(container, actual, total) {
           var m = document.getElementById("modal-conciliar-seguro"); if (m) m.remove();
           cargarMovimientosBancos();
           mostrarToast(d.mensaje || "Póliza conciliada.", "success");
+        })
+        .catch(function () { mostrarToast("Error al conciliar.", "error"); });
+    });
+  }
+
+  // ── Modal conciliar movimiento con albarán ────────────────────────────
+  function _abrirModalConciliarAlbaran(movId, concepto, fecha, importe) {
+    var existing = document.getElementById("modal-conciliar-albaran");
+    if (existing) existing.remove();
+    var absImporte = Math.abs(Number(importe) || 0);
+    var modal = document.createElement("div");
+    modal.className = "modal-overlay visible";
+    modal.id = "modal-conciliar-albaran";
+    modal.style.zIndex = "110";
+    modal.addEventListener("click", function (ev) { if (ev.target === modal) modal.remove(); });
+    modal.innerHTML =
+      '<div class="modal-editar" role="dialog" style="max-width:550px;max-height:85vh;overflow-y:auto;">' +
+        '<h2 style="margin:0 0 12px;font-size:18px;">Conciliar con albar\u00e1n</h2>' +
+        '<div style="background:var(--color-bg-page, #F8FAFC);padding:12px;border-radius:8px;margin-bottom:16px;">' +
+          '<div style="font-size:12px;color:var(--color-text-secondary);">Cargo bancario</div>' +
+          '<div style="font-size:20px;font-weight:600;">' + absImporte.toLocaleString("es-ES", { minimumFractionDigits: 2 }) + ' \u20AC</div>' +
+          '<div style="font-size:12px;color:var(--color-text-secondary);">' + (fecha || '\u2014') + ' \u00B7 ' + (concepto || '\u2014').replace(/</g, '&lt;') + '</div>' +
+        '</div>' +
+        '<div id="alb-conciliar-lista" style="margin-bottom:12px;"><p style="color:var(--color-text-secondary);font-size:13px;">Cargando albaranes\u2026</p></div>' +
+        '<div id="alb-conciliar-total" style="font-size:13px;font-weight:500;margin-bottom:12px;"></div>' +
+        '<div style="display:flex;justify-content:flex-end;gap:8px;">' +
+          '<button type="button" class="secondary" onclick="document.getElementById(\'modal-conciliar-albaran\').remove()">Cancelar</button>' +
+          '<button type="button" class="primary" id="btn-confirmar-conciliar-albaran" disabled>Conciliar</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+    // Cargar albaranes sin conciliar
+    fetch("/api/albaranes/sin-conciliar?_t=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var albaranes = data.albaranes || [];
+        var container = document.getElementById("alb-conciliar-lista");
+        if (!albaranes.length) {
+          container.innerHTML = '<p style="color:var(--color-text-secondary);font-size:13px;font-style:italic;">No hay albaranes pendientes de conciliar.</p>';
+          return;
+        }
+        var html = '';
+        albaranes.forEach(function (a) {
+          var total = Number(a.total || 0);
+          html += '<div class="alb-conciliar-item" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--color-border-tertiary, #E5E7EB);border-radius:8px;margin-bottom:6px;">' +
+            '<input type="checkbox" class="alb-check" data-id="' + a.id + '" data-total="' + total + '" style="flex-shrink:0;">' +
+            '<div style="flex:1;min-width:0;font-weight:normal;">' +
+              '<div style="font-size:13px !important;font-weight:500 !important;">#' + (a.numero_albaran || '?') + ' \u2014 ' + (a.proveedor || '?') + '</div>' +
+              '<div style="font-size:12px !important;font-weight:400 !important;color:var(--color-text-secondary);">' + (a.fecha || '') + (a.proyecto_nombre ? ' \u00B7 ' + a.proyecto_nombre : '') + '</div>' +
+            '</div>' +
+            '<span style="font-size:13px;font-weight:600;white-space:nowrap;">' + total.toLocaleString("es-ES", { minimumFractionDigits: 2 }) + ' \u20AC</span>' +
+          '</div>';
+        });
+        container.innerHTML = html;
+        var btnConfirmar = document.getElementById("btn-confirmar-conciliar-albaran");
+        var totalEl = document.getElementById("alb-conciliar-total");
+        function _updateTotal() {
+          var checks = container.querySelectorAll(".alb-check:checked");
+          var sum = 0;
+          checks.forEach(function (c) { sum += Number(c.dataset.total || 0); });
+          btnConfirmar.disabled = checks.length === 0;
+          var diff = Math.abs(sum - absImporte);
+          var cuadra = diff < 0.02;
+          totalEl.innerHTML = 'Total aplicado: ' + sum.toLocaleString("es-ES", { minimumFractionDigits: 2 }) + ' \u20AC / ' + absImporte.toLocaleString("es-ES", { minimumFractionDigits: 2 }) + ' \u20AC cargo' + (cuadra ? ' \u2014 <span style="color:#16A34A;">\u2713 Cuadra</span>' : '');
+        }
+        container.addEventListener("change", _updateTotal);
+      });
+    // Confirmar
+    document.getElementById("btn-confirmar-conciliar-albaran").addEventListener("click", function () {
+      var checks = document.querySelectorAll("#alb-conciliar-lista .alb-check:checked");
+      if (!checks.length) return;
+      this.disabled = true;
+      this.textContent = "Conciliando\u2026";
+      var albs = [];
+      checks.forEach(function (c) { albs.push({ albaran_id: parseInt(c.dataset.id, 10) }); });
+      fetch("/api/albaranes/conciliar-banco", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ movimiento_id: parseInt(movId, 10), movimiento_fecha: fecha, movimiento_importe: importe, albaranes: albs }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.error) { mostrarToast(d.error, "error"); return; }
+          var m = document.getElementById("modal-conciliar-albaran"); if (m) m.remove();
+          cargarMovimientosBancos();
+          mostrarToast(d.mensaje || "Albaranes conciliados.", "success");
         })
         .catch(function () { mostrarToast("Error al conciliar.", "error"); });
     });
@@ -2527,6 +2651,7 @@ form.addEventListener("submit", async (event) => {
       } else {
         cargarListado(empresa);
       }
+      if (window._reactRefreshFacturasProveedores) window._reactRefreshFacturasProveedores();
     }
   } catch (err) {
     console.error(err);
@@ -3209,15 +3334,16 @@ document.getElementById("btn-eliminar-seleccionadas").addEventListener("click", 
   const n = checks.length;
   if (!confirm("¿Seguro que quieres eliminar " + n + (n === 1 ? " factura" : " facturas") + "? Esta acción no se puede deshacer.")) return;
   const rutas = Array.from(checks).map((cb) => cb.dataset.ruta).filter(Boolean);
-  if (!rutas.length) {
-    mostrarToast("Las facturas seleccionadas no tienen ruta identificable.", "error");
+  const ids = Array.from(checks).map((cb) => cb.dataset.id).filter(Boolean);
+  if (!rutas.length && !ids.length) {
+    mostrarToast("Las facturas seleccionadas no tienen identificador.", "error");
     return;
   }
   try {
     const resp = await fetch("/api/facturas", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ empresa_id: emp, rutas }),
+      body: JSON.stringify({ empresa_id: emp, rutas: rutas, ids: ids }),
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -4048,12 +4174,17 @@ function abrirModalEdicion(f) {
   }
 
   var edLiquidacionPeriodo = document.getElementById("ed-liquidacion-periodo");
+  var edLiquidacionInput = document.getElementById("ed-liquidacion-periodo-input");
   var edLiquidacionTexto = document.getElementById("ed-liquidacion-periodo-texto");
-  if (edLiquidacionPeriodo) edLiquidacionPeriodo.value = (f.liquidacion_periodo || "").toString().trim();
-  if (edLiquidacionTexto) {
-    var lip = (f.liquidacion_periodo || "").toString().trim();
-    edLiquidacionTexto.textContent = lip ? "Periodo liquidación: " + lip + " (extracto mes siguiente)" : "";
+  var lip = (f.liquidacion_periodo || "").toString().trim();
+  // Default: month from invoice date if no liquidacion_periodo set
+  if (!lip) {
+    var fechaFact = (f.fecha_factura || "").toString().trim().slice(0, 10);
+    if (fechaFact && fechaFact.length >= 7) lip = fechaFact.slice(0, 7);
   }
+  if (edLiquidacionPeriodo) edLiquidacionPeriodo.value = lip;
+  if (edLiquidacionInput) edLiquidacionInput.value = lip;
+  if (edLiquidacionTexto) edLiquidacionTexto.textContent = "";
 
   var concWrap = document.getElementById("ed-conciliacion-wrap");
   var concResumen = document.getElementById("ed-conciliacion-resumen");
@@ -4128,20 +4259,10 @@ document.getElementById("modal-editar-overlay").addEventListener("click", (e) =>
   if (e.target.id === "modal-editar-overlay") cerrarModalEdicion();
 });
 
-document.getElementById("ed-btn-extracto-mes-siguiente").addEventListener("click", function () {
-  var fechaInp = document.getElementById("ed-fecha");
+document.getElementById("ed-liquidacion-periodo-input").addEventListener("change", function () {
+  var periodo = this.value || "";
   var edLiquidacionPeriodo = document.getElementById("ed-liquidacion-periodo");
-  var edLiquidacionTexto = document.getElementById("ed-liquidacion-periodo-texto");
-  var fechaStr = (fechaInp && fechaInp.value) ? fechaInp.value.trim().slice(0, 10) : "";
-  var d = fechaStr ? new Date(fechaStr + "T12:00:00") : new Date();
-  if (isNaN(d.getTime())) d = new Date();
-  var year = d.getFullYear();
-  var month = d.getMonth() + 1;
-  month += 1;
-  if (month > 12) { month = 1; year += 1; }
-  var periodo = year + "-" + String(month).padStart(2, "0");
   if (edLiquidacionPeriodo) edLiquidacionPeriodo.value = periodo;
-  if (edLiquidacionTexto) edLiquidacionTexto.textContent = "Periodo liquidación: " + periodo + " (extracto mes siguiente)";
 });
 
 document.getElementById("ed-selector-proveedor").addEventListener("change", function () {
@@ -4266,7 +4387,7 @@ document.getElementById("form-editar-factura").addEventListener("submit", async 
   factura.retenciones_total = document.getElementById("ed-retenciones").value.trim();
   factura.total_a_pagar = document.getElementById("ed-total").value.trim();
   factura.tarjeta_id = document.getElementById("ed-tarjeta").value.trim() || null;
-  factura.liquidacion_periodo = document.getElementById("ed-liquidacion-periodo").value.trim() || null;
+  factura.liquidacion_periodo = (document.getElementById("ed-liquidacion-periodo-input").value || document.getElementById("ed-liquidacion-periodo").value || "").trim() || null;
   factura.estado_pago = document.getElementById("ed-estado-pago").value.trim() || "pendiente";
   factura.comentarios_revision = document.getElementById("ed-comentarios").value.trim();
   factura.tercero_id = document.getElementById("ed-tercero-id").value.trim() || null;
@@ -4287,6 +4408,7 @@ document.getElementById("form-editar-factura").addEventListener("submit", async 
     cerrarModalEdicion();
     // Refresh the active view preserving filters (tarjeta, estado, año, mes)
     cargarListado(emp, true);
+    if (window._reactRefreshFacturasProveedores) window._reactRefreshFacturasProveedores();
     if (proveedorSeleccionadoNombre) {
       // If name changed, update the selected proveedor and reload its panel
       if (nuevoNombreProv && nuevoNombreProv !== proveedorSeleccionadoNombre) {

@@ -664,7 +664,8 @@
         asigs.forEach(function (a) {
           var bg = a.recurso_tipo === 'empleado' ? '#DCFCE7' : a.recurso_tipo === 'maquina' ? '#DBEAFE' : '#FEF3C7';
           var icon = a.recurso_tipo === 'empleado' ? '\uD83D\uDC77' : a.recurso_tipo === 'maquina' ? '\uD83C\uDFD7\uFE0F' : '\uD83D\uDE97';
-          html += '<div style="padding:3px 6px;font-size:10px;background:' + bg + ';border-radius:4px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + icon + ' ' + _esc(a.recurso_nombre) + '</div>';
+          var nombreEsc = _esc(a.recurso_nombre).replace(/'/g, "\\'");
+          html += '<div onclick="desasignarDia(' + _recProyId + ',\'' + a.recurso_tipo + '\',' + a.recurso_id + ',\'' + fecha + '\',\'' + nombreEsc + '\')" style="padding:3px 6px;font-size:10px;background:' + bg + ';border-radius:4px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;" title="Click para desasignar este d\u00eda">' + icon + ' ' + _esc(a.recurso_nombre) + '</div>';
         });
       } else {
         html += '<div style="font-size:10px;color:#CBD5E1;text-align:center;padding:8px 0;">\u2014</div>';
@@ -675,6 +676,20 @@
     el.innerHTML = html;
   }
 
+  var _svgTrash = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>';
+  var _svgPencil = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+
+  function _sidebarRecursoHtml(r, proyectoId) {
+    var icon = r.recurso_tipo === 'empleado' ? '\uD83D\uDC77' : '\uD83C\uDFD7\uFE0F';
+    var nombreEsc = _esc(r.recurso_nombre).replace(/'/g, "\\'");
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;">' +
+      '<span style="font-size:12px;">' + icon + ' ' + _esc(r.recurso_nombre) + ' <span style="color:#94A3B8;">(' + r.dias_asignados + 'd)</span></span>' +
+      '<div style="display:flex;gap:2px;align-items:center;">' +
+        '<button onclick="editarAsignacion(' + proyectoId + ',\'' + r.recurso_tipo + '\',' + r.recurso_id + ',\'' + nombreEsc + '\')" title="Editar fechas" style="background:none;border:none;cursor:pointer;padding:2px;color:var(--color-text-secondary);" onmouseover="this.style.color=\'var(--color-primary)\'" onmouseout="this.style.color=\'var(--color-text-secondary)\'">' + _svgPencil + '</button>' +
+        '<button onclick="desasignarRecurso(' + proyectoId + ',\'' + r.recurso_tipo + '\',' + r.recurso_id + ',\'' + nombreEsc + '\')" title="Desasignar" style="background:none;border:none;cursor:pointer;padding:2px;color:var(--color-text-secondary);" onmouseover="this.style.color=\'#DC2626\'" onmouseout="this.style.color=\'var(--color-text-secondary)\'">' + _svgTrash + '</button>' +
+      '</div></div>';
+  }
+
   function _pintarSidebar(recursos, proyectoId) {
     var el = document.getElementById("proy-recursos-sidebar");
     if (!el) return;
@@ -683,15 +698,11 @@
     var html = '';
     if (emps.length) {
       html += '<div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:6px;">\uD83D\uDC77 Equipo</div>';
-      emps.forEach(function (r) {
-        html += '<div style="padding:4px 0;font-size:12px;">' + _esc(r.recurso_nombre) + ' <span style="color:#94A3B8;">(' + r.dias_asignados + 'd)</span></div>';
-      });
+      emps.forEach(function (r) { html += _sidebarRecursoHtml(r, proyectoId); });
     }
     if (maqs.length) {
       html += '<div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);text-transform:uppercase;margin-top:12px;margin-bottom:6px;">\uD83C\uDFD7\uFE0F Máquinas</div>';
-      maqs.forEach(function (r) {
-        html += '<div style="padding:4px 0;font-size:12px;">' + _esc(r.recurso_nombre) + ' <span style="color:#94A3B8;">(' + r.dias_asignados + 'd)</span></div>';
-      });
+      maqs.forEach(function (r) { html += _sidebarRecursoHtml(r, proyectoId); });
     }
     if (!recursos.length) {
       html = '<p style="font-size:12px;color:var(--color-text-secondary);font-style:italic;">Sin recursos asignados</p>';
@@ -771,6 +782,238 @@
         .catch(function () { mostrarToast("Error.", "error"); });
     });
   };
+
+  window.desasignarRecurso = function (proyectoId, tipo, recursoId, nombre) {
+    if (!confirm("\u00bfEliminar " + nombre + " de este proyecto? Se borrar\u00e1n todas sus asignaciones.")) return;
+    fetch("/api/proyectos/" + proyectoId + "/asignaciones", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recurso_tipo: tipo, recurso_id: recursoId, fecha: "2000-01-01", fecha_hasta: "2099-12-31" }),
+    }).then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.error) { mostrarToast(d.error, "error"); return; }
+        mostrarToast(nombre + " eliminado del proyecto.", "success");
+        proyectoDashboard(proyectoId);
+      })
+      .catch(function () { mostrarToast("Error al eliminar.", "error"); });
+  };
+
+  window.desasignarDia = function (proyectoId, tipo, recursoId, fecha, nombre) {
+    if (!confirm("\u00bfDesasignar " + nombre + " el " + fecha + "?")) return;
+    fetch("/api/proyectos/" + proyectoId + "/asignaciones", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recurso_tipo: tipo, recurso_id: recursoId, fecha: fecha }),
+    }).then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.error) { mostrarToast(d.error, "error"); return; }
+        mostrarToast(nombre + " desasignado el " + fecha + ".", "success");
+        _renderRecursosCalendario(proyectoId);
+      })
+      .catch(function () { mostrarToast("Error al desasignar.", "error"); });
+  };
+
+  // ── Modal calendario edición de asignaciones ──
+  window.editarAsignacion = function (proyectoId, tipo, recursoId, nombre) {
+    Promise.all([
+      fetch("/api/proyectos/" + proyectoId).then(function (r) { return r.json(); }),
+      fetch("/api/proyectos/" + proyectoId + "/asignaciones?recurso_tipo=" + tipo + "&recurso_id=" + recursoId).then(function (r) { return r.json(); }),
+    ]).then(function (results) {
+      var proy = results[0];
+      var asigs = results[1].asignaciones || [];
+      _abrirModalCalendarioRecurso(proyectoId, tipo, recursoId, nombre, proy, asigs);
+    });
+  };
+
+  function _abrirModalCalendarioRecurso(proyectoId, tipo, recursoId, nombre, proy, asigs) {
+    var existing = document.getElementById("modal-editar-asignacion");
+    if (existing) existing.remove();
+    // Determine project date range
+    var inicio = proy.fecha_inicio_real || proy.fecha_inicio_estimada || new Date().toISOString().slice(0, 10);
+    var fin = proy.fecha_fin_real || proy.fecha_fin_estimada || "";
+    if (!fin) {
+      var d = new Date(inicio); d.setMonth(d.getMonth() + 3);
+      fin = d.toISOString().slice(0, 10);
+    }
+    // Build set of assigned dates
+    var asigSet = {};
+    asigs.forEach(function (a) { asigSet[a.fecha] = true; });
+
+    var modal = document.createElement("div");
+    modal.className = "modal-overlay visible";
+    modal.id = "modal-editar-asignacion";
+    modal.style.zIndex = "110";
+    modal.addEventListener("click", function (ev) { if (ev.target === modal) modal.remove(); });
+
+    // Parse month for navigation
+    var inicioDate = new Date(inicio + "T00:00:00");
+    var finDate = new Date(fin + "T00:00:00");
+    var curYear = inicioDate.getFullYear(), curMonth = inicioDate.getMonth();
+
+    function renderModal() {
+      var meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+      var diasNom = ["L","M","X","J","V","S","D"];
+      // Count totals
+      var allCells = [];
+      var totalLaborables = 0;
+      var d = new Date(curYear, curMonth, 1);
+      var lastDay = new Date(curYear, curMonth + 1, 0).getDate();
+      var primerDow = (d.getDay() + 6) % 7; // 0=Mon
+
+      var calHtml = '<div style="display:grid;grid-template-columns:repeat(7,36px);gap:4px;justify-content:center;">';
+      // Day headers
+      for (var h = 0; h < 7; h++) {
+        calHtml += '<div style="text-align:center;font-size:11px;font-weight:600;color:var(--color-text-secondary);padding:4px 0;">' + diasNom[h] + '</div>';
+      }
+      // Empty cells before first day
+      for (var e = 0; e < primerDow; e++) {
+        calHtml += '<div></div>';
+      }
+      // Days
+      for (var day = 1; day <= lastDay; day++) {
+        var dd = new Date(curYear, curMonth, day);
+        var fecha = dd.toISOString().slice(0, 10);
+        var dow = dd.getDay(); // 0=Sun
+        var esFinDeSemana = dow === 0 || dow === 6;
+        var enRango = dd >= inicioDate && dd <= finDate;
+
+        if (esFinDeSemana || !enRango) {
+          calHtml += '<div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:6px;font-size:12px;background:#F3F4F6;color:#9CA3AF;opacity:0.5;">' + day + '</div>';
+        } else {
+          totalLaborables++;
+          var asig = !!asigSet[fecha];
+          var bg = asig ? '#DCFCE7' : 'var(--color-bg-page, #F8FAFC)';
+          var col = asig ? '#166534' : 'var(--color-text-secondary)';
+          var brd = asig ? '#16A34A' : 'var(--color-border-tertiary, #E5E7EB)';
+          calHtml += '<div class="cal-dia-recurso" data-fecha="' + fecha + '" data-asignado="' + (asig ? '1' : '0') + '" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;background:' + bg + ';color:' + col + ';border:1px solid ' + brd + ';">' + day + '</div>';
+        }
+      }
+      calHtml += '</div>';
+
+      var seleccionados = 0;
+      for (var k in asigSet) { if (asigSet[k]) seleccionados++; }
+
+      modal.innerHTML =
+        '<div class="modal-editar" role="dialog" style="max-width:380px;">' +
+          '<h2 style="margin:0 0 4px;font-size:16px;">Asignaci\u00f3n de ' + _esc(nombre) + '</h2>' +
+          '<p style="margin:0 0 12px;font-size:12px;color:var(--color-text-secondary);">' + _esc(proy.nombre || '') + '</p>' +
+          '<div style="display:flex;gap:6px;margin-bottom:12px;">' +
+            '<button class="btn-small cal-btn-selall">Seleccionar todo</button>' +
+            '<button class="btn-small cal-btn-quitall">Quitar todo</button>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">' +
+            '<button class="btn-small cal-btn-prev" style="padding:2px 8px;">\u2190</button>' +
+            '<span style="font-size:13px;font-weight:600;">' + meses[curMonth] + ' ' + curYear + '</span>' +
+            '<button class="btn-small cal-btn-next" style="padding:2px 8px;">\u2192</button>' +
+          '</div>' +
+          calHtml +
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;">' +
+            '<span id="cal-resumen" style="font-size:12px;color:var(--color-text-secondary);">' + seleccionados + ' d\u00edas seleccionados</span>' +
+            '<div style="display:flex;gap:8px;">' +
+              '<button type="button" class="secondary cal-btn-cancelar">Cancelar</button>' +
+              '<button type="button" class="primary cal-btn-guardar">Guardar</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(modal);
+      _bindCalEvents();
+    }
+
+    function _updateResumen() {
+      var n = 0;
+      for (var k in asigSet) { if (asigSet[k]) n++; }
+      var el = document.getElementById("cal-resumen");
+      if (el) el.textContent = n + " d\u00edas seleccionados";
+    }
+
+    function _bindCalEvents() {
+      // Toggle days
+      modal.querySelectorAll(".cal-dia-recurso").forEach(function (el) {
+        el.addEventListener("click", function () {
+          var fecha = this.dataset.fecha;
+          var asig = this.dataset.asignado === "1";
+          if (asig) {
+            this.dataset.asignado = "0";
+            this.style.background = "var(--color-bg-page, #F8FAFC)";
+            this.style.color = "var(--color-text-secondary)";
+            this.style.borderColor = "var(--color-border-tertiary, #E5E7EB)";
+            delete asigSet[fecha];
+          } else {
+            this.dataset.asignado = "1";
+            this.style.background = "#DCFCE7";
+            this.style.color = "#166534";
+            this.style.borderColor = "#16A34A";
+            asigSet[fecha] = true;
+          }
+          _updateResumen();
+        });
+      });
+      // Select all / clear all
+      var btnSelAll = modal.querySelector(".cal-btn-selall");
+      var btnQuitAll = modal.querySelector(".cal-btn-quitall");
+      if (btnSelAll) btnSelAll.addEventListener("click", function () {
+        modal.querySelectorAll(".cal-dia-recurso").forEach(function (el) {
+          el.dataset.asignado = "1";
+          el.style.background = "#DCFCE7";
+          el.style.color = "#166534";
+          el.style.borderColor = "#16A34A";
+          asigSet[el.dataset.fecha] = true;
+        });
+        _updateResumen();
+      });
+      if (btnQuitAll) btnQuitAll.addEventListener("click", function () {
+        modal.querySelectorAll(".cal-dia-recurso").forEach(function (el) {
+          el.dataset.asignado = "0";
+          el.style.background = "var(--color-bg-page, #F8FAFC)";
+          el.style.color = "var(--color-text-secondary)";
+          el.style.borderColor = "var(--color-border-tertiary, #E5E7EB)";
+          delete asigSet[el.dataset.fecha];
+        });
+        _updateResumen();
+      });
+      // Month navigation
+      var btnPrev = modal.querySelector(".cal-btn-prev");
+      var btnNext = modal.querySelector(".cal-btn-next");
+      if (btnPrev) btnPrev.addEventListener("click", function () {
+        curMonth--;
+        if (curMonth < 0) { curMonth = 11; curYear--; }
+        modal.remove();
+        renderModal();
+      });
+      if (btnNext) btnNext.addEventListener("click", function () {
+        curMonth++;
+        if (curMonth > 11) { curMonth = 0; curYear++; }
+        modal.remove();
+        renderModal();
+      });
+      // Cancel
+      var btnCancel = modal.querySelector(".cal-btn-cancelar");
+      if (btnCancel) btnCancel.addEventListener("click", function () { modal.remove(); });
+      // Save
+      var btnGuardar = modal.querySelector(".cal-btn-guardar");
+      if (btnGuardar) btnGuardar.addEventListener("click", function () {
+        var fechas = [];
+        for (var k in asigSet) { if (asigSet[k]) fechas.push(k); }
+        fechas.sort();
+        btnGuardar.disabled = true;
+        btnGuardar.textContent = "Guardando\u2026";
+        fetch("/api/proyectos/" + proyectoId + "/asignaciones/bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recurso_tipo: tipo, recurso_id: recursoId, recurso_nombre: nombre, fechas: fechas }),
+        }).then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d.error) { mostrarToast(d.error, "error"); btnGuardar.disabled = false; btnGuardar.textContent = "Guardar"; return; }
+            modal.remove();
+            mostrarToast("Asignaci\u00f3n actualizada (" + fechas.length + " d\u00edas).", "success");
+            _renderRecursosCalendario(proyectoId);
+          })
+          .catch(function () { mostrarToast("Error al guardar.", "error"); btnGuardar.disabled = false; btnGuardar.textContent = "Guardar"; });
+      });
+    }
+
+    renderModal();
+  }
 
   window.proyectoAddDocumento = function (proyectoId) {
     var existing = document.getElementById("modal-add-documento");

@@ -83,6 +83,8 @@ def init_seguros_db():
         ]:
             if col not in cols_existentes:
                 conn.execute(f"ALTER TABLE polizas ADD COLUMN {col} {sql}")
+        # Backfill: ensure all polizas have estado_pago set
+        conn.execute("UPDATE polizas SET estado_pago = 'pendiente' WHERE estado_pago IS NULL OR estado_pago = ''")
     _initialized = True
 
 
@@ -313,7 +315,7 @@ def listar_polizas_pendientes_pago() -> list[dict]:
     conn = get_conn()
     try:
         rows = conn.execute(
-            "SELECT * FROM polizas WHERE estado = 'vigente' AND (estado_pago IS NULL OR estado_pago = 'pendiente') ORDER BY prima_anual DESC"
+            "SELECT * FROM polizas WHERE estado IN ('vigente','vencida','en_renovacion') AND (estado_pago IS NULL OR estado_pago = '' OR estado_pago = 'pendiente') ORDER BY prima_anual DESC"
         ).fetchall()
         return [dict(r) for r in rows]
     finally:

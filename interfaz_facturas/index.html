@@ -281,7 +281,8 @@
       </div>
 
       <div id="panel-facturas" class="panel-facturas">
-      <div>
+      <div id="panel-facturas-react"></div>
+      <div id="panel-facturas-vanilla">
         <section>
           <div class="card">
             <div class="breadcrumb-visual" id="breadcrumb-facturas-prov">Finanzas &rsaquo; Proveedores &rsaquo; Facturas</div>
@@ -504,7 +505,7 @@
         </section>
       </div>
 
-      <div id="panel-clientes-facturas" class="panel-clientes">
+      <div id="panel-clientes-facturas" class="panel-clientes content-panel">
         <div>
           <section>
             <div class="card">
@@ -726,7 +727,7 @@
       </div>
 
       <!-- ===== DASHBOARD FINANZAS ===== -->
-      <div id="panel-finanzas-inicio" class="panel-finanzas">
+      <div id="panel-finanzas-inicio" class="panel-finanzas content-panel">
         <div id="finanzas-dashboard-content">
           <div class="breadcrumb-visual">Finanzas</div>
           <h1>Finanzas</h1>
@@ -735,7 +736,7 @@
       </div>
 
       <!-- ===== DASHBOARD PROYECTOS ===== -->
-      <div id="panel-proyectos-inicio" class="panel-proyectos">
+      <div id="panel-proyectos-inicio" class="panel-proyectos content-panel">
         <div class="breadcrumb-visual">Proyectos</div>
         <h1>Proyectos</h1>
         <p class="subtitle" style="font-size:14px;color:#64748B;margin:0 0 20px;">Gestión de proyectos y logística</p>
@@ -991,7 +992,7 @@
         </div>
       </div>
 
-      <div id="panel-bancos-inicio" class="panel-bancos">
+      <div id="panel-bancos-inicio" class="panel-bancos content-panel">
         <div class="bancos-tabs">
           <button type="button" id="bancos-tab-movimientos" class="bancos-tab activo">Movimientos</button>
           <button type="button" id="bancos-tab-tarjetas" class="bancos-tab">Tarjetas bancos</button>
@@ -2643,11 +2644,12 @@
       </div>
 
       <!-- ═══ ALBARANES ═══ -->
-      <div id="panel-albaranes-inicio" class="panel-albaranes">
+      <div id="panel-albaranes-inicio" class="content-panel">
         <div class="breadcrumb-visual">Finanzas &rsaquo; Albaranes</div>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
           <h1 style="margin:0;font-size:20px;font-weight:600;">Albaranes de compra</h1>
           <span style="margin-right:auto;font-size:13px;color:var(--color-text-secondary);">Registro de albaranes y vinculación a facturas</span>
+          <button id="btn-procesar-albaran" class="primary" style="padding:6px 14px;font-size:13px;background:#7C3AED;" title="Procesar albarán desde foto con IA (OCR)">📷 Procesar albarán</button>
           <button id="btn-nuevo-albaran" class="primary" style="padding:6px 14px;font-size:13px;">+ Nuevo albarán</button>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
@@ -2714,7 +2716,12 @@
                     <option value="pendiente">Pendiente</option>
                   </select>
                 </div>
-                <div><label style="font-size:12px;">Persona (tarjeta)</label><input id="alb-tarjeta-persona" class="form-input" style="font-size:13px;" placeholder="Nombre del titular"></div>
+                <div id="alb-tarjeta-wrap" style="display:none;">
+                  <label style="font-size:12px;">Tarjeta</label>
+                  <select id="alb-tarjeta-id" class="form-select" style="font-size:13px;">
+                    <option value="">Seleccionar tarjeta…</option>
+                  </select>
+                </div>
               </div>
               <div style="margin-top:8px;"><label style="font-size:12px;">Proyecto</label>
                 <select id="alb-proyecto" class="form-select" style="font-size:13px;">
@@ -2751,7 +2758,7 @@
         </div>
       </div>
 
-      <div id="panel-control-calidad-inicio" class="panel-control-calidad">
+      <div id="panel-control-calidad-inicio" class="panel-control-calidad content-panel">
         <div class="breadcrumb-visual">Finanzas &rsaquo; Control de calidad</div>
         <h1 class="cc-titulo">Control de calidad</h1>
         <p class="subtitle cc-subtitle">Analiza las bases de facturas y revisa las filas con errores.</p>
@@ -2940,7 +2947,10 @@
                 </div>
               </div>
               <div style="display:flex;align-items:center;gap:8px;">
-                <button type="button" class="secondary" id="ed-btn-extracto-mes-siguiente" style="font-size:12px;" title="Asignar esta factura al extracto del mes siguiente (el banco suele incluir cargos de fin de mes en la liquidación siguiente)">Extracto mes siguiente</button>
+                <div>
+                  <label style="font-size:12px;color:var(--color-text-secondary);">Mes de liquidación</label>
+                  <input type="month" id="ed-liquidacion-periodo-input" style="font-size:13px;padding:4px 8px;border:0.5px solid var(--color-border-tertiary);border-radius:6px;display:block;">
+                </div>
                 <p id="ed-liquidacion-periodo-texto" class="subtitle ed-liquidacion-periodo-texto" style="margin:0;font-size:12px;"></p>
               </div>
               <div id="ed-conciliacion-wrap" class="ed-conciliacion-wrap conciliacion-box">
@@ -3576,6 +3586,11 @@
     <script src="/static/js/modules/eeff.js?v=1"></script>
     <script src="/static/js/modules/albaranes.js?v=1"></script>
     <script src="/static/js/modules/seguros.js?v=1"></script>
-    <script src="/static/js/app.js?v=30"></script>
+    <script src="/static/js/app.js?v=31"></script>
+    <!-- React desactivado temporalmente — reactivar cuando se resuelva el bug de visibilidad CSS
+    <script type="module" src="/static/js/react-app.js"></script>
+    <script type="module" src="/static/js/react/DashboardDirector.js"></script>
+    <script type="module" src="/static/js/react/FacturasProveedores.js"></script>
+    -->
   </body>
 </html>

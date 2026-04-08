@@ -266,7 +266,7 @@ def _backfill_codigos(conn) -> None:
 
 _PROY_SELECT = """
     SELECT p.*,
-        t.nombre_canonico AS nombre_cliente,
+        COALESCE(t.nombre_canonico, ce.nombre) AS nombre_cliente,
         pres.referencia AS presupuesto_ref,
         oport.nombre AS oportunidad_nombre,
         CASE WHEN p.hincas_estimadas > 0
@@ -277,6 +277,7 @@ _PROY_SELECT = """
              ELSE 0 END AS dias_activo
     FROM proyectos p
     LEFT JOIN terceros t ON t.id = p.cliente_tercero_id
+    LEFT JOIN crm_empresas ce ON ce.tercero_id = p.cliente_tercero_id OR (t.id IS NULL AND ce.id = p.cliente_tercero_id)
     LEFT JOIN presupuestos pres ON pres.id = p.presupuesto_id
     LEFT JOIN crm_oportunidades oport ON oport.id = p.oportunidad_id
 """
@@ -373,14 +374,15 @@ def obtener_dashboard_proyecto(proyecto_id: int) -> dict | None:
     with _conectar() as conn:
         row = conn.execute("""
             SELECT p.*,
-                   t.nombre_canonico AS cliente_nombre,
-                   t.nif AS cliente_nif,
+                   COALESCE(t.nombre_canonico, ce.nombre) AS cliente_nombre,
+                   COALESCE(t.nif, ce.cif) AS cliente_nif,
                    pres.referencia AS presupuesto_ref,
                    pres.id AS presupuesto_id_vinculado,
                    o.nombre AS oportunidad_nombre,
                    o.id AS oportunidad_id_vinculado
             FROM proyectos p
             LEFT JOIN terceros t ON t.id = p.cliente_tercero_id
+            LEFT JOIN crm_empresas ce ON ce.tercero_id = p.cliente_tercero_id OR (t.id IS NULL AND ce.id = p.cliente_tercero_id)
             LEFT JOIN presupuestos pres ON pres.id = p.presupuesto_id
             LEFT JOIN crm_oportunidades o ON o.id = p.oportunidad_id
             WHERE p.id = ?
@@ -970,6 +972,27 @@ def asignar_rango(proyecto_id: int, recurso_tipo: str, recurso_id: int,
     return count
 
 
+def asignar_fechas(proyecto_id: int, recurso_tipo: str, recurso_id: int,
+                   recurso_nombre: str, fechas: list[str]) -> int:
+    """Insert assignments for a list of specific dates. Returns count inserted."""
+    init_proyectos_db()
+    ahora = _now()
+    count = 0
+    with _conectar() as conn:
+        for fecha in fechas:
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO proyecto_asignaciones"
+                    " (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, created_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?)",
+                    (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, ahora),
+                )
+                count += 1
+            except Exception:
+                pass
+    return count
+
+
 def desasignar(proyecto_id: int, recurso_tipo: str, recurso_id: int, fecha: str) -> bool:
     init_proyectos_db()
     with _conectar() as conn:
@@ -992,7 +1015,8 @@ def desasignar_rango(proyecto_id: int, recurso_tipo: str, recurso_id: int,
         return n
 
 
-def obtener_asignaciones_proyecto(proyecto_id: int, fecha_desde: str = "", fecha_hasta: str = "") -> list[dict]:
+def obtener_asignaciones_proyecto(proyecto_id: int, fecha_desde: str = "", fecha_hasta: str = "",
+                                  recurso_tipo: str = "", recurso_id: int | None = None) -> list[dict]:
     init_proyectos_db()
     conn = _get_conn()
     try:
@@ -1004,6 +1028,12 @@ def obtener_asignaciones_proyecto(proyecto_id: int, fecha_desde: str = "", fecha
         if fecha_hasta:
             where += " AND fecha <= ?"
             params.append(fecha_hasta)
+        if recurso_tipo:
+            where += " AND recurso_tipo = ?"
+            params.append(recurso_tipo)
+        if recurso_id is not None:
+            where += " AND recurso_id = ?"
+            params.append(recurso_id)
         rows = conn.execute(
             f"SELECT * FROM proyecto_asignaciones WHERE {where} ORDER BY fecha, recurso_tipo, recurso_nombre",
             params,
