@@ -1500,7 +1500,7 @@
     document.getElementById("crm-op-motivo-wrap").style.display = (o && o.estado === "perdida") ? "" : "none";
     document.getElementById("btn-eliminar-crm-oportunidad").style.display = o ? "" : "none";
     // Autocomplete empresa
-    fetch("/api/crm/empresas?activo=1&limit=500")
+    fetch("/api/crm/empresas?activo=1&limit=2000")
       .then(function (r) { return r.json(); })
       .then(function (d) {
         var emps = d.empresas || [];
