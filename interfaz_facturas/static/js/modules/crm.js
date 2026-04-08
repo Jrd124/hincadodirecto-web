@@ -519,7 +519,7 @@
           (el.oportunidades ? " · " + el.oportunidades + " oport. cerrada(s)" : ""),
           "success");
         _crmEmpresaSeleccionada = null;
-        document.getElementById("crm-empresa-sin-seleccion").style.display = "block";
+        document.getElementById("crm-empresas-sin-seleccion").style.display = "block";
         document.getElementById("crm-empresa-detalle").style.display = "none";
         _crmCargarEmpresas();
         _crmCargarStats();
