@@ -1990,6 +1990,336 @@ def _split_msg(text: str, limit: int = 4000) -> list[str]:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+#  MAQUINARIA: estados de conversación para /incidencia
+# ═══════════════════════════════════════════════════════════════════════════
+
+INCIDENCIA_MAQUINA, INCIDENCIA_DESC, INCIDENCIA_FOTO = range(10, 13)
+
+_SEVERIDAD_LABELS = {
+    "baja": "🟢 Baja",
+    "media": "🟡 Media",
+    "alta": "🔴 Alta",
+    "seguridad": "🚨 Seguridad",
+}
+_ESTADO_INC_LABELS = {
+    "abierta": "🔴 Abierta",
+    "en_curso": "🟡 En revisión",
+    "cerrada": "✅ Cerrada",
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  MAQUINARIA: jobs de notificación proactiva
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def recordatorio_check_semanal(context: ContextTypes.DEFAULT_TYPE):
+    """Viernes 12:00 — recordar a todos los operarios el chequeo semanal de maquinaria."""
+    from core.maquinaria_db import listar_maquinas
+    operarios = listar_usuarios(rol="operario")
+    if not operarios:
+        return
+    try:
+        maquinas = [m for m in listar_maquinas() if m.get("activa")]
+    except Exception:
+        maquinas = []
+
+    resumen = ""
+    if maquinas:
+        resumen = "\n\nMáquinas activas:\n" + "\n".join(f"• {m['nombre']}" for m in maquinas[:10])
+
+    texto = (
+        "🔧 *Recordatorio semanal de maquinaria*\n\n"
+        "Es viernes — recuerda hacer el chequeo semanal de mantenimiento "
+        "de las máquinas a tu cargo antes de terminar la jornada."
+        + resumen
+    )
+    for op in operarios:
+        try:
+            await context.bot.send_message(
+                chat_id=op["telegram_id"],
+                text=texto,
+                parse_mode=ParseMode.MARKDOWN,
+            )
+        except Exception:
+            pass
+
+
+async def alerta_mantenimiento_pendiente(context: ContextTypes.DEFAULT_TYPE):
+    """Lunes y jueves 8:00 — avisar al responsable de cada máquina con revisión pendiente."""
+    from core.notificaciones_maquinaria import (
+        calcular_tareas_due, _log_notification, _get_week_iso, _build_notification_message,
+    )
+    from core.maquinaria_db import get_telegram_id_para_maquina
+
+    dues = calcular_tareas_due()
+    week = _get_week_iso()
+    enviadas = 0
+
+    for item in dues:
+        if item.get("already_notified_this_week"):
+            continue
+
+        telegram_id = get_telegram_id_para_maquina(item["maquina_id"])
+        if not telegram_id:
+            continue
+
+        mensaje = _build_notification_message(item)
+        token = (item.get("token") or {}).get("token", "")
+        due = int(item["next_due_hours"])
+
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton(
+                "📋 Abrir revisión",
+                url=f"{os.getenv('ERP_BASE_URL', 'https://erp.hincadodirecto.com')}"
+                    f"/w/{token}/revision?machine={item['maquina_id']}&due={due}",
+            )
+        ]])
+
+        try:
+            await context.bot.send_message(
+                chat_id=telegram_id,
+                text=mensaje,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=keyboard,
+            )
+            _log_notification(
+                item["maquina_id"], item["task_code"], week,
+                None, "telegram", mensaje, "enviado", str(telegram_id),
+            )
+            enviadas += 1
+        except Exception as e:
+            _log_notification(
+                item["maquina_id"], item["task_code"], week,
+                None, "telegram", mensaje, "fallido", str(e)[:100],
+            )
+
+    logger.info("alerta_mantenimiento_pendiente: %d avisos enviados", enviadas)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  MAQUINARIA: /incidencia — flujo de reporte desde operario
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def cmd_incidencia(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Inicia el flujo de reporte de incidencia en maquinaria."""
+    rol = _user_rol(update.effective_user.id)
+    if not rol or rol in ("pendiente", "bloqueado"):
+        await update.message.reply_text("🚫 No tienes acceso.")
+        return ConversationHandler.END
+
+    from core.maquinaria_db import listar_maquinas
+    try:
+        maquinas = [m for m in listar_maquinas() if m.get("activa")]
+    except Exception:
+        maquinas = []
+
+    if not maquinas:
+        await update.message.reply_text("No hay máquinas activas registradas.")
+        return ConversationHandler.END
+
+    botones = [
+        [InlineKeyboardButton(m["nombre"], callback_data=f"inc_maq_{m['id']}")]
+        for m in maquinas
+    ]
+    await update.message.reply_text(
+        "🔧 *Nueva incidencia*\n\n¿En qué máquina has detectado el problema?",
+        reply_markup=InlineKeyboardMarkup(botones),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    return INCIDENCIA_MAQUINA
+
+
+async def incidencia_seleccionar_maquina(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Operario selecciona la máquina afectada."""
+    query = update.callback_query
+    await query.answer()
+    maquina_id = int(query.data.replace("inc_maq_", ""))
+    context.user_data["incidencia"] = {"maquina_id": maquina_id}
+
+    # Guardar nombre de máquina para el mensaje de confirmación
+    from core.maquinaria_db import listar_maquinas
+    nombre = next((m["nombre"] for m in listar_maquinas() if m["id"] == maquina_id), f"#{maquina_id}")
+    context.user_data["incidencia"]["maquina_nombre"] = nombre
+
+    botones = InlineKeyboardMarkup([
+        [InlineKeyboardButton(lbl, callback_data=f"inc_sev_{sev}")]
+        for sev, lbl in _SEVERIDAD_LABELS.items()
+    ])
+    await query.edit_message_text(
+        f"✅ Máquina: *{nombre}*\n\n¿Qué gravedad tiene la incidencia?",
+        reply_markup=botones,
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    return INCIDENCIA_DESC
+
+
+async def incidencia_severidad(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Operario elige la severidad y se le pide descripción."""
+    query = update.callback_query
+    await query.answer()
+    severidad = query.data.replace("inc_sev_", "")
+    context.user_data["incidencia"]["severidad"] = severidad
+    lbl = _SEVERIDAD_LABELS.get(severidad, severidad)
+
+    await query.edit_message_text(
+        f"Severidad: *{lbl}*\n\nDescribe la incidencia con el mayor detalle posible:",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+    return INCIDENCIA_DESC
+
+
+async def incidencia_descripcion(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Operario escribe la descripción; se pregunta si quiere añadir foto."""
+    context.user_data["incidencia"]["descripcion"] = update.message.text
+
+    botones = InlineKeyboardMarkup([[
+        InlineKeyboardButton("📷 Sí, añadir foto", callback_data="inc_foto_si"),
+        InlineKeyboardButton("✅ No, enviar ya", callback_data="inc_foto_no"),
+    ]])
+    await update.message.reply_text(
+        "¿Quieres adjuntar una foto de la incidencia?",
+        reply_markup=botones,
+    )
+    return INCIDENCIA_FOTO
+
+
+async def incidencia_foto_decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Operario decide si añade foto o envía directamente."""
+    query = update.callback_query
+    await query.answer()
+    if query.data == "inc_foto_si":
+        await query.edit_message_text("📷 Envía la foto de la incidencia:")
+        return INCIDENCIA_FOTO
+    else:
+        return await _guardar_incidencia(query, context, foto_path=None)
+
+
+async def incidencia_recibir_foto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Recibe la foto y guarda la incidencia."""
+    foto = update.message.photo[-1]
+    file = await foto.get_file()
+    foto_dir = Path(_APP_DIR) / "data" / "incidencias_fotos"
+    foto_dir.mkdir(parents=True, exist_ok=True)
+    fname = f"inc_{update.effective_user.id}_{int(datetime.now().timestamp())}.jpg"
+    foto_path = str(foto_dir / fname)
+    await file.download_to_drive(foto_path)
+    return await _guardar_incidencia(update, context, foto_path=foto_path)
+
+
+async def _guardar_incidencia(source, context: ContextTypes.DEFAULT_TYPE, foto_path: str | None):
+    """Persiste la incidencia y notifica a superadmins."""
+    from core.maquinaria_db import crear_incidencia
+
+    tid = source.from_user.id if hasattr(source, "from_user") else source.effective_user.id
+    usuario = get_usuario(tid)
+    datos = context.user_data.get("incidencia", {})
+
+    inc = crear_incidencia({
+        "maquina_id": datos["maquina_id"],
+        "descripcion": datos.get("descripcion", ""),
+        "severidad": datos.get("severidad", "media"),
+        "telegram_id": tid,
+        "operario_nombre": usuario["nombre"] if usuario else str(tid),
+        "foto_path": foto_path or "",
+    })
+
+    sev_lbl = _SEVERIDAD_LABELS.get(inc.get("severidad", "media"), "")
+    maq = datos.get("maquina_nombre", f"#{datos['maquina_id']}")
+    confirmacion = (
+        f"✅ Incidencia #{inc['id']} registrada.\n\n"
+        f"🚜 *Máquina:* {maq}\n"
+        f"⚠️ *Severidad:* {sev_lbl}\n"
+        f"📝 *Descripción:* {inc['descripcion']}"
+    )
+
+    msg_fn = source.edit_message_text if hasattr(source, "edit_message_text") else source.message.reply_text
+    try:
+        await msg_fn(confirmacion, parse_mode=ParseMode.MARKDOWN)
+    except Exception:
+        pass
+
+    # Notificar a superadmins
+    aviso_admins = (
+        f"🚨 *Nueva incidencia #{inc['id']}*\n\n"
+        f"🚜 *Máquina:* {maq}\n"
+        f"👷 *Operario:* {usuario['nombre'] if usuario else str(tid)}\n"
+        f"⚠️ *Severidad:* {sev_lbl}\n"
+        f"📝 {inc['descripcion']}"
+        + ("\n📷 (con foto adjunta)" if foto_path else "")
+    )
+    await _notify_superadmins(context, aviso_admins)
+
+    context.user_data.pop("incidencia", None)
+    return ConversationHandler.END
+
+
+async def incidencia_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.pop("incidencia", None)
+    await update.message.reply_text("❌ Incidencia cancelada.")
+    return ConversationHandler.END
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  MAQUINARIA: /incidencias — gestión para superadmin
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def cmd_incidencias(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Superadmin: lista incidencias abiertas o en curso."""
+    rol = _user_rol(update.effective_user.id)
+    if rol != "superadmin":
+        await update.message.reply_text("🚫 Solo para administradores.")
+        return
+
+    from core.maquinaria_db import listar_incidencias
+    args = context.args or []
+    estado_filtro = args[0] if args else None  # ej. /incidencias en_curso
+    abiertas = listar_incidencias(estado=estado_filtro or "abierta", limit=20)
+    en_curso = listar_incidencias(estado="en_curso", limit=20) if not estado_filtro else []
+    todas = abiertas + en_curso
+
+    if not todas:
+        await update.message.reply_text("✅ No hay incidencias abiertas.")
+        return
+
+    for inc in todas:
+        sev = _SEVERIDAD_LABELS.get(inc.get("severidad", "media"), "")
+        est = _ESTADO_INC_LABELS.get(inc.get("estado", "abierta"), "")
+        op = inc.get("operario_nombre") or "—"
+        texto = (
+            f"🔧 *Incidencia #{inc['id']}* — {inc['maquina_nombre']}\n"
+            f"⚠️ {sev}  |  {est}\n"
+            f"👷 {op}\n"
+            f"📅 {inc['created_at'][:10]}\n"
+            f"📝 {inc['descripcion']}"
+        )
+        botones = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🟡 En revisión", callback_data=f"incest_{inc['id']}_en_curso"),
+            InlineKeyboardButton("✅ Cerrar", callback_data=f"incest_{inc['id']}_cerrada"),
+        ]])
+        await update.message.reply_text(texto, parse_mode=ParseMode.MARKDOWN, reply_markup=botones)
+
+
+async def callback_incidencia_estado(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Superadmin cambia el estado de una incidencia desde botones inline."""
+    query = update.callback_query
+    await query.answer()
+    if _user_rol(query.from_user.id) != "superadmin":
+        return
+
+    _, inc_id_str, nuevo_estado = query.data.split("_", 2)
+    inc_id = int(inc_id_str)
+
+    from core.maquinaria_db import actualizar_incidencia
+    inc = actualizar_incidencia(inc_id, {"estado": nuevo_estado})
+
+    est_lbl = _ESTADO_INC_LABELS.get(nuevo_estado, nuevo_estado)
+    await query.edit_message_text(
+        query.message.text + f"\n\n→ Estado actualizado: {est_lbl}",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 #  MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -2032,6 +2362,7 @@ def main():
     app.add_handler(CommandHandler("aprobar", cmd_aprobar))
     app.add_handler(CommandHandler("usuarios", cmd_usuarios))
     app.add_handler(CommandHandler("mispartes", cmd_mispartes))
+    app.add_handler(CommandHandler("incidencias", cmd_incidencias))
 
     # Commands: tarjeta management
     app.add_handler(CommandHandler("vertarjetas", cmd_vertarjetas))
@@ -2045,6 +2376,26 @@ def main():
     app.add_handler(CallbackQueryHandler(callback_factura_confirmar, pattern=r"^facconf_"))
     app.add_handler(CallbackQueryHandler(callback_factura_pago, pattern=r"^facpago_"))
     app.add_handler(CallbackQueryHandler(callback_asignar_tarjeta, pattern=r"^asigtar_|^settar_"))
+    app.add_handler(CallbackQueryHandler(callback_incidencia_estado, pattern=r"^incest_"))
+
+    # ConversationHandler: /incidencia (debe ir ANTES del photo handler genérico)
+    incidencia_conv = ConversationHandler(
+        entry_points=[CommandHandler("incidencia", cmd_incidencia)],
+        states={
+            INCIDENCIA_MAQUINA: [CallbackQueryHandler(incidencia_seleccionar_maquina, pattern=r"^inc_maq_")],
+            INCIDENCIA_DESC: [
+                CallbackQueryHandler(incidencia_severidad, pattern=r"^inc_sev_"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, incidencia_descripcion),
+            ],
+            INCIDENCIA_FOTO: [
+                CallbackQueryHandler(incidencia_foto_decision, pattern=r"^inc_foto_"),
+                MessageHandler(filters.PHOTO, incidencia_recibir_foto),
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", incidencia_cancel)],
+        per_message=False,
+    )
+    app.add_handler(incidencia_conv)
 
     # Photo handler
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
@@ -2068,6 +2419,10 @@ def main():
     jq.run_daily(recordatorio_partes, time=time(18, 0), days=(0, 1, 2, 3, 4))
     # Alerta viernes firmas: 14:00 viernes (Fri=4)
     jq.run_daily(alerta_viernes_firmas, time=time(14, 0), days=(4,))
+    # Maquinaria: recordatorio check semanal — viernes 12:00
+    jq.run_daily(recordatorio_check_semanal, time=time(12, 0), days=(4,))
+    # Maquinaria: alerta revisiones pendientes — lunes y jueves 8:00
+    jq.run_daily(alerta_mantenimiento_pendiente, time=time(8, 0), days=(0, 3))
 
     logger.info("Bot arrancado. Polling...")
     app.run_polling(drop_pending_updates=True)

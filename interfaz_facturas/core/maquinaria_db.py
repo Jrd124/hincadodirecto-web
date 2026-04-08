@@ -260,6 +260,13 @@ def init_maquinaria_db() -> None:
         if "marca" not in task_cols:
             conn.execute("ALTER TABLE maquinaria_maintenance_tasks ADD COLUMN marca TEXT NOT NULL DEFAULT 'ORTECO'")
 
+        # Añadir telegram_id a maquinaria_incidencias si no existe (para reportes desde bot)
+        inc_cols = [r[1] for r in conn.execute("PRAGMA table_info(maquinaria_incidencias)").fetchall()]
+        if "telegram_id" not in inc_cols:
+            conn.execute("ALTER TABLE maquinaria_incidencias ADD COLUMN telegram_id INTEGER")
+        if "operario_nombre" not in inc_cols:
+            conn.execute("ALTER TABLE maquinaria_incidencias ADD COLUMN operario_nombre TEXT")
+
         _seed_maquinas(conn)
         _seed_checklist_templates(conn)
         _seed_maintenance_tasks(conn)
@@ -1068,6 +1075,50 @@ def actualizar_incidencia(inc_id: int, data: dict) -> dict:
                  data.get("severidad", "media"), inc_id],
             )
         return dict(conn.execute("SELECT * FROM maquinaria_incidencias WHERE id = ?", [inc_id]).fetchone())
+
+
+def listar_incidencias(maquina_id: int | None = None,
+                       estado: str | None = None,
+                       limit: int = 50) -> list[dict]:
+    """Lista incidencias, opcionalmente filtradas por máquina y/o estado."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        q = (
+            "SELECT mi.*, m.nombre AS maquina_nombre "
+            "FROM maquinaria_incidencias mi "
+            "JOIN maquinas m ON m.id = mi.maquina_id "
+            "WHERE 1=1"
+        )
+        params: list = []
+        if maquina_id:
+            q += " AND mi.maquina_id = ?"
+            params.append(maquina_id)
+        if estado:
+            q += " AND mi.estado = ?"
+            params.append(estado)
+        q += f" ORDER BY mi.created_at DESC LIMIT {limit}"
+        return [dict(r) for r in conn.execute(q, params).fetchall()]
+
+
+def get_telegram_id_para_maquina(maquina_id: int) -> int | None:
+    """Devuelve el telegram_id del responsable asignado a una máquina.
+
+    Sigue la cadena: maquinas.responsable_id → empleados.id
+                     ← bot_telegram_usuarios.empleado_id → telegram_id
+
+    Returns None si la máquina no tiene responsable o el responsable
+    no está registrado en el bot.
+    """
+    init_maquinaria_db()
+    with _conectar() as conn:
+        row = conn.execute(
+            "SELECT btu.telegram_id "
+            "FROM maquinas m "
+            "JOIN bot_telegram_usuarios btu ON btu.empleado_id = m.responsable_id "
+            "WHERE m.id = ? AND btu.rol NOT IN ('pendiente', 'bloqueado')",
+            [maquina_id],
+        ).fetchone()
+        return row["telegram_id"] if row else None
 
 
 def asignar_responsable_maquina(maquina_id: int, responsable_id: int | None) -> bool:
