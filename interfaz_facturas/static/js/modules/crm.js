@@ -1498,44 +1498,125 @@
     document.getElementById("crm-op-motivo").value = o ? o.motivo_perdida || "" : "";
     document.getElementById("crm-op-descripcion").value = o ? o.descripcion || "" : "";
     document.getElementById("crm-op-motivo-wrap").style.display = (o && o.estado === "perdida") ? "" : "none";
-    fetch("/api/crm/empresas?activo=1&limit=200")
+    // Autocomplete empresa
+    fetch("/api/crm/empresas?activo=1&limit=500")
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        var empSel = document.getElementById("crm-op-empresa");
-        empSel.innerHTML = '<option value="">Seleccionar</option>';
-        (d.empresas || []).forEach(function (e) {
-          var opt = document.createElement("option");
-          opt.value = e.id;
-          opt.textContent = e.nombre;
-          empSel.appendChild(opt);
-        });
-        empSel.value = o ? String(o.empresa_id || "") : (_crmEmpresaSeleccionada ? String(_crmEmpresaSeleccionada) : "");
-        _opCargarContactos(empSel.value, o ? o.contacto_id : "");
+        var emps = d.empresas || [];
+        var empId = o ? String(o.empresa_id || "") : (_crmEmpresaSeleccionada ? String(_crmEmpresaSeleccionada) : "");
+        var empNombre = "";
+        if (empId) {
+          var found = emps.find(function (e) { return String(e.id) === empId; });
+          if (found) empNombre = found.nombre;
+        }
+        _opInitAutocompleteEmpresa(emps, empId, empNombre);
+        if (empId) {
+          var contId = o ? String(o.contacto_id || "") : "";
+          _opCargarContactosAC(empId, contId);
+        }
       });
     opModalEl.classList.add("visible");
     opModalEl.setAttribute("aria-hidden", "false");
   }
 
-  function _opCargarContactos(empresaId, selectedId) {
-    var sel = document.getElementById("crm-op-contacto");
-    sel.innerHTML = '<option value="">Sin contacto</option>';
+  // ── Autocomplete helpers para el modal de oportunidad ─────────────────────
+  var _opEmpresas = [];
+  var _opContactos = [];
+
+  function _opInitAutocompleteEmpresa(emps, selectedId, selectedNombre) {
+    _opEmpresas = emps;
+    var txt = document.getElementById("crm-op-empresa-txt");
+    var hid = document.getElementById("crm-op-empresa");
+    var dd = document.getElementById("crm-op-empresa-dropdown");
+    txt.value = selectedNombre || "";
+    hid.value = selectedId || "";
+    // Reset contacto
+    document.getElementById("crm-op-contacto-txt").value = "";
+    document.getElementById("crm-op-contacto").value = "";
+    _opRenderDropdown(txt, hid, dd, emps, selectedId, function (id, nombre) {
+      hid.value = id;
+      txt.value = nombre;
+      dd.style.display = "none";
+      _opCargarContactosAC(id, "");
+    });
+  }
+
+  function _opRenderDropdown(txt, hid, dd, items, selectedId, onSelect) {
+    // Limpiar listeners previos clonando
+    var newTxt = txt.cloneNode(true);
+    txt.parentNode.replaceChild(newTxt, txt);
+    txt = newTxt;
+
+    txt.addEventListener("input", function () {
+      var q = txt.value.trim().toLowerCase();
+      var filtered = q
+        ? items.filter(function (i) { return (i.nombre || i.label || "").toLowerCase().indexOf(q) !== -1; })
+        : items.slice(0, 30);
+      _opShowDropdown(dd, filtered, onSelect, hid);
+    });
+    txt.addEventListener("focus", function () {
+      var q = txt.value.trim().toLowerCase();
+      var filtered = q
+        ? items.filter(function (i) { return (i.nombre || i.label || "").toLowerCase().indexOf(q) !== -1; })
+        : items.slice(0, 30);
+      _opShowDropdown(dd, filtered, onSelect, hid);
+    });
+    txt.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { dd.style.display = "none"; }
+    });
+    document.addEventListener("click", function (e) {
+      if (!dd.contains(e.target) && e.target !== txt) dd.style.display = "none";
+    }, { capture: true });
+  }
+
+  function _opShowDropdown(dd, items, onSelect, hid) {
+    if (!items.length) { dd.style.display = "none"; return; }
+    dd.innerHTML = items.map(function (i) {
+      var id = i.id !== undefined ? i.id : i.value;
+      var label = i.nombre || i.label || "";
+      var extra = i.tipo ? '<span style="font-size:0.72rem;color:#94a3b8;margin-left:6px;">' + _esc(i.tipo) + '</span>' : "";
+      return '<div class="crm-ac-item" data-id="' + id + '" style="padding:7px 12px;cursor:pointer;font-size:0.88rem;display:flex;align-items:center;' +
+        (String(id) === String(hid.value) ? 'background:#EFF6FF;font-weight:600;' : '') + '">' +
+        _esc(label) + extra + '</div>';
+    }).join("");
+    dd.style.display = "block";
+    dd.querySelectorAll(".crm-ac-item").forEach(function (el) {
+      el.addEventListener("mousedown", function (e) {
+        e.preventDefault();
+        onSelect(el.getAttribute("data-id"), el.textContent.trim().replace(/\s+\S+$/, "").trim());
+        // Get clean label
+        var label = el.querySelector ? el.childNodes[0] && el.childNodes[0].textContent || el.textContent : el.textContent;
+        onSelect(el.getAttribute("data-id"), label.trim());
+      });
+    });
+  }
+
+  function _opCargarContactosAC(empresaId, selectedId) {
+    var txt = document.getElementById("crm-op-contacto-txt");
+    var hid = document.getElementById("crm-op-contacto");
+    var dd = document.getElementById("crm-op-contacto-dropdown");
+    txt.value = "";
+    hid.value = "";
+    _opContactos = [];
     if (!empresaId) return;
     fetch("/api/crm/contactos?empresa_id=" + empresaId + "&limit=200")
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        (d.contactos || []).forEach(function (c) {
-          var opt = document.createElement("option");
-          opt.value = c.id;
-          opt.textContent = c.nombre + (c.apellidos ? " " + c.apellidos : "");
-          sel.appendChild(opt);
+        _opContactos = (d.contactos || []).map(function (c) {
+          return { id: c.id, nombre: c.nombre + (c.apellidos ? " " + c.apellidos : "") };
         });
-        if (selectedId) sel.value = String(selectedId);
+        var selNombre = "";
+        if (selectedId) {
+          var found = _opContactos.find(function (c) { return String(c.id) === String(selectedId); });
+          if (found) { selNombre = found.nombre; hid.value = String(selectedId); txt.value = selNombre; }
+        }
+        _opRenderDropdown(txt, hid, dd, _opContactos, selectedId || "", function (id, nombre) {
+          hid.value = id;
+          txt.value = nombre;
+          dd.style.display = "none";
+        });
       });
   }
-
-  document.getElementById("crm-op-empresa").addEventListener("change", function () {
-    _opCargarContactos(this.value, "");
-  });
 
   function _opCerrarModal() { opModalEl.classList.remove("visible"); opModalEl.setAttribute("aria-hidden", "true"); }
   document.getElementById("btn-nueva-oportunidad-crm").addEventListener("click", function () { _opAbrirModal(null); });

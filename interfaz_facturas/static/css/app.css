@@ -4521,6 +4521,7 @@
       .crm-timeline-item[data-tipo="visita"]  { border-left-color: #dc2626; }
       .crm-timeline-item[data-tipo="gmail"]   { border-left-color: #ea4335; }
       .crm-timeline-item.crm-tl-selected { background: #EFF6FF; border-left-color: #2563eb; outline: 1px solid #BFDBFE; }
+      .crm-ac-item:hover { background: #F1F5F9; }
       .crm-timeline-icon {
         font-size: 1rem;
         line-height: 1.3;
