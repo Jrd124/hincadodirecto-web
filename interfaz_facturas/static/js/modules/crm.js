@@ -1498,6 +1498,7 @@
     document.getElementById("crm-op-motivo").value = o ? o.motivo_perdida || "" : "";
     document.getElementById("crm-op-descripcion").value = o ? o.descripcion || "" : "";
     document.getElementById("crm-op-motivo-wrap").style.display = (o && o.estado === "perdida") ? "" : "none";
+    document.getElementById("btn-eliminar-crm-oportunidad").style.display = o ? "" : "none";
     // Autocomplete empresa
     fetch("/api/crm/empresas?activo=1&limit=500")
       .then(function (r) { return r.json(); })
@@ -1622,6 +1623,23 @@
   document.getElementById("btn-nueva-oportunidad-crm").addEventListener("click", function () { _opAbrirModal(null); });
   document.getElementById("btn-cancelar-crm-oportunidad").addEventListener("click", _opCerrarModal);
   opModalEl.addEventListener("click", function (e) { if (e.target === opModalEl) _opCerrarModal(); });
+
+  document.getElementById("btn-eliminar-crm-oportunidad").addEventListener("click", function () {
+    var id = parseInt(document.getElementById("crm-op-edit-id").value);
+    if (!id) return;
+    var nombre = document.getElementById("crm-op-nombre").value || "esta oportunidad";
+    if (!confirm("¿Eliminar definitivamente la oportunidad «" + nombre + "»?\n\nSus actividades vinculadas se conservarán pero quedarán desvinculadas.")) return;
+    fetch("/api/crm/oportunidades/" + id, { method: "DELETE" })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok) { mostrarToast(res.data.error || "Error al eliminar", "error"); return; }
+        mostrarToast("Oportunidad eliminada.", "success");
+        _opCerrarModal();
+        _crmCargarOportunidades();
+        if (_crmEmpresaSeleccionada) _crmSeleccionarEmpresa(_crmEmpresaSeleccionada);
+      })
+      .catch(function () { mostrarToast("Error de conexión.", "error"); });
+  });
 
   function _opEditarById(id) {
     fetch("/api/crm/oportunidades/" + id)

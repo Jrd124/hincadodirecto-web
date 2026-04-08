@@ -352,6 +352,14 @@ def crm_pipeline_oportunidades():
   return jsonify({"pipeline": crm_db.pipeline_oportunidades()})
 
 
+@crm_bp.delete("/api/crm/oportunidades/<int:oportunidad_id>")
+def crm_eliminar_oportunidad(oportunidad_id: int):
+  res = crm_db.eliminar_oportunidad(oportunidad_id)
+  if not res.get("ok"):
+    return jsonify(res), 404
+  return jsonify(res), 200
+
+
 @crm_bp.get("/api/crm/seguimiento/empresas-frias")
 def crm_empresas_frias():
   """Empresas sin actividad en los últimos N días.

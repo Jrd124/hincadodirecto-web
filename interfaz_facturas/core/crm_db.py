@@ -987,6 +987,24 @@ def listar_oportunidades(
         return {"oportunidades": [dict(r) for r in rows], "total": total}
 
 
+def eliminar_oportunidad(oportunidad_id: int) -> dict:
+    """Elimina una oportunidad y su historial de forma permanente.
+
+    Returns:
+        {"ok": True} | {"ok": False, "error": "..."}
+    """
+    init_crm_db()
+    with _conectar() as conn:
+        row = conn.execute("SELECT id FROM crm_oportunidades WHERE id = ?", (oportunidad_id,)).fetchone()
+        if not row:
+            return {"ok": False, "error": "Oportunidad no encontrada"}
+        # El historial se borra por CASCADE (ON DELETE CASCADE)
+        # Las interacciones vinculadas se desvinculan (oportunidad_id → NULL)
+        conn.execute("UPDATE crm_interacciones SET oportunidad_id = NULL WHERE oportunidad_id = ?", (oportunidad_id,))
+        conn.execute("DELETE FROM crm_oportunidades WHERE id = ?", (oportunidad_id,))
+    return {"ok": True}
+
+
 def obtener_oportunidad(oportunidad_id: int) -> dict[str, Any] | None:
     init_crm_db()
     with _conectar() as conn:
