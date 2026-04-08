@@ -1535,8 +1535,8 @@
     document.getElementById("crm-op-contacto-txt").value = "";
     document.getElementById("crm-op-contacto").value = "";
     _opRenderDropdown(txt, hid, dd, emps, selectedId, function (id, nombre) {
-      hid.value = id;
-      txt.value = nombre;
+      document.getElementById("crm-op-empresa").value = id;
+      document.getElementById("crm-op-empresa-txt").value = nombre;
       dd.style.display = "none";
       _opCargarContactosAC(id, "");
     });
@@ -1576,7 +1576,7 @@
       var id = i.id !== undefined ? i.id : i.value;
       var label = i.nombre || i.label || "";
       var extra = i.tipo ? '<span style="font-size:0.72rem;color:#94a3b8;margin-left:6px;">' + _esc(i.tipo) + '</span>' : "";
-      return '<div class="crm-ac-item" data-id="' + id + '" style="padding:7px 12px;cursor:pointer;font-size:0.88rem;display:flex;align-items:center;' +
+      return '<div class="crm-ac-item" data-id="' + id + '" data-label="' + _esc(label) + '" style="padding:7px 12px;cursor:pointer;font-size:0.88rem;display:flex;align-items:center;' +
         (String(id) === String(hid.value) ? 'background:#EFF6FF;font-weight:600;' : '') + '">' +
         _esc(label) + extra + '</div>';
     }).join("");
@@ -1584,10 +1584,7 @@
     dd.querySelectorAll(".crm-ac-item").forEach(function (el) {
       el.addEventListener("mousedown", function (e) {
         e.preventDefault();
-        onSelect(el.getAttribute("data-id"), el.textContent.trim().replace(/\s+\S+$/, "").trim());
-        // Get clean label
-        var label = el.querySelector ? el.childNodes[0] && el.childNodes[0].textContent || el.textContent : el.textContent;
-        onSelect(el.getAttribute("data-id"), label.trim());
+        onSelect(el.getAttribute("data-id"), el.getAttribute("data-label") || "");
       });
     });
   }
@@ -1612,8 +1609,8 @@
           if (found) { selNombre = found.nombre; hid.value = String(selectedId); txt.value = selNombre; }
         }
         _opRenderDropdown(txt, hid, dd, _opContactos, selectedId || "", function (id, nombre) {
-          hid.value = id;
-          txt.value = nombre;
+          document.getElementById("crm-op-contacto").value = id;
+          document.getElementById("crm-op-contacto-txt").value = nombre;
           dd.style.display = "none";
         });
       });
