@@ -845,7 +845,7 @@
   };
 
   function _crmCargarEmpresasSelect() {
-    fetch("/api/crm/empresas?activo=1&limit=200")
+    fetch("/api/crm/empresas?activo=1&limit=2000")
       .then(function (r) { return r.json(); })
       .then(function (d) {
         var emps = d.empresas || [];
@@ -991,7 +991,7 @@
     document.getElementById("crm-cont-notas").value = c ? c.notas || "" : "";
     document.getElementById("btn-eliminar-crm-contacto").style.display = c ? "" : "none";
     var targetEmpId = c ? (c.empresa_vinculada_id || "") : (_crmEmpresaSeleccionada || "");
-    fetch("/api/crm/empresas?activo=1&limit=200")
+    fetch("/api/crm/empresas?activo=1&limit=2000")
       .then(function (r) { return r.json(); })
       .then(function (d) {
         var empSel = document.getElementById("crm-cont-empresa");
@@ -1176,7 +1176,7 @@
     var targetContId = i ? (i.contacto_id || "") : (def.contacto_id || "");
 
     // Load empresas select, then set values after options are populated
-    fetch("/api/crm/empresas?activo=1&limit=200")
+    fetch("/api/crm/empresas?activo=1&limit=2000")
       .then(function (r) { return r.json(); })
       .then(function (d) {
         var empSel = document.getElementById("crm-int-empresa");
