@@ -1013,6 +1013,19 @@ def listar_tarjetas_por_empresa(empresa_id: str):
   return jsonify({"tarjetas": tarjetas, "empresa_id": empresa_id, "solo_activas": solo_activas})
 
 
+@bancos_bp.get("/api/tarjetas")
+def listar_todas_tarjetas():
+  """Listado de TODAS las tarjetas activas (sin filtro de empresa)."""
+  from core.tarjetas_db import _conectar, init_tarjetas_db
+  init_tarjetas_db()
+  with _conectar() as conn:
+    cur = conn.execute(
+      "SELECT id, empresa_id, banco, persona, ultimos4, alias, activa FROM tarjetas WHERE activa = 1 ORDER BY banco, persona"
+    )
+    tarjetas = [dict(r) for r in cur.fetchall()]
+  return jsonify({"tarjetas": tarjetas})
+
+
 @bancos_bp.post("/api/tarjetas")
 def crear_tarjeta():
   """

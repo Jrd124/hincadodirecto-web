@@ -2696,7 +2696,12 @@
                     <option value="pendiente">Pendiente</option>
                   </select>
                 </div>
-                <div><label style="font-size:12px;">Persona (tarjeta)</label><input id="alb-tarjeta-persona" class="form-input" style="font-size:13px;" placeholder="Nombre del titular"></div>
+                <div id="alb-tarjeta-wrap" style="display:none;">
+                  <label style="font-size:12px;">Tarjeta</label>
+                  <select id="alb-tarjeta-id" class="form-select" style="font-size:13px;">
+                    <option value="">Seleccionar tarjeta…</option>
+                  </select>
+                </div>
               </div>
               <div style="margin-top:8px;"><label style="font-size:12px;">Proyecto</label>
                 <select id="alb-proyecto" class="form-select" style="font-size:13px;">

@@ -123,8 +123,11 @@ def listar_albaranes(
             params.append(factura_id)
         params.append(limit)
         rows = conn.execute(
-            f"SELECT a.*, p.nombre as proyecto_nombre FROM albaranes a"
+            f"SELECT a.*, p.nombre as proyecto_nombre,"
+            f" t.banco as tarjeta_banco, t.persona as tarjeta_persona_rel, t.ultimos4 as tarjeta_ultimos4, t.alias as tarjeta_alias"
+            f" FROM albaranes a"
             f" LEFT JOIN proyectos p ON a.proyecto_id = p.id"
+            f" LEFT JOIN tarjetas t ON a.tarjeta_id = t.id"
             f" WHERE {' AND '.join(where)}"
             f" ORDER BY a.fecha DESC, a.id DESC LIMIT ?",
             params,

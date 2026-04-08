@@ -21,6 +21,16 @@ function _initAlbaranes() {
   document.getElementById("btn-cancelar-albaran").addEventListener("click", _cerrarModalAlbaran);
   document.getElementById("form-albaran").addEventListener("submit", _guardarAlbaran);
 
+  // Toggle tarjeta selector on metodo_pago change
+  var metodoPagoEl = document.getElementById("alb-metodo-pago");
+  var tarjetaWrap = document.getElementById("alb-tarjeta-wrap");
+  metodoPagoEl.addEventListener("change", function () {
+    tarjetaWrap.style.display = this.value === "tarjeta" ? "" : "none";
+  });
+
+  // Load tarjetas from ERP
+  _cargarTarjetasAlbaranes();
+
   // Auto-calc total
   var impEl = document.getElementById("alb-importe");
   var ivaEl = document.getElementById("alb-iva");
@@ -102,7 +112,10 @@ function _renderTablaAlbaranes() {
   _albLista.forEach(function (a) {
     var tr = document.createElement("tr");
     var metodo = metodoPago[a.metodo_pago] || a.metodo_pago || "\u2014";
-    if (a.metodo_pago === "tarjeta" && a.tarjeta_persona) metodo += " (" + a.tarjeta_persona + ")";
+    if (a.metodo_pago === "tarjeta") {
+      var tarjetaInfo = a.tarjeta_banco ? (a.tarjeta_banco + " *" + (a.tarjeta_ultimos4 || "")) : (a.tarjeta_persona || "");
+      if (tarjetaInfo) metodo += " (" + tarjetaInfo + ")";
+    }
     var proy = a.proyecto_nombre || "\u2014";
     var total = a.total != null ? Number(a.total).toLocaleString("es-ES", { minimumFractionDigits: 2 }) + " \u20AC" : "\u2014";
     // Estado: conciliado > facturado > pendiente > anulado
@@ -145,7 +158,8 @@ function _abrirModalAlbaran(id) {
         document.getElementById("alb-iva").value = a.iva || "";
         document.getElementById("alb-total").value = a.total || "";
         document.getElementById("alb-metodo-pago").value = a.metodo_pago || "pendiente";
-        document.getElementById("alb-tarjeta-persona").value = a.tarjeta_persona || "";
+        document.getElementById("alb-tarjeta-id").value = a.tarjeta_id || "";
+        document.getElementById("alb-tarjeta-wrap").style.display = (a.metodo_pago === "tarjeta") ? "" : "none";
         document.getElementById("alb-proyecto").value = a.proyecto_id || "";
         document.getElementById("alb-notas").value = a.notas || "";
         modal.classList.add("visible");
@@ -153,6 +167,7 @@ function _abrirModalAlbaran(id) {
   } else {
     document.getElementById("form-albaran").reset();
     document.getElementById("alb-fecha").value = new Date().toISOString().slice(0, 10);
+    document.getElementById("alb-tarjeta-wrap").style.display = "none";
     modal.classList.add("visible");
   }
 }
@@ -172,7 +187,7 @@ function _guardarAlbaran(e) {
     iva: parseFloat(document.getElementById("alb-iva").value) || 0,
     total: parseFloat(document.getElementById("alb-total").value) || 0,
     metodo_pago: document.getElementById("alb-metodo-pago").value,
-    tarjeta_persona: document.getElementById("alb-tarjeta-persona").value,
+    tarjeta_id: document.getElementById("alb-tarjeta-id").value || null,
     proyecto_id: document.getElementById("alb-proyecto").value || null,
     notas: document.getElementById("alb-notas").value,
   };
@@ -238,6 +253,27 @@ function _procesarFotoAlbaran(file) {
       });
     })
     .catch(function () { resultado.innerHTML = '<p style="color:var(--color-danger);">Error procesando imagen.</p>'; });
+}
+
+// ── Cargar tarjetas ERP ─────────────────────────────────────────────────────
+
+function _cargarTarjetasAlbaranes() {
+  fetch("/api/tarjetas")
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var sel = document.getElementById("alb-tarjeta-id");
+      if (!sel || !data.tarjetas) return;
+      sel.innerHTML = '<option value="">Seleccionar tarjeta…</option>';
+      data.tarjetas.forEach(function (t) {
+        var label = t.banco + " *" + (t.ultimos4 || "????") + " — " + t.persona;
+        if (t.alias) label += " (" + t.alias + ")";
+        var opt = document.createElement("option");
+        opt.value = t.id;
+        opt.textContent = label;
+        sel.appendChild(opt);
+      });
+    })
+    .catch(function () {});
 }
 
 // ── Vinculación albaranes ↔ factura proveedor ────────────────────────────────
