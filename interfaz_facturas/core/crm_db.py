@@ -538,7 +538,7 @@ def eliminar_empresa(empresa_id: int) -> dict:
         ts = _now()
         conn.execute("UPDATE crm_empresas SET activo = 0 WHERE id = ?", (empresa_id,))
         n_cont = conn.execute(
-            "UPDATE crm_contactos SET activo = 0, fecha_actualizacion = ? WHERE empresa_id = ? AND activo = 1",
+            "UPDATE crm_contactos SET activo = 0, fecha_actualizacion = ? WHERE empresa_vinculada_id = ? AND activo = 1",
             (ts, empresa_id)
         ).rowcount
         n_int = conn.execute(
