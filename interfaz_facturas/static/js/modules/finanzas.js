@@ -4174,12 +4174,17 @@ function abrirModalEdicion(f) {
   }
 
   var edLiquidacionPeriodo = document.getElementById("ed-liquidacion-periodo");
+  var edLiquidacionInput = document.getElementById("ed-liquidacion-periodo-input");
   var edLiquidacionTexto = document.getElementById("ed-liquidacion-periodo-texto");
-  if (edLiquidacionPeriodo) edLiquidacionPeriodo.value = (f.liquidacion_periodo || "").toString().trim();
-  if (edLiquidacionTexto) {
-    var lip = (f.liquidacion_periodo || "").toString().trim();
-    edLiquidacionTexto.textContent = lip ? "Periodo liquidación: " + lip + " (extracto mes siguiente)" : "";
+  var lip = (f.liquidacion_periodo || "").toString().trim();
+  // Default: month from invoice date if no liquidacion_periodo set
+  if (!lip) {
+    var fechaFact = (f.fecha_factura || "").toString().trim().slice(0, 10);
+    if (fechaFact && fechaFact.length >= 7) lip = fechaFact.slice(0, 7);
   }
+  if (edLiquidacionPeriodo) edLiquidacionPeriodo.value = lip;
+  if (edLiquidacionInput) edLiquidacionInput.value = lip;
+  if (edLiquidacionTexto) edLiquidacionTexto.textContent = "";
 
   var concWrap = document.getElementById("ed-conciliacion-wrap");
   var concResumen = document.getElementById("ed-conciliacion-resumen");
@@ -4254,20 +4259,10 @@ document.getElementById("modal-editar-overlay").addEventListener("click", (e) =>
   if (e.target.id === "modal-editar-overlay") cerrarModalEdicion();
 });
 
-document.getElementById("ed-btn-extracto-mes-siguiente").addEventListener("click", function () {
-  var fechaInp = document.getElementById("ed-fecha");
+document.getElementById("ed-liquidacion-periodo-input").addEventListener("change", function () {
+  var periodo = this.value || "";
   var edLiquidacionPeriodo = document.getElementById("ed-liquidacion-periodo");
-  var edLiquidacionTexto = document.getElementById("ed-liquidacion-periodo-texto");
-  var fechaStr = (fechaInp && fechaInp.value) ? fechaInp.value.trim().slice(0, 10) : "";
-  var d = fechaStr ? new Date(fechaStr + "T12:00:00") : new Date();
-  if (isNaN(d.getTime())) d = new Date();
-  var year = d.getFullYear();
-  var month = d.getMonth() + 1;
-  month += 1;
-  if (month > 12) { month = 1; year += 1; }
-  var periodo = year + "-" + String(month).padStart(2, "0");
   if (edLiquidacionPeriodo) edLiquidacionPeriodo.value = periodo;
-  if (edLiquidacionTexto) edLiquidacionTexto.textContent = "Periodo liquidación: " + periodo + " (extracto mes siguiente)";
 });
 
 document.getElementById("ed-selector-proveedor").addEventListener("change", function () {
@@ -4392,7 +4387,7 @@ document.getElementById("form-editar-factura").addEventListener("submit", async 
   factura.retenciones_total = document.getElementById("ed-retenciones").value.trim();
   factura.total_a_pagar = document.getElementById("ed-total").value.trim();
   factura.tarjeta_id = document.getElementById("ed-tarjeta").value.trim() || null;
-  factura.liquidacion_periodo = document.getElementById("ed-liquidacion-periodo").value.trim() || null;
+  factura.liquidacion_periodo = (document.getElementById("ed-liquidacion-periodo-input").value || document.getElementById("ed-liquidacion-periodo").value || "").trim() || null;
   factura.estado_pago = document.getElementById("ed-estado-pago").value.trim() || "pendiente";
   factura.comentarios_revision = document.getElementById("ed-comentarios").value.trim();
   factura.tercero_id = document.getElementById("ed-tercero-id").value.trim() || null;

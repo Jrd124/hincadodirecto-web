@@ -506,8 +506,8 @@
       </div>
       </div>
 
-      <div id="panel-clientes-facturas" class="panel-clientes">
-        <div>
+      <div id="panel-clientes-facturas" class="panel-clientes content-panel">
+        <div style="max-width:1100px;margin:0 auto;padding:24px 20px;">
           <section>
             <div class="card">
               <div class="breadcrumb-visual">Finanzas &rsaquo; Clientes &rsaquo; Facturas</div>
@@ -728,16 +728,19 @@
       </div>
 
       <!-- ===== DASHBOARD FINANZAS ===== -->
-      <div id="panel-finanzas-inicio" class="panel-finanzas">
+      <div id="panel-finanzas-inicio" class="panel-finanzas content-panel">
+        <div style="max-width:1100px;margin:0 auto;padding:24px 20px;">
         <div id="finanzas-dashboard-content">
           <div class="breadcrumb-visual">Finanzas</div>
           <h1>Finanzas</h1>
           <p class="subtitle" style="font-size:14px;color:#64748B;margin:0 0 20px;">Cargando dashboard financiero...</p>
         </div>
+        </div>
       </div>
 
       <!-- ===== DASHBOARD PROYECTOS ===== -->
-      <div id="panel-proyectos-inicio" class="panel-proyectos">
+      <div id="panel-proyectos-inicio" class="panel-proyectos content-panel">
+        <div style="max-width:1100px;margin:0 auto;padding:24px 20px;">
         <div class="breadcrumb-visual">Proyectos</div>
         <h1>Proyectos</h1>
         <p class="subtitle" style="font-size:14px;color:#64748B;margin:0 0 20px;">Gestión de proyectos y logística</p>
@@ -764,6 +767,7 @@
           <div class="tes-card tes-card-green"><span class="tes-label">Hincas (mes)</span><span class="tes-valor" id="proy-met-hincas">--</span></div>
           <div class="tes-card"><span class="tes-label">Horas maq (mes)</span><span class="tes-valor" id="proy-met-horas">--</span></div>
           <div class="tes-card tes-card-green"><span class="tes-label">Facturado</span><span class="tes-valor" id="proy-met-fact">--</span></div>
+        </div>
         </div>
       </div>
 
@@ -993,7 +997,8 @@
         </div>
       </div>
 
-      <div id="panel-bancos-inicio" class="panel-bancos">
+      <div id="panel-bancos-inicio" class="panel-bancos content-panel">
+        <div style="max-width:1100px;margin:0 auto;padding:24px 20px;">
         <div class="bancos-tabs">
           <button type="button" id="bancos-tab-movimientos" class="bancos-tab activo">Movimientos</button>
           <button type="button" id="bancos-tab-tarjetas" class="bancos-tab">Tarjetas bancos</button>
@@ -1222,6 +1227,7 @@
               </div>
             </div>
           </div>
+        </div>
         </div>
       </div>
 
@@ -2630,6 +2636,7 @@
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
           <h1 style="margin:0;font-size:20px;font-weight:600;">Albaranes de compra</h1>
           <span style="margin-right:auto;font-size:13px;color:var(--color-text-secondary);">Registro de albaranes y vinculación a facturas</span>
+          <button id="btn-procesar-albaran" class="primary" style="padding:6px 14px;font-size:13px;background:#7C3AED;" title="Procesar albarán desde foto con IA (OCR)">📷 Procesar albarán</button>
           <button id="btn-nuevo-albaran" class="primary" style="padding:6px 14px;font-size:13px;">+ Nuevo albarán</button>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
@@ -2734,7 +2741,8 @@
         </div>
       </div>
 
-      <div id="panel-control-calidad-inicio" class="panel-control-calidad">
+      <div id="panel-control-calidad-inicio" class="panel-control-calidad content-panel">
+        <div style="max-width:1100px;margin:0 auto;padding:24px 20px;">
         <div class="breadcrumb-visual">Finanzas &rsaquo; Control de calidad</div>
         <h1 class="cc-titulo">Control de calidad</h1>
         <p class="subtitle cc-subtitle">Analiza las bases de facturas y revisa las filas con errores.</p>
@@ -2789,6 +2797,7 @@
           </div>
           <!-- Grid de cards de errores -->
           <div id="control-calidad-lista"></div>
+        </div>
         </div>
       </div>
 
@@ -2923,7 +2932,10 @@
                 </div>
               </div>
               <div style="display:flex;align-items:center;gap:8px;">
-                <button type="button" class="secondary" id="ed-btn-extracto-mes-siguiente" style="font-size:12px;" title="Asignar esta factura al extracto del mes siguiente (el banco suele incluir cargos de fin de mes en la liquidación siguiente)">Extracto mes siguiente</button>
+                <div>
+                  <label style="font-size:12px;color:var(--color-text-secondary);">Mes de liquidación</label>
+                  <input type="month" id="ed-liquidacion-periodo-input" style="font-size:13px;padding:4px 8px;border:0.5px solid var(--color-border-tertiary);border-radius:6px;display:block;">
+                </div>
                 <p id="ed-liquidacion-periodo-texto" class="subtitle ed-liquidacion-periodo-texto" style="margin:0;font-size:12px;"></p>
               </div>
               <div id="ed-conciliacion-wrap" class="ed-conciliacion-wrap conciliacion-box">

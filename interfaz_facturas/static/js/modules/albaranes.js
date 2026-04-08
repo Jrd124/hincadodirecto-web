@@ -15,6 +15,9 @@ function _initAlbaranes() {
 
   document.getElementById("alb-btn-buscar").addEventListener("click", _buscarAlbaranes);
   document.getElementById("btn-nuevo-albaran").addEventListener("click", function () { _abrirModalAlbaran(null); });
+  document.getElementById("btn-procesar-albaran").addEventListener("click", function () {
+    document.getElementById("modal-albaran-foto-overlay").classList.add("visible");
+  });
   document.getElementById("btn-cancelar-albaran").addEventListener("click", _cerrarModalAlbaran);
   document.getElementById("form-albaran").addEventListener("submit", _guardarAlbaran);
 
