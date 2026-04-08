@@ -519,6 +519,33 @@ def actualizar_empresa(empresa_id: int, data: dict) -> dict | None:
     return obtener_empresa(empresa_id)
 
 
+def eliminar_empresa(empresa_id: int) -> dict:
+    """Soft-delete de empresa y todo lo relacionado (contactos, interacciones, oportunidades).
+
+    Returns:
+        {"ok": True, "eliminados": {"contactos": n, "interacciones": n, "oportunidades": n}}
+        {"ok": False, "error": "..."}
+    """
+    init_crm_db()
+    with _conectar() as conn:
+        if not conn.execute("SELECT id FROM crm_empresas WHERE id = ? AND activo = 1", (empresa_id,)).fetchone():
+            return {"ok": False, "error": "Empresa no encontrada"}
+        ts = _now()
+        conn.execute("UPDATE crm_empresas SET activo = 0 WHERE id = ?", (empresa_id,))
+        n_cont = conn.execute(
+            "UPDATE crm_contactos SET activo = 0, fecha_actualizacion = ? WHERE empresa_id = ? AND activo = 1",
+            (ts, empresa_id)
+        ).rowcount
+        n_int = conn.execute(
+            "DELETE FROM crm_interacciones WHERE empresa_id = ?", (empresa_id,)
+        ).rowcount
+        n_op = conn.execute(
+            "UPDATE crm_oportunidades SET estado = 'perdida' WHERE empresa_id = ? AND estado NOT IN ('ganada','perdida')",
+            (empresa_id,)
+        ).rowcount
+    return {"ok": True, "eliminados": {"contactos": n_cont, "interacciones": n_int, "oportunidades": n_op}}
+
+
 def estadisticas_crm() -> dict[str, Any]:
     init_crm_db()
     import datetime

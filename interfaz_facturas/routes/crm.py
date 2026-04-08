@@ -66,6 +66,14 @@ def crm_actualizar_empresa(empresa_id: int):
   return jsonify(empresa)
 
 
+@crm_bp.delete("/api/crm/empresas/<int:empresa_id>")
+def crm_eliminar_empresa(empresa_id: int):
+  resultado = crm_db.eliminar_empresa(empresa_id)
+  if not resultado.get("ok"):
+    return jsonify({"error": resultado.get("error", "Error")}), 404
+  return jsonify(resultado)
+
+
 @crm_bp.get("/api/crm/empresas/<int:empresa_id>/resumen")
 def crm_resumen_empresa(empresa_id: int):
   """Devuelve resumen ligero: última interacción + contadores. Usado por card cabecera."""

@@ -503,6 +503,30 @@
       .then(function (emp) { if (!emp.error) _crmAbrirModal(emp); });
   });
 
+  // ── Eliminar empresa ────────────────────────────────────────────────────────
+  document.getElementById("btn-eliminar-empresa-crm").addEventListener("click", function () {
+    if (!_crmEmpresaSeleccionada) return;
+    var nombre = document.getElementById("crm-empresa-nombre").textContent || "esta empresa";
+    if (!confirm("¿Eliminar \"" + nombre + "\"?\n\nSe eliminarán también todos sus contactos, interacciones y oportunidades abiertas.\n\nEsta acción no se puede deshacer.")) return;
+    fetch("/api/crm/empresas/" + _crmEmpresaSeleccionada, { method: "DELETE" })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (res.error) { mostrarToast(res.error, "error"); return; }
+        var el = res.eliminados || {};
+        mostrarToast("Empresa eliminada" +
+          (el.contactos ? " · " + el.contactos + " contacto(s)" : "") +
+          (el.interacciones ? " · " + el.interacciones + " actividad(es)" : "") +
+          (el.oportunidades ? " · " + el.oportunidades + " oport. cerrada(s)" : ""),
+          "success");
+        _crmEmpresaSeleccionada = null;
+        document.getElementById("crm-empresa-sin-seleccion").style.display = "block";
+        document.getElementById("crm-empresa-detalle").style.display = "none";
+        _crmCargarEmpresas();
+        _crmCargarStats();
+      })
+      .catch(function () { mostrarToast("Error al eliminar la empresa.", "error"); });
+  });
+
   // Submit form
   formEl.addEventListener("submit", function (e) {
     e.preventDefault();
@@ -997,6 +1021,26 @@
   document.getElementById("btn-editar-contacto-crm").addEventListener("click", function () {
     if (!_contSeleccionado) return;
     fetch("/api/crm/contactos/" + _contSeleccionado).then(function (r) { return r.json(); }).then(function (c) { if (!c.error) _contAbrirModal(c); });
+  });
+
+  // ── Eliminar contacto ───────────────────────────────────────────────────────
+  document.getElementById("btn-eliminar-contacto-crm").addEventListener("click", function () {
+    if (!_contSeleccionado) return;
+    var nombre = (document.getElementById("crm-contacto-nombre") || {}).textContent || "este contacto";
+    if (!confirm("¿Eliminar \"" + nombre + "\"?\n\nEsta acción no se puede deshacer.")) return;
+    fetch("/api/crm/contactos/" + _contSeleccionado, { method: "DELETE" })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (res.error) { mostrarToast(res.error, "error"); return; }
+        mostrarToast("Contacto eliminado.", "success");
+        _contSeleccionado = null;
+        var sinSel = document.getElementById("crm-contacto-sin-seleccion");
+        var det = document.getElementById("crm-contacto-detalle");
+        if (sinSel) sinSel.style.display = "block";
+        if (det) det.style.display = "none";
+        if (window._crmCargarContactos) _crmCargarContactos();
+      })
+      .catch(function () { mostrarToast("Error al eliminar el contacto.", "error"); });
   });
 
   contFormEl.addEventListener("submit", function (e) {
