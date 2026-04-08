@@ -483,6 +483,14 @@
       .panel-albaranes.visible,
       .content-panel.visible {
         display: block;
+        overflow-x: hidden;
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+      .seccion-inicio.visible {
+        overflow-x: hidden;
+        max-width: 100%;
+        box-sizing: border-box;
       }
       .panel-proyectos > .layout {
         max-width: 1800px;
