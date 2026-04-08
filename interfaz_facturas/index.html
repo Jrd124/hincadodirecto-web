@@ -2230,7 +2230,13 @@
             </div>
             <div class="form-row">
               <div class="form-group"><label for="crm-cont-cargo">Cargo</label><input type="text" id="crm-cont-cargo" /></div>
-              <div class="form-group"><label for="crm-cont-empresa">Empresa</label><select id="crm-cont-empresa"><option value="">Sin empresa</option></select></div>
+              <div class="form-group"><label for="crm-cont-empresa-txt">Empresa</label>
+                <div style="position:relative;">
+                  <input type="text" id="crm-cont-empresa-txt" autocomplete="off" placeholder="Escribe para filtrar…" style="width:100%;" />
+                  <input type="hidden" id="crm-cont-empresa" />
+                  <div id="crm-cont-empresa-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);max-height:200px;overflow-y:auto;z-index:9999;"></div>
+                </div>
+              </div>
             </div>
             <div class="form-row">
               <div class="form-group"><label for="crm-cont-email">Email</label><input type="email" id="crm-cont-email" /></div>

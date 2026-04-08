@@ -851,7 +851,6 @@
         var emps = d.empresas || [];
         var selects = [
           contFiltroEmpEl,
-          document.getElementById("crm-cont-empresa"),
           document.getElementById("crm-int-empresa"),
           document.getElementById("crm-inter-filtro-empresa"),
         ];
@@ -990,20 +989,22 @@
     document.getElementById("crm-cont-tipo").value = c ? c.tipo_relacion || "otro" : "otro";
     document.getElementById("crm-cont-notas").value = c ? c.notas || "" : "";
     document.getElementById("btn-eliminar-crm-contacto").style.display = c ? "" : "none";
-    var targetEmpId = c ? (c.empresa_vinculada_id || "") : (_crmEmpresaSeleccionada || "");
+    var targetEmpId = String(c ? (c.empresa_vinculada_id || "") : (_crmEmpresaSeleccionada || ""));
     fetch("/api/crm/empresas?activo=1&limit=2000")
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        var empSel = document.getElementById("crm-cont-empresa");
-        var firstOpt = '<option value="">Sin empresa</option>';
-        empSel.innerHTML = firstOpt;
-        (d.empresas || []).forEach(function (e) {
-          var opt = document.createElement("option");
-          opt.value = e.id;
-          opt.textContent = e.nombre;
-          empSel.appendChild(opt);
+        var emps = d.empresas || [];
+        var found = emps.find(function (e) { return String(e.id) === targetEmpId; });
+        var txt = document.getElementById("crm-cont-empresa-txt");
+        var hid = document.getElementById("crm-cont-empresa");
+        var dd  = document.getElementById("crm-cont-empresa-dropdown");
+        txt.value = found ? found.nombre : "";
+        hid.value = targetEmpId;
+        _opRenderDropdown(txt, hid, dd, emps, targetEmpId, function (id, nombre) {
+          document.getElementById("crm-cont-empresa").value = id;
+          document.getElementById("crm-cont-empresa-txt").value = nombre;
+          dd.style.display = "none";
         });
-        empSel.value = String(targetEmpId);
       });
     contModalEl.classList.add("visible");
     contModalEl.setAttribute("aria-hidden", "false");
