@@ -453,6 +453,7 @@
       .panel-bancos,
       .panel-rrhh,
       .panel-onboarding,
+      .panel-operaciones,
       .panel-control-calidad,
       .panel-tesoreria,
       .panel-crm,
@@ -473,6 +474,7 @@
       .panel-bancos.visible,
       .panel-rrhh.visible,
       .panel-onboarding.visible,
+      .panel-operaciones.visible,
       .panel-control-calidad.visible,
       .panel-tesoreria.visible,
       .panel-crm.visible,
@@ -492,6 +494,26 @@
         max-width: 100%;
         box-sizing: border-box;
       }
+      /* ===== OPERACIONES PILLS ===== */
+      .oper-filtro-pill {
+        padding: 5px 12px;
+        border-radius: 6px;
+        border: none;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        background: transparent;
+        color: var(--color-text-secondary, #64748B);
+        transition: all .15s ease;
+      }
+      .oper-filtro-pill:hover {
+        background: var(--color-border, #E2E8F0);
+      }
+      .oper-filtro-pill.active {
+        background: var(--color-text-primary, #1E293B);
+        color: var(--color-bg-page, #fff);
+      }
+
       .panel-proyectos > .layout {
         max-width: 1800px;
         margin: 0 auto;

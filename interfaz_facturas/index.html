@@ -68,6 +68,11 @@
             <a href="#" class="sidebar-child" id="nav-proyectos-onboarding">Onboarding</a>
           </div>
         </div>
+        <!-- Operaciones -->
+        <a href="#" class="sidebar-item" id="nav-operaciones-modulo">
+          <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="2" width="14" height="12" rx="1.5"/><path d="M1 6h14"/><path d="M5 2v4"/><path d="M11 2v4"/><path d="M4 9h2v2H4z"/><path d="M7 9h2v2H7z"/><path d="M10 9h2v2h-2z"/></svg>
+          <span class="sidebar-label">Operaciones</span>
+        </a>
         <!-- Maquinaria -->
         <div class="sidebar-group">
           <a href="#" class="sidebar-item sidebar-parent" id="nav-maquinaria-modulo" data-group="maquinaria">
@@ -1220,6 +1225,74 @@
                 </table>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== OPERACIONES — PLANIFICADOR ===== -->
+      <div id="panel-operaciones-inicio" class="panel-operaciones content-panel">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+          <div>
+            <h2 style="margin:0;font-size:20px;font-weight:500;">Planificador de operaciones</h2>
+            <span style="font-size:13px;color:var(--color-text-secondary);">Asignaci&oacute;n de personal, m&aacute;quinas y veh&iacute;culos a proyectos</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button type="button" class="btn-small" id="oper-btn-masivo" style="font-size:12px;">Asignar equipo</button>
+            <button type="button" class="btn-small" id="oper-mes-prev" style="padding:4px 10px;">&#8592;</button>
+            <span id="oper-mes-titulo" style="font-size:16px;font-weight:500;min-width:160px;text-align:center;">Abril 2026</span>
+            <button type="button" class="btn-small" id="oper-mes-next" style="padding:4px 10px;">&#8594;</button>
+          </div>
+        </div>
+        <!-- KPIs -->
+        <div id="oper-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;">
+          <div class="tes-card tes-card-blue"><span class="tes-label">Empleados hoy</span><span class="tes-valor" id="oper-kpi-emp">--</span></div>
+          <div class="tes-card tes-card-green"><span class="tes-label">M&aacute;quinas hoy</span><span class="tes-valor" id="oper-kpi-maq">--</span></div>
+          <div class="tes-card"><span class="tes-label">Proyectos activos</span><span class="tes-valor" id="oper-kpi-proy">--</span></div>
+          <div class="tes-card tes-card-green"><span class="tes-label">Ocupaci&oacute;n mes</span><span class="tes-valor" id="oper-kpi-ocup">--</span></div>
+        </div>
+        <!-- Filtros -->
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+          <div id="oper-filtros" style="display:flex;gap:4px;background:var(--color-bg-page,#F8FAFC);border-radius:8px;padding:3px;border:0.5px solid var(--color-border);">
+            <button type="button" class="oper-filtro-pill active" data-filtro="todos">Todos</button>
+            <button type="button" class="oper-filtro-pill" data-filtro="maquinas">M&aacute;quinas</button>
+            <button type="button" class="oper-filtro-pill" data-filtro="hincadores">Hincadores</button>
+            <button type="button" class="oper-filtro-pill" data-filtro="ayudantes">Ayudantes</button>
+            <button type="button" class="oper-filtro-pill" data-filtro="vehiculos">Veh&iacute;culos</button>
+          </div>
+          <div style="width:1px;height:24px;background:var(--color-border);"></div>
+          <select id="oper-filtro-proyecto" style="font-size:12px;padding:5px 24px 5px 8px;border:0.5px solid var(--color-border-tertiary,var(--color-border));border-radius:8px;background:var(--color-bg-page,#fff);width:auto;max-width:220px;">
+            <option value="">Todos los proyectos</option>
+          </select>
+        </div>
+        <!-- Cuadrante -->
+        <div id="oper-cuadrante" style="overflow-x:auto;border:1px solid var(--color-border);border-radius:8px;"></div>
+        <!-- Leyenda -->
+        <div id="oper-leyenda" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;font-size:12px;"></div>
+      </div>
+
+      <!-- Modal: Asignación masiva -->
+      <div id="modal-oper-masivo-overlay" class="modal-overlay" aria-hidden="true">
+        <div class="modal-editar" role="dialog" style="max-width:500px;">
+          <h2 style="margin:0 0 16px;font-size:18px;">Asignar equipo a proyecto</h2>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:12px;font-weight:600;">Proyecto</label>
+            <select id="oper-masivo-proyecto" class="form-select" style="font-size:13px;width:100%;"></select>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+            <div><label style="font-size:12px;">Desde</label><input type="date" id="oper-masivo-desde" class="form-input" style="font-size:13px;"></div>
+            <div><label style="font-size:12px;">Hasta</label><input type="date" id="oper-masivo-hasta" class="form-input" style="font-size:13px;"></div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:12px;font-weight:600;">Empleados</label>
+            <div id="oper-masivo-empleados" style="max-height:150px;overflow-y:auto;border:1px solid var(--color-border);border-radius:6px;padding:8px;display:flex;flex-wrap:wrap;gap:6px;"></div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:12px;font-weight:600;">M&aacute;quinas</label>
+            <div id="oper-masivo-maquinas" style="max-height:100px;overflow-y:auto;border:1px solid var(--color-border);border-radius:6px;padding:8px;display:flex;flex-wrap:wrap;gap:6px;"></div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;">
+            <button type="button" class="secondary" id="oper-masivo-cerrar">Cancelar</button>
+            <button type="button" class="primary" id="oper-masivo-confirmar">Asignar</button>
           </div>
         </div>
       </div>
@@ -3592,6 +3665,7 @@
     <script src="/static/js/modules/eeff.js?v=1"></script>
     <script src="/static/js/modules/albaranes.js?v=1"></script>
     <script src="/static/js/modules/seguros.js?v=1"></script>
+    <script src="/static/js/modules/operaciones.js?v=1"></script>
     <script src="/static/js/app.js?v=31"></script>
     <!-- React desactivado temporalmente — reactivar cuando se resuelva el bug de visibilidad CSS
     <script type="module" src="/static/js/react-app.js"></script>

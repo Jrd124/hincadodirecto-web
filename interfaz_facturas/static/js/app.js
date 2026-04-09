@@ -36,6 +36,12 @@ const MODULOS = {
     subNavLinks: { clientes_facturas: "nav-clientes-facturas", clientes_listado: "nav-clientes-listado" },
     defecto: "clientes_facturas",
   },
+  operaciones: {
+    linkId: "nav-operaciones-modulo",
+    paneles: { inicio: "panel-operaciones-inicio" },
+    subNavLinks: {},
+    defecto: "inicio",
+  },
   proyectos: {
     linkId: "nav-proyectos-modulo",
     submenuId: "submenu-proyectos",
@@ -486,6 +492,8 @@ function activarModulo(nombre) {
     cargarUsuarios();
   } else if (nombre === "maquinaria") {
     cargarMaquinaria();
+  } else if (nombre === "operaciones") {
+    if (typeof cargarOperaciones === "function") cargarOperaciones();
   }
   actualizarHash();
 }
@@ -575,6 +583,10 @@ document.getElementById("nav-proyectos-modulo").addEventListener("click", (e) =>
   e.preventDefault();
   proyectosSubpanel = "inicio";
   activarModulo("proyectos");
+});
+document.getElementById("nav-operaciones-modulo").addEventListener("click", (e) => {
+  e.preventDefault();
+  activarModulo("operaciones");
 });
 document.getElementById("nav-rrhh-modulo").addEventListener("click", (e) => {
   e.preventDefault();
