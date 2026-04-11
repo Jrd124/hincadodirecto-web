@@ -42,17 +42,129 @@ def init_empleados_db() -> None:
                 email TEXT,
                 fecha_alta TEXT,
                 fecha_baja TEXT,
-                estado TEXT DEFAULT 'activo' CHECK(estado IN ('activo','baja','vacaciones')),
+                estado TEXT DEFAULT 'activo' CHECK(estado IN ('activo','baja','vacaciones','exempleado')),
                 notas TEXT,
                 created_at TEXT NOT NULL,
                 updated_at TEXT
             )
         """)
+        # Migrar CHECK constraint si falta 'exempleado'
+        row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='empleados'").fetchone()
+        if row and "'exempleado'" not in (row[0] or ""):
+            conn.execute("ALTER TABLE empleados RENAME TO _empleados_old")
+            conn.execute("""
+                CREATE TABLE empleados (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nombre TEXT NOT NULL,
+                    apellidos TEXT,
+                    dni TEXT UNIQUE,
+                    puesto TEXT,
+                    categoria TEXT,
+                    telefono TEXT,
+                    email TEXT,
+                    fecha_alta TEXT,
+                    fecha_baja TEXT,
+                    estado TEXT DEFAULT 'activo' CHECK(estado IN ('activo','baja','vacaciones','exempleado')),
+                    notas TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT
+                )
+            """)
+            conn.execute("INSERT INTO empleados SELECT id,nombre,apellidos,dni,puesto,categoria,telefono,email,fecha_alta,fecha_baja,estado,notas,created_at,updated_at FROM _empleados_old")
+            conn.execute("DROP TABLE _empleados_old")
+
         # Migración progresiva: añadir columnas nuevas si no existen
         existing = {r[1] for r in conn.execute("PRAGMA table_info(empleados)").fetchall()}
         for col_name, col_type in _EXTRA_COLUMNS:
             if col_name not in existing:
                 conn.execute(f"ALTER TABLE empleados ADD COLUMN {col_name} {col_type}")
+
+        # Columna fecha_antiguedad para dato de nómina
+        if "fecha_antiguedad" not in existing:
+            conn.execute("ALTER TABLE empleados ADD COLUMN fecha_antiguedad TEXT")
+
+        # ── Tablas de nóminas ──────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS nominas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                empleado_id INTEGER NOT NULL,
+                periodo TEXT NOT NULL,
+                tipo TEXT NOT NULL,
+                dias INTEGER DEFAULT 30,
+                salario_base REAL DEFAULT 0,
+                antiguedad_euros REAL DEFAULT 0,
+                plus_asistencia REAL DEFAULT 0,
+                extra_mes REAL DEFAULT 0,
+                mejora_voluntaria REAL DEFAULT 0,
+                a_cuenta_convenio REAL DEFAULT 0,
+                dietas REAL DEFAULT 0,
+                indemnizacion REAL DEFAULT 0,
+                vacaciones_proporcionales REAL DEFAULT 0,
+                cot_cc REAL DEFAULT 0,
+                cot_mei REAL DEFAULT 0,
+                cot_fp REAL DEFAULT 0,
+                cot_desempleo REAL DEFAULT 0,
+                irpf_porcentaje REAL DEFAULT 0,
+                irpf_euros REAL DEFAULT 0,
+                embargo REAL DEFAULT 0,
+                rem_total REAL DEFAULT 0,
+                base_ss REAL DEFAULT 0,
+                total_devengado REAL DEFAULT 0,
+                total_deducir REAL DEFAULT 0,
+                liquido REAL DEFAULT 0,
+                coste_empresa REAL DEFAULT 0,
+                coste_dia REAL DEFAULT 0,
+                ss_empresa REAL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (empleado_id) REFERENCES empleados(id),
+                UNIQUE(empleado_id, periodo, tipo)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_nominas_emp ON nominas(empleado_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_nominas_periodo ON nominas(periodo)")
+
+        # ── Tablas futuras (Fase 2) ───────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS adelantos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                empleado_id INTEGER NOT NULL,
+                fecha TEXT NOT NULL,
+                importe REAL NOT NULL,
+                concepto TEXT,
+                estado TEXT DEFAULT 'pendiente',
+                nomina_descuento_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (empleado_id) REFERENCES empleados(id)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ausencias (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                empleado_id INTEGER NOT NULL,
+                tipo TEXT NOT NULL,
+                fecha_inicio TEXT NOT NULL,
+                fecha_fin TEXT,
+                dias INTEGER,
+                motivo TEXT,
+                estado TEXT DEFAULT 'aprobada',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (empleado_id) REFERENCES empleados(id)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS dietas_config (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tipo TEXT NOT NULL,
+                subtipo TEXT NOT NULL,
+                categoria TEXT,
+                importe REAL NOT NULL,
+                fecha_vigencia_desde TEXT NOT NULL,
+                fecha_vigencia_hasta TEXT,
+                notas TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
     _initialized = True
 
 
@@ -67,7 +179,7 @@ _CAMPOS = [
     "prl_basico", "prl_basico_horas", "prl_basico_caducidad",
     "prl_especifico", "prl_especifico_caducidad",
     "apto_medico", "apto_medico_caducidad",
-    "formacion_especifica", "foto_url",
+    "formacion_especifica", "foto_url", "fecha_antiguedad",
 ]
 
 

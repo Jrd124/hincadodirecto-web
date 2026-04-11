@@ -1302,24 +1302,34 @@
       <div id="panel-rrhh-inicio" class="panel-rrhh">
         <div class="breadcrumb-visual">RRHH</div>
         <h1>Recursos Humanos</h1>
-        <p class="subtitle" style="font-size:14px;color:#64748B;margin:0 0 20px;">Gestión integral del equipo</p>
-        <div class="modulo-nav-grid">
-          <div class="modulo-nav-card modulo-nav-card-disabled">
-            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="7" r="3"/><path d="M2 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/><circle cx="18" cy="9" r="2.5"/><path d="M22 21c0-3-2.2-5.5-5-5.9"/></svg>
-            <div><span class="modulo-nav-title">Equipo</span><span class="badge-proximamente">Próximamente</span><p class="modulo-nav-desc">Gestión del equipo y asignación de proyectos</p></div>
-          </div>
-          <div class="modulo-nav-card modulo-nav-card-disabled">
-            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 9h20M8 15h2M14 15h2"/></svg>
-            <div><span class="modulo-nav-title">Nóminas</span><span class="badge-proximamente">Próximamente</span><p class="modulo-nav-desc">Gestión de nóminas mensuales y pagos</p></div>
-          </div>
-          <div class="modulo-nav-card modulo-nav-card-disabled">
-            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-            <div><span class="modulo-nav-title">Adelantos</span><span class="badge-proximamente">Próximamente</span><p class="modulo-nav-desc">Control de adelantos de nómina</p></div>
-          </div>
-          <div class="modulo-nav-card modulo-nav-card-disabled">
-            <svg class="modulo-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-            <div><span class="modulo-nav-title">Reserva</span><span class="badge-proximamente">Próximamente</span><p class="modulo-nav-desc">Pool de candidatos y reserva de talento</p></div>
-          </div>
+        <p class="subtitle" style="font-size:14px;color:#64748B;margin:0 0 20px;">Dashboard de costes de personal</p>
+        <!-- KPIs -->
+        <div id="rrhh-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:20px;">
+          <div class="tes-card tes-card-blue"><span class="tes-label">Empleados activos</span><span class="tes-valor" id="rrhh-kpi-activos">--</span></div>
+          <div class="tes-card tes-card-green"><span class="tes-label">Coste empresa/mes</span><span class="tes-valor" id="rrhh-kpi-coste-mes">--</span></div>
+          <div class="tes-card"><span class="tes-label">Coste medio/d&iacute;a</span><span class="tes-valor" id="rrhh-kpi-coste-dia">--</span></div>
+          <div class="tes-card"><span class="tes-label">Dietas mes</span><span class="tes-valor" id="rrhh-kpi-dietas">--</span></div>
+          <div class="tes-card"><span class="tes-label">N&oacute;minas cargadas</span><span class="tes-valor" id="rrhh-kpi-nominas">--</span></div>
+          <div class="tes-card" style="border-left:4px solid #EF4444;"><span class="tes-label">Finiquitos 12m</span><span class="tes-valor" id="rrhh-kpi-rotacion" style="color:#991B1B;">--</span></div>
+        </div>
+        <!-- Tabla resumen mensual -->
+        <h4 style="margin:0 0 8px;font-size:0.95rem;font-weight:700;">Evoluci&oacute;n mensual</h4>
+        <div class="card" style="overflow-x:auto;padding:0;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+            <thead>
+              <tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
+                <th style="padding:8px 10px;font-weight:700;">Mes</th>
+                <th style="padding:8px 10px;font-weight:700;text-align:right;">Empleados</th>
+                <th style="padding:8px 10px;font-weight:700;text-align:right;">Coste Empresa</th>
+                <th style="padding:8px 10px;font-weight:700;text-align:right;">L&iacute;quido</th>
+                <th style="padding:8px 10px;font-weight:700;text-align:right;">Dietas</th>
+                <th style="padding:8px 10px;font-weight:700;text-align:right;">Finiquitos</th>
+              </tr>
+            </thead>
+            <tbody id="rrhh-tbody-resumen-mensual">
+              <tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-secondary);">Cargando...</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
       <div id="panel-rrhh-equipo" class="panel-rrhh">
@@ -1474,11 +1484,48 @@
         </div>
       </div>
       <div id="panel-rrhh-nominas" class="panel-rrhh">
-        <div class="card card-placeholder">
-          <svg class="placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M2 9h20M8 15h2M14 15h2"/></svg>
-          <h1>Nóminas</h1>
-          <span class="badge-proximamente">Próximamente</span>
-          <p class="placeholder-desc">Gestión de nóminas mensuales y pagos al equipo</p>
+        <!-- Selector periodo + botón importar -->
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <label style="font-weight:600;font-size:0.9rem;">Periodo:</label>
+            <select id="rrhh-nominas-periodo" style="padding:6px 10px;border:1px solid var(--border,#dee2e6);border-radius:8px;font-size:0.88rem;"></select>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <label style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#EFF6FF;color:#1E40AF;border:1px solid #93C5FD;border-radius:8px;cursor:pointer;font-size:0.88rem;font-weight:600;">
+              Importar Excel
+              <input type="file" id="rrhh-import-file" accept=".xlsx,.xls" style="display:none;">
+            </label>
+          </div>
+        </div>
+        <!-- Ficha individual (oculta por defecto) -->
+        <div id="rrhh-ficha-empleado" style="display:none;margin-bottom:20px;">
+          <button onclick="_rrhhCerrarFicha()" style="margin-bottom:10px;padding:4px 10px;font-size:0.85rem;background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;">&larr; Volver al listado</button>
+          <div id="rrhh-ficha-contenido"></div>
+        </div>
+        <!-- Tabla nóminas del mes -->
+        <div id="rrhh-nominas-tabla-wrapper">
+          <div class="card" style="overflow-x:auto;padding:0;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+              <thead>
+                <tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
+                  <th style="padding:8px 8px;font-weight:700;">#</th>
+                  <th style="padding:8px 8px;font-weight:700;">Empleado</th>
+                  <th style="padding:8px 6px;font-weight:700;">Tipo</th>
+                  <th style="padding:8px 6px;font-weight:700;text-align:right;">Sal. Base</th>
+                  <th style="padding:8px 6px;font-weight:700;text-align:right;">Dietas</th>
+                  <th style="padding:8px 6px;font-weight:700;text-align:right;">T. Devengado</th>
+                  <th style="padding:8px 6px;font-weight:700;text-align:right;">T. Deducir</th>
+                  <th style="padding:8px 6px;font-weight:700;text-align:right;">L&iacute;quido</th>
+                  <th style="padding:8px 6px;font-weight:700;text-align:right;">Coste Empresa</th>
+                  <th style="padding:8px 6px;font-weight:700;text-align:right;">Coste/D&iacute;a</th>
+                </tr>
+              </thead>
+              <tbody id="rrhh-tbody-nominas-mes">
+                <tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--text-secondary);">Selecciona un periodo</td></tr>
+              </tbody>
+              <tfoot id="rrhh-tfoot-nominas-mes" style="font-weight:700;background:var(--bg-secondary,#f8f9fa);"></tfoot>
+            </table>
+          </div>
         </div>
       </div>
       <div id="panel-rrhh-adelantos" class="panel-rrhh">

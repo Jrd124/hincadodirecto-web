@@ -592,6 +592,7 @@ document.getElementById("nav-rrhh-modulo").addEventListener("click", (e) => {
   e.preventDefault();
   rrhhSubpanel = "inicio";
   activarModulo("rrhh");
+  if (typeof window._rrhhOnPanelShow === "function") window._rrhhOnPanelShow("inicio");
 });
 if (document.getElementById("nav-onboarding-modulo")) {
   document.getElementById("nav-onboarding-modulo").addEventListener("click", (e) => {
@@ -717,6 +718,7 @@ document.getElementById("nav-rrhh-alumni").addEventListener("click", (e) => {
 document.getElementById("nav-rrhh-nominas").addEventListener("click", (e) => {
   e.preventDefault();
   activarSubpanel("rrhh", "nominas");
+  if (typeof window._rrhhOnPanelShow === "function") window._rrhhOnPanelShow("nominas");
 });
 document.getElementById("nav-rrhh-adelantos").addEventListener("click", (e) => {
   e.preventDefault();
