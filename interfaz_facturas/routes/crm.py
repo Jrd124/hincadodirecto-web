@@ -282,6 +282,14 @@ def crm_interacciones_pendientes():
 
 # ─── CRM Oportunidades ──────────────────────────────────────────────────────
 
+_TRUTHY = {"1", "true", "yes", "si", "sí", "on"}
+
+
+def _bool_arg(name: str) -> bool:
+  raw = (request.args.get(name) or "").strip().lower()
+  return raw in _TRUTHY
+
+
 @crm_bp.get("/api/crm/oportunidades")
 def crm_listar_oportunidades():
   estado = (request.args.get("estado") or "").strip() or None
@@ -291,9 +299,17 @@ def crm_listar_oportunidades():
   q = (request.args.get("q") or "").strip() or None
   limit = min(int(request.args.get("limit") or 200), 500)
   offset = int(request.args.get("offset") or 0)
+  # Filtros nuevos del motor (Fase 3). Compat: si no se pasan, no cambia nada.
+  riesgo = (request.args.get("riesgo") or "").strip().lower() or None
+  vencidas = _bool_arg("vencidas")
+  sin_proxima_accion = _bool_arg("sin_proxima_accion")
+  sin_actividad_dias = request.args.get("sin_actividad_dias", type=int)
+  ordenar = (request.args.get("ordenar") or "").strip().lower() or None
   return jsonify(crm_db.listar_oportunidades(
     estado=estado, empresa_id=empresa_id, contacto_id=contacto_id,
     fuente=fuente, q=q, limit=limit, offset=offset,
+    riesgo=riesgo, vencidas=vencidas, sin_proxima_accion=sin_proxima_accion,
+    sin_actividad_dias=sin_actividad_dias, ordenar=ordenar,
   ))
 
 
@@ -358,6 +374,40 @@ def crm_eliminar_oportunidad(oportunidad_id: int):
   if not res.get("ok"):
     return jsonify(res), 404
   return jsonify(res), 200
+
+
+@crm_bp.get("/api/crm/seguimiento/hoy")
+def crm_seguimiento_hoy():
+  """Oportunidades que requieren acción hoy o están vencidas.
+
+  Query params:
+    limit (int, default 100, max 500)
+    incluir_verdes (bool, default false): si true, incluye riesgo=verde.
+  """
+  limit = min(int(request.args.get("limit") or 100), 500)
+  incluir_verdes = _bool_arg("incluir_verdes")
+  return jsonify(crm_db.oportunidades_hoy(limit=limit, incluir_verdes=incluir_verdes))
+
+
+@crm_bp.get("/api/crm/seguimiento/riesgo")
+def crm_seguimiento_riesgo():
+  """Oportunidades abiertas en riesgo.
+
+  Query params:
+    nivel (str): 'rojo' | 'ambar' | 'ambar+rojo' (default).
+    limit (int, default 100, max 500)
+  """
+  nivel = (request.args.get("nivel") or "ambar+rojo").strip().lower()
+  if nivel not in ("rojo", "ambar", "ambar+rojo"):
+    return _bad_request("nivel debe ser 'rojo', 'ambar' o 'ambar+rojo'")
+  limit = min(int(request.args.get("limit") or 100), 500)
+  return jsonify(crm_db.oportunidades_riesgo(nivel=nivel, limit=limit))
+
+
+@crm_bp.get("/api/crm/analitica/pipeline")
+def crm_analitica_pipeline():
+  """Métricas agregadas del pipeline: etapas, riesgo, importe rojo, disciplina, tiempos medios."""
+  return jsonify(crm_db.analitica_pipeline())
 
 
 @crm_bp.get("/api/crm/seguimiento/empresas-frias")

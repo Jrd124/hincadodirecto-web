@@ -187,6 +187,79 @@ def init_crm_db() -> None:
         except Exception:
             pass
 
+        # Migration: CRM v1.5 — motor de seguimiento (Fase 2, Bloques 1-2)
+        # Añade campos persistidos por el motor en crm_oportunidades,
+        # columna direccion en crm_interacciones, tabla crm_etapa_sla e índices.
+        # Idempotente. Script equivalente: scripts/migration_crm_v15.py
+        try:
+            op_cols = {r[1] for r in conn.execute("PRAGMA table_info(crm_oportunidades)").fetchall()}
+            _v15_op = [
+                ("ultima_interaccion_fecha",    "TEXT"),
+                ("fecha_entrada_etapa",         "TEXT"),
+                ("next_action_date",            "TEXT"),
+                ("next_action_type",            "TEXT"),
+                ("next_action_source",          "TEXT"),
+                ("priority_score",              "INTEGER"),
+                ("riesgo",                      "TEXT"),
+                ("estado_respuesta",            "TEXT"),
+                ("seguimiento_recalculado_en",  "TEXT"),
+            ]
+            for _nom, _tipo in _v15_op:
+                if _nom not in op_cols:
+                    conn.execute(f"ALTER TABLE crm_oportunidades ADD COLUMN {_nom} {_tipo}")
+
+            int_cols = {r[1] for r in conn.execute("PRAGMA table_info(crm_interacciones)").fetchall()}
+            if "direccion" not in int_cols:
+                conn.execute("ALTER TABLE crm_interacciones ADD COLUMN direccion TEXT")
+                conn.execute(
+                    "UPDATE crm_interacciones SET direccion = 'none' WHERE direccion IS NULL"
+                )
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS crm_etapa_sla (
+                    etapa                   TEXT PRIMARY KEY,
+                    sla_dias_sin_contacto   INTEGER NOT NULL,
+                    sla_dias_en_etapa       INTEGER NOT NULL,
+                    accion_default          TEXT    NOT NULL,
+                    prioridad_base          INTEGER NOT NULL
+                )
+            """)
+            _v15_seed = [
+                ("lead",                 5,    14, "primer_contacto",      40),
+                ("contacto_inicial",     7,    21, "perseguir_respuesta",  55),
+                ("cotizacion_enviada",   5,    30, "recordar_presupuesto", 75),
+                ("negociacion",          3,    20, "cerrar",               90),
+                ("aplazada",            30,   120, "reactivar",            20),
+                ("ganada",            9999,  9999, "cerrar",                0),
+                ("perdida",           9999,  9999, "cerrar",                0),
+            ]
+            for _fila in _v15_seed:
+                conn.execute(
+                    "INSERT OR IGNORE INTO crm_etapa_sla "
+                    "(etapa, sla_dias_sin_contacto, sla_dias_en_etapa, accion_default, prioridad_base) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    _fila,
+                )
+
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS ix_crm_oport_next_action_date "
+                "ON crm_oportunidades(next_action_date)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS ix_crm_oport_priority_score "
+                "ON crm_oportunidades(priority_score DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS ix_crm_oport_riesgo "
+                "ON crm_oportunidades(riesgo)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS ix_crm_interacciones_direccion "
+                "ON crm_interacciones(oportunidad_id, direccion, fecha DESC)"
+            )
+        except Exception as _exc:
+            logger.warning("Migración CRM v1.5 no aplicada completamente: %s", _exc)
+
         # ── Tablas auxiliares para duplicados ────────────────────────────────
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS terceros_fusiones_log (
@@ -762,19 +835,39 @@ def listar_interacciones(
         return {"interacciones": [dict(r) for r in rows], "total": total, "limit": limit, "offset": offset}
 
 
+def _inferir_direccion(tipo: str, data: dict) -> str:
+    """Dirección por defecto para interacciones creadas a mano.
+
+    Las notas/llamadas/reuniones/visitas internas no tienen dirección clara →
+    'none'. Email y whatsapp manuales se consideran outbound por defecto
+    (el comercial los creó para contactar), salvo que el caller lo indique.
+    Gmail sync sobreescribe esto con 'in'/'out' real.
+    """
+    explicita = (data.get("direccion") or "").strip().lower()
+    if explicita in ("in", "out", "none"):
+        return explicita
+    tipo = (tipo or "").lower()
+    if tipo in ("email", "whatsapp"):
+        return "out"
+    return "none"
+
+
 def crear_interaccion(data: dict) -> dict:
     init_crm_db()
     ahora = _now()
+    tipo = (data.get("tipo") or "nota").strip()
+    direccion = _inferir_direccion(tipo, data)
     with _conectar() as conn:
         conn.execute("""
             INSERT INTO crm_interacciones (contacto_id, empresa_id, tipo, asunto, descripcion,
                 fecha, duracion_minutos, resultado, siguiente_accion, fecha_siguiente_accion,
-                oportunidad_id, creado_por, fecha_creacion, source, gmail_thread_id, gmail_snippet)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                oportunidad_id, creado_por, fecha_creacion, source, gmail_thread_id, gmail_snippet,
+                direccion)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             data.get("contacto_id") or None,
             data.get("empresa_id") or None,
-            (data.get("tipo") or "nota").strip(),
+            tipo,
             (data.get("asunto") or "").strip() or None,
             (data.get("descripcion") or "").strip() or None,
             (data.get("fecha") or ahora[:10]).strip(),
@@ -788,9 +881,10 @@ def crear_interaccion(data: dict) -> dict:
             (data.get("source") or "manual").strip(),
             data.get("gmail_thread_id") or None,
             data.get("gmail_snippet") or None,
+            direccion,
         ))
         new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-        return dict(conn.execute("""
+        resultado = dict(conn.execute("""
             SELECT i.*, c.nombre AS nombre_contacto, c.apellidos AS apellidos_contacto,
                    e.nombre AS nombre_empresa
             FROM crm_interacciones i
@@ -798,6 +892,13 @@ def crear_interaccion(data: dict) -> dict:
             LEFT JOIN crm_empresas e ON e.id = i.empresa_id
             WHERE i.id = ?
         """, (new_id,)).fetchone())
+        # Hook motor de seguimiento — nunca debe romper el insert
+        try:
+            from core import crm_seguimiento
+            crm_seguimiento.recalcular_por_interaccion(new_id, conn)
+        except Exception as exc:
+            logger.warning("crm_seguimiento hook (crear_interaccion) falló: %s", exc)
+        return resultado
 
 
 def actualizar_interaccion(interaccion_id: int, data: dict) -> dict | None:
@@ -827,7 +928,7 @@ def actualizar_interaccion(interaccion_id: int, data: dict) -> dict | None:
             (data.get("source") or "manual").strip(),
             interaccion_id,
         ))
-        return dict(conn.execute("""
+        resultado = dict(conn.execute("""
             SELECT i.*, c.nombre AS nombre_contacto, c.apellidos AS apellidos_contacto,
                    e.nombre AS nombre_empresa
             FROM crm_interacciones i
@@ -835,12 +936,34 @@ def actualizar_interaccion(interaccion_id: int, data: dict) -> dict | None:
             LEFT JOIN crm_empresas e ON e.id = i.empresa_id
             WHERE i.id = ?
         """, (interaccion_id,)).fetchone())
+        try:
+            from core import crm_seguimiento
+            crm_seguimiento.recalcular_por_interaccion(interaccion_id, conn)
+        except Exception as exc:
+            logger.warning("crm_seguimiento hook (actualizar_interaccion) falló: %s", exc)
+        return resultado
 
 
 def eliminar_interaccion(interaccion_id: int) -> bool:
     init_crm_db()
     with _conectar() as conn:
+        # Capturamos oportunidad/empresa ANTES del DELETE para recálculo posterior.
+        row = conn.execute(
+            "SELECT oportunidad_id, empresa_id FROM crm_interacciones WHERE id = ?",
+            (interaccion_id,),
+        ).fetchone()
         n = conn.execute("DELETE FROM crm_interacciones WHERE id = ?", (interaccion_id,)).rowcount
+        if n > 0 and row is not None:
+            try:
+                from core import crm_seguimiento
+                op_id = row["oportunidad_id"] if isinstance(row, sqlite3.Row) else row[0]
+                emp_id = row["empresa_id"] if isinstance(row, sqlite3.Row) else row[1]
+                if op_id:
+                    crm_seguimiento.recalcular_seguimiento_oportunidad(op_id, conn)
+                elif emp_id:
+                    crm_seguimiento.recalcular_seguimiento_empresa(emp_id, conn)
+            except Exception as exc:
+                logger.warning("crm_seguimiento hook (eliminar_interaccion) falló: %s", exc)
     return n > 0
 
 
@@ -903,7 +1026,7 @@ def empresas_sin_actividad(
                  WHERE empresa_id = e.id ORDER BY fecha DESC LIMIT 1) AS ultima_interaccion_tipo,
                 CAST(
                     julianday('now') -
-                    julianday(COALESCE(MAX(i.fecha), e.created_at, '2000-01-01'))
+                    julianday(COALESCE(MAX(i.fecha), e.fecha_creacion, '2000-01-01'))
                 AS INTEGER) AS dias_sin_actividad
             FROM crm_empresas e
             LEFT JOIN crm_interacciones i ON i.empresa_id = e.id
@@ -938,19 +1061,43 @@ def interacciones_pendientes() -> list[dict[str, Any]]:
 
 _OPORT_ESTADOS = ('lead', 'contacto_inicial', 'cotizacion_enviada', 'negociacion', 'ganada', 'perdida', 'aplazada')
 
+# Selección base con derivados de seguimiento (dias_*) calculados en query.
+# julianday('now') es UTC, así que los días son coherentes con _now() del motor.
 _OPORT_SELECT = """
     SELECT o.*,
         e.nombre AS nombre_empresa, e.tipo AS tipo_empresa,
         c.nombre AS nombre_contacto, c.apellidos AS apellidos_contacto,
         pres.referencia AS presupuesto_ref,
         proy.nombre AS proyecto_nombre,
-        (SELECT COUNT(*) FROM crm_interacciones i WHERE i.oportunidad_id = o.id) AS num_interacciones
+        (SELECT COUNT(*) FROM crm_interacciones i WHERE i.oportunidad_id = o.id) AS num_interacciones,
+        CASE
+            WHEN o.ultima_interaccion_fecha IS NULL THEN NULL
+            ELSE CAST(julianday('now') - julianday(substr(o.ultima_interaccion_fecha, 1, 10)) AS INTEGER)
+        END AS dias_sin_contacto,
+        CASE
+            WHEN o.fecha_entrada_etapa IS NULL THEN NULL
+            ELSE CAST(julianday('now') - julianday(substr(o.fecha_entrada_etapa, 1, 10)) AS INTEGER)
+        END AS dias_en_etapa_actual
     FROM crm_oportunidades o
     LEFT JOIN crm_empresas e ON e.id = o.empresa_id
     LEFT JOIN crm_contactos c ON c.id = o.contacto_id
     LEFT JOIN presupuestos pres ON pres.id = o.presupuesto_id
     LEFT JOIN proyectos proy ON proy.id = o.proyecto_id
 """
+
+# Orden canónico del motor: prioridad DESC, empates por next_action_date ASC.
+_ORDER_MOTOR = (
+    "ORDER BY COALESCE(o.priority_score, 0) DESC, "
+    "o.next_action_date ASC NULLS LAST, o.fecha_creacion DESC"
+)
+# SQLite no soporta NULLS LAST; simulamos con CASE.
+_ORDER_MOTOR = (
+    "ORDER BY COALESCE(o.priority_score, 0) DESC, "
+    "CASE WHEN o.next_action_date IS NULL THEN 1 ELSE 0 END, "
+    "o.next_action_date ASC, o.fecha_creacion DESC"
+)
+
+_RIESGOS_VALIDOS = ("verde", "ambar", "rojo")
 
 
 def listar_oportunidades(
@@ -961,7 +1108,22 @@ def listar_oportunidades(
     q: str | None = None,
     limit: int = 200,
     offset: int = 0,
+    riesgo: str | None = None,
+    vencidas: bool = False,
+    sin_proxima_accion: bool = False,
+    sin_actividad_dias: int | None = None,
+    ordenar: str | None = None,
 ) -> dict[str, Any]:
+    """Lista oportunidades con filtros opcionales sobre campos del motor.
+
+    Filtros de motor (aditivos, se aplican sobre los existentes):
+      riesgo              : 'verde' | 'ambar' | 'rojo' | 'ambar+rojo'
+      vencidas            : True → next_action_date < hoy
+      sin_proxima_accion  : True → next_action_date IS NULL
+      sin_actividad_dias  : int → ultima_interaccion_fecha <= hoy - N
+      ordenar             : 'motor' (priority_score/next_action_date) |
+                            None (orden por defecto: fecha_creacion DESC)
+    """
     init_crm_db()
     where_parts: list[str] = []
     params: list[Any] = []
@@ -980,16 +1142,254 @@ def listar_oportunidades(
     if q:
         where_parts.append("o.nombre LIKE ?")
         params.append(f"%{q}%")
+
+    # ── Filtros nuevos del motor (Fase 3) ──
+    if riesgo:
+        # Normalizamos: Flask decodifica '+' de la query string como espacio,
+        # así que ?riesgo=ambar+rojo llega como 'ambar rojo'. Tratamos ambas
+        # formas (y coma) como equivalentes.
+        r = riesgo.strip().lower().replace(" ", "+").replace(",", "+")
+        if r in ("ambar+rojo", "rojo+ambar"):
+            where_parts.append("o.riesgo IN ('ambar','rojo')")
+        elif r in _RIESGOS_VALIDOS:
+            where_parts.append("o.riesgo = ?")
+            params.append(r)
+        # si llega un riesgo no válido, se ignora silenciosamente (no rompe contrato)
+
+    if vencidas:
+        # Sólo oportunidades con fecha y vencida a hoy. Excluimos NULL para
+        # mantener semánticas claras: "sin próxima acción" es un filtro aparte.
+        where_parts.append(
+            "o.next_action_date IS NOT NULL AND o.next_action_date < date('now')"
+        )
+
+    if sin_proxima_accion:
+        # Oportunidad abierta sin next_action_date calculado ni definido.
+        where_parts.append("o.next_action_date IS NULL")
+        where_parts.append(
+            "o.estado IN ('lead','contacto_inicial','cotizacion_enviada','negociacion','aplazada')"
+        )
+
+    if sin_actividad_dias is not None and sin_actividad_dias > 0:
+        where_parts.append(
+            "(o.ultima_interaccion_fecha IS NULL OR "
+            "julianday('now') - julianday(substr(o.ultima_interaccion_fecha, 1, 10)) >= ?)"
+        )
+        params.append(int(sin_actividad_dias))
+
     where = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
 
+    order_sql = _ORDER_MOTOR if (ordenar == "motor") else "ORDER BY o.fecha_creacion DESC"
+
     with _conectar() as conn:
-        total = conn.execute(f"SELECT COUNT(*) FROM crm_oportunidades o {where}", params).fetchone()[0]
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM crm_oportunidades o {where}", params
+        ).fetchone()[0]
         rows = conn.execute(f"""
             {_OPORT_SELECT} {where}
-            ORDER BY o.fecha_creacion DESC
+            {order_sql}
             LIMIT ? OFFSET ?
         """, params + [limit, offset]).fetchall()
         return {"oportunidades": [dict(r) for r in rows], "total": total}
+
+
+# ─── Seguimiento / analítica (Fase 3) ────────────────────────────────────────
+
+def oportunidades_hoy(
+    limit: int = 100,
+    incluir_verdes: bool = False,
+) -> dict[str, Any]:
+    """Oportunidades que requieren acción hoy o están vencidas.
+
+    - Lee los campos ya persistidos por el motor; no reinventa lógica.
+    - Incluye 'ámbar' y 'rojo' por defecto; 'verde' opcional.
+    - Orden: priority_score DESC, next_action_date ASC (vencidas primero).
+    """
+    init_crm_db()
+    where_parts = [
+        "o.estado IN ('lead','contacto_inicial','cotizacion_enviada','negociacion','aplazada')",
+        "(o.next_action_date IS NOT NULL AND o.next_action_date <= date('now'))",
+    ]
+    if not incluir_verdes:
+        where_parts.append("(o.riesgo IS NULL OR o.riesgo IN ('ambar','rojo'))")
+    where = "WHERE " + " AND ".join(where_parts)
+    with _conectar() as conn:
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM crm_oportunidades o {where}"
+        ).fetchone()[0]
+        rows = conn.execute(f"""
+            {_OPORT_SELECT} {where}
+            {_ORDER_MOTOR}
+            LIMIT ?
+        """, [int(limit)]).fetchall()
+    return {"oportunidades": [dict(r) for r in rows], "total": total}
+
+
+def oportunidades_riesgo(
+    nivel: str = "ambar+rojo",
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Oportunidades abiertas filtradas por nivel de riesgo.
+
+    nivel: 'rojo' | 'ambar' | 'ambar+rojo'
+    Orden: rojo antes que ámbar; dentro de cada bucket, prioridad DESC.
+    """
+    init_crm_db()
+    nivel_norm = (nivel or "ambar+rojo").strip().lower()
+    where_parts = [
+        "o.estado IN ('lead','contacto_inicial','cotizacion_enviada','negociacion','aplazada')",
+    ]
+    params: list[Any] = []
+    if nivel_norm == "rojo":
+        where_parts.append("o.riesgo = 'rojo'")
+    elif nivel_norm == "ambar":
+        where_parts.append("o.riesgo = 'ambar'")
+    else:  # ambar+rojo (default)
+        where_parts.append("o.riesgo IN ('ambar','rojo')")
+    where = "WHERE " + " AND ".join(where_parts)
+    # Orden: rojo primero (bucket 0 < 1), luego prioridad, luego fecha
+    order = (
+        "ORDER BY CASE o.riesgo WHEN 'rojo' THEN 0 WHEN 'ambar' THEN 1 ELSE 2 END, "
+        "COALESCE(o.priority_score, 0) DESC, "
+        "CASE WHEN o.next_action_date IS NULL THEN 1 ELSE 0 END, "
+        "o.next_action_date ASC"
+    )
+    with _conectar() as conn:
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM crm_oportunidades o {where}", params
+        ).fetchone()[0]
+        rows = conn.execute(f"""
+            {_OPORT_SELECT} {where}
+            {order}
+            LIMIT ?
+        """, params + [int(limit)]).fetchall()
+    return {
+        "oportunidades": [dict(r) for r in rows],
+        "total": total,
+        "nivel": nivel_norm,
+    }
+
+
+def analitica_pipeline() -> dict[str, Any]:
+    """Métricas agregadas del pipeline (Fase 3).
+
+    Devuelve:
+      - pipeline      : [{estado, count, importe_total}] — todas las etapas
+      - riesgo        : {verde, ambar, rojo, sin_clasificar} (sólo abiertas)
+      - importe_rojo  : suma de importe_estimado de oportunidades en rojo
+      - disciplina    : {
+            total_abiertas, con_next_action, sin_next_action,
+            vencidas, cobertura_pct
+        }
+      - tiempos_medios: {
+            dias_en_cotizacion_enviada, dias_en_negociacion
+        } — medias sobre abiertas en esa etapa, usando fecha_entrada_etapa.
+      - nota_conversion: razón por la que no se incluye conversion todavía.
+
+    Toda la agregación se hace en SQL; la ruta HTTP no hace cálculos.
+    """
+    init_crm_db()
+    abiertos = ('lead', 'contacto_inicial', 'cotizacion_enviada', 'negociacion', 'aplazada')
+    placeholder_abiertos = ",".join("?" * len(abiertos))
+    with _conectar() as conn:
+        # Pipeline por etapa — reutiliza la misma semántica que pipeline_oportunidades()
+        pipeline_rows = conn.execute("""
+            SELECT estado, COUNT(*) AS count,
+                   COALESCE(SUM(importe_estimado), 0) AS importe_total
+            FROM crm_oportunidades
+            GROUP BY estado
+        """).fetchall()
+        pipeline_dict = {e: {"count": 0, "importe_total": 0.0} for e in _OPORT_ESTADOS}
+        for r in pipeline_rows:
+            pipeline_dict[r["estado"]] = {
+                "count": r["count"],
+                "importe_total": round(r["importe_total"] or 0.0, 2),
+            }
+        pipeline = [{"estado": e, **v} for e, v in pipeline_dict.items()]
+
+        # Riesgo — sólo abiertas
+        riesgo_rows = conn.execute(
+            f"""
+            SELECT COALESCE(riesgo, 'sin_clasificar') AS bucket, COUNT(*) AS c
+            FROM crm_oportunidades
+            WHERE estado IN ({placeholder_abiertos})
+            GROUP BY bucket
+            """,
+            abiertos,
+        ).fetchall()
+        riesgo = {"verde": 0, "ambar": 0, "rojo": 0, "sin_clasificar": 0}
+        for r in riesgo_rows:
+            b = r["bucket"] if r["bucket"] in riesgo else "sin_clasificar"
+            riesgo[b] = int(r["c"])
+
+        # Importe en rojo
+        importe_rojo = conn.execute(
+            f"""
+            SELECT COALESCE(SUM(importe_estimado), 0) AS total
+            FROM crm_oportunidades
+            WHERE estado IN ({placeholder_abiertos}) AND riesgo = 'rojo'
+            """,
+            abiertos,
+        ).fetchone()["total"]
+
+        # Disciplina comercial
+        disc_row = conn.execute(
+            f"""
+            SELECT
+              SUM(CASE WHEN 1=1 THEN 1 ELSE 0 END) AS total_abiertas,
+              SUM(CASE WHEN next_action_date IS NOT NULL THEN 1 ELSE 0 END) AS con_next,
+              SUM(CASE WHEN next_action_date IS NULL THEN 1 ELSE 0 END) AS sin_next,
+              SUM(CASE WHEN next_action_date IS NOT NULL
+                        AND next_action_date < date('now') THEN 1 ELSE 0 END) AS vencidas
+            FROM crm_oportunidades
+            WHERE estado IN ({placeholder_abiertos})
+            """,
+            abiertos,
+        ).fetchone()
+        total_abiertas = int(disc_row["total_abiertas"] or 0)
+        con_next = int(disc_row["con_next"] or 0)
+        cobertura_pct = round((con_next / total_abiertas * 100.0), 1) if total_abiertas else 0.0
+        disciplina = {
+            "total_abiertas":   total_abiertas,
+            "con_next_action":  con_next,
+            "sin_next_action":  int(disc_row["sin_next"] or 0),
+            "vencidas":         int(disc_row["vencidas"] or 0),
+            "cobertura_pct":    cobertura_pct,
+        }
+
+        # Tiempos medios en etapas clave (sólo abiertas en esa etapa)
+        def _avg_dias_en(etapa: str) -> float | None:
+            row = conn.execute(
+                """
+                SELECT AVG(julianday('now') - julianday(substr(fecha_entrada_etapa, 1, 10))) AS media
+                FROM crm_oportunidades
+                WHERE estado = ? AND fecha_entrada_etapa IS NOT NULL
+                """,
+                (etapa,),
+            ).fetchone()
+            media = row["media"] if row else None
+            return round(float(media), 1) if media is not None else None
+
+        tiempos_medios = {
+            "dias_en_cotizacion_enviada": _avg_dias_en("cotizacion_enviada"),
+            "dias_en_negociacion":        _avg_dias_en("negociacion"),
+        }
+
+    return {
+        "pipeline": pipeline,
+        "riesgo": riesgo,
+        "importe_rojo": round(float(importe_rojo or 0.0), 2),
+        "disciplina": disciplina,
+        "tiempos_medios": tiempos_medios,
+        # Conversion ganadas/perdidas queda fuera de esta fase:
+        # requiere ventana temporal acordada (últimos 30/90 días) y limpieza
+        # de históricos que hoy sólo reflejan cambios de estado, no cohortes.
+        "nota_conversion": (
+            "Conversion ganada/perdida no incluida: requiere definir ventana temporal "
+            "(30/90 días) y cohortes, y hoy crm_oportunidades_historial no distingue "
+            "cohorte de origen de forma barata. Se añadirá en fase posterior."
+        ),
+    }
 
 
 def eliminar_oportunidad(oportunidad_id: int) -> dict:
@@ -1061,6 +1461,11 @@ def crear_oportunidad(data: dict) -> dict:
             INSERT INTO crm_oportunidades_historial (oportunidad_id, estado_anterior, estado_nuevo, fecha, usuario)
             VALUES (?, NULL, ?, ?, ?)
         """, (new_id, (data.get("estado") or "lead").strip(), ahora, None))
+        try:
+            from core import crm_seguimiento
+            crm_seguimiento.recalcular_seguimiento_oportunidad(new_id, conn)
+        except Exception as exc:
+            logger.warning("crm_seguimiento hook (crear_oportunidad) falló: %s", exc)
     return obtener_oportunidad(new_id)
 
 
@@ -1102,6 +1507,11 @@ def actualizar_oportunidad(oportunidad_id: int, data: dict) -> dict | None:
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (oportunidad_id, estado_anterior, nuevo_estado,
                   (data.get("motivo_perdida") or "").strip() or None, ahora, None))
+        try:
+            from core import crm_seguimiento
+            crm_seguimiento.recalcular_seguimiento_oportunidad(oportunidad_id, conn)
+        except Exception as exc:
+            logger.warning("crm_seguimiento hook (actualizar_oportunidad) falló: %s", exc)
     return obtener_oportunidad(oportunidad_id)
 
 
@@ -1127,6 +1537,11 @@ def cambiar_estado_oportunidad(oportunidad_id: int, nuevo_estado: str, motivo: s
                 INSERT INTO crm_oportunidades_historial (oportunidad_id, estado_anterior, estado_nuevo, motivo, fecha, usuario)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (oportunidad_id, estado_anterior, nuevo_estado, motivo, ahora, None))
+        try:
+            from core import crm_seguimiento
+            crm_seguimiento.recalcular_seguimiento_oportunidad(oportunidad_id, conn)
+        except Exception as exc:
+            logger.warning("crm_seguimiento hook (cambiar_estado_oportunidad) falló: %s", exc)
     return obtener_oportunidad(oportunidad_id)
 
 
