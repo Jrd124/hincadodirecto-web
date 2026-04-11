@@ -73,6 +73,20 @@
           <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="2" width="14" height="12" rx="1.5"/><path d="M1 6h14"/><path d="M5 2v4"/><path d="M11 2v4"/><path d="M4 9h2v2H4z"/><path d="M7 9h2v2H7z"/><path d="M10 9h2v2h-2z"/></svg>
           <span class="sidebar-label">Operaciones</span>
         </a>
+        <!-- Gasoil -->
+        <div class="sidebar-group">
+          <a href="#" class="sidebar-item sidebar-parent" id="nav-gasoil-modulo" data-group="gasoil">
+            <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 14V4a2 2 0 012-2h3a2 2 0 012 2v10"/><path d="M3 7h7"/><path d="M11 6l2-2 1 1v5a1 1 0 01-2 0V8"/><circle cx="6.5" cy="10.5" r="1.5"/></svg>
+            <span class="sidebar-label">Gasoil</span>
+            <svg class="sidebar-chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4"/></svg>
+          </a>
+          <div class="sidebar-children" data-parent="gasoil">
+            <a href="#" class="sidebar-child" id="nav-gasoil-dashboard">Dashboard</a>
+            <a href="#" class="sidebar-child" id="nav-gasoil-transacciones">Transacciones</a>
+            <a href="#" class="sidebar-child" id="nav-gasoil-estaciones">Estaciones</a>
+            <a href="#" class="sidebar-child" id="nav-gasoil-vehiculos">Veh&iacute;culos</a>
+          </div>
+        </div>
         <!-- Maquinaria -->
         <div class="sidebar-group">
           <a href="#" class="sidebar-item sidebar-parent" id="nav-maquinaria-modulo" data-group="maquinaria">
@@ -1534,6 +1548,123 @@
           <h1>Adelantos</h1>
           <span class="badge-proximamente">Próximamente</span>
           <p class="placeholder-desc">Control de adelantos de nómina y liquidaciones</p>
+        </div>
+      </div>
+
+      <!-- ═══ GASOIL / MOEVE ════════════════════════════════════════════ -->
+      <div id="panel-gasoil-inicio" class="panel-gasoil" style="display:none;">
+        <!-- KPIs -->
+        <div id="gasoil-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:16px;">
+          <div class="tes-card tes-card-blue"><span class="tes-label">Total gastado</span><span class="tes-valor" id="gasoil-kpi-total">--</span></div>
+          <div class="tes-card"><span class="tes-label">Litros totales</span><span class="tes-valor" id="gasoil-kpi-litros">--</span></div>
+          <div class="tes-card"><span class="tes-label">Transacciones</span><span class="tes-valor" id="gasoil-kpi-txns">--</span></div>
+          <div class="tes-card tes-card-green"><span class="tes-label">% Imputado</span><span class="tes-valor" id="gasoil-kpi-pct">--</span></div>
+          <div class="tes-card"><span class="tes-label">Estaciones geo</span><span class="tes-valor" id="gasoil-kpi-geo">--</span></div>
+        </div>
+        <!-- Gasto mensual -->
+        <h4 style="margin:0 0 8px;font-size:0.95rem;font-weight:700;">Gasto mensual por tipo</h4>
+        <div class="card" style="overflow-x:auto;padding:0;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+            <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
+              <th style="padding:7px 8px;font-weight:700;">Mes</th>
+              <th style="padding:7px 6px;font-weight:700;text-align:right;">Diesel</th>
+              <th style="padding:7px 6px;font-weight:700;text-align:right;">Gasolina</th>
+              <th style="padding:7px 6px;font-weight:700;text-align:right;">Peajes</th>
+              <th style="padding:7px 6px;font-weight:700;text-align:right;">Otros</th>
+              <th style="padding:7px 6px;font-weight:700;text-align:right;">Total</th>
+            </tr></thead>
+            <tbody id="gasoil-tbody-mensual"><tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-secondary);">Cargando...</td></tr></tbody>
+          </table>
+        </div>
+        <!-- Desglose vehículo -->
+        <h4 style="margin:16px 0 8px;font-size:0.95rem;font-weight:700;">Desglose por veh&iacute;culo</h4>
+        <div class="card" style="overflow-x:auto;padding:0;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+            <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
+              <th style="padding:7px 8px;font-weight:700;">Matr&iacute;cula</th>
+              <th style="padding:7px 6px;font-weight:700;">Tipo</th>
+              <th style="padding:7px 6px;font-weight:700;text-align:right;">Gasto total</th>
+              <th style="padding:7px 6px;font-weight:700;text-align:right;">Litros</th>
+              <th style="padding:7px 6px;font-weight:700;text-align:right;">&Uacute;ltimo uso</th>
+            </tr></thead>
+            <tbody id="gasoil-tbody-vehiculos"><tr><td colspan="5" style="text-align:center;padding:2rem;">Cargando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="panel-gasoil-transacciones" class="panel-gasoil" style="display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input type="date" id="gasoil-tx-desde" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;">
+            <span style="font-size:0.85rem;">a</span>
+            <input type="date" id="gasoil-tx-hasta" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;">
+            <select id="gasoil-tx-matricula" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;">
+              <option value="">Todos veh&iacute;culos</option>
+            </select>
+            <select id="gasoil-tx-estado" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;">
+              <option value="">Todos</option>
+              <option value="1">Sin asignar</option>
+            </select>
+            <button onclick="_gasoilFiltrar()" class="btn-small">Filtrar</button>
+          </div>
+          <label style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#EFF6FF;color:#1E40AF;border:1px solid #93C5FD;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600;">
+            Importar Excel
+            <input type="file" id="gasoil-import-file" accept=".xlsx,.xls" style="display:none;">
+          </label>
+        </div>
+        <div class="card" style="overflow-x:auto;padding:0;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
+            <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
+              <th style="padding:6px 6px;font-weight:700;">Fecha</th>
+              <th style="padding:6px 6px;font-weight:700;">Hora</th>
+              <th style="padding:6px 6px;font-weight:700;">Matr&iacute;cula</th>
+              <th style="padding:6px 6px;font-weight:700;">Estaci&oacute;n</th>
+              <th style="padding:6px 6px;font-weight:700;">Concepto</th>
+              <th style="padding:6px 6px;font-weight:700;text-align:right;">Litros</th>
+              <th style="padding:6px 6px;font-weight:700;text-align:right;">Importe</th>
+              <th style="padding:6px 6px;font-weight:700;">Proyecto</th>
+            </tr></thead>
+            <tbody id="gasoil-tbody-txns"><tr><td colspan="8" style="text-align:center;padding:2rem;">Usa los filtros para ver transacciones</td></tr></tbody>
+          </table>
+        </div>
+        <div id="gasoil-tx-paginacion" style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;font-size:0.85rem;"></div>
+      </div>
+
+      <div id="panel-gasoil-estaciones" class="panel-gasoil" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <h4 style="margin:0;font-size:0.95rem;font-weight:700;">Estaciones de servicio</h4>
+          <button onclick="_gasoilGeocodificar()" class="btn-small" style="background:#DCFCE7;color:#166534;border:1px solid #86EFAC;">Geocodificar pendientes</button>
+        </div>
+        <div class="card" style="overflow-x:auto;padding:0;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+            <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
+              <th style="padding:7px 8px;font-weight:700;">Estaci&oacute;n</th>
+              <th style="padding:7px 6px;font-weight:700;">Localidad</th>
+              <th style="padding:7px 6px;font-weight:700;">Lat/Lon</th>
+              <th style="padding:7px 6px;font-weight:700;text-align:right;">Frecuencia</th>
+              <th style="padding:7px 6px;font-weight:700;">&Uacute;ltimo uso</th>
+              <th style="padding:7px 6px;font-weight:700;">Estado</th>
+            </tr></thead>
+            <tbody id="gasoil-tbody-estaciones"><tr><td colspan="6" style="text-align:center;padding:2rem;">Cargando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="panel-gasoil-vehiculos" class="panel-gasoil" style="display:none;">
+        <h4 style="margin:0 0 12px;font-size:0.95rem;font-weight:700;">Veh&iacute;culos</h4>
+        <div class="card" style="overflow-x:auto;padding:0;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+            <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
+              <th style="padding:7px 8px;font-weight:700;">Matr&iacute;cula</th>
+              <th style="padding:7px 6px;font-weight:700;">Tipo</th>
+              <th style="padding:7px 6px;font-weight:700;">Descripci&oacute;n</th>
+              <th style="padding:7px 6px;font-weight:700;text-align:right;">Gasto total</th>
+              <th style="padding:7px 6px;font-weight:700;text-align:right;">Litros</th>
+              <th style="padding:7px 6px;font-weight:700;text-align:right;">Transacciones</th>
+              <th style="padding:7px 6px;font-weight:700;">&Uacute;ltimo uso</th>
+            </tr></thead>
+            <tbody id="gasoil-tbody-vehiculos-detail"><tr><td colspan="7" style="text-align:center;padding:2rem;">Cargando...</td></tr></tbody>
+          </table>
         </div>
       </div>
 
@@ -3714,6 +3845,7 @@
     <script src="/static/js/modules/albaranes.js?v=1"></script>
     <script src="/static/js/modules/seguros.js?v=1"></script>
     <script src="/static/js/modules/operaciones.js?v=1"></script>
+    <script src="/static/js/modules/gasoil.js?v=1"></script>
     <script src="/static/js/app.js?v=31"></script>
     <!-- React desactivado temporalmente — reactivar cuando se resuelva el bug de visibilidad CSS
     <script type="module" src="/static/js/react-app.js"></script>

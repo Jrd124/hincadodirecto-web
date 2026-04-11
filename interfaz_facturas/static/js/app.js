@@ -42,6 +42,13 @@ const MODULOS = {
     subNavLinks: {},
     defecto: "inicio",
   },
+  gasoil: {
+    linkId: "nav-gasoil-modulo",
+    submenuId: "submenu-gasoil",
+    paneles: { inicio: "panel-gasoil-inicio", transacciones: "panel-gasoil-transacciones", estaciones: "panel-gasoil-estaciones", vehiculos: "panel-gasoil-vehiculos" },
+    subNavLinks: { dashboard: "nav-gasoil-dashboard", transacciones: "nav-gasoil-transacciones", estaciones: "nav-gasoil-estaciones", vehiculos: "nav-gasoil-vehiculos" },
+    defecto: "inicio",
+  },
   proyectos: {
     linkId: "nav-proyectos-modulo",
     submenuId: "submenu-proyectos",
@@ -387,6 +394,21 @@ function restaurarDesdeHash() {
       proyectosSubpanel = "inicio";
       activarModulo("proyectos");
     }
+  } else if (mod === "gasoil") {
+    if (partes.length >= 2) {
+      var sp = partes[1];
+      var gpMap = { dashboard: "inicio", transacciones: "transacciones", estaciones: "estaciones", vehiculos: "vehiculos" };
+      if (gpMap[sp]) {
+        activarModulo("gasoil");
+        activarSubpanel("gasoil", gpMap[sp]);
+        if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow(gpMap[sp]);
+      } else {
+        activarModulo("gasoil");
+      }
+    } else {
+      activarModulo("gasoil");
+      if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("inicio");
+    }
   } else if (mod === "rrhh") {
     if (partes.length >= 2) {
       var sp = partes[1];
@@ -587,6 +609,31 @@ document.getElementById("nav-proyectos-modulo").addEventListener("click", (e) =>
 document.getElementById("nav-operaciones-modulo").addEventListener("click", (e) => {
   e.preventDefault();
   activarModulo("operaciones");
+});
+document.getElementById("nav-gasoil-modulo").addEventListener("click", (e) => {
+  e.preventDefault();
+  activarModulo("gasoil");
+  if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("inicio");
+});
+document.getElementById("nav-gasoil-dashboard").addEventListener("click", (e) => {
+  e.preventDefault();
+  activarSubpanel("gasoil", "inicio");
+  if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("inicio");
+});
+document.getElementById("nav-gasoil-transacciones").addEventListener("click", (e) => {
+  e.preventDefault();
+  activarSubpanel("gasoil", "transacciones");
+  if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("transacciones");
+});
+document.getElementById("nav-gasoil-estaciones").addEventListener("click", (e) => {
+  e.preventDefault();
+  activarSubpanel("gasoil", "estaciones");
+  if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("estaciones");
+});
+document.getElementById("nav-gasoil-vehiculos").addEventListener("click", (e) => {
+  e.preventDefault();
+  activarSubpanel("gasoil", "vehiculos");
+  if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("vehiculos");
 });
 document.getElementById("nav-rrhh-modulo").addEventListener("click", (e) => {
   e.preventDefault();

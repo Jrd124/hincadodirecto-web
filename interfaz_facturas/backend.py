@@ -5283,6 +5283,9 @@ app.register_blueprint(gmail_routes_bp)
 from routes.operaciones import operaciones_bp as operaciones_routes_bp
 app.register_blueprint(operaciones_routes_bp)
 
+from routes.moeve import moeve_bp
+app.register_blueprint(moeve_bp)
+
 logger.info("ERP arrancado — blueprints registrados")
 
 
