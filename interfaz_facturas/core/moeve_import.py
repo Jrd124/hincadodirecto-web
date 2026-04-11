@@ -184,10 +184,75 @@ def importar_moeve(excel_path=None, excel_bytes=None):
         raw_rows.append(row)
     wb.close()
 
-    # ── Netear descuentos Billed=2 ──
+    # ── Fase 0: Detectar meses con doble conteo (B1 + B2 simultáneo) ──
+    # Cuando un mes tiene tanto B1 como B2, las transacciones B1 son duplicados
+    # pre-facturación de las B2 (facturadas). Conservar solo B2, pero enriquecer
+    # su Location con el valor de B1 (B2 suele tener "- -").
+    mes_b1 = defaultdict(list)
+    mes_b2 = defaultdict(list)
+    for row in raw_rows:
+        dt = str(row[7] or "").strip()
+        dp = dt.split(" ")[0].split("/")
+        if len(dp) != 3:
+            continue
+        mes = f"{dp[2]}-{dp[1].zfill(2)}"
+        billed = str(row[19] or "").strip()
+        if billed == "1":
+            mes_b1[mes].append(row)
+        else:
+            mes_b2[mes].append(row)
+
+    meses_overlap = set(mes_b1.keys()) & set(mes_b2.keys())
+
+    # Para meses con overlap: construir lookup B1 para enriquecer ubicación de B2
+    b1_location_lookup = {}  # (tarjeta, dia, concepto, litros_round) → location
+    b1_descartados = 0
+    if meses_overlap:
+        for mes in meses_overlap:
+            for row in mes_b1[mes]:
+                tarjeta = str(row[0] or "").strip()
+                dt = str(row[7] or "").strip()
+                dia = dt.split(" ")[0]  # DD/MM/YYYY
+                concepto = str(row[10] or "").strip()
+                litros = round(abs(float(row[11] or 0)), 1)
+                location = str(row[4] or "").strip()
+                if location and location not in ("- -", "-"):
+                    key = (tarjeta, dia, concepto, litros)
+                    b1_location_lookup[key] = location
+            b1_descartados += len(mes_b1[mes])
+
+    # Filtrar raw_rows: descartar B1 de meses con overlap
+    filtered_rows = []
+    for row in raw_rows:
+        dt = str(row[7] or "").strip()
+        dp = dt.split(" ")[0].split("/")
+        if len(dp) != 3:
+            filtered_rows.append(row)
+            continue
+        mes = f"{dp[2]}-{dp[1].zfill(2)}"
+        billed = str(row[19] or "").strip()
+        if billed == "1" and mes in meses_overlap:
+            continue  # Descartar B1 duplicado
+        # Si es B2 de mes overlap y no tiene location, enriquecer desde B1
+        if billed == "2" and mes in meses_overlap:
+            location = str(row[4] or "").strip()
+            if not location or location in ("- -", "-"):
+                tarjeta = str(row[0] or "").strip()
+                dia = dt.split(" ")[0]
+                concepto = str(row[10] or "").strip()
+                litros = round(abs(float(row[11] or 0)), 1)
+                key = (tarjeta, dia, concepto, litros)
+                b1_loc = b1_location_lookup.get(key, "")
+                if b1_loc:
+                    row = list(row)
+                    row[4] = b1_loc  # Enriquecer Location
+                    row = tuple(row)
+        filtered_rows.append(row)
+
+    # ── Fase 1: Netear descuentos Billed=2 ──
     # Group by (tarjeta, fecha_hora, concepto, litros) to find pairs
     groups = defaultdict(list)
-    for row in raw_rows:
+    for row in filtered_rows:
         tarjeta = str(row[0] or "").strip()
         fecha_hora = str(row[7] or "").strip()
         concepto = str(row[10] or "").strip()
@@ -226,6 +291,9 @@ def importar_moeve(excel_path=None, excel_bytes=None):
     conn = get_conn()
     stats = {
         "registros_excel": len(raw_rows),
+        "b1_descartados": b1_descartados,
+        "meses_overlap": sorted(meses_overlap),
+        "b1_locations_enriquecidas": len(b1_location_lookup),
         "pares_neteados": neteados,
         "registros_finales": len(final_rows),
         "insertados": 0,
