@@ -26,7 +26,7 @@ def _ensure_tables():
             recurso_id INTEGER NOT NULL,
             recurso_nombre TEXT NOT NULL,
             fecha TEXT NOT NULL,
-            estado TEXT DEFAULT 'planificado' CHECK(estado IN ('planificado','confirmado','incidencia','cancelado')),
+            estado TEXT DEFAULT 'planificado' CHECK(estado IN ('planificado','confirmado','incidencia','cancelado','averia')),
             notas TEXT,
             created_at TEXT NOT NULL,
             UNIQUE(recurso_tipo, recurso_id, fecha)
@@ -34,6 +34,29 @@ def _ensure_tables():
         c.execute("CREATE INDEX IF NOT EXISTS ix_asig_proy ON proyecto_asignaciones(proyecto_id)")
         c.execute("CREATE INDEX IF NOT EXISTS ix_asig_fecha ON proyecto_asignaciones(fecha)")
         c.execute("CREATE INDEX IF NOT EXISTS ix_asig_recurso ON proyecto_asignaciones(recurso_tipo, recurso_id)")
+
+        # Migrar CHECK constraint si la tabla ya existía sin 'averia'
+        row = c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='proyecto_asignaciones'").fetchone()
+        if row and "'averia'" not in (row[0] or ""):
+            c.execute("ALTER TABLE proyecto_asignaciones RENAME TO _asig_old")
+            c.execute("""CREATE TABLE proyecto_asignaciones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                proyecto_id INTEGER NOT NULL,
+                recurso_tipo TEXT NOT NULL CHECK(recurso_tipo IN ('empleado','maquina','vehiculo')),
+                recurso_id INTEGER NOT NULL,
+                recurso_nombre TEXT NOT NULL,
+                fecha TEXT NOT NULL,
+                estado TEXT DEFAULT 'planificado' CHECK(estado IN ('planificado','confirmado','incidencia','cancelado','averia')),
+                notas TEXT,
+                created_at TEXT NOT NULL,
+                UNIQUE(recurso_tipo, recurso_id, fecha)
+            )""")
+            c.execute("INSERT INTO proyecto_asignaciones SELECT * FROM _asig_old")
+            c.execute("DROP TABLE _asig_old")
+            c.execute("CREATE INDEX IF NOT EXISTS ix_asig_proy ON proyecto_asignaciones(proyecto_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS ix_asig_fecha ON proyecto_asignaciones(fecha)")
+            c.execute("CREATE INDEX IF NOT EXISTS ix_asig_recurso ON proyecto_asignaciones(recurso_tipo, recurso_id)")
+
         c.commit()
         _tables_ok = True
     finally:
@@ -139,8 +162,17 @@ def asignar():
     fecha_desde = data.get("fecha_desde")
     fecha_hasta = data.get("fecha_hasta")
 
-    if not recurso_tipo or not recurso_id or not proyecto_id:
-        return jsonify({"error": "recurso_tipo, recurso_id y proyecto_id requeridos"}), 400
+    estado = data.get("estado", "planificado")
+    notas = data.get("notas", "")
+
+    if not recurso_tipo or not recurso_id:
+        return jsonify({"error": "recurso_tipo y recurso_id requeridos"}), 400
+
+    # Avería: proyecto_id = 0, estado = 'averia'
+    if estado == "averia":
+        proyecto_id = 0
+    elif not proyecto_id:
+        return jsonify({"error": "proyecto_id requerido (o estado=averia)"}), 400
 
     conn = _conn()
     try:
@@ -171,12 +203,12 @@ def asignar():
             try:
                 conn.execute(
                     "INSERT OR REPLACE INTO proyecto_asignaciones "
-                    "(proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, estado, created_at) "
-                    "VALUES (?, ?, ?, ?, ?, 'planificado', ?)",
-                    (proyecto_id, recurso_tipo, recurso_id, nombre, f, ahora),
+                    "(proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, estado, notas, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (proyecto_id, recurso_tipo, recurso_id, nombre, f, estado, notas, ahora),
                 )
                 insertadas += 1
-            except sqlite3.IntegrityError:
+            except Exception:
                 pass
         conn.commit()
         return jsonify({"ok": True, "insertadas": insertadas})
@@ -211,6 +243,31 @@ def desasignar():
             )
         else:
             return jsonify({"error": "fecha o fecha_desde/fecha_hasta requeridos"}), 400
+        conn.commit()
+        return jsonify({"ok": True})
+    finally:
+        conn.close()
+
+
+@operaciones_bp.post("/api/operaciones/averia-nota")
+def averia_nota():
+    """Editar la nota de una avería existente."""
+    data = request.get_json(silent=True) or {}
+    recurso_tipo = data.get("recurso_tipo")
+    recurso_id = data.get("recurso_id")
+    fecha = data.get("fecha")
+    notas = data.get("notas", "")
+
+    if not recurso_tipo or not recurso_id or not fecha:
+        return jsonify({"error": "recurso_tipo, recurso_id y fecha requeridos"}), 400
+
+    conn = _conn()
+    try:
+        conn.execute(
+            "UPDATE proyecto_asignaciones SET notas = ? "
+            "WHERE recurso_tipo = ? AND recurso_id = ? AND fecha = ? AND estado = 'averia'",
+            (notas, recurso_tipo, recurso_id, fecha),
+        )
         conn.commit()
         return jsonify({"ok": True})
     finally:
@@ -293,7 +350,12 @@ def resumen():
 
         maq_hoy = conn.execute(
             "SELECT COUNT(DISTINCT recurso_id) FROM proyecto_asignaciones "
-            "WHERE recurso_tipo = 'maquina' AND fecha = ?", (hoy,)
+            "WHERE recurso_tipo = 'maquina' AND fecha = ? AND estado != 'averia'", (hoy,)
+        ).fetchone()[0]
+
+        maq_averia = conn.execute(
+            "SELECT COUNT(DISTINCT recurso_id) FROM proyecto_asignaciones "
+            "WHERE recurso_tipo = 'maquina' AND fecha = ? AND estado = 'averia'", (hoy,)
         ).fetchone()[0]
 
         proy_activos = conn.execute(
@@ -310,7 +372,7 @@ def resumen():
 
         return jsonify({
             "emp_hoy": emp_hoy, "emp_total": total_emp,
-            "maq_hoy": maq_hoy, "maq_total": total_maq,
+            "maq_hoy": maq_hoy, "maq_averia": maq_averia, "maq_total": total_maq,
             "proy_activos": proy_activos,
             "ocupacion": ocupacion,
         })
