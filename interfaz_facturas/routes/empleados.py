@@ -236,6 +236,19 @@ def api_rrhh_importar():
     return jsonify({"error": str(e)}), 500
 
 
+@empleados_bp.post("/api/rrhh/dedup-empleados")
+def api_rrhh_dedup():
+  """Ejecuta deduplicación de empleados por DNI normalizado."""
+  from core.dedup_empleados import dedup_empleados
+  dry_run = request.args.get("dry_run", "0") == "1"
+  try:
+    result = dedup_empleados(dry_run=dry_run)
+    return jsonify(result)
+  except Exception as e:
+    logger.exception("Error en deduplicación")
+    return jsonify({"error": str(e)}), 500
+
+
 @empleados_bp.get("/api/rrhh/estadisticas")
 def api_rrhh_estadisticas():
   """KPIs globales de RRHH."""

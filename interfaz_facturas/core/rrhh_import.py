@@ -36,6 +36,13 @@ def _normalizar_categoria(cat: str | None) -> str:
     return _CAT_MAP.get(cat.strip().lower(), cat.strip())
 
 
+def _normalizar_dni(dni: str | None) -> str:
+    """Quita guiones, espacios y pasa a mayúsculas."""
+    if not dni:
+        return ""
+    return dni.replace("-", "").replace(" ", "").upper().strip()
+
+
 def importar_nominas(excel_path: str = None, excel_bytes: bytes = None) -> dict:
     """Importa nóminas desde archivo Excel o bytes.
 
@@ -81,10 +88,14 @@ def importar_nominas(excel_path: str = None, excel_bytes: bytes = None) -> dict:
         for row in rows:
             periodo = str(row[0]).strip()
             nombre_raw = str(row[1]).strip()
-            dni = str(row[2]).strip()
+            dni = _normalizar_dni(str(row[2]).strip())
             categoria = str(row[3]).strip() if row[3] else ""
             antiguedad = str(row[4]).strip() if row[4] else ""
             tipo = str(row[5]).strip().upper()
+
+            if not dni:
+                stats["errores"].append(f"Fila sin DNI: {nombre_raw} periodo={periodo}")
+                continue
 
             if dni not in dni_info:
                 dni_info[dni] = {
