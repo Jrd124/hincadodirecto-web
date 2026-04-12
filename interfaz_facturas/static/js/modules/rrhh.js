@@ -1078,10 +1078,21 @@ function _rrhhCargarDietas() {
         }
       }
 
-      // Employee dietas table
+      // Employee dietas table — dynamic headers
+      var empThead = document.getElementById("rrhh-dietas-emp-thead");
       var empBody = document.getElementById("rrhh-dietas-emp-tbody");
       if (!empBody) return;
       var periodos = (d.periodos || []).slice().reverse();
+
+      // Build thead dynamically
+      if (empThead) {
+        var th = '<tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;"><th style="padding:6px 8px;font-weight:700;white-space:nowrap;">Empleado</th>';
+        periodos.forEach(function (p) {
+          th += '<th style="padding:6px 4px;font-weight:700;text-align:right;font-size:0.75rem;white-space:nowrap;">' + p.substring(2) + '</th>';
+        });
+        th += '<th style="padding:6px 6px;font-weight:700;text-align:right;">Total</th></tr>';
+        empThead.innerHTML = th;
+      }
       var emps = d.emp_dietas || [];
 
       // Group by employee

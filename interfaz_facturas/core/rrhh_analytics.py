@@ -331,23 +331,17 @@ def dietas_dashboard():
         # Config
         config = [dict(r) for r in conn.execute("SELECT * FROM dietas_config ORDER BY tipo, subtipo").fetchall()]
 
-        # Dietas por empleado (últimos 3 meses de datos)
-        ultimo = conn.execute("SELECT MAX(periodo) FROM nominas WHERE tipo='NOMINA'").fetchone()[0] or ""
-        y, m = int(ultimo[:4]), int(ultimo[5:7])
-        periodos = []
-        for i in range(3):
-            periodos.append(f"{y}-{m:02d}")
-            m -= 1
-            if m < 1:
-                m = 12; y -= 1
-        periodos.reverse()
+        # Dietas por empleado — todos los meses con datos
+        periodos = [r[0] for r in conn.execute(
+            "SELECT DISTINCT periodo FROM nominas WHERE tipo='NOMINA' AND dietas > 0 ORDER BY periodo"
+        ).fetchall()]
 
         emp_dietas = [dict(r) for r in conn.execute("""
             SELECT e.id, e.nombre, e.apellidos, n.periodo, ROUND(n.dietas,2) as dietas
             FROM nominas n JOIN empleados e ON e.id=n.empleado_id
-            WHERE n.tipo='NOMINA' AND n.periodo IN (?,?,?)
+            WHERE n.tipo='NOMINA' AND n.dietas > 0
             ORDER BY e.apellidos, e.nombre, n.periodo
-        """, tuple(periodos)).fetchall()]
+        """).fetchall()]
 
         return {"config": config, "emp_dietas": emp_dietas, "periodos": periodos}
     finally:
