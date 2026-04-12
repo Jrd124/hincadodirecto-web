@@ -265,7 +265,7 @@ function _rrhhRenderTabla(tbody, lista, esActivos) {
       : '<span style="color:var(--text-secondary);font-size:0.8rem;">No</span>';
     var carnet = e.carnet_conducir || "\u2014";
 
-    html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_rrhhEditarEmpleado(' + e.id + ')">' +
+    html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_rrhhAbrirFichaDesdeEquipo(' + e.id + ')">' +
       '<td style="padding:0.6rem 1rem;font-weight:600;white-space:nowrap;">' + nombreCompleto + '</td>' +
       '<td style="padding:0.6rem 0.75rem;">' + (e.dni || "\u2014") + '</td>' +
       '<td style="padding:0.6rem 0.75rem;">' + (e.puesto || "\u2014") + '</td>' +
@@ -275,6 +275,7 @@ function _rrhhRenderTabla(tbody, lista, esActivos) {
       '<td style="padding:0.6rem 0.75rem;">' + aptoBadge + '</td>' +
       '<td style="padding:0.6rem 0.75rem;">' + carnet + '</td>' +
       '<td style="padding:0.6rem 0.75rem;text-align:center;">' +
+        '<button onclick="event.stopPropagation();_rrhhEditarEmpleado(' + e.id + ')" title="Editar" style="background:none;border:none;cursor:pointer;color:#3B82F6;font-size:0.9rem;margin-right:4px;">&#x270E;</button>' +
         '<button onclick="event.stopPropagation();_rrhhEliminarEmpleado(' + e.id + ',\'' + nombreCompleto.replace(/'/g, "\\'") + '\')" title="Dar de baja" style="background:none;border:none;cursor:pointer;color:#dc3545;font-size:1rem;">&#x2716;</button>' +
       '</td></tr>';
   });
@@ -426,6 +427,13 @@ function _rrhhGuardarEmpleado() {
 
 function _rrhhEditarEmpleado(id) {
   _rrhhAbrirModalEmpleado(id);
+}
+
+function _rrhhAbrirFichaDesdeEquipo(empId) {
+  // Navigate to Nóminas subpanel and open ficha
+  if (typeof activarSubpanel === "function") activarSubpanel("rrhh", "nominas");
+  _rrhhCargarNominas();
+  setTimeout(function () { _rrhhVerFichaEmpleado(empId); }, 150);
 }
 
 function _rrhhEliminarEmpleado(id, nombre) {
@@ -1413,6 +1421,7 @@ window._rrhhAbrirModalEmpleado = _rrhhAbrirModalEmpleado;
 window._rrhhCerrarModalEmpleado = _rrhhCerrarModalEmpleado;
 window._rrhhGuardarEmpleado = _rrhhGuardarEmpleado;
 window._rrhhEditarEmpleado = _rrhhEditarEmpleado;
+window._rrhhAbrirFichaDesdeEquipo = _rrhhAbrirFichaDesdeEquipo;
 window._rrhhEliminarEmpleado = _rrhhEliminarEmpleado;
 window._rrhhLimpiarFormEmpleado = _rrhhLimpiarFormEmpleado;
 window._rrhhRellenarFormEmpleado = _rrhhRellenarFormEmpleado;
