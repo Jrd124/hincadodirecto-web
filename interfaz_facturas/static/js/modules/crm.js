@@ -1300,9 +1300,11 @@
     { key: "perdida", label: "Perdida" },
     { key: "aplazada", label: "Aplazada" },
   ];
-  var opBoardEl = document.getElementById("op-kanban-board");
-  var opListaEl = document.getElementById("op-lista-view");
-  var opModalEl = document.getElementById("modal-crm-oportunidad");
+  var opBoardEl      = document.getElementById("op-kanban-board");
+  var opListaEl      = document.getElementById("op-lista-view");
+  var opAnaliticaEl  = document.getElementById("op-analitica-view");
+  var opMotorFiltros = document.getElementById("op-motor-filtros");
+  var opModalEl      = document.getElementById("modal-crm-oportunidad");
   var opFormEl = document.getElementById("form-crm-oportunidad");
   var opMpModalEl = document.getElementById("modal-crm-motivo-perdida");
   var _opData = [];
@@ -1318,21 +1320,62 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         _opData = data.oportunidades || [];
-        _opRenderKanban();
+        if (opAnaliticaEl && opAnaliticaEl.style.display !== "none") {
+          _opRenderAnalitica();
+        } else if (opListaEl && opListaEl.style.display !== "none") {
+          _opRenderLista();
+        } else {
+          _opRenderKanban();
+        }
       });
   };
 
   function _opRenderKanban() {
+    // ── Bloque 4: motor filters ──────────────────────────────────────────
+    var _mfRiesgo     = (document.getElementById("op-filtro-riesgo")     || {}).value || "";
+    var _mfVencidas   = !!((document.getElementById("op-filtro-vencidas") || {}).checked);
+    var _mfSinProx    = !!((document.getElementById("op-filtro-sin-proxima") || {}).checked);
+    var _mfHoy        = new Date().toISOString().substring(0, 10);
+
     var byEstado = {};
     _opEstados.forEach(function (e) { byEstado[e.key] = []; });
-    _opData.forEach(function (o) { if (byEstado[o.estado]) byEstado[o.estado].push(o); });
+    _opData.forEach(function (o) {
+      if (_mfRiesgo && (o.riesgo || "sin_clasificar") !== _mfRiesgo) return;
+      if (_mfVencidas && (!o.next_action_date || o.next_action_date.substring(0, 10) >= _mfHoy)) return;
+      if (_mfSinProx && o.next_action_date) return;
+      if (byEstado[o.estado]) byEstado[o.estado].push(o);
+    });
+
+    // Fase 3: para detectar "próxima acción vencida" en el render.
+    var _hoyISO = new Date().toISOString().substring(0, 10);
 
     opBoardEl.innerHTML = _opEstados.map(function (est) {
       var ops = byEstado[est.key] || [];
       var total = ops.reduce(function (s, o) { return s + (o.importe_estimado || 0); }, 0);
       var cards = ops.map(function (o) {
         var prob = o.probabilidad || 0;
-        return '<div class="kanban-card" draggable="true" data-op-id="' + o.id + '">' +
+        // ── Fase 3: indicadores del motor ─────────────────────────────────
+        // Riesgo: se pinta como stripe izquierdo del card vía clase CSS.
+        // 'sin_clasificar' y null/undefined → sin stripe (comportamiento
+        // idéntico a antes de Fase 3).
+        var riesgoClass = (o.riesgo && o.riesgo !== 'sin_clasificar')
+          ? ' riesgo-' + o.riesgo : '';
+        // Meta row con "Nd sin contacto" + "⚠ vencida" si procede.
+        // Si no hay datos del motor, la fila no se renderiza.
+        var motorBits = '';
+        if (typeof o.dias_sin_contacto === 'number' && o.dias_sin_contacto >= 0) {
+          motorBits += '<span class="kanban-card-dias" title="Días desde la última interacción">'
+            + o.dias_sin_contacto + 'd sin contacto</span>';
+        }
+        // La columna real del motor es 'next_action_date' (no 'proxima_accion_fecha').
+        if (o.next_action_date && o.next_action_date.substring(0, 10) < _hoyISO) {
+          motorBits += '<span class="kanban-card-accion-vencida" title="Próxima acción vencida: '
+            + _esc(o.next_action_date.substring(0, 10)) + '">⚠ vencida</span>';
+        }
+        var motorRow = motorBits
+          ? '<div class="kanban-card-motor-row">' + motorBits + '</div>'
+          : '';
+        return '<div class="kanban-card' + riesgoClass + '" draggable="true" data-op-id="' + o.id + '">' +
           '<div class="kanban-card-name">' + _esc(o.nombre) + '</div>' +
           '<div class="kanban-card-empresa">' + _esc(o.nombre_empresa || "") + '</div>' +
           (o.importe_estimado ? '<div class="kanban-card-importe">' + _fmtEur(o.importe_estimado) + '</div>' : '') +
@@ -1341,6 +1384,7 @@
             '<span class="kanban-card-prob-text">' + prob + '%</span>' +
           '</div>' +
           (o.fecha_estimada_cierre ? '<div class="kanban-card-fecha">' + _esc(o.fecha_estimada_cierre.substring(0, 10)) + '</div>' : '') +
+          motorRow +
           (o.fuente && o.fuente !== "otro" ? '<span class="kanban-card-fuente">' + _esc(o.fuente) + '</span>' : '') +
           (function(){var bb='';if(o.presupuesto_id&&o.presupuesto_ref)bb+='<span style="font-size:11px;padding:2px 6px;background:#2563EB10;color:#2563EB;border-radius:4px;">\uD83D\uDCC4 '+_esc(o.presupuesto_ref)+'</span>';if(o.proyecto_id&&o.proyecto_nombre)bb+='<span style="font-size:11px;padding:2px 6px;background:#16A34A10;color:#16A34A;border-radius:4px;">\uD83D\uDD27 '+_esc(o.proyecto_nombre)+'</span>';return bb?'<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">'+bb+'</div>':'';})() +
         '</div>';
@@ -1419,51 +1463,122 @@
     opMpModalEl.setAttribute("aria-hidden", "true");
   });
 
-  // View toggle
-  document.getElementById("op-view-kanban").addEventListener("click", function () {
-    opBoardEl.style.display = "";
-    opListaEl.style.display = "none";
-    document.getElementById("op-view-kanban").classList.add("active");
-    document.getElementById("op-view-lista").classList.remove("active");
-  });
-  document.getElementById("op-view-lista").addEventListener("click", function () {
-    opBoardEl.style.display = "none";
-    opListaEl.style.display = "";
-    document.getElementById("op-view-lista").classList.add("active");
-    document.getElementById("op-view-kanban").classList.remove("active");
-    _opRenderLista();
-  });
+  // View toggle — helper para limpiar estado de todos los botones/vistas
+  function _opActivarVista(vista) {
+    // vista: "kanban" | "lista" | "analitica"
+    opBoardEl.style.display      = vista === "kanban"    ? "" : "none";
+    opListaEl.style.display      = vista === "lista"     ? "" : "none";
+    opAnaliticaEl.style.display  = vista === "analitica" ? "" : "none";
+    // Motor filtros: ocultos en analítica (muestra el pipeline completo)
+    if (opMotorFiltros) opMotorFiltros.style.display = vista === "analitica" ? "none" : "";
+    ["op-view-kanban", "op-view-lista", "op-view-analitica"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.classList.remove("active");
+    });
+    var activeBtn = document.getElementById("op-view-" + vista);
+    if (activeBtn) activeBtn.classList.add("active");
+    if (vista === "lista")     _opRenderLista();
+    if (vista === "analitica") _opRenderAnalitica();
+  }
+
+  document.getElementById("op-view-kanban").addEventListener("click", function () { _opActivarVista("kanban"); });
+  document.getElementById("op-view-lista").addEventListener("click",   function () { _opActivarVista("lista"); });
+  document.getElementById("op-view-analitica").addEventListener("click", function () { _opActivarVista("analitica"); });
 
   function _opRenderLista() {
-    var estado = document.getElementById("op-filtro-estado").value;
-    var empId = document.getElementById("op-filtro-empresa").value;
-    var q = (document.getElementById("op-filtro-buscar").value || "").trim().toLowerCase();
+    var estado   = document.getElementById("op-filtro-estado").value;
+    var empId    = document.getElementById("op-filtro-empresa").value;
+    var q        = (document.getElementById("op-filtro-buscar").value || "").trim().toLowerCase();
+    // ── Bloque 4: motor filters ──────────────────────────────────────────
+    var mfRiesgo    = (document.getElementById("op-filtro-riesgo")     || {}).value || "";
+    var mfVencidas  = !!((document.getElementById("op-filtro-vencidas")    || {}).checked);
+    var mfSinProx   = !!((document.getElementById("op-filtro-sin-proxima") || {}).checked);
+    var mfOrdenar   = (document.getElementById("op-filtro-ordenar")    || {}).value || "";
+    var mfHoy       = new Date().toISOString().substring(0, 10);
+
     var filtered = _opData.filter(function (o) {
       if (estado && o.estado !== estado) return false;
       if (empId && String(o.empresa_id) !== empId) return false;
       if (q && (o.nombre || "").toLowerCase().indexOf(q) < 0) return false;
+      if (mfRiesgo && (o.riesgo || "sin_clasificar") !== mfRiesgo) return false;
+      if (mfVencidas && (!o.next_action_date || o.next_action_date.substring(0, 10) >= mfHoy)) return false;
+      if (mfSinProx && o.next_action_date) return false;
       return true;
     });
+
+    // Ordenar
+    if (mfOrdenar === "motor") {
+      filtered.sort(function (a, b) { return (b.priority_score || 0) - (a.priority_score || 0); });
+    } else if (mfOrdenar === "importe") {
+      filtered.sort(function (a, b) { return (b.importe_estimado || 0) - (a.importe_estimado || 0); });
+    } else if (mfOrdenar === "cierre") {
+      filtered.sort(function (a, b) {
+        if (!a.fecha_estimada_cierre && !b.fecha_estimada_cierre) return 0;
+        if (!a.fecha_estimada_cierre) return 1;
+        if (!b.fecha_estimada_cierre) return -1;
+        return a.fecha_estimada_cierre.localeCompare(b.fecha_estimada_cierre);
+      });
+    }
+
     var container = document.getElementById("op-tabla-container");
     if (!filtered.length) {
-      container.innerHTML = '<p class="crm-placeholder">Sin oportunidades.</p>';
+      container.innerHTML = '<p class="crm-placeholder">Sin oportunidades con los filtros actuales.</p>';
       return;
     }
-    var html = '<table class="tabla-facturas"><thead><tr><th>Nombre</th><th>Empresa</th><th>Estado</th><th>Importe</th><th>Prob.</th><th>Cierre</th><th>Presupuesto</th><th>Proyecto</th><th>Fuente</th></tr></thead><tbody>';
+
+    var html = '<table class="tabla-facturas"><thead><tr>'
+      + '<th>Nombre</th><th>Empresa</th><th>Estado</th>'
+      + '<th>Riesgo</th><th style="text-align:right;">Prio.</th>'
+      + '<th style="text-align:right;">Días sin contacto</th>'
+      + '<th>Próx. acción</th>'
+      + '<th style="text-align:right;">Importe</th><th style="text-align:right;">Prob.</th>'
+      + '<th>Cierre</th>'
+      + '</tr></thead><tbody>';
+
     filtered.forEach(function (o) {
-      var opPresCol = o.presupuesto_id && o.presupuesto_ref ? '<a href="#" onclick="event.stopPropagation();navegarAPresupuesto(' + o.presupuesto_id + ');return false;" style="color:#2563EB;text-decoration:none;font-size:12px;">' + _esc(o.presupuesto_ref) + '</a>' : '';
-      var opProyCol = o.proyecto_id && o.proyecto_nombre ? '<a href="#" onclick="event.stopPropagation();navegarAProyecto(' + o.proyecto_id + ');return false;" style="color:#16A34A;text-decoration:none;font-size:12px;">' + _esc(o.proyecto_nombre) + '</a>' : '';
-      html += '<tr style="cursor:pointer;" data-op-id="' + o.id + '">' +
-        '<td style="font-weight:600;">' + _esc(o.nombre) + '</td>' +
-        '<td>' + _esc(o.nombre_empresa || "") + '</td>' +
-        '<td><span class="status-badge status-badge--' + _esc(o.estado) + '">' + _esc(o.estado) + '</span></td>' +
-        '<td class="numero">' + (o.importe_estimado ? _fmtEur(o.importe_estimado) : "") + '</td>' +
-        '<td class="numero">' + (o.probabilidad || 0) + '%</td>' +
-        '<td>' + _esc((o.fecha_estimada_cierre || "").substring(0, 10)) + '</td>' +
-        '<td>' + opPresCol + '</td>' +
-        '<td>' + opProyCol + '</td>' +
-        '<td>' + _esc(o.fuente || "") + '</td></tr>';
+      // Riesgo dot
+      var rColor = o.riesgo === 'rojo' ? '#ef4444' : o.riesgo === 'ambar' ? '#f59e0b' : o.riesgo === 'verde' ? '#22c55e' : null;
+      var riesgoCell = rColor
+        ? '<span style="display:inline-flex;align-items:center;gap:4px;">'
+          + '<span style="width:8px;height:8px;border-radius:50%;background:' + rColor + ';flex-shrink:0;"></span>'
+          + '<span style="font-size:0.78rem;">' + _esc(o.riesgo) + '</span></span>'
+        : '<span style="color:#cbd5e1;font-size:0.78rem;">—</span>';
+
+      // Priority score chip
+      var prioCell = (o.priority_score != null)
+        ? '<span style="font-size:0.75rem;font-weight:700;color:#4f46e5;">' + o.priority_score + '</span>'
+        : '<span style="color:#cbd5e1;font-size:0.78rem;">—</span>';
+
+      // Días sin contacto
+      var diasCell = (typeof o.dias_sin_contacto === 'number')
+        ? '<span style="font-size:0.82rem;">' + o.dias_sin_contacto + 'd</span>'
+        : '<span style="color:#cbd5e1;font-size:0.78rem;">—</span>';
+
+      // Próxima acción: label + fecha (roja si vencida)
+      var naCell = '<span style="color:#cbd5e1;font-size:0.78rem;">—</span>';
+      if (o.next_action_type) {
+        var naLabel = _NEXT_ACTION_LABEL[o.next_action_type] || o.next_action_type;
+        var naFecha = o.next_action_date ? o.next_action_date.substring(0, 10) : "";
+        var naVencida = naFecha && naFecha < mfHoy;
+        naCell = '<span style="font-size:0.8rem;">' + _esc(naLabel) + '</span>'
+          + (naFecha ? '<br><span style="font-size:0.73rem;color:' + (naVencida ? '#ef4444' : '#64748b') + ';">'
+            + naFecha + (naVencida ? ' ⚠' : '') + '</span>' : '');
+      }
+
+      html += '<tr style="cursor:pointer;" data-op-id="' + o.id + '">'
+        + '<td style="font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _esc(o.nombre) + '</td>'
+        + '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _esc(o.nombre_empresa || "") + '</td>'
+        + '<td><span class="status-badge status-badge--' + _esc(o.estado) + '">' + _esc(o.estado) + '</span></td>'
+        + '<td>' + riesgoCell + '</td>'
+        + '<td class="numero">' + prioCell + '</td>'
+        + '<td class="numero">' + diasCell + '</td>'
+        + '<td>' + naCell + '</td>'
+        + '<td class="numero">' + (o.importe_estimado ? _fmtEur(o.importe_estimado) : "") + '</td>'
+        + '<td class="numero">' + (o.probabilidad || 0) + '%</td>'
+        + '<td>' + _esc((o.fecha_estimada_cierre || "").substring(0, 10)) + '</td>'
+        + '</tr>';
     });
+
     html += '</tbody></table>';
     container.innerHTML = html;
     container.querySelectorAll("[data-op-id]").forEach(function (tr) {
@@ -1471,9 +1586,157 @@
     });
   }
 
-  ["op-filtro-estado", "op-filtro-empresa"].forEach(function (id) {
+  // ── Bloque 4: Panel de Analítica de Pipeline ─────────────────────────────
+  function _opRenderAnalitica() {
+    var hoy = new Date().toISOString().substring(0, 10);
+    var _ESTADOS_ABIERTOS = ["lead", "contacto_inicial", "cotizacion_enviada", "negociacion", "aplazada"];
+    var abiertas = _opData.filter(function (o) { return _ESTADOS_ABIERTOS.indexOf(o.estado) >= 0; });
+    var ganadas  = _opData.filter(function (o) { return o.estado === "ganada"; });
+    var perdidas = _opData.filter(function (o) { return o.estado === "perdida"; });
+
+    var totalImporte = abiertas.reduce(function (s, o) { return s + (o.importe_estimado || 0); }, 0);
+    var valorMedio   = abiertas.length ? totalImporte / abiertas.length : 0;
+    var cerradas     = ganadas.length + perdidas.length;
+    var pctConv      = cerradas > 0 ? Math.round(ganadas.length / cerradas * 100) : null;
+
+    // ── KPIs ──────────────────────────────────────────────────────────────
+    var kpiEl = document.getElementById("op-kpi-row");
+    if (kpiEl) {
+      var kpis = [
+        { label: "Pipeline abierto", value: abiertas.length + " ops",         sub: "oportunidades activas",     color: "#4f46e5" },
+        { label: "Importe pipeline", value: _fmtEur(totalImporte) || "0 €",  sub: "valor estimado total",      color: "#0891b2" },
+        { label: "Valor medio",      value: _fmtEur(valorMedio) || "0 €",    sub: "por oportunidad",           color: "#059669" },
+        { label: "Ganadas",          value: ganadas.length,                   sub: pctConv != null ? pctConv + "% conversión" : "cerradas ganadas", color: "#16a34a" },
+        { label: "Perdidas",         value: perdidas.length,                  sub: "oportunidades perdidas",    color: "#dc2626" },
+      ];
+      kpiEl.innerHTML = kpis.map(function (k) {
+        return '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 18px;">'
+          + '<div style="font-size:0.72rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">' + k.label + '</div>'
+          + '<div style="font-size:1.45rem;font-weight:800;color:' + k.color + ';line-height:1.2;">' + k.value + '</div>'
+          + '<div style="font-size:0.72rem;color:#94a3b8;margin-top:3px;">' + k.sub + '</div>'
+          + '</div>';
+      }).join("");
+    }
+
+    // ── Embudo por etapa ──────────────────────────────────────────────────
+    var etapaLabels = {
+      lead: "Lead", contacto_inicial: "Contacto inicial",
+      cotizacion_enviada: "Cotización enviada", negociacion: "Negociación", aplazada: "Aplazada",
+    };
+    var etapaData = _ESTADOS_ABIERTOS.map(function (e) {
+      var ops = _opData.filter(function (o) { return o.estado === e; });
+      return {
+        key: e, label: etapaLabels[e] || e,
+        count: ops.length,
+        importe: ops.reduce(function (s, o) { return s + (o.importe_estimado || 0); }, 0),
+      };
+    });
+    var maxImporte = Math.max.apply(null, etapaData.map(function (e) { return e.importe; })) || 1;
+    var funnelEl = document.getElementById("op-funnel-bars");
+    if (funnelEl) {
+      funnelEl.innerHTML = etapaData.map(function (e) {
+        var pct = Math.round(e.importe / maxImporte * 100);
+        var importeStr = e.importe ? _fmtEur(e.importe) : "0 €";
+        return '<div style="margin-bottom:14px;">'
+          + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">'
+          + '<span style="font-size:0.82rem;font-weight:600;color:#374151;">' + _esc(e.label) + '</span>'
+          + '<span style="font-size:0.78rem;color:#64748b;">' + e.count + ' · ' + importeStr + '</span>'
+          + '</div>'
+          + '<div style="height:10px;background:#f1f5f9;border-radius:5px;overflow:hidden;">'
+          + '<div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,#4f46e5,#818cf8);border-radius:5px;transition:width 0.5s;"></div>'
+          + '</div>'
+          + '</div>';
+      }).join("") || '<p style="color:#94a3b8;font-size:0.85rem;">Sin datos.</p>';
+    }
+
+    // ── Riesgo breakdown ──────────────────────────────────────────────────
+    var rCounts = { rojo: 0, ambar: 0, verde: 0, sin_clasificar: 0 };
+    abiertas.forEach(function (o) {
+      var r = o.riesgo || "sin_clasificar";
+      if (rCounts[r] !== undefined) rCounts[r]++; else rCounts.sin_clasificar++;
+    });
+    var rTotal = abiertas.length || 1;
+    var rCfg = [
+      { key: "rojo",          label: "Rojo",           color: "#ef4444" },
+      { key: "ambar",         label: "Ámbar",          color: "#f59e0b" },
+      { key: "verde",         label: "Verde",          color: "#22c55e" },
+      { key: "sin_clasificar",label: "Sin clasificar", color: "#cbd5e1" },
+    ];
+    var riesgoEl = document.getElementById("op-riesgo-breakdown");
+    if (riesgoEl) {
+      riesgoEl.innerHTML = rCfg.map(function (r) {
+        var cnt = rCounts[r.key] || 0;
+        var pct = Math.round(cnt / rTotal * 100);
+        return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">'
+          + '<span style="width:10px;height:10px;border-radius:50%;background:' + r.color + ';flex-shrink:0;display:inline-block;"></span>'
+          + '<span style="font-size:0.82rem;color:#374151;flex:1;min-width:0;">' + r.label + '</span>'
+          + '<div style="width:100px;height:7px;background:#f1f5f9;border-radius:4px;overflow:hidden;flex-shrink:0;">'
+          + '<div style="height:100%;width:' + pct + '%;background:' + r.color + ';border-radius:4px;transition:width 0.4s;"></div>'
+          + '</div>'
+          + '<span style="font-size:0.78rem;color:#64748b;width:26px;text-align:right;flex-shrink:0;">' + cnt + '</span>'
+          + '</div>';
+      }).join("");
+    }
+
+    // ── Top 5 por priority_score ──────────────────────────────────────────
+    var top5 = abiertas
+      .filter(function (o) { return o.priority_score != null; })
+      .sort(function (a, b) { return (b.priority_score || 0) - (a.priority_score || 0); })
+      .slice(0, 5);
+    var topEl = document.getElementById("op-top-prioridad");
+    if (!topEl) return;
+    if (!top5.length) {
+      topEl.innerHTML = '<p style="color:#94a3b8;font-size:0.85rem;">Sin datos de motor. Registra interacciones comerciales (llamada, email, reunión) para activar el motor de seguimiento.</p>';
+      return;
+    }
+    var _rDot = function (r) {
+      var c = r === "rojo" ? "#ef4444" : r === "ambar" ? "#f59e0b" : r === "verde" ? "#22c55e" : "#e2e8f0";
+      return '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + c + ';vertical-align:middle;margin-right:3px;"></span>';
+    };
+    var topHtml = '<table class="tabla-facturas" style="font-size:0.82rem;">'
+      + '<thead><tr><th>#</th><th>Oportunidad</th><th>Empresa</th>'
+      + '<th style="text-align:right;">Prio.</th><th>Riesgo</th>'
+      + '<th style="text-align:right;">Importe</th><th>Próx. acción</th></tr></thead><tbody>';
+    top5.forEach(function (o, i) {
+      var naLabel = o.next_action_type ? (_NEXT_ACTION_LABEL[o.next_action_type] || o.next_action_type) : "—";
+      var naFecha = o.next_action_date ? o.next_action_date.substring(0, 10) : "";
+      var naVenc  = naFecha && naFecha < hoy;
+      topHtml += '<tr style="cursor:pointer;" data-op-id="' + o.id + '">'
+        + '<td style="color:#94a3b8;font-size:0.75rem;width:28px;">' + (i + 1) + '</td>'
+        + '<td style="font-weight:600;">' + _esc(o.nombre) + '</td>'
+        + '<td>' + _esc(o.nombre_empresa || "") + '</td>'
+        + '<td class="numero" style="font-weight:800;color:#4f46e5;">' + o.priority_score + '</td>'
+        + '<td>' + _rDot(o.riesgo || "sin_clasificar") + '<span style="font-size:0.78rem;">' + _esc(o.riesgo || "—") + '</span></td>'
+        + '<td class="numero">' + (o.importe_estimado ? _fmtEur(o.importe_estimado) : "—") + '</td>'
+        + '<td>' + _esc(naLabel) + (naFecha
+            ? ' <span style="font-size:0.72rem;color:' + (naVenc ? "#ef4444" : "#94a3b8") + ';">'
+              + naFecha + (naVenc ? " ⚠" : "") + "</span>"
+            : "") + '</td>'
+        + '</tr>';
+    });
+    topHtml += '</tbody></table>';
+    topEl.innerHTML = topHtml;
+    topEl.querySelectorAll("[data-op-id]").forEach(function (tr) {
+      tr.addEventListener("click", function () { _opEditarById(parseInt(tr.getAttribute("data-op-id"))); });
+    });
+  }
+
+  ["op-filtro-estado", "op-filtro-empresa", "op-filtro-ordenar"].forEach(function (id) {
     var el = document.getElementById(id);
     if (el) el.addEventListener("change", _opRenderLista);
+  });
+  // Motor filters: actúan sobre ambas vistas (kanban visible o lista visible).
+  function _opMotorFiltroChange() {
+    if (opBoardEl.style.display !== "none") _opRenderKanban();
+    else _opRenderLista();
+  }
+  ["op-filtro-riesgo"].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener("change", _opMotorFiltroChange);
+  });
+  ["op-filtro-vencidas", "op-filtro-sin-proxima"].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener("change", _opMotorFiltroChange);
   });
   var opBuscarEl = document.getElementById("op-filtro-buscar");
   var _opBuscarTimer = null;
@@ -1913,4 +2176,130 @@
       }, 400);
     }, 300);
   };
+
+  // ─── Oportunidades de hoy (Fase 3 Bloque 4) ──────────────────────────────
+  // Navegación directa a la oportunidad: reusa _opEditarById que abre el
+  // modal de edición cargando por id desde /api/crm/oportunidades/:id.
+  window.navegarAOportunidadCRM = function (opId) {
+    // Navega al subpanel de oportunidades y después abre el modal. El submódulo
+    // se encarga del fetch.
+    if (typeof activarSubpanel === "function") {
+      activarSubpanel("crm", "oportunidades");
+    } else {
+      var navCRM = document.getElementById("nav-crm-modulo");
+      if (navCRM) navCRM.click();
+      var navOp = document.getElementById("nav-crm-oportunidades");
+      if (navOp) setTimeout(function () { navOp.click(); }, 150);
+    }
+    setTimeout(function () {
+      if (typeof window._crmCargarOportunidades === "function") window._crmCargarOportunidades();
+      setTimeout(function () { _opEditarById(opId); }, 250);
+    }, 200);
+  };
+
+  // Traducción de next_action_type del motor a etiquetas legibles.
+  var _NEXT_ACTION_LABEL = {
+    primer_contacto:      "Primer contacto",
+    perseguir_respuesta:  "Perseguir respuesta",
+    recordar_presupuesto: "Recordar presupuesto",
+    cerrar:               "Cerrar",
+    reactivar:            "Reactivar",
+    revisar_estancada:    "Revisar (estancada)",
+    usuario:              "Plan del usuario",
+  };
+
+  // Iconos por riesgo (consistentes con el stripe del kanban).
+  var _RIESGO_DOT = {
+    verde: '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;" title="Riesgo verde"></span>',
+    ambar: '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b;" title="Riesgo ámbar"></span>',
+    rojo:  '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;" title="Riesgo rojo"></span>',
+  };
+
+  function _crmRenderOportunidadesHoy(data) {
+    var listaEl = document.getElementById("crm-hoy-lista");
+    if (!listaEl) return;
+    var ops = (data && data.oportunidades) || [];
+    var total = (data && data.total) || 0;
+    if (!ops.length) {
+      listaEl.innerHTML = '<p style="color:var(--color-text-secondary);font-size:0.85rem;padding:8px 0;">✅ Nada que atender hoy. Todas las oportunidades abiertas están al día.</p>';
+      return;
+    }
+    var hoyISO = new Date().toISOString().substring(0, 10);
+    var header = '<div style="font-size:0.8rem;font-weight:600;color:var(--color-text-secondary);margin-bottom:6px;">' +
+      total + ' oportunidad' + (total !== 1 ? "es" : "") + ' con acción vencida o para hoy</div>';
+    var rows = ops.map(function (o) {
+      var dot = _RIESGO_DOT[o.riesgo] || '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#cbd5e1;" title="Sin clasificar"></span>';
+      var nextType = _NEXT_ACTION_LABEL[o.next_action_type] || (o.next_action_type || "");
+      var fecha = (o.next_action_date || "").substring(0, 10);
+      var vencida = fecha && fecha < hoyISO;
+      var fechaColor = vencida ? "#ef4444" : "#64748b";
+      var fechaPrefix = vencida ? "⚠ " : "";
+      var score = (typeof o.priority_score === "number") ? o.priority_score : null;
+      var scoreChip = (score !== null)
+        ? '<span style="font-size:0.68rem;padding:1px 6px;border-radius:10px;background:#eef2ff;color:#4f46e5;font-weight:600;" title="Priority score">' + score + '</span>'
+        : '';
+      var importe = o.importe_estimado ? _fmtEur(o.importe_estimado) : '';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border,#E2E8F0);cursor:pointer;" ' +
+        'onclick="window.navegarAOportunidadCRM(' + o.id + ')" title="Abrir oportunidad">' +
+        dot +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:0.87rem;font-weight:600;color:var(--color-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+            _esc(o.nombre) +
+            (importe ? ' <span style="color:#94a3b8;font-weight:500;font-size:0.78rem;">· ' + importe + '</span>' : '') +
+          '</div>' +
+          '<div style="font-size:0.74rem;color:var(--color-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+            _esc(o.nombre_empresa || "") + (nextType ? ' · ' + _esc(nextType) : '') +
+          '</div>' +
+        '</div>' +
+        (fecha ? '<span style="font-size:0.75rem;color:' + fechaColor + ';font-weight:' + (vencida ? '600' : '500') + ';white-space:nowrap;">' + fechaPrefix + fecha + '</span>' : '') +
+        scoreChip +
+      '</div>';
+    }).join("");
+    listaEl.innerHTML = header + rows;
+  }
+
+  function _crmCargarOportunidadesHoy() {
+    var listaEl = document.getElementById("crm-hoy-lista");
+    var btn = document.getElementById("btn-crm-hoy-refrescar");
+    var incluirVerdes = document.getElementById("crm-hoy-incluir-verdes");
+    if (!listaEl) return;
+    var qs = "?limit=50";
+    if (incluirVerdes && incluirVerdes.checked) qs += "&incluir_verdes=true";
+    if (btn) { btn.disabled = true; btn.textContent = "⏳"; }
+    listaEl.innerHTML = '<p style="color:var(--color-text-secondary);font-size:0.85rem;padding:8px 0;">Cargando…</p>';
+    fetch("/api/crm/seguimiento/hoy" + qs)
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (btn) { btn.disabled = false; btn.textContent = "Refrescar"; }
+        if (!res.ok) {
+          listaEl.innerHTML = '<p style="color:#dc2626;font-size:0.85rem;">Error: ' + _esc((res.data && res.data.error) || "desconocido") + '</p>';
+          return;
+        }
+        _crmRenderOportunidadesHoy(res.data);
+      })
+      .catch(function (err) {
+        if (btn) { btn.disabled = false; btn.textContent = "Refrescar"; }
+        listaEl.innerHTML = '<p style="color:#dc2626;font-size:0.85rem;">Error de red: ' + _esc(String(err)) + '</p>';
+      });
+  }
+
+  // Botón manual de refresco + recarga al cambiar el checkbox.
+  var _btnHoy = document.getElementById("btn-crm-hoy-refrescar");
+  if (_btnHoy) _btnHoy.addEventListener("click", _crmCargarOportunidadesHoy);
+  var _chkHoy = document.getElementById("crm-hoy-incluir-verdes");
+  if (_chkHoy) _chkHoy.addEventListener("change", _crmCargarOportunidadesHoy);
+
+  // Auto-carga cuando el panel inicio CRM se hace visible. No duplicamos con
+  // el observer de Gmail — ponemos otro para no acoplar responsabilidades.
+  var _panelInicioHoyObs = document.getElementById("panel-crm-inicio");
+  if (_panelInicioHoyObs) {
+    new MutationObserver(function (muts) {
+      muts.forEach(function (m) {
+        if (m.type === "attributes" && _panelInicioHoyObs.classList.contains("visible")) {
+          _crmCargarOportunidadesHoy();
+        }
+      });
+    }).observe(_panelInicioHoyObs, { attributes: true, attributeFilter: ["class"] });
+    if (_panelInicioHoyObs.classList.contains("visible")) _crmCargarOportunidadesHoy();
+  }
 })();

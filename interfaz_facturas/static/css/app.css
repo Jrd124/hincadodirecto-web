@@ -5019,6 +5019,38 @@
       .kb-perdida { --kb-color: #ef4444; }
       .kb-aplazada { --kb-color: #64748b; }
 
+      /* ── Fase 3: indicadores del motor de priorización ───────────────
+         Stripe izquierdo colorido por riesgo. Sin riesgo → border normal.
+         Paleta alineada con .kb-* (misma semántica de colores). */
+      .kanban-card.riesgo-verde,
+      .kanban-card.riesgo-ambar,
+      .kanban-card.riesgo-rojo {
+        border-left-width: 3px;
+        padding-left: 8px; /* 10 - 2, compensa el borde más grueso */
+      }
+      .kanban-card.riesgo-verde { border-left-color: #22c55e; }
+      .kanban-card.riesgo-ambar { border-left-color: #f59e0b; }
+      .kanban-card.riesgo-rojo  { border-left-color: #ef4444; }
+      /* Fila meta con días sin contacto y alerta de acción vencida. */
+      .kanban-card-motor-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        margin-top: 4px;
+      }
+      .kanban-card-dias {
+        font-size: 0.68rem;
+        color: #94a3b8;
+        white-space: nowrap;
+      }
+      .kanban-card-accion-vencida {
+        font-size: 0.68rem;
+        font-weight: 600;
+        color: #ef4444;
+        white-space: nowrap;
+      }
+
       /* ===== CRM DEDUP ===== */
       .crm-dedup-grupo {
         border: 1px solid #e2e8f0;

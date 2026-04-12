@@ -1959,6 +1959,26 @@
               <div id="crm-seguimiento-lista" style="max-height:260px;overflow-y:auto;border-top:1px solid var(--border,#E2E8F0);padding-top:8px;"></div>
             </div>
           </div>
+
+          <!-- Oportunidades de hoy — Fase 3 Bloque 4 -->
+          <div style="margin-top:12px;padding:16px 20px;background:var(--color-surface,#F8FAFC);border:1px solid var(--border,#E2E8F0);border-radius:10px;">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+              <span style="font-size:1.2rem;">⏰</span>
+              <div style="flex:1;min-width:180px;">
+                <div style="font-size:0.95rem;font-weight:600;color:var(--color-text,#1E293B);">Oportunidades de hoy</div>
+                <div style="font-size:0.8rem;color:var(--color-text-secondary,#64748B);margin-top:2px;">Acciones vencidas o para hoy, priorizadas por el motor</div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <label style="font-size:0.78rem;color:var(--color-text-secondary,#64748B);display:flex;align-items:center;gap:4px;">
+                  <input type="checkbox" id="crm-hoy-incluir-verdes" style="margin:0;"> incluir verdes
+                </label>
+                <button type="button" id="btn-crm-hoy-refrescar" style="font-size:0.82rem;padding:6px 14px;background:var(--color-primary,#4F46E5);color:#fff;border:none;border-radius:6px;cursor:pointer;">Refrescar</button>
+              </div>
+            </div>
+            <div id="crm-hoy-lista" style="max-height:320px;overflow-y:auto;border-top:1px solid var(--border,#E2E8F0);padding-top:8px;">
+              <p style="color:var(--color-text-secondary);font-size:0.85rem;padding:8px 0;">Cargando…</p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2159,8 +2179,26 @@
             <div style="display:flex;gap:6px;align-items:center;">
               <button type="button" class="secondary kanban-view-btn active" id="op-view-kanban" title="Vista Kanban" style="padding:4px 10px;font-size:0.8rem;">Kanban</button>
               <button type="button" class="secondary kanban-view-btn" id="op-view-lista" title="Vista Lista" style="padding:4px 10px;font-size:0.8rem;">Lista</button>
+              <button type="button" class="secondary kanban-view-btn" id="op-view-analitica" title="Analítica de pipeline" style="padding:4px 10px;font-size:0.8rem;">📊 Analítica</button>
             </div>
             <button type="button" class="primary" id="btn-nueva-oportunidad-crm" style="font-size:0.85rem;padding:6px 16px;">+ Nueva oportunidad</button>
+          </div>
+          <!-- Motor filter bar – compartida Kanban + Lista (Bloque 4) -->
+          <div id="op-motor-filtros" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding:9px 14px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;">
+            <span style="font-size:0.72rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.07em;white-space:nowrap;">Motor</span>
+            <select id="op-filtro-riesgo" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:0.82rem;background:#fff;">
+              <option value="">Todos los riesgos</option>
+              <option value="rojo">🔴 Rojo</option>
+              <option value="ambar">🟡 Ámbar</option>
+              <option value="verde">🟢 Verde</option>
+              <option value="sin_clasificar">⚪ Sin clasificar</option>
+            </select>
+            <label style="display:flex;align-items:center;gap:5px;font-size:0.82rem;color:#374151;cursor:pointer;user-select:none;">
+              <input type="checkbox" id="op-filtro-vencidas" style="margin:0;"> Solo vencidas
+            </label>
+            <label style="display:flex;align-items:center;gap:5px;font-size:0.82rem;color:#374151;cursor:pointer;user-select:none;">
+              <input type="checkbox" id="op-filtro-sin-proxima" style="margin:0;"> Sin próxima acción
+            </label>
           </div>
           <!-- Kanban view -->
           <div id="op-kanban-board" class="kanban-board"></div>
@@ -2181,8 +2219,35 @@
                 <option value="">Todas las empresas</option>
               </select>
               <input type="text" id="op-filtro-buscar" placeholder="Buscar..." style="flex:1;min-width:120px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:0.85rem;" />
+              <select id="op-filtro-ordenar" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:0.85rem;background:#fff;">
+                <option value="">Ordenar por defecto</option>
+                <option value="motor">Motor (prioridad ↓)</option>
+                <option value="importe">Importe ↓</option>
+                <option value="cierre">Cierre próximo</option>
+              </select>
             </div>
             <div id="op-tabla-container"></div>
+          </div>
+          <!-- Analítica view – Bloque 4 -->
+          <div id="op-analitica-view" style="display:none;">
+            <!-- KPIs -->
+            <div id="op-kpi-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:22px;"></div>
+            <!-- Embudo + Riesgo -->
+            <div style="display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start;">
+              <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;">
+                <h3 style="font-size:0.82rem;font-weight:700;color:#64748b;margin:0 0 14px;text-transform:uppercase;letter-spacing:0.06em;">Embudo por etapa</h3>
+                <div id="op-funnel-bars"></div>
+              </div>
+              <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;">
+                <h3 style="font-size:0.82rem;font-weight:700;color:#64748b;margin:0 0 14px;text-transform:uppercase;letter-spacing:0.06em;">Riesgo del pipeline</h3>
+                <div id="op-riesgo-breakdown"></div>
+              </div>
+            </div>
+            <!-- Top prioridad -->
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px 20px;margin-top:16px;">
+              <h3 style="font-size:0.82rem;font-weight:700;color:#64748b;margin:0 0 14px;text-transform:uppercase;letter-spacing:0.06em;">Top 5 por prioridad del motor</h3>
+              <div id="op-top-prioridad"></div>
+            </div>
           </div>
         </section>
       </div>
@@ -3958,7 +4023,7 @@
     <script src="/static/js/modules/finanzas.js?v=27"></script>
     <script src="/static/js/modules/proyectos.js?v=27"></script>
     <script src="/static/js/modules/presupuestos.js?v=27"></script>
-    <script src="/static/js/modules/crm.js?v=27"></script>
+    <script src="/static/js/modules/crm.js?v=32"></script>
     <script src="/static/js/modules/maquinaria.js?v=32"></script>
     <script src="/static/js/modules/certificaciones.js?v=27"></script>
     <script src="/static/js/modules/usuarios.js?v=27"></script>
