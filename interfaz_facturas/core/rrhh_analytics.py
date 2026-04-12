@@ -85,13 +85,15 @@ def dashboard():
 
         # Alertas
         alertas = []
-        # Empleados activos sin nómina este mes
-        sin_nomina = conn.execute("""
-            SELECT COUNT(*) FROM empleados e WHERE e.estado='activo'
+        # Empleados activos sin nómina este mes — listar nombres
+        sin_nomina_rows = conn.execute("""
+            SELECT e.nombre, e.apellidos FROM empleados e WHERE e.estado='activo'
             AND e.id NOT IN (SELECT empleado_id FROM nominas WHERE periodo=? AND tipo='NOMINA')
-        """, (ultimo,)).fetchone()[0]
-        if sin_nomina > 0:
-            alertas.append({"tipo": "warning", "texto": f"{sin_nomina} empleado(s) activo(s) sin nomina en {ultimo}"})
+            ORDER BY e.apellidos, e.nombre
+        """, (ultimo,)).fetchall()
+        if sin_nomina_rows:
+            nombres = [f"{r['nombre']} {r['apellidos'] or ''}".strip() for r in sin_nomina_rows]
+            alertas.append({"tipo": "warning", "texto": f"{len(nombres)} empleado(s) activo(s) sin nomina en {ultimo}:", "nombres": nombres})
 
         adelantos_pend = conn.execute(
             "SELECT COUNT(*), SUM(importe) FROM adelantos WHERE estado='pendiente'"
@@ -124,6 +126,7 @@ def verificador(periodo):
     try:
         rows = conn.execute("""
             SELECT n.empleado_id, e.nombre, e.apellidos, e.categoria, e.dni,
+                   e.neto_pactado,
                    n.dias, n.liquido, n.embargo, n.coste_empresa,
                    n.total_devengado, n.total_deducir, n.dietas,
                    n.salario_base, n.plus_asistencia, n.extra_mes,
@@ -139,11 +142,20 @@ def verificador(periodo):
         total_adelantos = 0
         total_embargo = 0
         total_transferir = 0
+        total_estimado = 0
 
         for r in rows:
             emp_id = r["empleado_id"]
             liquido = r["liquido"] or 0
             embargo = r["embargo"] or 0
+            dias = r["dias"] or 30
+            dietas = r["dietas"] or 0
+            neto_pactado = r["neto_pactado"] or 0
+
+            # Estimación: neto pactado proporcional a días + dietas
+            neto_proporcional = round(neto_pactado * dias / 30, 2) if neto_pactado > 0 else 0
+            estimado = round(neto_proporcional + dietas, 2)
+            diferencia = round(estimado - liquido, 2) if estimado > 0 else 0
 
             # Adelantos pendientes del empleado
             adel = conn.execute(
@@ -160,25 +172,31 @@ def verificador(periodo):
                 "categoria": r["categoria"] or "",
                 "dni": r["dni"] or "",
                 "tipo": r["tipo"],
-                "dias": r["dias"] or 0,
+                "dias": dias,
+                "neto_pactado": neto_pactado,
+                "neto_proporcional": neto_proporcional,
+                "dietas": round(dietas, 2),
+                "estimado": estimado,
                 "liquido": round(liquido, 2),
+                "diferencia": diferencia,
                 "adelantos": round(adel, 2),
                 "embargo": round(embargo, 2),
                 "a_transferir": round(a_transferir, 2),
                 "coste_empresa": round(r["coste_empresa"] or 0, 2),
                 "total_devengado": round(r["total_devengado"] or 0, 2),
-                "dietas": round(r["dietas"] or 0, 2),
             })
 
             total_liquido += liquido
             total_adelantos += adel
             total_embargo += embargo
             total_transferir += a_transferir
+            total_estimado += estimado
 
         return {
             "periodo": periodo,
             "lineas": lineas,
             "totales": {
+                "estimado": round(total_estimado, 2),
                 "liquido": round(total_liquido, 2),
                 "adelantos": round(total_adelantos, 2),
                 "embargo": round(total_embargo, 2),

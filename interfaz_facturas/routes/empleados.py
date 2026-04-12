@@ -521,3 +521,118 @@ def api_rrhh_generar_remesa(periodo):
     mimetype="text/csv",
     headers={"Content-Disposition": f"attachment; filename=remesa_{periodo}.csv"},
   )
+
+
+@empleados_bp.get("/api/rrhh/dietas/calendario/<periodo>")
+def api_rrhh_dietas_calendario(periodo):
+  """Matriz empleados × días con tipo dieta para el calendario."""
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    from datetime import date, timedelta
+    y, m = int(periodo[:4]), int(periodo[5:7])
+    d = date(y, m, 1)
+    dias = []
+    while d.month == m:
+      dias.append(d.isoformat())
+      d += timedelta(days=1)
+
+    emps = [dict(r) for r in conn.execute(
+      "SELECT id, nombre, apellidos FROM empleados WHERE estado='activo' ORDER BY apellidos, nombre"
+    ).fetchall()]
+
+    # Get dietas_diarias for this month
+    dietas = {}
+    for r in conn.execute(
+      "SELECT empleado_id, fecha, tipo, importe, notas FROM dietas_diarias "
+      "WHERE fecha >= ? AND fecha <= ?", (dias[0], dias[-1])
+    ).fetchall():
+      dietas[(r["empleado_id"], r["fecha"])] = dict(r)
+
+    # Get project assignments for context
+    asignaciones = {}
+    for r in conn.execute(
+      "SELECT recurso_id, fecha, p.codigo FROM proyecto_asignaciones pa "
+      "JOIN proyectos p ON p.id = pa.proyecto_id "
+      "WHERE pa.recurso_tipo='empleado' AND pa.fecha >= ? AND pa.fecha <= ?",
+      (dias[0], dias[-1])
+    ).fetchall():
+      asignaciones[(r["recurso_id"], r["fecha"])] = r["codigo"]
+
+    return jsonify({"dias": dias, "empleados": emps, "dietas": {f"{k[0]}_{k[1]}": v for k, v in dietas.items()}, "proyectos": {f"{k[0]}_{k[1]}": v for k, v in asignaciones.items()}})
+  finally:
+    conn.close()
+
+
+@empleados_bp.post("/api/rrhh/dietas/diaria")
+def api_rrhh_dietas_diaria():
+  """Guardar/actualizar dieta de un día."""
+  empleados_db.init_empleados_db()
+  data = request.get_json(silent=True) or {}
+  conn = get_conn()
+  try:
+    conn.execute(
+      "INSERT OR REPLACE INTO dietas_diarias (empleado_id, fecha, tipo, importe, notas) VALUES (?,?,?,?,?)",
+      (data.get("empleado_id"), data.get("fecha"), data.get("tipo", ""), data.get("importe", 0), data.get("notas", "")),
+    )
+    conn.commit()
+    return jsonify({"ok": True})
+  finally:
+    conn.close()
+
+
+@empleados_bp.get("/api/rrhh/dietas/resumen-pivot")
+def api_rrhh_dietas_pivot():
+  """Tabla pivot empleados × meses con totales de dietas."""
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    periodos = [r[0] for r in conn.execute(
+      "SELECT DISTINCT periodo FROM nominas WHERE tipo='NOMINA' ORDER BY periodo"
+    ).fetchall()]
+
+    rows = [dict(r) for r in conn.execute("""
+      SELECT e.id, e.nombre, e.apellidos, n.periodo, ROUND(n.dietas,2) as dietas
+      FROM nominas n JOIN empleados e ON e.id=n.empleado_id
+      WHERE n.tipo='NOMINA' AND n.dietas > 0
+      ORDER BY e.apellidos, e.nombre, n.periodo
+    """).fetchall()]
+
+    return jsonify({"periodos": periodos, "datos": rows})
+  finally:
+    conn.close()
+
+
+@empleados_bp.get("/api/rrhh/dietas/empleado/<int:eid>/<periodo>")
+def api_rrhh_dietas_empleado(eid, periodo):
+  """Detalle diario de dietas de un empleado con proyecto de operaciones."""
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    from datetime import date, timedelta
+    y, m = int(periodo[:4]), int(periodo[5:7])
+    d = date(y, m, 1)
+    dias = []
+    while d.month == m:
+      dias.append({"fecha": d.isoformat(), "dia_semana": ["L","M","X","J","V","S","D"][d.weekday()], "num": d.day, "laborable": d.weekday() < 5})
+      d += timedelta(days=1)
+
+    dietas = {}
+    for r in conn.execute(
+      "SELECT fecha, tipo, importe, notas FROM dietas_diarias WHERE empleado_id=? AND fecha >= ? AND fecha <= ?",
+      (eid, dias[0]["fecha"], dias[-1]["fecha"])
+    ).fetchall():
+      dietas[r["fecha"]] = dict(r)
+
+    proyectos = {}
+    for r in conn.execute(
+      "SELECT pa.fecha, p.codigo, p.nombre FROM proyecto_asignaciones pa "
+      "JOIN proyectos p ON p.id=pa.proyecto_id "
+      "WHERE pa.recurso_tipo='empleado' AND pa.recurso_id=? AND pa.fecha >= ? AND pa.fecha <= ?",
+      (eid, dias[0]["fecha"], dias[-1]["fecha"])
+    ).fetchall():
+      proyectos[r["fecha"]] = {"codigo": r["codigo"], "nombre": r["nombre"]}
+
+    return jsonify({"dias": dias, "dietas": dietas, "proyectos": proyectos})
+  finally:
+    conn.close()

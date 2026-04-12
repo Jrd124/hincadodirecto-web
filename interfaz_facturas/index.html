@@ -1399,70 +1399,92 @@
 
         <!-- Modal crear/editar empleado -->
         <div id="modal-rrhh-empleado" class="modal-overlay" style="display:none;">
-          <div class="modal" style="max-width:720px;">
+          <div class="modal" style="max-width:700px;">
             <div class="modal-header">
               <h3 id="modal-emp-titulo">Nuevo trabajador</h3>
               <button class="modal-close" onclick="_rrhhCerrarModalEmpleado()">&times;</button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body" style="max-height:75vh;overflow-y:auto;">
               <input type="hidden" id="emp-id">
-              <!-- Sección 1: Datos personales -->
-              <h4 style="margin:0 0 0.75rem;font-size:0.95rem;color:var(--color-primary,#2563eb);">Datos personales</h4>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem 1rem;">
-                <div class="form-group"><label>Nombre *</label><input id="emp-nombre" type="text" required style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
-                <div class="form-group"><label>Apellidos</label><input id="emp-apellidos" type="text" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
-                <div class="form-group"><label>DNI</label><input id="emp-dni" type="text" placeholder="12345678A" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
-                <div class="form-group"><label>Nº Seguridad Social</label><input id="emp-nss" type="text" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
-                <div class="form-group"><label>Teléfono</label><input id="emp-telefono" type="text" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
-                <div class="form-group"><label>Email</label><input id="emp-email" type="email" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+              <!-- Secci&oacute;n 1: Informaci&oacute;n Personal -->
+              <div style="border-left:4px solid #3B82F6;padding:14px 16px;margin-bottom:14px;background:rgba(59,130,246,0.03);border-radius:8px;">
+                <h4 style="margin:0 0 10px;font-size:0.85rem;color:#3B82F6;text-transform:uppercase;letter-spacing:0.5px;">Informaci&oacute;n Personal</h4>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                  <div class="form-group"><label style="font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Nombre *</label><input id="emp-nombre" type="text" required style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;"></div>
+                  <div class="form-group"><label style="font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Apellidos</label><input id="emp-apellidos" type="text" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;"></div>
+                  <div class="form-group"><label style="font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">DNI</label><input id="emp-dni" type="text" placeholder="12345678A" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;"></div>
+                  <div class="form-group"><label style="font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Tel&eacute;fono</label><input id="emp-telefono" type="text" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;"></div>
+                  <div class="form-group"><label style="font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Email</label><input id="emp-email" type="email" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;"></div>
+                  <div class="form-group"><label style="font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">N&ordm; Seg. Social</label><input id="emp-nss" type="text" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;"></div>
+                </div>
+                <div class="form-group" style="margin-top:10px;"><label style="font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">IBAN / Cuenta corriente</label><input id="emp-iban" type="text" placeholder="ES12 3456 7890 1234 5678 9012" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;"></div>
+                <div class="form-group" style="margin-top:10px;"><label style="font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Direcci&oacute;n</label><input id="emp-direccion" type="text" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;"></div>
               </div>
-              <!-- Sección 2: Datos laborales -->
-              <h4 style="margin:1.25rem 0 0.75rem;font-size:0.95rem;color:var(--color-primary,#2563eb);">Datos laborales</h4>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem 1rem;">
-                <div class="form-group"><label>Puesto</label><input id="emp-puesto" type="text" placeholder="Operario, Encargado…" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
-                <div class="form-group"><label>Categoría</label><input id="emp-categoria" type="text" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
-                <div class="form-group"><label>Fecha alta</label><input id="emp-fecha-alta" type="date" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
+              <!-- Secci&oacute;n 2: Informaci&oacute;n Laboral -->
+              <div style="border-left:4px solid #10B981;padding:14px 16px;margin-bottom:14px;background:rgba(16,185,129,0.03);border-radius:8px;">
+                <h4 style="margin:0 0 10px;font-size:0.85rem;color:#10B981;text-transform:uppercase;letter-spacing:0.5px;">Informaci&oacute;n Laboral</h4>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                  <div class="form-group">
+                    <label style="font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Categor&iacute;a</label>
+                    <select id="emp-categoria" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;">
+                      <option value="">Seleccionar...</option>
+                      <option value="Jefes de 1&ordf;">Jefes de 1&ordf;</option>
+                      <option value="Oficial de 1&ordf;">Oficial de 1&ordf;</option>
+                      <option value="Peones">Peones</option>
+                      <option value="Auxiliares">Auxiliares</option>
+                      <option value="Limpiadora">Limpiadora</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label style="font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Estado</label>
+                    <select id="emp-estado" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;">
+                      <option value="activo">Activo</option>
+                      <option value="baja">Baja</option>
+                      <option value="vacaciones">Vacaciones</option>
+                      <option value="reserva">Reserva</option>
+                      <option value="exempleado">Exempleado</option>
+                    </select>
+                  </div>
+                  <div class="form-group"><label style="font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Puesto</label><input id="emp-puesto" type="text" placeholder="Hincador, Ayudante..." style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;"></div>
+                  <div class="form-group"><label style="font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Fecha alta</label><input id="emp-fecha-alta" type="date" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;"></div>
+                </div>
+              </div>
+              <!-- Secci&oacute;n 3: Informaci&oacute;n Econ&oacute;mica -->
+              <div style="border-left:4px solid #E8B931;padding:14px 16px;margin-bottom:14px;background:rgba(232,185,49,0.03);border-radius:8px;">
+                <h4 style="margin:0 0 10px;font-size:0.85rem;color:#E8B931;text-transform:uppercase;letter-spacing:0.5px;">Informaci&oacute;n Econ&oacute;mica</h4>
                 <div class="form-group">
-                  <label>Estado</label>
-                  <select id="emp-estado" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;">
-                    <option value="activo">Activo</option>
-                    <option value="baja">Baja</option>
-                    <option value="vacaciones">Vacaciones</option>
-                  </select>
+                  <label style="font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Neto pactado mensual (sin dietas) &euro;</label>
+                  <input id="emp-neto-pactado" type="number" step="0.01" placeholder="0.00" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;">
+                  <span style="font-size:0.75rem;color:#888;margin-top:4px;display:block;">L&iacute;quido mensual negociado con el empleado (sin dietas). Se usa en el Verificador.</span>
                 </div>
               </div>
-              <!-- Sección 3: Formación y PRL -->
-              <h4 style="margin:1.25rem 0 0.75rem;font-size:0.95rem;color:var(--color-primary,#2563eb);">Formación y PRL</h4>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem 1rem;">
-                <div class="form-group" style="display:flex;align-items:center;gap:0.5rem;">
-                  <input id="emp-prl-basico" type="checkbox" style="width:18px;height:18px;">
-                  <label for="emp-prl-basico" style="margin:0;font-weight:600;">PRL Básico</label>
-                </div>
-                <div class="form-group"><label>Horas PRL</label>
-                  <select id="emp-prl-horas" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;">
-                    <option value="">—</option><option value="20">20h</option><option value="60">60h</option>
-                  </select>
-                </div>
-                <div class="form-group"><label>Caducidad PRL básico</label><input id="emp-prl-basico-cad" type="date" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
-                <div class="form-group"><label>PRL específico</label><input id="emp-prl-especifico" type="text" placeholder="Descripción curso…" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
-                <div class="form-group"><label>Cad. PRL específico</label><input id="emp-prl-especifico-cad" type="date" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
-                <div class="form-group" style="display:flex;align-items:center;gap:0.5rem;">
-                  <input id="emp-apto-medico" type="checkbox" style="width:18px;height:18px;">
-                  <label for="emp-apto-medico" style="margin:0;font-weight:600;">Apto médico</label>
-                </div>
-                <div class="form-group"><label>Cad. apto médico</label><input id="emp-apto-medico-cad" type="date" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
-                <div class="form-group"><label>Carnet conducir</label><input id="emp-carnet-conducir" type="text" placeholder="B, C, C+E…" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
-                <div class="form-group"><label>Cad. carnet conducir</label><input id="emp-carnet-conducir-cad" type="date" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
-                <div class="form-group"><label>Carnet maquinaria</label><input id="emp-carnet-maquinaria" type="text" placeholder="Tipos habilitados…" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
-                <div class="form-group"><label>Cad. carnet maquinaria</label><input id="emp-carnet-maquinaria-cad" type="date" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;"></div>
-                <div class="form-group" style="grid-column:1/-1;"><label>Formación específica</label><textarea id="emp-formacion-especifica" rows="2" placeholder="Otros cursos, habilitaciones…" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;resize:vertical;"></textarea></div>
+              <!-- Secci&oacute;n 4: Notas -->
+              <div style="border-left:4px solid #6B7280;padding:14px 16px;margin-bottom:14px;background:rgba(107,114,128,0.03);border-radius:8px;">
+                <h4 style="margin:0 0 10px;font-size:0.85rem;color:#6B7280;text-transform:uppercase;letter-spacing:0.5px;">Notas</h4>
+                <textarea id="emp-notas" rows="3" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;resize:vertical;"></textarea>
               </div>
-              <!-- Notas -->
-              <div class="form-group" style="margin-top:1rem;"><label>Notas</label><textarea id="emp-notas" rows="2" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);font-size:0.88rem;resize:vertical;"></textarea></div>
-              <!-- Botón guardar -->
-              <div style="display:flex;justify-content:flex-end;gap:0.75rem;margin-top:1.25rem;">
-                <button onclick="_rrhhCerrarModalEmpleado()" style="padding:0.5rem 1rem;border:1px solid var(--border);border-radius:var(--radius-md,8px);background:#fff;cursor:pointer;font-size:0.88rem;">Cancelar</button>
-                <button onclick="_rrhhGuardarEmpleado()" style="padding:0.5rem 1.2rem;background:var(--color-primary,#2563eb);color:#fff;border:none;border-radius:var(--radius-md,8px);font-weight:600;cursor:pointer;font-size:0.88rem;">Guardar</button>
+              <!-- PRL (colapsable) -->
+              <details style="margin-bottom:14px;">
+                <summary style="cursor:pointer;font-size:0.85rem;font-weight:600;color:var(--text-secondary);padding:8px 0;">Formaci&oacute;n y PRL (expandir)</summary>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding-top:10px;">
+                  <div class="form-group" style="display:flex;align-items:center;gap:0.5rem;"><input id="emp-prl-basico" type="checkbox" style="width:16px;height:16px;"><label for="emp-prl-basico" style="margin:0;font-weight:600;font-size:0.85rem;">PRL B&aacute;sico</label></div>
+                  <div class="form-group"><label style="font-size:0.75rem;color:#888;">Horas PRL</label><select id="emp-prl-horas" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;"><option value="">—</option><option value="20">20h</option><option value="60">60h</option></select></div>
+                  <div class="form-group"><label style="font-size:0.75rem;color:#888;">Cad. PRL b&aacute;sico</label><input id="emp-prl-basico-cad" type="date" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;"></div>
+                  <div class="form-group"><label style="font-size:0.75rem;color:#888;">PRL espec&iacute;fico</label><input id="emp-prl-especifico" type="text" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;"></div>
+                  <div class="form-group"><label style="font-size:0.75rem;color:#888;">Cad. PRL esp.</label><input id="emp-prl-especifico-cad" type="date" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;"></div>
+                  <div class="form-group" style="display:flex;align-items:center;gap:0.5rem;"><input id="emp-apto-medico" type="checkbox" style="width:16px;height:16px;"><label for="emp-apto-medico" style="margin:0;font-weight:600;font-size:0.85rem;">Apto m&eacute;dico</label></div>
+                  <div class="form-group"><label style="font-size:0.75rem;color:#888;">Cad. apto m&eacute;dico</label><input id="emp-apto-medico-cad" type="date" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;"></div>
+                  <div class="form-group"><label style="font-size:0.75rem;color:#888;">Carnet conducir</label><input id="emp-carnet-conducir" type="text" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;"></div>
+                  <div class="form-group"><label style="font-size:0.75rem;color:#888;">Cad. carnet</label><input id="emp-carnet-conducir-cad" type="date" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;"></div>
+                  <div class="form-group"><label style="font-size:0.75rem;color:#888;">Carnet maquinaria</label><input id="emp-carnet-maquinaria" type="text" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;"></div>
+                  <div class="form-group"><label style="font-size:0.75rem;color:#888;">Cad. carnet maq.</label><input id="emp-carnet-maquinaria-cad" type="date" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;"></div>
+                  <div class="form-group" style="grid-column:1/-1;"><label style="font-size:0.75rem;color:#888;">Formaci&oacute;n espec&iacute;fica</label><textarea id="emp-formacion-especifica" rows="2" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;resize:vertical;"></textarea></div>
+                </div>
+              </details>
+              <!-- Bot&oacute;n guardar -->
+              <div style="display:flex;justify-content:flex-end;gap:0.75rem;margin-top:0.5rem;">
+                <button onclick="_rrhhCerrarModalEmpleado()" style="padding:0.5rem 1rem;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer;font-size:0.88rem;">Cancelar</button>
+                <button onclick="_rrhhGuardarEmpleado()" style="padding:0.5rem 1.2rem;background:var(--color-primary,#2563eb);color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:0.88rem;">Guardar</button>
               </div>
             </div>
           </div>
@@ -1511,20 +1533,22 @@
         <!-- Tabla nóminas mes -->
         <div id="rrhh-nominas-tabla-wrapper">
           <div class="card" style="overflow-x:auto;padding:0;">
-            <table style="width:100%;border-collapse:collapse;font-size:0.78rem;table-layout:fixed;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
               <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
                 <th style="padding:6px 6px;font-weight:700;width:28px;">#</th>
                 <th style="padding:6px 6px;font-weight:700;">Empleado</th>
+                <th style="padding:6px 3px;font-weight:700;width:32px;"></th>
                 <th style="padding:6px 4px;font-weight:700;width:40px;">DNI</th>
                 <th style="padding:6px 4px;font-weight:700;width:45px;">Tipo</th>
-                <th style="padding:6px 4px;font-weight:700;text-align:right;">Devengado</th>
-                <th style="padding:6px 4px;font-weight:700;text-align:right;">Deducir</th>
-                <th style="padding:6px 4px;font-weight:700;text-align:right;">L&iacute;quido</th>
-                <th style="padding:6px 4px;font-weight:700;text-align:right;">Dietas</th>
                 <th style="padding:6px 4px;font-weight:700;text-align:right;">Coste Emp.</th>
+                <th style="padding:6px 4px;font-weight:700;text-align:right;">IRPF &euro;</th>
+                <th style="padding:6px 4px;font-weight:700;text-align:right;">SS Emp.</th>
+                <th style="padding:6px 4px;font-weight:700;text-align:right;">L&iacute;q. s/dietas</th>
+                <th style="padding:6px 4px;font-weight:700;text-align:right;">Dietas</th>
+                <th style="padding:6px 4px;font-weight:700;text-align:right;">L&iacute;quido</th>
                 <th style="padding:6px 4px;font-weight:700;text-align:right;">Coste/D&iacute;a</th>
               </tr></thead>
-              <tbody id="rrhh-tbody-nominas-mes"><tr><td colspan="10" style="text-align:center;padding:2rem;">Selecciona un periodo</td></tr></tbody>
+              <tbody id="rrhh-tbody-nominas-mes"><tr><td colspan="12" style="text-align:center;padding:2rem;">Selecciona un periodo</td></tr></tbody>
               <tfoot id="rrhh-tfoot-nominas-mes" style="font-weight:700;background:var(--bg-secondary,#f8f9fa);"></tfoot>
             </table>
           </div>
@@ -1543,17 +1567,20 @@
         <div class="card" style="overflow-x:auto;padding:0;">
           <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
             <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
-              <th style="padding:6px 6px;font-weight:700;">Empleado</th>
-              <th style="padding:6px 4px;font-weight:700;">Cat.</th>
+              <th style="padding:6px 6px;font-weight:700;">Nombre</th>
+              <th style="padding:6px 3px;font-weight:700;"></th>
               <th style="padding:6px 4px;font-weight:700;">DNI</th>
+              <th style="padding:6px 4px;font-weight:700;">Cat.</th>
               <th style="padding:6px 4px;font-weight:700;text-align:right;">D&iacute;as</th>
-              <th style="padding:6px 4px;font-weight:700;text-align:right;">L&iacute;quido</th>
-              <th style="padding:6px 4px;font-weight:700;text-align:right;">Adelantos</th>
-              <th style="padding:6px 4px;font-weight:700;text-align:right;">Embargo</th>
+              <th style="padding:6px 4px;font-weight:700;text-align:right;">Neto pactado</th>
+              <th style="padding:6px 4px;font-weight:700;text-align:right;">Dietas</th>
+              <th style="padding:6px 4px;font-weight:700;text-align:right;">Estimado</th>
+              <th style="padding:6px 4px;font-weight:700;text-align:right;border-left:2px solid var(--border,#e9ecef);">L&iacute;quido</th>
+              <th style="padding:6px 4px;font-weight:700;text-align:right;">Diferencia</th>
+              <th style="padding:6px 4px;font-weight:700;text-align:right;border-left:2px solid var(--border,#e9ecef);">Adelantos</th>
               <th style="padding:6px 4px;font-weight:700;text-align:right;font-weight:800;">A TRANSFERIR</th>
-              <th style="padding:6px 4px;font-weight:700;">Estado</th>
             </tr></thead>
-            <tbody id="rrhh-verif-tbody"><tr><td colspan="9" style="text-align:center;padding:2rem;">Selecciona un mes</td></tr></tbody>
+            <tbody id="rrhh-verif-tbody"><tr><td colspan="12" style="text-align:center;padding:2rem;">Selecciona un mes</td></tr></tbody>
             <tfoot id="rrhh-verif-tfoot" style="font-weight:700;background:var(--bg-secondary,#f8f9fa);"></tfoot>
           </table>
         </div>
@@ -1561,30 +1588,10 @@
       <!-- ═══ DIETAS ═══ -->
       <div id="panel-rrhh-dietas" class="panel-rrhh">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-          <h4 style="margin:0;font-size:0.95rem;font-weight:700;">Configuraci&oacute;n de tarifas de dietas</h4>
+          <h4 style="margin:0;font-size:0.95rem;font-weight:700;">Dietas</h4>
           <button onclick="_rrhhNuevaDieta()" class="btn-small" style="background:#EFF6FF;color:#1E40AF;border:1px solid #93C5FD;">+ Nueva tarifa</button>
         </div>
-        <div class="card" style="overflow-x:auto;padding:0;margin-bottom:16px;">
-          <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
-            <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
-              <th style="padding:7px 8px;font-weight:700;">Tipo</th>
-              <th style="padding:7px 6px;font-weight:700;">Subtipo</th>
-              <th style="padding:7px 6px;font-weight:700;">Categor&iacute;a</th>
-              <th style="padding:7px 6px;font-weight:700;text-align:right;">Importe</th>
-              <th style="padding:7px 6px;font-weight:700;">Vigencia desde</th>
-              <th style="padding:7px 6px;font-weight:700;">Vigencia hasta</th>
-              <th style="padding:7px 6px;font-weight:700;text-align:center;">Acciones</th>
-            </tr></thead>
-            <tbody id="rrhh-dietas-tbody"><tr><td colspan="7" style="text-align:center;padding:2rem;">Cargando...</td></tr></tbody>
-          </table>
-        </div>
-        <h4 style="margin:0 0 8px;font-size:0.95rem;font-weight:700;">Dietas por empleado (mensual)</h4>
-        <div class="card" style="overflow-x:auto;padding:0;">
-          <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
-            <thead id="rrhh-dietas-emp-thead"><tr><th style="padding:7px 8px;">Cargando...</th></tr></thead>
-            <tbody id="rrhh-dietas-emp-tbody"></tbody>
-          </table>
-        </div>
+        <div id="rrhh-dietas-contenido"></div>
       </div>
       <!-- ═══ ADELANTOS ═══ -->
       <div id="panel-rrhh-adelantos" class="panel-rrhh">
