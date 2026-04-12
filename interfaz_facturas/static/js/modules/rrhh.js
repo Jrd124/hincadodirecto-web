@@ -226,66 +226,98 @@ function _rrhhCargarDashboard() {
 // ==  2. EQUIPO (employee directory + CRUD)                                    ==
 // ===============================================================================
 
-function _rrhhCargarEmpleados() {
-  var tbodyActivos = document.getElementById("tbody-empleados-activos");
-  if (!tbodyActivos) return;
-  tbodyActivos.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--text-secondary);">Cargando\u2026</td></tr>';
+var _rrhhEquipoColapsados = { baja: true, vacaciones: true, reserva: true, exempleado: true };
 
-  fetch("/api/empleados?solo_activos=0")
+function _rrhhCargarEmpleados() {
+  var container = document.getElementById("tbody-empleados-activos");
+  if (!container) return;
+  var wrapper = container.closest(".card") || container.parentNode;
+  wrapper.innerHTML = '<p style="text-align:center;padding:2rem;color:var(--text-secondary);">Cargando\u2026</p>';
+
+  fetch("/api/rrhh/empleados?estado=todos")
     .then(function (r) { return r.json(); })
     .then(function (d) {
       _rrhhEmpleadosCache = d.empleados || [];
       _rrhhRenderVistas(_rrhhEmpleadosCache);
     })
     .catch(function (err) {
-      tbodyActivos.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;color:#dc3545;">Error al cargar empleados: ' + err.message + '</td></tr>';
+      wrapper.innerHTML = '<p style="text-align:center;padding:2rem;color:#dc3545;">Error: ' + err.message + '</p>';
     });
 }
 
 function _rrhhRenderVistas(lista) {
-  // Group by real estado
   var grupos = [
-    { key: "activo", label: "Activos", color: "#22c55e" },
-    { key: "baja", label: "Baja", color: "#f59e0b" },
-    { key: "vacaciones", label: "Vacaciones", color: "#3B82F6" },
-    { key: "reserva", label: "Reserva", color: "#6B7280" },
-    { key: "exempleado", label: "Exempleados", color: "#ef4444" }
+    { key: "activo", label: "Activos", color: "#22c55e", chevron: "\u25BC" },
+    { key: "baja", label: "Baja", color: "#f59e0b", chevron: "\u25BC" },
+    { key: "vacaciones", label: "Vacaciones", color: "#3B82F6", chevron: "\u25BC" },
+    { key: "reserva", label: "Reserva", color: "#6B7280", chevron: "\u25BC" },
+    { key: "exempleado", label: "Exempleados", color: "#ef4444", chevron: "\u25BC" }
   ];
   var container = document.getElementById("tbody-empleados-activos");
   if (!container) return;
-  // Render into the parent table's tbody by replacing entire content
-  // Actually, we'll render into the card container above the table
-  var tableWrapper = container.closest(".card") || container.parentNode;
+  var wrapper = container.closest(".card") || container.parentNode;
+
   var html = "";
   grupos.forEach(function (g) {
     var emps = lista.filter(function (e) { return e.estado === g.key; });
     if (!emps.length) return;
-    html += '<div style="margin-bottom:16px;">';
-    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:0 4px;">';
-    html += '<span style="font-weight:700;font-size:0.9rem;">' + g.label + '</span>';
-    html += '<span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:0.75rem;font-weight:600;background:' + g.color + '20;color:' + g.color + ';">' + emps.length + '</span>';
+    var collapsed = _rrhhEquipoColapsados[g.key];
+    var chevron = collapsed ? "\u25B6" : "\u25BC";
+
+    // Group header (clickable)
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border,#e9ecef);background:var(--bg-secondary,#f8f9fa);user-select:none;" onclick="_rrhhToggleGrupoEquipo(\'' + g.key + '\')">';
+    html += '<span style="font-size:0.75rem;width:12px;display:inline-block;">' + chevron + '</span>';
+    html += '<span style="font-weight:700;font-size:0.88rem;">' + g.label + '</span>';
+    html += '<span style="display:inline-block;padding:1px 8px;border-radius:9999px;font-size:0.72rem;font-weight:600;background:' + g.color + '20;color:' + g.color + ';">' + emps.length + '</span>';
     html += '</div>';
-    html += '<table style="width:100%;border-collapse:collapse;font-size:0.88rem;">';
-    html += '<tbody>';
-    emps.forEach(function (e) {
+
+    // Table (hidden if collapsed)
+    html += '<table data-equipo-grupo="' + g.key + '" style="width:100%;border-collapse:collapse;font-size:0.82rem;' + (collapsed ? 'display:none;' : '') + '">';
+    // Header
+    html += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);">' +
+      '<th style="padding:6px 10px;text-align:left;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;">Nombre</th>' +
+      '<th style="padding:6px 6px;text-align:left;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:110px;">DNI</th>' +
+      '<th style="padding:6px 6px;text-align:left;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:130px;">Categor\u00eda</th>' +
+      '<th style="padding:6px 6px;text-align:left;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:130px;">Tel\u00e9fono</th>' +
+      '<th style="padding:6px 6px;text-align:right;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:95px;">Coste/D\u00eda</th>' +
+      '<th style="padding:6px 6px;text-align:center;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:90px;">Estado</th>' +
+      '<th style="padding:6px 6px;text-align:center;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:90px;">Acciones</th>' +
+      '</tr></thead><tbody>';
+
+    emps.forEach(function (e, i) {
       var nombreCompleto = (e.nombre || "") + (e.apellidos ? " " + e.apellidos : "");
-      html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_rrhhAbrirFichaDesdeEquipo(' + e.id + ')">' +
-        '<td style="padding:0.5rem 0.75rem;font-weight:600;white-space:nowrap;">' + nombreCompleto + '</td>' +
-        '<td style="padding:0.5rem 0.5rem;">' + (e.dni || "\u2014") + '</td>' +
-        '<td style="padding:0.5rem 0.5rem;">' + (e.categoria || e.puesto || "\u2014") + '</td>' +
-        '<td style="padding:0.5rem 0.5rem;">' + (e.telefono || "\u2014") + '</td>' +
-        '<td style="padding:0.5rem 0.5rem;text-align:center;">' +
-          '<button onclick="event.stopPropagation();_rrhhEditarEmpleado(' + e.id + ')" title="Editar" style="background:none;border:none;cursor:pointer;color:#3B82F6;font-size:0.9rem;">&#x270E;</button>' +
+      var estadoColor = { activo: "#22c55e", baja: "#f59e0b", vacaciones: "#3B82F6", reserva: "#6B7280", exempleado: "#ef4444" }[e.estado] || "#6B7280";
+      var estadoLabel = e.estado ? e.estado.charAt(0).toUpperCase() + e.estado.slice(1) : "\u2014";
+      var costeDia = e.coste_dia_actual || e.ultimo_coste_empresa ? (e.coste_dia_actual || 0) : null;
+      var zebra = i % 2 === 1 ? "background:rgba(0,0,0,0.015);" : "";
+
+      html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;' + zebra + '" onclick="_rrhhAbrirFichaDesdeEquipo(' + e.id + ')" onmouseover="this.style.background=\'rgba(59,130,246,0.06)\'" onmouseout="this.style.background=\'' + (i % 2 === 1 ? 'rgba(0,0,0,0.015)' : '') + '\'">' +
+        '<td style="padding:7px 10px;font-weight:600;white-space:nowrap;">' + nombreCompleto + '</td>' +
+        '<td style="padding:7px 6px;font-family:monospace;font-size:0.8rem;">' + (e.dni || "\u2014") + '</td>' +
+        '<td style="padding:7px 6px;">' + (e.categoria || e.puesto || "\u2014") + '</td>' +
+        '<td style="padding:7px 6px;">' + (e.telefono || "\u2014") + '</td>' +
+        '<td style="padding:7px 6px;text-align:right;">' + (costeDia !== null ? fmtEur(costeDia) + ' \u20ac/d' : '\u2014') + '</td>' +
+        '<td style="padding:7px 6px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:0.7rem;font-weight:600;background:' + estadoColor + '18;color:' + estadoColor + ';">' + estadoLabel + '</span></td>' +
+        '<td style="padding:7px 6px;text-align:center;white-space:nowrap;">' +
+          '<button onclick="event.stopPropagation();_rrhhAbrirFichaDesdeEquipo(' + e.id + ')" title="Ver ficha" style="background:none;border:none;cursor:pointer;color:#3B82F6;font-size:0.85rem;">&#x1F464;</button> ' +
+          '<button onclick="event.stopPropagation();_rrhhEditarEmpleado(' + e.id + ')" title="Editar" style="background:none;border:none;cursor:pointer;color:#6B7280;font-size:0.85rem;">&#x270E;</button> ' +
+          '<button onclick="event.stopPropagation();_rrhhEliminarEmpleado(' + e.id + ',\'' + nombreCompleto.replace(/'/g, "\\'") + '\')" title="Dar de baja" style="background:none;border:none;cursor:pointer;color:#dc3545;font-size:0.85rem;">&#x2716;</button>' +
         '</td></tr>';
     });
-    html += '</tbody></table></div>';
+    html += '</tbody></table>';
   });
+
   if (!html) html = '<p style="text-align:center;padding:2rem;color:var(--text-secondary);">Sin empleados</p>';
-  tableWrapper.innerHTML = html;
+  wrapper.innerHTML = html;
 
   // Hide old inactivos wrapper
-  var wrapper = document.getElementById("rrhh-inactivos-wrapper");
-  if (wrapper) wrapper.style.display = "none";
+  var inacWrapper = document.getElementById("rrhh-inactivos-wrapper");
+  if (inacWrapper) inacWrapper.style.display = "none";
+}
+
+function _rrhhToggleGrupoEquipo(key) {
+  _rrhhEquipoColapsados[key] = !_rrhhEquipoColapsados[key];
+  _rrhhRenderVistas(_rrhhEmpleadosCache);
 }
 
 function _rrhhRenderTabla(tbody, lista, esActivos) {
@@ -1683,6 +1715,7 @@ window._rrhhCargarEmpleados = _rrhhCargarEmpleados;
 window._rrhhRenderVistas = _rrhhRenderVistas;
 window._rrhhRenderTabla = _rrhhRenderTabla;
 window._rrhhToggleInactivos = _rrhhToggleInactivos;
+window._rrhhToggleGrupoEquipo = _rrhhToggleGrupoEquipo;
 window._rrhhAbrirModalEmpleado = _rrhhAbrirModalEmpleado;
 window._rrhhCerrarModalEmpleado = _rrhhCerrarModalEmpleado;
 window._rrhhGuardarEmpleado = _rrhhGuardarEmpleado;
