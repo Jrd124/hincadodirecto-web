@@ -428,3 +428,44 @@ def crm_empresas_frias():
   excluir = [t.strip() for t in excluir_raw.split(",") if t.strip()] or None
   empresas = crm_db.empresas_sin_actividad(dias=dias, tipos=tipos, excluir_estados=excluir)
   return jsonify({"empresas": empresas[:limit], "total": len(empresas), "dias_umbral": dias})
+
+
+# ─── GMAIL SYNC ───────────────────────────────────────────────────────────────
+
+@crm_bp.get("/api/crm/gmail/status")
+def crm_gmail_status():
+  """Estado de la integración Gmail: si está configurada, cuenta y último sync."""
+  try:
+    from core import gmail_sync
+    return jsonify(gmail_sync.gmail_disponible())
+  except Exception as exc:
+    logger.error("gmail status error: %s", exc)
+    return jsonify({"disponible": False, "motivo": str(exc)}), 500
+
+
+@crm_bp.post("/api/crm/gmail/sync")
+def crm_gmail_sync():
+  """Dispara sync Gmail manual. Devuelve resumen de la operación.
+
+  Body JSON opcional:
+    solo_con_dominio (bool, default false): solo empresas con dominio configurado.
+    batch_size (int, default según CRM_GMAIL_BATCH_SIZE env var).
+  """
+  try:
+    from core import gmail_sync
+    estado = gmail_sync.gmail_disponible()
+    if not estado.get("disponible"):
+      return jsonify({"ok": False, "error": estado.get("motivo", "Gmail no disponible")}), 400
+    data = request.get_json(silent=True) or {}
+    solo_con_dominio = bool(data.get("solo_con_dominio", False))
+    batch_size = int(data.get("batch_size") or 20)
+    dias_atras = int(data["dias_atras"]) if data.get("dias_atras") else None
+    resumen = gmail_sync.sync_global_batch(
+      batch_size=batch_size,
+      solo_con_dominio=solo_con_dominio,
+      dias_atras=dias_atras,
+    )
+    return jsonify({"ok": True, "resumen": resumen})
+  except Exception as exc:
+    logger.error("gmail sync error: %s", exc, exc_info=True)
+    return jsonify({"ok": False, "error": str(exc)}), 500

@@ -1120,10 +1120,21 @@
           if (i.siguiente_accion) {
             seg = '<span class="crm-badge-seguimiento">Seguimiento ' + _esc((i.fecha_siguiente_accion || "").substring(0, 10)) + '</span>';
           }
+          // Badge de fuente: gmail importado automáticamente
+          var srcBadge = "";
+          if (i.source === "gmail") {
+            srcBadge = '<span style="display:inline-flex;align-items:center;gap:3px;font-size:0.7rem;font-weight:600;'
+              + 'background:#fce8e6;color:#ea4335;border:1px solid #f5c6c2;border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:middle;">'
+              + '📧 Gmail</span>';
+          } else if (i.source && i.source !== "manual") {
+            srcBadge = '<span style="font-size:0.7rem;font-weight:600;background:#f1f5f9;color:#64748b;'
+              + 'border:1px solid #e2e8f0;border-radius:4px;padding:1px 6px;margin-left:6px;vertical-align:middle;">'
+              + _esc(i.source) + '</span>';
+          }
           return '<div class="crm-tl-card" data-int-id="' + i.id + '">' +
             '<div class="crm-tl-icon crm-tl-icon-' + _esc(i.tipo) + '">' + icon + '</div>' +
             '<div class="crm-tl-body">' +
-              '<div class="crm-tl-asunto">' + _esc(i.asunto || "(Sin asunto)") + seg + '</div>' +
+              '<div class="crm-tl-asunto">' + _esc(i.asunto || "(Sin asunto)") + srcBadge + seg + '</div>' +
               '<div class="crm-tl-meta">' + _esc(i.nombre_empresa || "") + (i.nombre_contacto ? ' &middot; ' + _esc(i.nombre_contacto) + ' ' + _esc(i.apellidos_contacto || '') : '') + '</div>' +
               (i.descripcion ? '<div class="crm-tl-desc">' + _esc(i.descripcion) + '</div>' : '') +
             '</div>' +
@@ -1966,32 +1977,8 @@
   if (_initPanelInicio && _initPanelInicio.classList.contains("visible")) _crmCargarStats();
   if (_initPanelEmpresas && _initPanelEmpresas.classList.contains("visible")) _crmCargarEmpresas();
 
-  // ─── Gmail Sync — Fase 3 ─────────────────────────────────────────────────
-
-  /** Comprueba si Gmail está disponible y actualiza UI del panel inicio */
-  function _gmailComprobarEstado() {
-    fetch("/api/gmail/estado")
-      .then(function (r) { return r.json(); })
-      .then(function (estado) {
-        var card = document.getElementById("crm-gmail-admin-card");
-        var txt = document.getElementById("crm-gmail-estado-txt");
-        if (!card) return;
-        card.style.display = "block";
-        if (estado.disponible) {
-          if (txt) txt.textContent = "Conectado como " + (estado.cuenta || "—");
-          var btnGlobal = document.getElementById("btn-gmail-sync-global");
-          if (btnGlobal) btnGlobal.disabled = false;
-        } else {
-          if (txt) txt.textContent = "No configurado: " + (estado.motivo || "");
-          var btnGlobal2 = document.getElementById("btn-gmail-sync-global");
-          if (btnGlobal2) btnGlobal2.disabled = true;
-        }
-      })
-      .catch(function () {
-        var card = document.getElementById("crm-gmail-admin-card");
-        if (card) card.style.display = "none";
-      });
-  }
+  // ─── Gmail Sync — Fase 3 (widget global consolidado en Bloque 5) ────────────
+  // _gmailComprobarEstado() eliminado — sustituido por _crmGmailComprobarEstado()
 
   /** Sincroniza Gmail para una empresa concreta y actualiza el timeline */
   function _gmailSyncEmpresa(empresaId, btn) {
@@ -2049,52 +2036,7 @@
       .catch(function () {});
   }
 
-  // Botón Sync Gmail global (en panel inicio CRM)
-  var _btnGmailGlobal = document.getElementById("btn-gmail-sync-global");
-  if (_btnGmailGlobal) {
-    _btnGmailGlobal.addEventListener("click", function () {
-      var btn = _btnGmailGlobal;
-      var orig = btn.textContent;
-      btn.disabled = true;
-      btn.textContent = "⏳ Sincronizando…";
-      var res2El = document.getElementById("crm-gmail-sync-resultado");
-      if (res2El) { res2El.style.display = "none"; res2El.textContent = ""; }
-      fetch("/api/gmail/sync/global", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ solo_con_dominio: false }) })
-        .then(function (r) { return r.json(); })
-        .then(function (res) {
-          btn.disabled = false;
-          btn.textContent = orig;
-          if (res.error) {
-            if (res2El) { res2El.style.display = "block"; res2El.textContent = "Error: " + res.error; }
-            return;
-          }
-          var txt = "✓ " + res.empresas_procesadas + " empresa(s) procesadas · " +
-            res.hilos_encontrados + " hilo(s) · " +
-            res.interacciones_creadas + " actividad(es) nueva(s)";
-          if (res.errores && res.errores.length) txt += " · " + res.errores.length + " error(es)";
-          if (res2El) { res2El.style.display = "block"; res2El.textContent = txt; }
-        })
-        .catch(function (err) {
-          btn.disabled = false;
-          btn.textContent = orig;
-          if (res2El) { res2El.style.display = "block"; res2El.textContent = "Error de red: " + err; }
-        });
-    });
-  }
-
-  // Cargar estado Gmail cuando se abre el panel inicio CRM
-  var _crmPanelInicioObs = document.getElementById("panel-crm-inicio");
-  if (_crmPanelInicioObs) {
-    new MutationObserver(function (muts) {
-      muts.forEach(function (m) {
-        if (m.type === "attributes" && _crmPanelInicioObs.classList.contains("visible")) {
-          _gmailComprobarEstado();
-        }
-      });
-    }).observe(_crmPanelInicioObs, { attributes: true, attributeFilter: ["class"] });
-    // Si ya está visible al cargar
-    if (_crmPanelInicioObs.classList.contains("visible")) _gmailComprobarEstado();
-  }
+  // _btnGmailGlobal y su MutationObserver eliminados — consolidados en widget Bloque 5
 
   // ─── Seguimiento CRM — Fase 4B ───────────────────────────────────────────
   var _TIPO_ICON = { cliente: "🏢", lead: "🎯", proveedor: "🔧", colaborador: "🤝", otro: "📌" };
@@ -2289,17 +2231,119 @@
   var _chkHoy = document.getElementById("crm-hoy-incluir-verdes");
   if (_chkHoy) _chkHoy.addEventListener("change", _crmCargarOportunidadesHoy);
 
-  // Auto-carga cuando el panel inicio CRM se hace visible. No duplicamos con
-  // el observer de Gmail — ponemos otro para no acoplar responsabilidades.
+  // Auto-carga cuando el panel inicio CRM se hace visible.
   var _panelInicioHoyObs = document.getElementById("panel-crm-inicio");
   if (_panelInicioHoyObs) {
     new MutationObserver(function (muts) {
       muts.forEach(function (m) {
         if (m.type === "attributes" && _panelInicioHoyObs.classList.contains("visible")) {
           _crmCargarOportunidadesHoy();
+          _crmGmailComprobarEstado();
         }
       });
     }).observe(_panelInicioHoyObs, { attributes: true, attributeFilter: ["class"] });
-    if (_panelInicioHoyObs.classList.contains("visible")) _crmCargarOportunidadesHoy();
+    if (_panelInicioHoyObs.classList.contains("visible")) {
+      _crmCargarOportunidadesHoy();
+      _crmGmailComprobarEstado();
+    }
   }
+
+  // ── Bloque 5: Gmail Sync widget ──────────────────────────────────────────
+  var _gmailDisponible = false;
+
+  function _crmGmailComprobarEstado() {
+    var estadoEl  = document.getElementById("crm-gmail-estado");
+    var btnSync   = document.getElementById("btn-crm-gmail-sync");
+    if (!estadoEl || !btnSync) return;
+
+    estadoEl.textContent = "Comprobando conexión…";
+    btnSync.disabled = true;
+    btnSync.style.opacity = "0.5";
+
+    fetch("/api/crm/gmail/status")
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        _gmailDisponible = !!d.disponible;
+        if (d.disponible) {
+          estadoEl.innerHTML = '✅ Conectado como <strong>' + _esc(d.cuenta || "") + '</strong>';
+          btnSync.disabled = false;
+          btnSync.style.opacity = "1";
+        } else {
+          estadoEl.innerHTML = '⚠️ No configurado — <span style="color:#94a3b8;">' + _esc(d.motivo || "Sin credenciales Gmail") + '</span>';
+          btnSync.disabled = true;
+          btnSync.style.opacity = "0.4";
+        }
+      })
+      .catch(function () {
+        estadoEl.textContent = "Error al comprobar estado Gmail.";
+      });
+  }
+
+  function _crmGmailSync() {
+    if (!_gmailDisponible) return;
+    var btnSync    = document.getElementById("btn-crm-gmail-sync");
+    var resumenEl  = document.getElementById("crm-gmail-resumen");
+    var errorEl    = document.getElementById("crm-gmail-error");
+    if (!btnSync) return;
+
+    // Reset UI
+    if (resumenEl) resumenEl.style.display = "none";
+    if (errorEl)   errorEl.style.display   = "none";
+    btnSync.disabled = true;
+    btnSync.textContent = "Sincronizando…";
+    btnSync.style.opacity = "0.7";
+
+    var diasEl = document.getElementById("crm-gmail-dias");
+    var diasAtras = diasEl ? (parseInt(diasEl.value) || 30) : 30;
+    fetch("/api/crm/gmail/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dias_atras: diasAtras }),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        btnSync.disabled = false;
+        btnSync.textContent = "Sincronizar ahora";
+        btnSync.style.opacity = "1";
+
+        if (!res.ok || !res.data.ok) {
+          if (errorEl) {
+            errorEl.textContent = "❌ " + (res.data.error || "Error desconocido durante el sync.");
+            errorEl.style.display = "";
+          }
+          return;
+        }
+
+        var r = res.data.resumen || {};
+        var lineas = [];
+        if (r.empresas_procesadas != null) lineas.push("Empresas procesadas: <strong>" + r.empresas_procesadas + "</strong>");
+        if (r.hilos_nuevos        != null) lineas.push("Emails nuevos importados: <strong>" + r.hilos_nuevos + "</strong>");
+        if (r.hilos_ya_existian   != null) lineas.push("Ya existían: <strong>" + r.hilos_ya_existian + "</strong>");
+        if (r.errores             != null) lineas.push("Errores: <strong>" + r.errores + "</strong>");
+        if (r.duracion_s          != null) lineas.push("Duración: <strong>" + Number(r.duracion_s).toFixed(1) + "s</strong>");
+        if (resumenEl) {
+          resumenEl.innerHTML = "✅ Sync completado — " + (lineas.length ? lineas.join(" · ") : "Sin cambios.");
+          resumenEl.style.display = "";
+        }
+
+        // Refrescar interacciones si el panel está visible
+        if (typeof window._crmCargarInteracciones === "function") {
+          var panelInt = document.getElementById("panel-crm-interacciones");
+          if (panelInt && panelInt.classList.contains("visible")) _crmCargarInteracciones();
+        }
+      })
+      .catch(function (err) {
+        btnSync.disabled = false;
+        btnSync.textContent = "Sincronizar ahora";
+        btnSync.style.opacity = "1";
+        if (errorEl) {
+          errorEl.textContent = "❌ Error de red: " + err.message;
+          errorEl.style.display = "";
+        }
+      });
+  }
+
+  var _btnGmailSync = document.getElementById("btn-crm-gmail-sync");
+  if (_btnGmailSync) _btnGmailSync.addEventListener("click", _crmGmailSync);
+
 })();
