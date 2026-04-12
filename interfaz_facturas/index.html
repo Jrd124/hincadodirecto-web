@@ -1509,6 +1509,38 @@
               Importar Excel
               <input type="file" id="rrhh-import-file" accept=".xlsx,.xls" style="display:none;">
             </label>
+            <label style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;border-radius:8px;cursor:pointer;font-size:0.88rem;font-weight:600;">
+              OCR PDFs
+              <input type="file" id="rrhh-import-pdf" accept=".pdf,.zip" multiple style="display:none;">
+            </label>
+          </div>
+        </div>
+        <!-- OCR Preview (oculto por defecto) -->
+        <div id="rrhh-ocr-preview" style="display:none;margin-bottom:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <h4 style="margin:0;font-size:0.95rem;font-weight:700;">Preview n&oacute;minas OCR</h4>
+            <div style="display:flex;gap:8px;">
+              <button onclick="_rrhhConfirmarOCR()" class="btn-small" style="background:#DCFCE7;color:#166534;border:1px solid #86EFAC;" id="rrhh-ocr-confirmar">Importar</button>
+              <button onclick="_rrhhCerrarOCR()" class="btn-small secondary">Cancelar</button>
+            </div>
+          </div>
+          <div id="rrhh-ocr-progress" style="display:none;margin-bottom:10px;padding:10px;background:#FEF3C7;border-radius:8px;font-size:0.85rem;"></div>
+          <div class="card" style="overflow-x:auto;padding:0;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
+              <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
+                <th style="padding:6px 6px;font-weight:700;">Empleado</th>
+                <th style="padding:6px 6px;font-weight:700;">DNI</th>
+                <th style="padding:6px 6px;font-weight:700;">Periodo</th>
+                <th style="padding:6px 6px;font-weight:700;">Tipo</th>
+                <th style="padding:6px 6px;font-weight:700;text-align:right;">D&iacute;as</th>
+                <th style="padding:6px 6px;font-weight:700;text-align:right;">Devengado</th>
+                <th style="padding:6px 6px;font-weight:700;text-align:right;">Deducir</th>
+                <th style="padding:6px 6px;font-weight:700;text-align:right;">L&iacute;quido</th>
+                <th style="padding:6px 6px;font-weight:700;text-align:right;">Coste Emp.</th>
+                <th style="padding:6px 6px;font-weight:700;">Estado</th>
+              </tr></thead>
+              <tbody id="rrhh-ocr-tbody"></tbody>
+            </table>
           </div>
         </div>
         <!-- Ficha individual (oculta por defecto) -->

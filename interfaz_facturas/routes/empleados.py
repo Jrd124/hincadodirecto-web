@@ -249,6 +249,82 @@ def api_rrhh_dedup():
     return jsonify({"error": str(e)}), 500
 
 
+@empleados_bp.post("/api/rrhh/procesar-nominas-pdf")
+def api_rrhh_procesar_pdfs():
+  """Procesa PDFs de nómina con OCR (GPT-4 Vision). Devuelve preview."""
+  import tempfile, zipfile
+  from pathlib import Path
+  from core.rrhh_ocr import procesar_lote_nominas
+
+  files = request.files.getlist("archivos")
+  if not files:
+    return jsonify({"error": "Se requieren archivos PDF"}), 400
+
+  pdf_paths = []
+  tmpdir = tempfile.mkdtemp()
+
+  for f in files:
+    fname = f.filename or "unknown"
+    fpath = Path(tmpdir) / fname
+    f.save(str(fpath))
+
+    if fname.lower().endswith(".zip"):
+      with zipfile.ZipFile(str(fpath)) as zf:
+        for name in zf.namelist():
+          if name.lower().endswith(".pdf"):
+            extracted = Path(tmpdir) / Path(name).name
+            with open(str(extracted), "wb") as out:
+              out.write(zf.read(name))
+            pdf_paths.append(str(extracted))
+    elif fname.lower().endswith(".pdf"):
+      pdf_paths.append(str(fpath))
+
+  if not pdf_paths:
+    return jsonify({"error": "No se encontraron archivos PDF"}), 400
+
+  try:
+    result = procesar_lote_nominas(pdf_paths)
+    # Enrich with employee match status
+    conn = get_conn()
+    try:
+      for nom in result["nominas"]:
+        dni = (nom.get("dni") or "").replace("-", "").replace(" ", "").upper()
+        if dni:
+          emp = conn.execute("SELECT id, nombre, apellidos FROM empleados WHERE dni = ?", (dni,)).fetchone()
+          if emp:
+            nom["_emp_id"] = emp["id"]
+            nom["_emp_nombre"] = f"{emp['nombre']} {emp['apellidos'] or ''}".strip()
+            nom["_estado"] = "match"
+          else:
+            nom["_emp_id"] = None
+            nom["_emp_nombre"] = None
+            nom["_estado"] = "nuevo"
+        else:
+          nom["_estado"] = "error"
+    finally:
+      conn.close()
+    return jsonify(result)
+  except Exception as e:
+    logger.exception("Error procesando PDFs de nómina")
+    return jsonify({"error": str(e)}), 500
+
+
+@empleados_bp.post("/api/rrhh/confirmar-nominas")
+def api_rrhh_confirmar_nominas():
+  """Confirma e inserta nóminas procesadas por OCR."""
+  from core.rrhh_ocr import confirmar_nominas
+  data = request.get_json(silent=True) or {}
+  nominas = data.get("nominas", [])
+  if not nominas:
+    return jsonify({"error": "No hay nóminas para confirmar"}), 400
+  try:
+    result = confirmar_nominas(nominas)
+    return jsonify(result)
+  except Exception as e:
+    logger.exception("Error confirmando nóminas")
+    return jsonify({"error": str(e)}), 500
+
+
 @empleados_bp.get("/api/rrhh/estadisticas")
 def api_rrhh_estadisticas():
   """KPIs globales de RRHH."""
