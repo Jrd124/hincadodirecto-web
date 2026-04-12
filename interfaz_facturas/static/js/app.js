@@ -66,8 +66,8 @@ const MODULOS = {
   rrhh: {
     linkId: "nav-rrhh-modulo",
     submenuId: "submenu-rrhh",
-    paneles: { inicio: "panel-rrhh-inicio", equipo: "panel-rrhh-equipo", reserva: "panel-rrhh-reserva", alumni: "panel-rrhh-alumni", nominas: "panel-rrhh-nominas", adelantos: "panel-rrhh-adelantos" },
-    subNavLinks: { equipo: "nav-rrhh-equipo", reserva: "nav-rrhh-reserva", alumni: "nav-rrhh-alumni", nominas: "nav-rrhh-nominas", adelantos: "nav-rrhh-adelantos" },
+    paneles: { inicio: "panel-rrhh-inicio", equipo: "panel-rrhh-equipo", nominas: "panel-rrhh-nominas", verificador: "panel-rrhh-verificador", dietas: "panel-rrhh-dietas", adelantos: "panel-rrhh-adelantos", ss: "panel-rrhh-ss", irpf: "panel-rrhh-irpf", costeproyecto: "panel-rrhh-coste-proyecto", importar: "panel-rrhh-importar" },
+    subNavLinks: { equipo: "nav-rrhh-equipo", nominas: "nav-rrhh-nominas", verificador: "nav-rrhh-verificador", dietas: "nav-rrhh-dietas", adelantos: "nav-rrhh-adelantos", ss: "nav-rrhh-ss", irpf: "nav-rrhh-irpf", costeproyecto: "nav-rrhh-coste-proyecto", importar: "nav-rrhh-importar" },
     defecto: "inicio",
   },
   onboarding: {
@@ -412,7 +412,7 @@ function restaurarDesdeHash() {
   } else if (mod === "rrhh") {
     if (partes.length >= 2) {
       var sp = partes[1];
-      if (["equipo", "reserva", "alumni", "nominas", "adelantos"].indexOf(sp) >= 0) {
+      if (["equipo", "nominas", "verificador", "dietas", "adelantos", "ss", "irpf", "costeproyecto", "importar"].indexOf(sp) >= 0) {
         rrhhSubpanel = sp;
         activarModulo("rrhh");
         activarSubpanel("rrhh", sp);
@@ -749,27 +749,14 @@ document.getElementById("nav-proyectos-onboarding").addEventListener("click", (e
   activarSubpanel("proyectos", "onboarding");
 });
 
-document.getElementById("nav-rrhh-equipo").addEventListener("click", (e) => {
-  e.preventDefault();
-  activarSubpanel("rrhh", "equipo");
-  if (typeof window._rrhhOnPanelShow === "function") window._rrhhOnPanelShow("equipo");
-});
-document.getElementById("nav-rrhh-reserva").addEventListener("click", (e) => {
-  e.preventDefault();
-  activarSubpanel("rrhh", "reserva");
-});
-document.getElementById("nav-rrhh-alumni").addEventListener("click", (e) => {
-  e.preventDefault();
-  activarSubpanel("rrhh", "alumni");
-});
-document.getElementById("nav-rrhh-nominas").addEventListener("click", (e) => {
-  e.preventDefault();
-  activarSubpanel("rrhh", "nominas");
-  if (typeof window._rrhhOnPanelShow === "function") window._rrhhOnPanelShow("nominas");
-});
-document.getElementById("nav-rrhh-adelantos").addEventListener("click", (e) => {
-  e.preventDefault();
-  activarSubpanel("rrhh", "adelantos");
+["equipo","nominas","verificador","dietas","adelantos","ss","irpf","costeproyecto","importar"].forEach(function(sp) {
+  var navId = "nav-rrhh-" + (sp === "costeproyecto" ? "coste-proyecto" : sp);
+  var el = document.getElementById(navId);
+  if (el) el.addEventListener("click", function(e) {
+    e.preventDefault();
+    activarSubpanel("rrhh", sp);
+    if (typeof window._rrhhOnPanelShow === "function") window._rrhhOnPanelShow(sp);
+  });
 });
 
 // CRM nav handlers

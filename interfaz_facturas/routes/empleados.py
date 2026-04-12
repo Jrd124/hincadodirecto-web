@@ -387,3 +387,137 @@ def api_rrhh_estadisticas():
     })
   finally:
     conn.close()
+
+
+# ═══ RRHH Analytics endpoints ═════════════════════════════════════════════
+
+
+@empleados_bp.get("/api/rrhh/dashboard")
+def api_rrhh_dashboard():
+  from core.rrhh_analytics import dashboard
+  return jsonify(dashboard())
+
+
+@empleados_bp.get("/api/rrhh/verificador/<periodo>")
+def api_rrhh_verificador(periodo):
+  from core.rrhh_analytics import verificador
+  return jsonify(verificador(periodo))
+
+
+@empleados_bp.get("/api/rrhh/seguridad-social")
+def api_rrhh_ss():
+  from core.rrhh_analytics import seguridad_social
+  return jsonify(seguridad_social())
+
+
+@empleados_bp.get("/api/rrhh/irpf")
+def api_rrhh_irpf():
+  from core.rrhh_analytics import irpf
+  return jsonify(irpf())
+
+
+@empleados_bp.get("/api/rrhh/coste-proyecto")
+def api_rrhh_coste_proyecto():
+  from core.rrhh_analytics import coste_proyecto
+  return jsonify(coste_proyecto())
+
+
+@empleados_bp.get("/api/rrhh/dietas/dashboard")
+def api_rrhh_dietas_dashboard():
+  from core.rrhh_analytics import dietas_dashboard
+  return jsonify(dietas_dashboard())
+
+
+@empleados_bp.get("/api/rrhh/dietas/config")
+def api_rrhh_dietas_config_list():
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    return jsonify({"config": [dict(r) for r in conn.execute("SELECT * FROM dietas_config ORDER BY tipo, subtipo").fetchall()]})
+  finally:
+    conn.close()
+
+
+@empleados_bp.post("/api/rrhh/dietas/config")
+def api_rrhh_dietas_config_create():
+  empleados_db.init_empleados_db()
+  data = request.get_json(silent=True) or {}
+  conn = get_conn()
+  try:
+    conn.execute(
+      "INSERT INTO dietas_config (tipo, subtipo, categoria, importe, fecha_vigencia_desde, fecha_vigencia_hasta, notas) VALUES (?,?,?,?,?,?,?)",
+      (data.get("tipo"), data.get("subtipo"), data.get("categoria"), data.get("importe"), data.get("fecha_vigencia_desde"), data.get("fecha_vigencia_hasta"), data.get("notas")),
+    )
+    conn.commit()
+    return jsonify({"ok": True}), 201
+  finally:
+    conn.close()
+
+
+@empleados_bp.delete("/api/rrhh/dietas/config/<int:did>")
+def api_rrhh_dietas_config_delete(did):
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    conn.execute("DELETE FROM dietas_config WHERE id=?", (did,))
+    conn.commit()
+    return jsonify({"ok": True})
+  finally:
+    conn.close()
+
+
+@empleados_bp.get("/api/rrhh/adelantos")
+def api_rrhh_adelantos_list():
+  from core.rrhh_analytics import adelantos_list
+  return jsonify(adelantos_list(
+    empleado_id=request.args.get("empleado_id"),
+    estado=request.args.get("estado"),
+  ))
+
+
+@empleados_bp.post("/api/rrhh/adelantos")
+def api_rrhh_adelantos_create():
+  empleados_db.init_empleados_db()
+  data = request.get_json(silent=True) or {}
+  conn = get_conn()
+  try:
+    conn.execute(
+      "INSERT INTO adelantos (empleado_id, fecha, importe, concepto, estado) VALUES (?,?,?,?,?)",
+      (data.get("empleado_id"), data.get("fecha"), data.get("importe"), data.get("concepto"), "pendiente"),
+    )
+    conn.commit()
+    return jsonify({"ok": True}), 201
+  finally:
+    conn.close()
+
+
+@empleados_bp.delete("/api/rrhh/adelantos/<int:aid>")
+def api_rrhh_adelantos_delete(aid):
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    conn.execute("DELETE FROM adelantos WHERE id=?", (aid,))
+    conn.commit()
+    return jsonify({"ok": True})
+  finally:
+    conn.close()
+
+
+@empleados_bp.post("/api/rrhh/verificador/<periodo>/generar-remesa")
+def api_rrhh_generar_remesa(periodo):
+  """Genera CSV de remesa bancaria para transferir nóminas."""
+  from core.rrhh_analytics import verificador
+  import io, csv
+  data = verificador(periodo)
+  output = io.StringIO()
+  writer = csv.writer(output, delimiter=";")
+  writer.writerow(["Nombre", "Importe", "Concepto"])
+  for l in data["lineas"]:
+    if l["a_transferir"] > 0 and l["tipo"] == "NOMINA":
+      writer.writerow([l["nombre"], f"{l['a_transferir']:.2f}", f"Nomina {periodo}"])
+  from flask import Response
+  return Response(
+    output.getvalue(),
+    mimetype="text/csv",
+    headers={"Content-Disposition": f"attachment; filename=remesa_{periodo}.csv"},
+  )

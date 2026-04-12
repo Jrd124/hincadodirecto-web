@@ -8,6 +8,13 @@ function _rrhhOnPanelShow(panel) {
   if (panel === "equipo") _rrhhCargarEmpleados();
   else if (panel === "inicio") _rrhhCargarDashboard();
   else if (panel === "nominas") _rrhhCargarNominas();
+  else if (panel === "verificador") _rrhhCargarVerificador();
+  else if (panel === "dietas") _rrhhCargarDietas();
+  else if (panel === "adelantos") _rrhhCargarAdelantos();
+  else if (panel === "ss") _rrhhCargarSS();
+  else if (panel === "irpf") _rrhhCargarIRPF();
+  else if (panel === "costeproyecto") _rrhhCargarCosteProyecto();
+  else if (panel === "importar") _rrhhInitImportar();
 }
 
 // ── Cargar lista ─────────────────────────────────────────────────────────
@@ -274,40 +281,75 @@ function _rrhhFmtEur(n) {
 var _rrhhDashCargado = false;
 
 function _rrhhCargarDashboard() {
-  // KPIs
-  fetch("/api/rrhh/estadisticas")
+  fetch("/api/rrhh/dashboard")
     .then(function (r) { return r.json(); })
     .then(function (d) {
-      document.getElementById("rrhh-kpi-activos").textContent = d.emp_activos;
-      document.getElementById("rrhh-kpi-coste-mes").textContent = _rrhhFmtEur(d.coste_mes);
-      document.getElementById("rrhh-kpi-coste-dia").textContent = _rrhhFmtEur(d.coste_medio_dia);
-      document.getElementById("rrhh-kpi-dietas").textContent = _rrhhFmtEur(d.dietas_mes);
-      document.getElementById("rrhh-kpi-nominas").textContent = d.total_nominas;
-      document.getElementById("rrhh-kpi-rotacion").textContent = d.finiquitos_12m;
-    })
-    .catch(function () {});
-
-  // Resumen mensual
-  fetch("/api/rrhh/nominas/resumen-mensual")
-    .then(function (r) { return r.json(); })
-    .then(function (d) {
-      var tbody = document.getElementById("rrhh-tbody-resumen-mensual");
-      if (!d.meses || !d.meses.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-secondary);">Sin datos de n\u00f3minas</td></tr>';
-        return;
+      var k = d.kpis || {};
+      document.getElementById("rrhh-kpi-activos").textContent = k.emp_activos || 0;
+      document.getElementById("rrhh-kpi-coste-mes").textContent = _rrhhFmtEur(k.coste_mes);
+      document.getElementById("rrhh-kpi-coste-dia").textContent = _rrhhFmtEur(k.coste_dia);
+      document.getElementById("rrhh-kpi-dietas").textContent = _rrhhFmtEur(k.dietas_mes);
+      var varEl = document.getElementById("rrhh-kpi-variacion");
+      if (varEl) {
+        var v = k.variacion || 0;
+        var arrow = v > 0 ? "\u2191" : v < 0 ? "\u2193" : "";
+        varEl.textContent = arrow + " " + Math.abs(v) + "%";
+        varEl.style.color = v > 0 ? "#dc2626" : v < 0 ? "#16a34a" : "inherit";
       }
-      var html = "";
-      d.meses.forEach(function (m) {
-        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_rrhhVerMes(\'' + m.periodo + '\')">' +
-          '<td style="padding:7px 10px;font-weight:600;">' + m.periodo + '</td>' +
-          '<td style="padding:7px 10px;text-align:right;">' + m.num_empleados + '</td>' +
-          '<td style="padding:7px 10px;text-align:right;">' + _rrhhFmtEur(m.total_coste_empresa) + '</td>' +
-          '<td style="padding:7px 10px;text-align:right;">' + _rrhhFmtEur(m.total_liquido) + '</td>' +
-          '<td style="padding:7px 10px;text-align:right;">' + _rrhhFmtEur(m.total_dietas) + '</td>' +
-          '<td style="padding:7px 10px;text-align:right;">' + (m.num_finiquitos > 0 ? '<span style="color:#dc2626;">' + m.num_finiquitos + '</span>' : '0') + '</td>' +
-          '</tr>';
-      });
-      tbody.innerHTML = html;
+      var rotEl = document.getElementById("rrhh-kpi-rotacion");
+      if (rotEl) rotEl.textContent = (k.rotacion || 0) + "%";
+
+      // Evolución mensual
+      var tbody = document.getElementById("rrhh-tbody-resumen-mensual");
+      var evo = d.evolucion || [];
+      if (!evo.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;">Sin datos</td></tr>';
+      } else {
+        var html = "";
+        evo.forEach(function (m) {
+          html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_rrhhVerMes(\'' + m.periodo + '\')">' +
+            '<td style="padding:7px 10px;font-weight:600;">' + m.periodo + '</td>' +
+            '<td style="padding:7px 10px;text-align:right;">' + m.empleados + '</td>' +
+            '<td style="padding:7px 10px;text-align:right;">' + _rrhhFmtEur(m.coste_empresa) + '</td>' +
+            '<td style="padding:7px 10px;text-align:right;">' + _rrhhFmtEur(m.salarios) + '</td>' +
+            '<td style="padding:7px 10px;text-align:right;">' + _rrhhFmtEur(m.dietas) + '</td>' +
+            '<td style="padding:7px 10px;text-align:right;">' + _rrhhFmtEur(m.ss_empresa) + '</td>' +
+            '</tr>';
+        });
+        tbody.innerHTML = html;
+      }
+
+      // Top 5
+      var top5 = d.top5 || [];
+      var topDiv = document.getElementById("rrhh-top5");
+      if (topDiv && top5.length) {
+        var h = '<h4 style="margin:12px 0 6px;font-size:0.9rem;font-weight:700;">Top 5 coste/d\u00eda</h4><div class="card" style="padding:0;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+        top5.forEach(function (t) {
+          h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_rrhhVerFichaEmpleado(' + t.id + ')">' +
+            '<td style="padding:5px 8px;font-weight:500;">' + t.nombre + ' ' + (t.apellidos || '') + '</td>' +
+            '<td style="padding:5px 6px;">' + (t.categoria || '') + '</td>' +
+            '<td style="padding:5px 6px;text-align:right;">' + _rrhhFmtEur(t.coste_dia) + '/d</td>' +
+            '<td style="padding:5px 6px;text-align:right;">' + _rrhhFmtEur(t.coste_empresa) + '</td></tr>';
+        });
+        h += '</table></div>';
+        topDiv.innerHTML = h;
+      }
+
+      // Alertas
+      var alertas = d.alertas || [];
+      var alertDiv = document.getElementById("rrhh-alertas");
+      if (alertDiv) {
+        if (!alertas.length) { alertDiv.innerHTML = ""; }
+        else {
+          var ah = '';
+          alertas.forEach(function (a) {
+            var bg = a.tipo === "warning" ? "#FEF3C7" : "#EFF6FF";
+            var col = a.tipo === "warning" ? "#92400E" : "#1E40AF";
+            ah += '<div style="padding:8px 12px;background:' + bg + ';color:' + col + ';border-radius:6px;font-size:0.85rem;margin-bottom:6px;">' + a.texto + '</div>';
+          });
+          alertDiv.innerHTML = ah;
+        }
+      }
     })
     .catch(function () {});
   _rrhhDashCargado = true;
@@ -340,66 +382,7 @@ function _rrhhCargarNominas() {
       });
     document.getElementById("rrhh-nominas-periodo").addEventListener("change", function () {
       _rrhhCargarMes(this.value);
-      // Ocultar ficha si estaba abierta
       _rrhhCerrarFicha();
-    });
-    // Import handler
-    document.getElementById("rrhh-import-file").addEventListener("change", function () {
-      if (!this.files.length) return;
-      var fd = new FormData();
-      fd.append("archivo", this.files[0]);
-      fetch("/api/rrhh/importar-nominas", { method: "POST", body: fd })
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          if (d.error) { alert("Error: " + d.error); return; }
-          var msg = "Importaci\u00f3n completada:\n" +
-            d.empleados_creados + " empleados creados\n" +
-            d.empleados_actualizados + " empleados actualizados\n" +
-            d.nominas_importadas + " n\u00f3minas importadas\n" +
-            d.finiquitos_importados + " finiquitos importados";
-          if (d.errores && d.errores.length) msg += "\n\nErrores: " + d.errores.join("; ");
-          alert(msg);
-          // Reload
-          _rrhhNominasInit = false;
-          _rrhhCargarNominas();
-        })
-        .catch(function (err) { alert("Error: " + err.message); });
-      this.value = "";
-    });
-    // PDF OCR import handler
-    document.getElementById("rrhh-import-pdf").addEventListener("change", function () {
-      if (!this.files.length) return;
-      var fd = new FormData();
-      for (var i = 0; i < this.files.length; i++) {
-        fd.append("archivos", this.files[i]);
-      }
-      var progress = document.getElementById("rrhh-ocr-progress");
-      var preview = document.getElementById("rrhh-ocr-preview");
-      preview.style.display = "block";
-      progress.style.display = "block";
-      progress.textContent = "Procesando " + this.files.length + " archivo(s) con OCR... Esto puede tardar unos minutos.";
-      document.getElementById("rrhh-ocr-tbody").innerHTML = "";
-      document.getElementById("rrhh-ocr-confirmar").disabled = true;
-
-      fetch("/api/rrhh/procesar-nominas-pdf", { method: "POST", body: fd })
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          progress.style.display = "none";
-          if (d.error) { progress.style.display = "block"; progress.textContent = "Error: " + d.error; return; }
-          _rrhhOCRData = d.nominas || [];
-          _rrhhRenderOCRPreview(_rrhhOCRData);
-          if (_rrhhOCRData.length) document.getElementById("rrhh-ocr-confirmar").disabled = false;
-          if (d.errores && d.errores.length) {
-            progress.style.display = "block";
-            progress.style.background = "#FEE2E2";
-            progress.textContent = "Errores: " + d.errores.map(function (e) { return e.archivo + ": " + e.error; }).join("; ");
-          }
-        })
-        .catch(function (err) {
-          progress.textContent = "Error: " + err.message;
-          progress.style.background = "#FEE2E2";
-        });
-      this.value = "";
     });
   } else {
     // Reload current month
@@ -621,6 +604,337 @@ function _rrhhVerMes(periodo) {
   }, 100);
 }
 
+// ═══ Verificador ═════════════════════════════════════════════════════════
+
+var _rrhhVerifInit = false;
+
+function _rrhhCargarVerificador() {
+  if (!_rrhhVerifInit) {
+    _rrhhVerifInit = true;
+    fetch("/api/rrhh/estadisticas").then(function(r){return r.json();}).then(function(d){
+      var sel = document.getElementById("rrhh-verif-periodo");
+      sel.innerHTML = "";
+      (d.periodos || []).slice().reverse().forEach(function(p){ sel.innerHTML += '<option value="'+p+'">'+p+'</option>'; });
+      if (d.periodos && d.periodos.length) { sel.value = d.periodos[d.periodos.length-1]; _rrhhLoadVerif(sel.value); }
+    });
+    document.getElementById("rrhh-verif-periodo").addEventListener("change", function(){ _rrhhLoadVerif(this.value); });
+  }
+}
+
+function _rrhhLoadVerif(periodo) {
+  var tbody = document.getElementById("rrhh-verif-tbody");
+  var tfoot = document.getElementById("rrhh-verif-tfoot");
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;">Cargando...</td></tr>';
+  tfoot.innerHTML = "";
+
+  fetch("/api/rrhh/verificador/" + periodo)
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var tot = d.totales || {};
+      var kpis = document.getElementById("rrhh-verif-kpis");
+      kpis.innerHTML =
+        '<div class="tes-card"><span class="tes-label">N\u00f3minas</span><span class="tes-valor" style="font-size:1rem;">' + (tot.nominas||0) + '</span></div>' +
+        '<div class="tes-card tes-card-blue"><span class="tes-label">Total l\u00edquido</span><span class="tes-valor" style="font-size:0.9rem;">' + _rrhhFmtEur(tot.liquido) + '</span></div>' +
+        '<div class="tes-card"><span class="tes-label">Adelantos</span><span class="tes-valor" style="font-size:0.9rem;">' + _rrhhFmtEur(tot.adelantos) + '</span></div>' +
+        '<div class="tes-card"><span class="tes-label">Embargos</span><span class="tes-valor" style="font-size:0.9rem;">' + _rrhhFmtEur(tot.embargo) + '</span></div>' +
+        '<div class="tes-card tes-card-green"><span class="tes-label"><b>A TRANSFERIR</b></span><span class="tes-valor" style="font-size:0.9rem;">' + _rrhhFmtEur(tot.transferir) + '</span></div>';
+
+      var lineas = d.lineas || [];
+      if (!lineas.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;">Sin datos</td></tr>'; return; }
+      var html = "";
+      lineas.forEach(function(l){
+        var esFin = l.tipo === "FINIQUITO";
+        var bg = esFin ? "background:#FEF2F2;" : "";
+        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);'+bg+'">' +
+          '<td style="padding:5px 6px;font-weight:500;">' + l.nombre + '</td>' +
+          '<td style="padding:5px 4px;font-size:0.75rem;">' + l.categoria + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + l.dias + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + _rrhhFmtEur(l.liquido) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + (l.adelantos > 0 ? '<span style="color:#dc2626;">-'+_rrhhFmtEur(l.adelantos)+'</span>' : '-') + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + (l.embargo > 0 ? '<span style="color:#dc2626;">-'+_rrhhFmtEur(l.embargo)+'</span>' : '-') + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;font-weight:700;">' + _rrhhFmtEur(l.a_transferir) + '</td>' +
+          '<td style="padding:5px 4px;">' + (esFin ? '<span style="color:#dc2626;">FINIQ</span>' : '<span style="color:#22c55e;">\u2713</span>') + '</td>' +
+          '</tr>';
+      });
+      tbody.innerHTML = html;
+      tfoot.innerHTML = '<tr><td colspan="3" style="padding:6px;">TOTALES</td><td style="padding:6px;text-align:right;">'+_rrhhFmtEur(tot.liquido)+'</td><td style="padding:6px;text-align:right;">'+_rrhhFmtEur(tot.adelantos)+'</td><td style="padding:6px;text-align:right;">'+_rrhhFmtEur(tot.embargo)+'</td><td style="padding:6px;text-align:right;font-weight:800;">'+_rrhhFmtEur(tot.transferir)+'</td><td></td></tr>';
+    });
+}
+
+function _rrhhGenerarRemesa() {
+  var periodo = document.getElementById("rrhh-verif-periodo").value;
+  if (!periodo) { alert("Selecciona un periodo"); return; }
+  window.open("/api/rrhh/verificador/" + periodo + "/generar-remesa", "_blank");
+}
+
+// ═══ Seguridad Social ═══════════════════════════════════════════════════
+
+function _rrhhCargarSS() {
+  fetch("/api/rrhh/seguridad-social")
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var k = d.kpis || {};
+      var kpis = document.getElementById("rrhh-ss-kpis");
+      kpis.innerHTML =
+        '<div class="tes-card tes-card-blue"><span class="tes-label">SS Empresa/mes</span><span class="tes-valor" style="font-size:0.9rem;">' + _rrhhFmtEur(k.ss_empresa_mes) + '</span></div>' +
+        '<div class="tes-card"><span class="tes-label">SS Trabajador/mes</span><span class="tes-valor" style="font-size:0.9rem;">' + _rrhhFmtEur(k.ss_trabajador_mes) + '</span></div>' +
+        '<div class="tes-card tes-card-green"><span class="tes-label">Acumulado a\u00f1o</span><span class="tes-valor" style="font-size:0.9rem;">' + _rrhhFmtEur(k.acumulado_anio) + '</span></div>';
+
+      var meses = d.meses || [];
+      var tbody = document.getElementById("rrhh-ss-tbody");
+      if (!meses.length) { tbody.innerHTML = '<tr><td colspan="6">Sin datos</td></tr>'; return; }
+      var html = "";
+      meses.forEach(function(m){
+        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
+          '<td style="padding:6px 8px;font-weight:500;">' + m.periodo + '</td>' +
+          '<td style="padding:6px 4px;text-align:right;">' + m.empleados + '</td>' +
+          '<td style="padding:6px 4px;text-align:right;">' + _rrhhFmtEur(m.base_ss) + '</td>' +
+          '<td style="padding:6px 4px;text-align:right;">' + _rrhhFmtEur(m.ss_empresa) + '</td>' +
+          '<td style="padding:6px 4px;text-align:right;">' + _rrhhFmtEur(m.ss_trabajador) + '</td>' +
+          '<td style="padding:6px 4px;text-align:right;font-weight:600;">' + _rrhhFmtEur(m.total_ss) + '</td></tr>';
+      });
+      tbody.innerHTML = html;
+    });
+}
+
+// ═══ IRPF ════════════════════════════════════════════════════════════════
+
+function _rrhhCargarIRPF() {
+  fetch("/api/rrhh/irpf")
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var k = d.kpis || {};
+      var kpis = document.getElementById("rrhh-irpf-kpis");
+      kpis.innerHTML =
+        '<div class="tes-card tes-card-blue"><span class="tes-label">Acumulado a\u00f1o</span><span class="tes-valor" style="font-size:0.9rem;">' + _rrhhFmtEur(k.acumulado_anio) + '</span></div>' +
+        '<div class="tes-card"><span class="tes-label">% Retenci\u00f3n medio</span><span class="tes-valor" style="font-size:0.9rem;">' + (k.pct_medio||0) + '%</span></div>';
+
+      var trs = d.trimestres || [];
+      var tbody = document.getElementById("rrhh-irpf-tbody");
+      if (!trs.length) { tbody.innerHTML = '<tr><td colspan="7">Sin datos</td></tr>'; return; }
+      var html = "";
+      trs.forEach(function(t){
+        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
+          '<td style="padding:6px 8px;font-weight:600;">' + t.trimestre + '</td>' +
+          '<td style="padding:6px 6px;">' + t.meses_label + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;">' + t.nominas + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;">' + _rrhhFmtEur(t.base) + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;font-weight:600;">' + _rrhhFmtEur(t.retenido) + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;">' + t.pct_medio + '%</td>' +
+          '<td style="padding:6px 6px;">' + t.fecha_limite + '</td></tr>';
+      });
+      tbody.innerHTML = html;
+    });
+}
+
+// ═══ Coste Proyecto ══════════════════════════════════════════════════════
+
+function _rrhhCargarCosteProyecto() {
+  fetch("/api/rrhh/coste-proyecto")
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var tbody = document.getElementById("rrhh-costeproy-tbody");
+      var proys = d.proyectos || [];
+      if (!proys.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;">Sin datos de asignaciones empleado-proyecto</td></tr>'; return; }
+      var html = "";
+      proys.forEach(function(p){
+        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
+          '<td style="padding:6px 8px;font-weight:500;">' + (p.codigo||'') + ' ' + (p.proyecto||'') + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;">' + p.empleados + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;">' + p.dias_hombre + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;">' + _rrhhFmtEur(p.coste_personal) + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;">' + _rrhhFmtEur(p.dietas) + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;font-weight:700;">' + _rrhhFmtEur(p.total_rrhh) + '</td></tr>';
+      });
+      tbody.innerHTML = html;
+    });
+}
+
+// ═══ Dietas ══════════════════════════════════════════════════════════════
+
+function _rrhhCargarDietas() {
+  fetch("/api/rrhh/dietas/dashboard")
+    .then(function(r){return r.json();})
+    .then(function(d){
+      // Config table
+      var cfgBody = document.getElementById("rrhh-dietas-tbody");
+      var cfg = d.config || [];
+      if (!cfg.length) {
+        cfgBody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:1.5rem;">Sin tarifas configuradas. Pulsa \"+ Nueva tarifa\".</td></tr>';
+      } else {
+        var html = "";
+        cfg.forEach(function(c){
+          html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
+            '<td style="padding:6px 8px;">' + (c.tipo||'') + '</td>' +
+            '<td style="padding:6px 6px;">' + (c.subtipo||'') + '</td>' +
+            '<td style="padding:6px 6px;">' + (c.categoria||'Todas') + '</td>' +
+            '<td style="padding:6px 6px;text-align:right;">' + _rrhhFmtEur(c.importe) + '</td>' +
+            '<td style="padding:6px 6px;">' + (c.fecha_vigencia_desde||'') + '</td>' +
+            '<td style="padding:6px 6px;">' + (c.fecha_vigencia_hasta||'-') + '</td>' +
+            '<td style="padding:6px 6px;text-align:center;"><button onclick="_rrhhBorrarDieta('+c.id+')" class="btn-small danger" style="font-size:0.75rem;padding:2px 8px;">Borrar</button></td></tr>';
+        });
+        cfgBody.innerHTML = html;
+      }
+      // Employee dietas
+      var empBody = document.getElementById("rrhh-dietas-emp-tbody");
+      var periodos = d.periodos || [];
+      var emps = d.emp_dietas || [];
+      // Group by employee
+      var byEmp = {};
+      emps.forEach(function(e){
+        var key = e.id;
+        if (!byEmp[key]) byEmp[key] = { nombre: e.nombre + ' ' + (e.apellidos||''), periodos: {} };
+        byEmp[key].periodos[e.periodo] = e.dietas;
+      });
+      if (!Object.keys(byEmp).length) { empBody.innerHTML = '<tr><td colspan="5">Sin datos</td></tr>'; return; }
+      var hh = "";
+      Object.values(byEmp).forEach(function(e){
+        var total = 0;
+        hh += '<tr style="border-bottom:1px solid var(--border,#e9ecef);"><td style="padding:5px 8px;font-weight:500;">' + e.nombre + '</td>';
+        periodos.forEach(function(p){
+          var v = e.periodos[p] || 0; total += v;
+          hh += '<td style="padding:5px 6px;text-align:right;">' + (v > 0 ? _rrhhFmtEur(v) : '-') + '</td>';
+        });
+        hh += '<td style="padding:5px 6px;text-align:right;font-weight:600;">' + _rrhhFmtEur(total) + '</td></tr>';
+      });
+      empBody.innerHTML = hh;
+    });
+}
+
+function _rrhhNuevaDieta() {
+  var tipo = prompt("Tipo (nacional/internacional):", "nacional");
+  if (!tipo) return;
+  var subtipo = prompt("Subtipo (completa/media):", "completa");
+  var importe = parseFloat(prompt("Importe EUR/d\u00eda:", "8.03"));
+  if (isNaN(importe)) return;
+  var desde = prompt("Vigencia desde (YYYY-MM-DD):", new Date().toISOString().slice(0,10));
+  fetch("/api/rrhh/dietas/config", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({tipo:tipo, subtipo:subtipo, importe:importe, fecha_vigencia_desde:desde})
+  }).then(function(){_rrhhCargarDietas();});
+}
+
+function _rrhhBorrarDieta(id) {
+  if (!confirm("Eliminar tarifa?")) return;
+  fetch("/api/rrhh/dietas/config/"+id, {method:"DELETE"}).then(function(){_rrhhCargarDietas();});
+}
+
+// ═══ Adelantos ═══════════════════════════════════════════════════════════
+
+function _rrhhCargarAdelantos() {
+  var empId = document.getElementById("rrhh-adel-empleado").value;
+  var estado = document.getElementById("rrhh-adel-estado").value;
+  var params = [];
+  if (empId) params.push("empleado_id="+empId);
+  if (estado) params.push("estado="+estado);
+  var url = "/api/rrhh/adelantos" + (params.length ? "?" + params.join("&") : "");
+
+  fetch(url)
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var k = d.kpis || {};
+      var kpis = document.getElementById("rrhh-adel-kpis");
+      kpis.innerHTML =
+        '<div class="tes-card"><span class="tes-label">Pendientes</span><span class="tes-valor" style="font-size:1rem;">' + (k.pendientes||0) + '</span></div>' +
+        '<div class="tes-card tes-card-blue"><span class="tes-label">Importe pendiente</span><span class="tes-valor" style="font-size:0.9rem;">' + _rrhhFmtEur(k.importe_pendiente) + '</span></div>';
+
+      var tbody = document.getElementById("rrhh-adel-tbody");
+      var items = d.adelantos || [];
+      if (!items.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;">Sin adelantos</td></tr>'; return; }
+      var html = "";
+      items.forEach(function(a){
+        var nombre = (a.nombre||'') + ' ' + (a.apellidos||'');
+        var estadoHtml = a.estado === 'pendiente' ? '<span style="color:#f59e0b;">Pendiente</span>' : '<span style="color:#22c55e;">Descontado</span>';
+        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
+          '<td style="padding:6px 8px;">' + (a.fecha||'') + '</td>' +
+          '<td style="padding:6px 6px;font-weight:500;">' + nombre.trim() + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;">' + _rrhhFmtEur(a.importe) + '</td>' +
+          '<td style="padding:6px 6px;">' + (a.concepto||'-') + '</td>' +
+          '<td style="padding:6px 6px;">' + estadoHtml + '</td>' +
+          '<td style="padding:6px 6px;text-align:center;"><button onclick="_rrhhBorrarAdelanto('+a.id+')" class="btn-small danger" style="font-size:0.75rem;padding:2px 8px;">X</button></td></tr>';
+      });
+      tbody.innerHTML = html;
+
+      // Populate employee dropdown if not done
+      var sel = document.getElementById("rrhh-adel-empleado");
+      if (sel.options.length <= 1) {
+        fetch("/api/rrhh/empleados?estado=todos").then(function(r){return r.json();}).then(function(ed){
+          (ed.empleados||[]).forEach(function(e){
+            sel.innerHTML += '<option value="'+e.id+'">'+(e.nombre||'')+' '+(e.apellidos||'')+'</option>';
+          });
+        });
+      }
+    });
+}
+
+function _rrhhNuevoAdelanto() {
+  var empId = prompt("ID empleado:");
+  if (!empId) return;
+  var fecha = prompt("Fecha (YYYY-MM-DD):", new Date().toISOString().slice(0,10));
+  var importe = parseFloat(prompt("Importe EUR:", "200"));
+  if (isNaN(importe)) return;
+  var concepto = prompt("Concepto:", "Adelanto n\u00f3mina");
+  fetch("/api/rrhh/adelantos", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({empleado_id:parseInt(empId), fecha:fecha, importe:importe, concepto:concepto})
+  }).then(function(){_rrhhCargarAdelantos();});
+}
+
+function _rrhhBorrarAdelanto(id) {
+  if (!confirm("Eliminar adelanto?")) return;
+  fetch("/api/rrhh/adelantos/"+id, {method:"DELETE"}).then(function(){_rrhhCargarAdelantos();});
+}
+
+// ═══ Importar (init OCR/Excel handlers) ═════════════════════════════════
+
+var _rrhhImportInit = false;
+
+function _rrhhInitImportar() {
+  if (_rrhhImportInit) return;
+  _rrhhImportInit = true;
+
+  // Excel handler
+  document.getElementById("rrhh-import-file").addEventListener("change", function () {
+    if (!this.files.length) return;
+    var fd = new FormData();
+    fd.append("archivo", this.files[0]);
+    fetch("/api/rrhh/importar-nominas", { method: "POST", body: fd })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.error) { alert("Error: " + d.error); return; }
+        alert("Importaci\u00f3n: " + d.empleados_creados + " creados, " + d.empleados_actualizados + " actualizados, " + d.nominas_importadas + " n\u00f3minas, " + d.finiquitos_importados + " finiquitos");
+      })
+      .catch(function (err) { alert("Error: " + err.message); });
+    this.value = "";
+  });
+
+  // PDF OCR handler
+  document.getElementById("rrhh-import-pdf").addEventListener("change", function () {
+    if (!this.files.length) return;
+    var fd = new FormData();
+    for (var i = 0; i < this.files.length; i++) fd.append("archivos", this.files[i]);
+    var progress = document.getElementById("rrhh-ocr-progress");
+    var preview = document.getElementById("rrhh-ocr-preview");
+    preview.style.display = "block";
+    progress.style.display = "block";
+    progress.textContent = "Procesando " + this.files.length + " archivo(s) con OCR...";
+    document.getElementById("rrhh-ocr-tbody").innerHTML = "";
+    document.getElementById("rrhh-ocr-confirmar").disabled = true;
+
+    fetch("/api/rrhh/procesar-nominas-pdf", { method: "POST", body: fd })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        progress.style.display = "none";
+        if (d.error) { progress.style.display = "block"; progress.textContent = "Error: " + d.error; return; }
+        _rrhhOCRData = d.nominas || [];
+        _rrhhRenderOCRPreview(_rrhhOCRData);
+        if (_rrhhOCRData.length) document.getElementById("rrhh-ocr-confirmar").disabled = false;
+      })
+      .catch(function (err) { progress.textContent = "Error: " + err.message; progress.style.background = "#FEE2E2"; });
+    this.value = "";
+  });
+}
+
 // ── Expose globally ─────────────────────────────────────────────────────
 window._rrhhOnPanelShow = _rrhhOnPanelShow;
 window._rrhhCargarEmpleados = _rrhhCargarEmpleados;
@@ -636,3 +950,15 @@ window._rrhhCerrarFicha = _rrhhCerrarFicha;
 window._rrhhCargarDashboard = _rrhhCargarDashboard;
 window._rrhhConfirmarOCR = _rrhhConfirmarOCR;
 window._rrhhCerrarOCR = _rrhhCerrarOCR;
+window._rrhhCargarVerificador = _rrhhCargarVerificador;
+window._rrhhGenerarRemesa = _rrhhGenerarRemesa;
+window._rrhhCargarSS = _rrhhCargarSS;
+window._rrhhCargarIRPF = _rrhhCargarIRPF;
+window._rrhhCargarCosteProyecto = _rrhhCargarCosteProyecto;
+window._rrhhCargarDietas = _rrhhCargarDietas;
+window._rrhhNuevaDieta = _rrhhNuevaDieta;
+window._rrhhBorrarDieta = _rrhhBorrarDieta;
+window._rrhhCargarAdelantos = _rrhhCargarAdelantos;
+window._rrhhNuevoAdelanto = _rrhhNuevoAdelanto;
+window._rrhhBorrarAdelanto = _rrhhBorrarAdelanto;
+window._rrhhInitImportar = _rrhhInitImportar;
