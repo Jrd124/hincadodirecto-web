@@ -94,6 +94,25 @@ def _ts_to_date(ts_ms: str | int | None) -> str:
         return ""
 
 
+def _inferir_direccion_gmail(from_addr: str | None) -> str:
+    """Deduce 'in'/'out' comparando el remitente con nuestro dominio.
+
+    Conservador: si no podemos determinarlo, devolvemos 'in'. El query de
+    Gmail ya filtra a hilos que involucran a la empresa objetivo, así que
+    cualquier mensaje cuyo From no sea nuestro tiende a ser entrante.
+    """
+    if not from_addr:
+        return "in"
+    our_account = (GMAIL_ACCOUNT or "").strip().lower()
+    our_domain = our_account.rsplit("@", 1)[-1] if "@" in our_account else our_account
+    addr = from_addr.lower()
+    if our_account and our_account in addr:
+        return "out"
+    if our_domain and ("@" + our_domain) in addr:
+        return "out"
+    return "in"
+
+
 def _clean_snippet(snippet: str) -> str:
     """Limpia el snippet de Gmail (entidades HTML, espacios)."""
     if not snippet:
@@ -108,20 +127,47 @@ def _clean_snippet(snippet: str) -> str:
 
 
 def _build_query(empresa: dict, contactos: list[dict]) -> str | None:
-    """Construye la query Gmail para una empresa."""
+    """Construye la query Gmail para una empresa.
+
+    Dominios genéricos (gmail.com, hotmail.com, etc.) se excluyen del
+    matching por dominio para evitar falsos positivos masivos. Los contactos
+    con esos emails tampoco se usan — deben sincronizarse manualmente.
+    """
+    _DOMINIOS_GENERICOS: set[str] = {
+        "gmail.com", "googlemail.com",
+        "hotmail.com", "hotmail.es", "hotmail.co.uk",
+        "outlook.com", "outlook.es",
+        "live.com", "live.es",
+        "yahoo.com", "yahoo.es",
+        "icloud.com", "me.com", "mac.com",
+        "msn.com",
+    }
+
     parts = []
-    dominio = (empresa.get("dominio") or "").strip()
-    if dominio:
+    dominio = (empresa.get("dominio") or "").strip().lower()
+    if dominio and dominio not in _DOMINIOS_GENERICOS:
         parts.append(f"(from:@{dominio} OR to:@{dominio})")
+    elif dominio and dominio in _DOMINIOS_GENERICOS:
+        logger.info(
+            "Empresa %s tiene dominio genérico (%s) — omitido del auto-sync. "
+            "Usa sync manual por contacto para esta empresa.",
+            empresa.get("nombre"), dominio,
+        )
+
     for c in contactos:
         email = (c.get("email") or "").strip().lower()
-        if email:
-            parts.append(f"(from:{email} OR to:{email})")
+        if not email:
+            continue
+        email_dominio = email.split("@")[-1] if "@" in email else ""
+        if email_dominio in _DOMINIOS_GENERICOS:
+            logger.debug("Contacto %s tiene email genérico (%s) — omitido del auto-sync.", email, email_dominio)
+            continue
+        parts.append(f"(from:{email} OR to:{email})")
+
     if not parts:
-        # Fallback: nombre de empresa entre comillas (menos preciso)
-        nombre = (empresa.get("nombre") or "").strip()
-        if nombre and len(nombre) > 3:
-            parts.append(f'"{nombre}"')
+        # Sin dominio corporativo ni emails corporativos → empresa manual únicamente
+        return None
+
     return " OR ".join(parts) if parts else None
 
 
@@ -198,6 +244,8 @@ def sync_empresa(
             "subject": subject,
             "date": date_str,
             "participants": participants,
+            "from_addr": from_addr,
+            "to_addr": to_addr,
             "snippet": snippet,
             "empresa_id": empresa["id"],
             "num_messages": len(messages),
@@ -278,11 +326,13 @@ def guardar_hilo_como_interaccion(
         from datetime import datetime as dt_
         ahora = dt_.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
 
+        direccion = _inferir_direccion_gmail(hilo.get("from_addr"))
+
         conn.execute("""
             INSERT INTO crm_interacciones
                 (empresa_id, tipo, asunto, descripcion, fecha, source,
-                 gmail_thread_id, gmail_snippet, creado_por, fecha_creacion)
-            VALUES (?, 'email', ?, ?, ?, 'gmail', ?, ?, 'gmail_sync', ?)
+                 gmail_thread_id, gmail_snippet, creado_por, fecha_creacion, direccion)
+            VALUES (?, 'email', ?, ?, ?, 'gmail', ?, ?, 'gmail_sync', ?, ?)
         """, (
             empresa_id,
             subject[:255],
@@ -291,9 +341,18 @@ def guardar_hilo_como_interaccion(
             thread_id,
             snippet,
             ahora,
+            direccion,
         ))
         new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-        return {"id": new_id, "gmail_thread_id": thread_id, "asunto": subject}
+
+        # Hook motor de seguimiento — nunca debe romper la sync.
+        try:
+            from core import crm_seguimiento
+            crm_seguimiento.recalcular_seguimiento_empresa(empresa_id, conn)
+        except Exception as exc:
+            logger.warning("crm_seguimiento hook (gmail_sync) falló: %s", exc)
+
+        return {"id": new_id, "gmail_thread_id": thread_id, "asunto": subject, "direccion": direccion}
 
 
 # ── Job global (batch) ────────────────────────────────────────────────────────

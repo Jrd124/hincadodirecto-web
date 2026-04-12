@@ -1979,6 +1979,25 @@
               <p style="color:var(--color-text-secondary);font-size:0.85rem;padding:8px 0;">Cargando…</p>
             </div>
           </div>
+
+          <!-- Gmail Sync — Bloque 5 -->
+          <div style="margin-top:12px;padding:16px 20px;background:var(--color-surface,#F8FAFC);border:1px solid var(--border,#E2E8F0);border-radius:10px;">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+              <span style="font-size:1.2rem;">📧</span>
+              <div style="flex:1;min-width:180px;">
+                <div style="font-size:0.95rem;font-weight:600;color:var(--color-text,#1E293B);">Sincronización Gmail</div>
+                <div id="crm-gmail-estado" style="font-size:0.8rem;color:var(--color-text-secondary,#64748B);margin-top:2px;">Comprobando…</div>
+                <div style="font-size:0.73rem;color:#94a3b8;margin-top:3px;">Solo empresas con dominio corporativo. Gmail, Hotmail, Outlook → manual.</div>
+              </div>
+              <button type="button" id="btn-crm-gmail-sync" disabled
+                style="font-size:0.82rem;padding:6px 14px;background:var(--color-primary,#4F46E5);color:#fff;border:none;border-radius:6px;cursor:pointer;opacity:0.5;">
+                Sincronizar ahora
+              </button>
+            </div>
+            <div id="crm-gmail-resumen" style="margin-top:10px;display:none;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:0.82rem;color:#166534;"></div>
+            <div id="crm-gmail-error" style="margin-top:10px;display:none;padding:10px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:0.82rem;color:#991b1b;"></div>
+          </div>
+
         </div>
       </div>
 
@@ -2330,6 +2349,7 @@
               <option value="reunion">Reunion</option>
               <option value="nota">Nota</option>
               <option value="visita">Visita</option>
+              <option value="gmail">📧 Gmail (auto)</option>
             </select>
             <select id="crm-inter-filtro-empresa" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:0.85rem;background:#fff;max-width:220px;">
               <option value="">Todas las empresas</option>
@@ -4023,7 +4043,7 @@
     <script src="/static/js/modules/finanzas.js?v=27"></script>
     <script src="/static/js/modules/proyectos.js?v=27"></script>
     <script src="/static/js/modules/presupuestos.js?v=27"></script>
-    <script src="/static/js/modules/crm.js?v=32"></script>
+    <script src="/static/js/modules/crm.js?v=33"></script>
     <script src="/static/js/modules/maquinaria.js?v=32"></script>
     <script src="/static/js/modules/certificaciones.js?v=27"></script>
     <script src="/static/js/modules/usuarios.js?v=27"></script>
