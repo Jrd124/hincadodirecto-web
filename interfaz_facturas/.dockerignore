@@ -7,8 +7,12 @@ __pycache__
 venv
 node_modules
 data/*.db
+data/*.xlsx
 data/logs/
 data/backups/
+data/fotos_maquinaria/
+data/subidas/
+data/control_vision_facturas.csv
 *.md
 docs/
 tests/

@@ -1,0 +1,24 @@
+version: "3.8"
+
+services:
+  erp:
+    build:
+      context: ./interfaz_facturas
+      dockerfile: Dockerfile
+    container_name: hincado-erp
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Datos persistentes: sobreviven a rebuilds/deploys
+      - erp-data:/app/data
+    env_file:
+      - ./interfaz_facturas/.env
+    environment:
+      - APP_BASE_DIR=/app
+
+volumes:
+  erp-data:
+    # Named volume — Docker lo gestiona en /var/lib/docker/volumes/
+    # Primera vez: se inicializa con el contenido de /app/data de la imagen
+    # Siguientes veces: el volumen existente se monta sin sobrescribir

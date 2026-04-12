@@ -23,8 +23,9 @@ COPY . .
 # Base dir para config.py (evita que parents[1] resuelva a "/" en el contenedor)
 ENV APP_BASE_DIR=/app
 
-# Crear directorios de datos si no existen
-RUN mkdir -p /app/data /app/data/logs /app/data/backups
+# Crear directorios de datos si no existen (para primer arranque sin volumen)
+# Cuando se usa docker-compose con volumen, estos dirs se crean en el volumen
+RUN mkdir -p /app/data /app/data/logs /app/data/backups /app/data/subidas
 
 # Puerto
 EXPOSE 8000
