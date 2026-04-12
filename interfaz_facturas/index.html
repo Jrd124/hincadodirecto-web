@@ -131,7 +131,6 @@
             <a href="#" class="sidebar-child" id="nav-rrhh-ss">Seg. Social</a>
             <a href="#" class="sidebar-child" id="nav-rrhh-irpf">IRPF</a>
             <a href="#" class="sidebar-child" id="nav-rrhh-coste-proyecto">Coste Proy.</a>
-            <a href="#" class="sidebar-child" id="nav-rrhh-importar">Importar</a>
           </div>
         </div>
         <!-- Presupuestos -->
@@ -1318,30 +1317,15 @@
 
       <!-- ===== DASHBOARD RRHH ===== -->
       <div id="panel-rrhh-inicio" class="panel-rrhh">
-        <div id="rrhh-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin-bottom:16px;">
-          <div class="tes-card tes-card-blue"><span class="tes-label">Plantilla activa</span><span class="tes-valor" id="rrhh-kpi-activos">--</span></div>
-          <div class="tes-card tes-card-green"><span class="tes-label">Coste empresa/mes</span><span class="tes-valor" id="rrhh-kpi-coste-mes">--</span></div>
-          <div class="tes-card"><span class="tes-label">Coste medio/d&iacute;a</span><span class="tes-valor" id="rrhh-kpi-coste-dia">--</span></div>
-          <div class="tes-card"><span class="tes-label">Dietas mes</span><span class="tes-valor" id="rrhh-kpi-dietas">--</span></div>
-          <div class="tes-card"><span class="tes-label">Variaci&oacute;n vs ant.</span><span class="tes-valor" id="rrhh-kpi-variacion">--</span></div>
-          <div class="tes-card" style="border-left:4px solid #EF4444;"><span class="tes-label">Rotaci&oacute;n 12m</span><span class="tes-valor" id="rrhh-kpi-rotacion" style="color:#991B1B;">--</span></div>
+        <div id="rrhh-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px;"></div>
+        <div class="card" style="padding:16px;margin-bottom:18px;">
+          <h4 style="margin:0 0 10px;font-size:0.9rem;font-weight:700;">Evoluci&oacute;n coste empresa (12 meses)</h4>
+          <canvas id="rrhh-chart-evolucion" height="220"></canvas>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
-          <div>
-            <h4 style="margin:0 0 8px;font-size:0.9rem;font-weight:700;">Evoluci&oacute;n mensual</h4>
-            <div class="card" style="overflow-x:auto;padding:0;">
-              <table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
-                <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
-                  <th style="padding:6px 8px;font-weight:700;">Mes</th>
-                  <th style="padding:6px 6px;font-weight:700;text-align:right;">Empl.</th>
-                  <th style="padding:6px 6px;font-weight:700;text-align:right;">Coste Emp.</th>
-                  <th style="padding:6px 6px;font-weight:700;text-align:right;">Salarios</th>
-                  <th style="padding:6px 6px;font-weight:700;text-align:right;">Dietas</th>
-                  <th style="padding:6px 6px;font-weight:700;text-align:right;">SS Emp.</th>
-                </tr></thead>
-                <tbody id="rrhh-tbody-resumen-mensual"><tr><td colspan="6" style="text-align:center;padding:2rem;">Cargando...</td></tr></tbody>
-              </table>
-            </div>
+          <div class="card" style="padding:16px;">
+            <h4 style="margin:0 0 10px;font-size:0.9rem;font-weight:700;">Distribuci&oacute;n por categor&iacute;a</h4>
+            <canvas id="rrhh-chart-categorias" height="200"></canvas>
           </div>
           <div>
             <div id="rrhh-top5"></div>
@@ -1484,34 +1468,64 @@
           </div>
         </div>
       </div>
-      <!-- ═══ NÓMINAS ═══ -->
+      <!-- ═══ NÓMINAS (con importador integrado) ═══ -->
       <div id="panel-rrhh-nominas" class="panel-rrhh">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <label style="font-weight:600;font-size:0.9rem;">Periodo:</label>
-            <select id="rrhh-nominas-periodo" style="padding:6px 10px;border:1px solid var(--border,#dee2e6);border-radius:8px;font-size:0.88rem;"></select>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button onclick="_rrhhMesPrev()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;font-size:1rem;">&laquo;</button>
+            <span id="rrhh-nominas-label" style="font-weight:700;font-size:0.95rem;min-width:120px;text-align:center;">--</span>
+            <button onclick="_rrhhMesNext()" style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;font-size:1rem;">&raquo;</button>
+            <select id="rrhh-nominas-periodo" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;margin-left:8px;"></select>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <label style="display:inline-flex;align-items:center;gap:5px;padding:7px 12px;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;border-radius:6px;cursor:pointer;font-size:0.82rem;font-weight:600;">
+              OCR PDFs <input type="file" id="rrhh-import-pdf" accept=".pdf,.zip" multiple style="display:none;">
+            </label>
+            <label style="display:inline-flex;align-items:center;gap:5px;padding:7px 12px;background:#EFF6FF;color:#1E40AF;border:1px solid #93C5FD;border-radius:6px;cursor:pointer;font-size:0.82rem;font-weight:600;">
+              Excel <input type="file" id="rrhh-import-file" accept=".xlsx,.xls" style="display:none;">
+            </label>
           </div>
         </div>
-        <div id="rrhh-ficha-empleado" style="display:none;margin-bottom:20px;">
-          <button onclick="_rrhhCerrarFicha()" style="margin-bottom:10px;padding:4px 10px;font-size:0.85rem;background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;">&larr; Volver</button>
+        <!-- OCR Preview -->
+        <div id="rrhh-ocr-preview" style="display:none;margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <h4 style="margin:0;font-size:0.9rem;font-weight:700;">Preview OCR</h4>
+            <div style="display:flex;gap:6px;">
+              <button onclick="_rrhhConfirmarOCR()" class="btn-small" style="background:#DCFCE7;color:#166534;border:1px solid #86EFAC;" id="rrhh-ocr-confirmar">Importar</button>
+              <button onclick="_rrhhCerrarOCR()" class="btn-small secondary">Cancelar</button>
+            </div>
+          </div>
+          <div id="rrhh-ocr-progress" style="display:none;padding:8px;background:#FEF3C7;border-radius:6px;font-size:0.82rem;margin-bottom:6px;"></div>
+          <div class="card" style="overflow-x:auto;padding:0;"><table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
+            <thead><tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:5px 6px;">Empleado</th><th style="padding:5px 4px;">DNI</th><th style="padding:5px 4px;">Periodo</th><th style="padding:5px 4px;">Tipo</th><th style="padding:5px 4px;text-align:right;">Devengado</th><th style="padding:5px 4px;text-align:right;">L&iacute;quido</th><th style="padding:5px 4px;text-align:right;">Coste Emp.</th><th style="padding:5px 4px;">Estado</th></tr></thead>
+            <tbody id="rrhh-ocr-tbody"></tbody>
+          </table></div>
+        </div>
+        <!-- KPIs resumen mes -->
+        <div id="rrhh-nominas-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px;"></div>
+        <!-- Ficha empleado -->
+        <div id="rrhh-ficha-empleado" style="display:none;margin-bottom:14px;">
+          <button onclick="_rrhhCerrarFicha()" style="margin-bottom:8px;padding:3px 8px;font-size:0.82rem;background:none;border:1px solid var(--border);border-radius:5px;cursor:pointer;">&larr; Volver</button>
           <div id="rrhh-ficha-contenido"></div>
         </div>
+        <!-- Tabla nóminas mes -->
         <div id="rrhh-nominas-tabla-wrapper">
           <div class="card" style="overflow-x:auto;padding:0;">
-            <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
               <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
-                <th style="padding:8px 8px;font-weight:700;">#</th>
-                <th style="padding:8px 8px;font-weight:700;">Empleado</th>
-                <th style="padding:8px 6px;font-weight:700;">Tipo</th>
-                <th style="padding:8px 6px;font-weight:700;text-align:right;">Sal. Base</th>
-                <th style="padding:8px 6px;font-weight:700;text-align:right;">Dietas</th>
-                <th style="padding:8px 6px;font-weight:700;text-align:right;">T. Devengado</th>
-                <th style="padding:8px 6px;font-weight:700;text-align:right;">T. Deducir</th>
-                <th style="padding:8px 6px;font-weight:700;text-align:right;">L&iacute;quido</th>
-                <th style="padding:8px 6px;font-weight:700;text-align:right;">Coste Empresa</th>
-                <th style="padding:8px 6px;font-weight:700;text-align:right;">Coste/D&iacute;a</th>
+                <th style="padding:6px 6px;font-weight:700;">#</th>
+                <th style="padding:6px 6px;font-weight:700;">Empleado</th>
+                <th style="padding:6px 4px;font-weight:700;">Tipo</th>
+                <th style="padding:6px 4px;font-weight:700;text-align:right;">D&iacute;as</th>
+                <th style="padding:6px 4px;font-weight:700;text-align:right;">Sal.Base</th>
+                <th style="padding:6px 4px;font-weight:700;text-align:right;">Compl.</th>
+                <th style="padding:6px 4px;font-weight:700;text-align:right;">Dietas</th>
+                <th style="padding:6px 4px;font-weight:700;text-align:right;">Devengado</th>
+                <th style="padding:6px 4px;font-weight:700;text-align:right;">Deducir</th>
+                <th style="padding:6px 4px;font-weight:700;text-align:right;">L&iacute;quido</th>
+                <th style="padding:6px 4px;font-weight:700;text-align:right;">Coste Emp.</th>
               </tr></thead>
-              <tbody id="rrhh-tbody-nominas-mes"><tr><td colspan="10" style="text-align:center;padding:2rem;">Selecciona un periodo</td></tr></tbody>
+              <tbody id="rrhh-tbody-nominas-mes"><tr><td colspan="11" style="text-align:center;padding:2rem;">Selecciona un periodo</td></tr></tbody>
               <tfoot id="rrhh-tfoot-nominas-mes" style="font-weight:700;background:var(--bg-secondary,#f8f9fa);"></tfoot>
             </table>
           </div>
@@ -1605,7 +1619,11 @@
       <!-- ═══ SEGURIDAD SOCIAL ═══ -->
       <div id="panel-rrhh-ss" class="panel-rrhh">
         <div id="rrhh-ss-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:16px;"></div>
-        <h4 style="margin:0 0 8px;font-size:0.95rem;font-weight:700;">Cotizaciones mensuales (empresa)</h4>
+        <div class="card" style="padding:16px;margin-bottom:16px;">
+          <h4 style="margin:0 0 10px;font-size:0.9rem;font-weight:700;">Cotizaciones mensuales</h4>
+          <canvas id="rrhh-chart-ss" height="200"></canvas>
+        </div>
+        <h4 style="margin:0 0 8px;font-size:0.95rem;font-weight:700;">Desglose mensual</h4>
         <div class="card" style="overflow-x:auto;padding:0;">
           <table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
             <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
@@ -1656,45 +1674,7 @@
           </table>
         </div>
       </div>
-      <!-- ═══ IMPORTAR ═══ -->
-      <div id="panel-rrhh-importar" class="panel-rrhh">
-        <h4 style="margin:0 0 12px;font-size:0.95rem;font-weight:700;">Importar n&oacute;minas</h4>
-        <div style="display:flex;gap:12px;margin-bottom:16px;">
-          <label style="display:inline-flex;align-items:center;gap:6px;padding:12px 20px;background:#EFF6FF;color:#1E40AF;border:1px solid #93C5FD;border-radius:8px;cursor:pointer;font-size:0.9rem;font-weight:600;">
-            Importar Excel (.xlsx)
-            <input type="file" id="rrhh-import-file" accept=".xlsx,.xls" style="display:none;">
-          </label>
-          <label style="display:inline-flex;align-items:center;gap:6px;padding:12px 20px;background:#FEF3C7;color:#92400E;border:1px solid #FCD34D;border-radius:8px;cursor:pointer;font-size:0.9rem;font-weight:600;">
-            OCR PDFs (GPT-4 Vision)
-            <input type="file" id="rrhh-import-pdf" accept=".pdf,.zip" multiple style="display:none;">
-          </label>
-        </div>
-        <div id="rrhh-ocr-preview" style="display:none;margin-bottom:16px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-            <h4 style="margin:0;font-size:0.95rem;font-weight:700;">Preview n&oacute;minas OCR</h4>
-            <div style="display:flex;gap:8px;">
-              <button onclick="_rrhhConfirmarOCR()" class="btn-small" style="background:#DCFCE7;color:#166534;border:1px solid #86EFAC;" id="rrhh-ocr-confirmar">Importar</button>
-              <button onclick="_rrhhCerrarOCR()" class="btn-small secondary">Cancelar</button>
-            </div>
-          </div>
-          <div id="rrhh-ocr-progress" style="display:none;margin-bottom:10px;padding:10px;background:#FEF3C7;border-radius:8px;font-size:0.85rem;"></div>
-          <div class="card" style="overflow-x:auto;padding:0;">
-            <table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
-              <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
-                <th style="padding:6px 6px;font-weight:700;">Empleado</th>
-                <th style="padding:6px 6px;font-weight:700;">DNI</th>
-                <th style="padding:6px 6px;font-weight:700;">Periodo</th>
-                <th style="padding:6px 6px;font-weight:700;">Tipo</th>
-                <th style="padding:6px 6px;font-weight:700;text-align:right;">Devengado</th>
-                <th style="padding:6px 6px;font-weight:700;text-align:right;">L&iacute;quido</th>
-                <th style="padding:6px 6px;font-weight:700;text-align:right;">Coste Emp.</th>
-                <th style="padding:6px 6px;font-weight:700;">Estado</th>
-              </tr></thead>
-              <tbody id="rrhh-ocr-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+      <!-- panel-rrhh-importar removed — importers integrated in Nóminas -->
 
       <!-- ═══ GASOIL / MOEVE ════════════════════════════════════════════ -->
       <div id="panel-gasoil-inicio" class="panel-gasoil">

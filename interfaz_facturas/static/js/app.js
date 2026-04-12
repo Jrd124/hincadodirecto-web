@@ -66,8 +66,8 @@ const MODULOS = {
   rrhh: {
     linkId: "nav-rrhh-modulo",
     submenuId: "submenu-rrhh",
-    paneles: { inicio: "panel-rrhh-inicio", equipo: "panel-rrhh-equipo", nominas: "panel-rrhh-nominas", verificador: "panel-rrhh-verificador", dietas: "panel-rrhh-dietas", adelantos: "panel-rrhh-adelantos", ss: "panel-rrhh-ss", irpf: "panel-rrhh-irpf", costeproyecto: "panel-rrhh-coste-proyecto", importar: "panel-rrhh-importar" },
-    subNavLinks: { equipo: "nav-rrhh-equipo", nominas: "nav-rrhh-nominas", verificador: "nav-rrhh-verificador", dietas: "nav-rrhh-dietas", adelantos: "nav-rrhh-adelantos", ss: "nav-rrhh-ss", irpf: "nav-rrhh-irpf", costeproyecto: "nav-rrhh-coste-proyecto", importar: "nav-rrhh-importar" },
+    paneles: { inicio: "panel-rrhh-inicio", equipo: "panel-rrhh-equipo", nominas: "panel-rrhh-nominas", verificador: "panel-rrhh-verificador", dietas: "panel-rrhh-dietas", adelantos: "panel-rrhh-adelantos", ss: "panel-rrhh-ss", irpf: "panel-rrhh-irpf", costeproyecto: "panel-rrhh-coste-proyecto" },
+    subNavLinks: { equipo: "nav-rrhh-equipo", nominas: "nav-rrhh-nominas", verificador: "nav-rrhh-verificador", dietas: "nav-rrhh-dietas", adelantos: "nav-rrhh-adelantos", ss: "nav-rrhh-ss", irpf: "nav-rrhh-irpf", costeproyecto: "nav-rrhh-coste-proyecto" },
     defecto: "inicio",
   },
   onboarding: {
@@ -412,7 +412,7 @@ function restaurarDesdeHash() {
   } else if (mod === "rrhh") {
     if (partes.length >= 2) {
       var sp = partes[1];
-      if (["equipo", "nominas", "verificador", "dietas", "adelantos", "ss", "irpf", "costeproyecto", "importar"].indexOf(sp) >= 0) {
+      if (["equipo", "nominas", "verificador", "dietas", "adelantos", "ss", "irpf", "costeproyecto"].indexOf(sp) >= 0) {
         rrhhSubpanel = sp;
         activarModulo("rrhh");
         activarSubpanel("rrhh", sp);
@@ -749,7 +749,7 @@ document.getElementById("nav-proyectos-onboarding").addEventListener("click", (e
   activarSubpanel("proyectos", "onboarding");
 });
 
-["equipo","nominas","verificador","dietas","adelantos","ss","irpf","costeproyecto","importar"].forEach(function(sp) {
+["equipo","nominas","verificador","dietas","adelantos","ss","irpf","costeproyecto"].forEach(function(sp) {
   var navId = "nav-rrhh-" + (sp === "costeproyecto" ? "coste-proyecto" : sp);
   var el = document.getElementById(navId);
   if (el) el.addEventListener("click", function(e) {
