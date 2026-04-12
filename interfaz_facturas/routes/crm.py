@@ -459,9 +459,11 @@ def crm_gmail_sync():
     data = request.get_json(silent=True) or {}
     solo_con_dominio = bool(data.get("solo_con_dominio", False))
     batch_size = int(data.get("batch_size") or 20)
+    dias_atras = int(data["dias_atras"]) if data.get("dias_atras") else None
     resumen = gmail_sync.sync_global_batch(
       batch_size=batch_size,
       solo_con_dominio=solo_con_dominio,
+      dias_atras=dias_atras,
     )
     return jsonify({"ok": True, "resumen": resumen})
   except Exception as exc:

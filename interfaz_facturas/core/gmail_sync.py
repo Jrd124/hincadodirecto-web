@@ -127,11 +127,19 @@ def _clean_snippet(snippet: str) -> str:
 
 
 def _build_query(empresa: dict, contactos: list[dict]) -> str | None:
-    """Construye la query Gmail para una empresa.
+    """Construye la query Gmail para una empresa buscando SOLO por email de contacto.
 
-    Dominios genéricos (gmail.com, hotmail.com, etc.) se excluyen del
-    matching por dominio para evitar falsos positivos masivos. Los contactos
-    con esos emails tampoco se usan — deben sincronizarse manualmente.
+    Decisión de diseño: NO buscamos por dominio corporativo (@acme.com) porque
+    eso traería emails de operaciones, administración, técnicos, etc. — ruido
+    que no pertenece al CRM comercial.
+
+    Solo se indexan hilos con contactos explícitamente añadidos a la empresa
+    en el CRM, que por definición son los interlocutores comerciales
+    (decisores de venta/compra). Si una empresa no tiene contactos con email,
+    el sync la salta: señal de que aún no tenemos un interlocutor identificado.
+
+    Emails en dominios genéricos (gmail, hotmail…) se omiten del auto-sync
+    y deben registrarse manualmente.
     """
     _DOMINIOS_GENERICOS: set[str] = {
         "gmail.com", "googlemail.com",
@@ -144,31 +152,39 @@ def _build_query(empresa: dict, contactos: list[dict]) -> str | None:
     }
 
     parts = []
-    dominio = (empresa.get("dominio") or "").strip().lower()
-    if dominio and dominio not in _DOMINIOS_GENERICOS:
-        parts.append(f"(from:@{dominio} OR to:@{dominio})")
-    elif dominio and dominio in _DOMINIOS_GENERICOS:
-        logger.info(
-            "Empresa %s tiene dominio genérico (%s) — omitido del auto-sync. "
-            "Usa sync manual por contacto para esta empresa.",
-            empresa.get("nombre"), dominio,
-        )
-
     for c in contactos:
         email = (c.get("email") or "").strip().lower()
         if not email:
             continue
         email_dominio = email.split("@")[-1] if "@" in email else ""
         if email_dominio in _DOMINIOS_GENERICOS:
-            logger.debug("Contacto %s tiene email genérico (%s) — omitido del auto-sync.", email, email_dominio)
+            logger.debug(
+                "Contacto %s tiene email genérico (%s) — omitido del auto-sync. "
+                "Registra la interacción manualmente.",
+                email, email_dominio,
+            )
             continue
         parts.append(f"(from:{email} OR to:{email})")
 
     if not parts:
-        # Sin dominio corporativo ni emails corporativos → empresa manual únicamente
+        logger.info(
+            "Empresa '%s' sin contactos comerciales con email corporativo — omitida del auto-sync.",
+            empresa.get("nombre"),
+        )
         return None
 
-    return " OR ".join(parts) if parts else None
+    return " OR ".join(parts)
+
+
+def _after_date_filter(dias_atras: int | None) -> str:
+    """Devuelve el fragmento 'after:YYYY/MM/DD' para limitar el lookback de Gmail.
+    Si dias_atras es None o 0 no añade filtro (busca en todo el historial).
+    """
+    if not dias_atras or dias_atras <= 0:
+        return ""
+    from datetime import date, timedelta
+    cutoff = date.today() - timedelta(days=dias_atras)
+    return f" after:{cutoff.strftime('%Y/%m/%d')}"
 
 
 # ── Sync por empresa ───────────────────────────────────────────────────────────
@@ -178,6 +194,7 @@ def sync_empresa(
     contactos: list[dict],
     service=None,
     max_threads: int = CRM_GMAIL_MAX_THREADS,
+    dias_atras: int | None = None,
 ) -> list[dict]:
     """
     Busca hilos Gmail para una empresa y devuelve lista de metadatos.
@@ -194,6 +211,8 @@ def sync_empresa(
     if not query:
         logger.info("Empresa %s sin dominio ni emails de contacto — omitida", empresa.get("nombre"))
         return []
+
+    query += _after_date_filter(dias_atras)
 
     try:
         resp = service.users().threads().list(
@@ -360,6 +379,7 @@ def guardar_hilo_como_interaccion(
 def sync_global_batch(
     batch_size: int = CRM_GMAIL_BATCH_SIZE,
     solo_con_dominio: bool = False,
+    dias_atras: int | None = None,
 ) -> dict[str, Any]:
     """
     Sync global: procesa hasta `batch_size` empresas con dominio o contactos con email.
@@ -413,7 +433,7 @@ def sync_global_batch(
         try:
             contactos_data = listar_contactos(empresa_id=empresa_id)
             contactos = contactos_data.get("contactos", [])
-            hilos = sync_empresa(emp, contactos, service=service)
+            hilos = sync_empresa(emp, contactos, service=service, dias_atras=dias_atras)
             stats["hilos_encontrados"] += len(hilos)
             stats["empresas_procesadas"] += 1
             for h in hilos:

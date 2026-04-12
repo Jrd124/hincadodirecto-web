@@ -1977,32 +1977,8 @@
   if (_initPanelInicio && _initPanelInicio.classList.contains("visible")) _crmCargarStats();
   if (_initPanelEmpresas && _initPanelEmpresas.classList.contains("visible")) _crmCargarEmpresas();
 
-  // ─── Gmail Sync — Fase 3 ─────────────────────────────────────────────────
-
-  /** Comprueba si Gmail está disponible y actualiza UI del panel inicio */
-  function _gmailComprobarEstado() {
-    fetch("/api/gmail/estado")
-      .then(function (r) { return r.json(); })
-      .then(function (estado) {
-        var card = document.getElementById("crm-gmail-admin-card");
-        var txt = document.getElementById("crm-gmail-estado-txt");
-        if (!card) return;
-        card.style.display = "block";
-        if (estado.disponible) {
-          if (txt) txt.textContent = "Conectado como " + (estado.cuenta || "—");
-          var btnGlobal = document.getElementById("btn-gmail-sync-global");
-          if (btnGlobal) btnGlobal.disabled = false;
-        } else {
-          if (txt) txt.textContent = "No configurado: " + (estado.motivo || "");
-          var btnGlobal2 = document.getElementById("btn-gmail-sync-global");
-          if (btnGlobal2) btnGlobal2.disabled = true;
-        }
-      })
-      .catch(function () {
-        var card = document.getElementById("crm-gmail-admin-card");
-        if (card) card.style.display = "none";
-      });
-  }
+  // ─── Gmail Sync — Fase 3 (widget global consolidado en Bloque 5) ────────────
+  // _gmailComprobarEstado() eliminado — sustituido por _crmGmailComprobarEstado()
 
   /** Sincroniza Gmail para una empresa concreta y actualiza el timeline */
   function _gmailSyncEmpresa(empresaId, btn) {
@@ -2060,52 +2036,7 @@
       .catch(function () {});
   }
 
-  // Botón Sync Gmail global (en panel inicio CRM)
-  var _btnGmailGlobal = document.getElementById("btn-gmail-sync-global");
-  if (_btnGmailGlobal) {
-    _btnGmailGlobal.addEventListener("click", function () {
-      var btn = _btnGmailGlobal;
-      var orig = btn.textContent;
-      btn.disabled = true;
-      btn.textContent = "⏳ Sincronizando…";
-      var res2El = document.getElementById("crm-gmail-sync-resultado");
-      if (res2El) { res2El.style.display = "none"; res2El.textContent = ""; }
-      fetch("/api/gmail/sync/global", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ solo_con_dominio: false }) })
-        .then(function (r) { return r.json(); })
-        .then(function (res) {
-          btn.disabled = false;
-          btn.textContent = orig;
-          if (res.error) {
-            if (res2El) { res2El.style.display = "block"; res2El.textContent = "Error: " + res.error; }
-            return;
-          }
-          var txt = "✓ " + res.empresas_procesadas + " empresa(s) procesadas · " +
-            res.hilos_encontrados + " hilo(s) · " +
-            res.interacciones_creadas + " actividad(es) nueva(s)";
-          if (res.errores && res.errores.length) txt += " · " + res.errores.length + " error(es)";
-          if (res2El) { res2El.style.display = "block"; res2El.textContent = txt; }
-        })
-        .catch(function (err) {
-          btn.disabled = false;
-          btn.textContent = orig;
-          if (res2El) { res2El.style.display = "block"; res2El.textContent = "Error de red: " + err; }
-        });
-    });
-  }
-
-  // Cargar estado Gmail cuando se abre el panel inicio CRM
-  var _crmPanelInicioObs = document.getElementById("panel-crm-inicio");
-  if (_crmPanelInicioObs) {
-    new MutationObserver(function (muts) {
-      muts.forEach(function (m) {
-        if (m.type === "attributes" && _crmPanelInicioObs.classList.contains("visible")) {
-          _gmailComprobarEstado();
-        }
-      });
-    }).observe(_crmPanelInicioObs, { attributes: true, attributeFilter: ["class"] });
-    // Si ya está visible al cargar
-    if (_crmPanelInicioObs.classList.contains("visible")) _gmailComprobarEstado();
-  }
+  // _btnGmailGlobal y su MutationObserver eliminados — consolidados en widget Bloque 5
 
   // ─── Seguimiento CRM — Fase 4B ───────────────────────────────────────────
   var _TIPO_ICON = { cliente: "🏢", lead: "🎯", proveedor: "🔧", colaborador: "🤝", otro: "📌" };
@@ -2362,7 +2293,13 @@
     btnSync.textContent = "Sincronizando…";
     btnSync.style.opacity = "0.7";
 
-    fetch("/api/crm/gmail/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+    var diasEl = document.getElementById("crm-gmail-dias");
+    var diasAtras = diasEl ? (parseInt(diasEl.value) || 30) : 30;
+    fetch("/api/crm/gmail/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dias_atras: diasAtras }),
+    })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         btnSync.disabled = false;
