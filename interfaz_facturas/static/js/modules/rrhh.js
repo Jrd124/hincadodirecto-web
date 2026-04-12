@@ -243,18 +243,49 @@ function _rrhhCargarEmpleados() {
 }
 
 function _rrhhRenderVistas(lista) {
-  var activos = lista.filter(function (e) { return e.estado === "activo" || e.estado === "vacaciones"; });
-  var inactivos = lista.filter(function (e) { return e.estado !== "activo" && e.estado !== "vacaciones"; });
+  // Group by real estado
+  var grupos = [
+    { key: "activo", label: "Activos", color: "#22c55e" },
+    { key: "baja", label: "Baja", color: "#f59e0b" },
+    { key: "vacaciones", label: "Vacaciones", color: "#3B82F6" },
+    { key: "reserva", label: "Reserva", color: "#6B7280" },
+    { key: "exempleado", label: "Exempleados", color: "#ef4444" }
+  ];
+  var container = document.getElementById("tbody-empleados-activos");
+  if (!container) return;
+  // Render into the parent table's tbody by replacing entire content
+  // Actually, we'll render into the card container above the table
+  var tableWrapper = container.closest(".card") || container.parentNode;
+  var html = "";
+  grupos.forEach(function (g) {
+    var emps = lista.filter(function (e) { return e.estado === g.key; });
+    if (!emps.length) return;
+    html += '<div style="margin-bottom:16px;">';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:0 4px;">';
+    html += '<span style="font-weight:700;font-size:0.9rem;">' + g.label + '</span>';
+    html += '<span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:0.75rem;font-weight:600;background:' + g.color + '20;color:' + g.color + ';">' + emps.length + '</span>';
+    html += '</div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:0.88rem;">';
+    html += '<tbody>';
+    emps.forEach(function (e) {
+      var nombreCompleto = (e.nombre || "") + (e.apellidos ? " " + e.apellidos : "");
+      html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_rrhhAbrirFichaDesdeEquipo(' + e.id + ')">' +
+        '<td style="padding:0.5rem 0.75rem;font-weight:600;white-space:nowrap;">' + nombreCompleto + '</td>' +
+        '<td style="padding:0.5rem 0.5rem;">' + (e.dni || "\u2014") + '</td>' +
+        '<td style="padding:0.5rem 0.5rem;">' + (e.categoria || e.puesto || "\u2014") + '</td>' +
+        '<td style="padding:0.5rem 0.5rem;">' + (e.telefono || "\u2014") + '</td>' +
+        '<td style="padding:0.5rem 0.5rem;text-align:center;">' +
+          '<button onclick="event.stopPropagation();_rrhhEditarEmpleado(' + e.id + ')" title="Editar" style="background:none;border:none;cursor:pointer;color:#3B82F6;font-size:0.9rem;">&#x270E;</button>' +
+        '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  });
+  if (!html) html = '<p style="text-align:center;padding:2rem;color:var(--text-secondary);">Sin empleados</p>';
+  tableWrapper.innerHTML = html;
 
-  _rrhhRenderTabla(document.getElementById("tbody-empleados-activos"), activos, true);
-  _rrhhRenderTabla(document.getElementById("tbody-empleados-inactivos"), inactivos, false);
-
+  // Hide old inactivos wrapper
   var wrapper = document.getElementById("rrhh-inactivos-wrapper");
-  if (wrapper) {
-    wrapper.style.display = inactivos.length > 0 ? "" : "none";
-    var countEl = document.getElementById("count-inactivos");
-    if (countEl) countEl.textContent = inactivos.length;
-  }
+  if (wrapper) wrapper.style.display = "none";
 }
 
 function _rrhhRenderTabla(tbody, lista, esActivos) {
@@ -738,25 +769,44 @@ function _rrhhVerFichaEmpleado(empId, origen) {
     var estadoColor = emp.estado === "activo" ? "#22c55e" : emp.estado === "exempleado" ? "#ef4444" : "#f59e0b";
     var estadoLabel = emp.estado ? emp.estado.charAt(0).toUpperCase() + emp.estado.slice(1) : "";
 
-    var html = '';
-    // Header
-    html += '<div class="card" style="padding:16px;margin-bottom:12px;">';
-    html += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
-    html += '<h3 style="margin:0;font-size:1.1rem;">' + nombreCompleto + '</h3>';
-    html += '<span style="padding:2px 10px;border-radius:9999px;font-size:0.75rem;font-weight:600;background:' + estadoColor + '20;color:' + estadoColor + ';">' + estadoLabel + '</span>';
-    html += '</div>';
-    html += '<div style="font-size:0.85rem;color:var(--text-secondary);margin-top:4px;">DNI: ' + (emp.dni || "\u2014") + ' &middot; Categor\u00eda: ' + (emp.categoria || "\u2014") + ' &middot; Antig\u00fcedad: ' + (emp.fecha_antiguedad || "\u2014") + '</div>';
-    html += '</div>';
+    // Calculate salary averages from last 3 nominas
+    var last3 = nominas.filter(function (n) { return n.tipo === "NOMINA"; }).slice(0, 3);
+    var salMes = 0, costeMes = 0;
+    if (last3.length) {
+      var sumDev = 0, sumCE = 0, sumDiet = 0;
+      last3.forEach(function (n) { sumDev += (n.total_devengado || 0); sumCE += (n.coste_empresa || 0); sumDiet += (n.dietas || 0); });
+      salMes = Math.round((sumDev - sumDiet) / last3.length);
+      costeMes = Math.round((sumCE - sumDiet) / last3.length);
+    }
 
-    // Personal KPIs
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px;">';
-    html += _rrhhKpiCard("Coste total", fmtEurFull(res.coste_total), "", "0.95rem");
-    html += _rrhhKpiCard("Coste medio/mes", fmtEurFull(res.coste_medio_mes), "", "0.95rem");
-    html += _rrhhKpiCard("\u00daltimo coste/d\u00eda", fmtEurFull(res.ultimo_coste_dia), "", "0.95rem");
-    html += _rrhhKpiCard("Total dietas", fmtEurFull(res.total_dietas), "", "0.95rem");
-    html += _rrhhKpiCard("Total l\u00edquido", fmtEurFull(res.total_liquido), " tes-card-blue", "0.95rem");
-    html += _rrhhKpiCard("Meses activos", (res.meses_activos || 0), "", "0.95rem");
+    var html = '';
+    // Card 1: Información General (borde azul)
+    html += '<div class="card" style="border-left:4px solid #3B82F6;padding:14px 16px;margin-bottom:12px;">';
+    html += '<h4 style="margin:0 0 8px;font-size:0.85rem;color:#3B82F6;text-transform:uppercase;letter-spacing:0.5px;">Informaci\u00f3n General</h4>';
+    html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">';
+    html += '<h3 style="margin:0;font-size:1.05rem;">' + nombreCompleto + '</h3>';
+    html += '<span style="padding:2px 10px;border-radius:9999px;font-size:0.72rem;font-weight:600;background:' + estadoColor + '20;color:' + estadoColor + ';">' + estadoLabel + '</span>';
     html += '</div>';
+    html += '<div style="font-size:0.82rem;color:var(--text-secondary);display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;">';
+    html += '<span><b>DNI:</b> ' + (emp.dni || "\u2014") + '</span>';
+    html += '<span><b>M\u00f3vil:</b> ' + (emp.telefono || "\u2014") + '</span>';
+    html += '<span><b>Email:</b> ' + (emp.email || "\u2014") + '</span>';
+    html += '<span><b>Cuenta:</b> ' + (emp.iban || "\u2014") + '</span>';
+    html += '</div></div>';
+
+    // Card 2: Información Operativa (borde verde)
+    html += '<div class="card" style="border-left:4px solid #10B981;padding:14px 16px;margin-bottom:12px;">';
+    html += '<h4 style="margin:0 0 8px;font-size:0.85rem;color:#10B981;text-transform:uppercase;letter-spacing:0.5px;">Informaci\u00f3n Operativa</h4>';
+    html += '<div style="font-size:0.82rem;display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;">';
+    html += '<span><b>Categor\u00eda:</b> ' + (emp.categoria || "\u2014") + '</span>';
+    html += '<span><b>Antig\u00fcedad:</b> ' + (emp.fecha_antiguedad || "\u2014") + '</span>';
+    html += '<span><b>Salario mensual (s/dietas):</b> ' + fmtEurFull(salMes) + '</span>';
+    html += '<span><b>Coste empresa mensual (s/dietas):</b> ' + fmtEurFull(costeMes) + '</span>';
+    html += '<span><b>Salario anual (s/dietas):</b> ' + fmtEurFull(salMes * 12) + '</span>';
+    html += '<span><b>Coste empresa anual (s/dietas):</b> ' + fmtEurFull(costeMes * 12) + '</span>';
+    html += '<span><b>Meses activos:</b> ' + (res.meses_activos || 0) + '</span>';
+    html += '<span><b>\u00daltimo coste/d\u00eda:</b> ' + fmtEurFull(res.ultimo_coste_dia) + '</span>';
+    html += '</div></div>';
 
     // Mini chart: evolución coste_empresa
     if (nominas.length >= 2) {
@@ -1152,6 +1202,14 @@ function _rrhhDietasCalendario(body) {
   _rrhhDietasCalLoad(periodo);
 }
 
+// Festivos (reutilizar lista de Operaciones)
+var _RRHH_FESTIVOS = [
+  '2025-01-01','2025-01-06','2025-04-17','2025-04-18','2025-05-01','2025-08-15','2025-10-12','2025-11-01','2025-12-06','2025-12-08','2025-12-25',
+  '2026-01-01','2026-01-06','2026-04-02','2026-04-03','2026-05-01','2026-08-15','2026-10-12','2026-11-02','2026-12-07','2026-12-08','2026-12-25',
+  '2027-01-01','2027-01-06','2027-03-25','2027-03-26','2027-05-01','2027-08-15','2027-10-12','2027-11-01','2027-12-06','2027-12-08','2027-12-25'
+];
+var _DIAS_SEMANA = ["D","L","M","X","J","V","S"];
+
 function _rrhhDietasCalLoad(periodo) {
   var grid = document.getElementById("rrhh-dietas-cal-grid");
   if (!grid) return;
@@ -1160,45 +1218,77 @@ function _rrhhDietasCalLoad(periodo) {
     .then(function (r) { return r.json(); })
     .then(function (d) {
       var empleados = d.empleados || [];
-      var diasMes = d.dias_mes || 31;
-      if (!empleados.length) { grid.innerHTML = '<p style="padding:1rem;color:var(--text-secondary);">Sin datos para este mes</p>'; return; }
-      var colorMap = { NC: "#3B82F6", NM: "#93C5FD", IC: "#F59E0B", IM: "#FDE68A", "": "transparent" };
-      var h = '<table style="width:100%;border-collapse:collapse;font-size:0.75rem;">';
-      h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:4px 6px;font-weight:700;white-space:nowrap;position:sticky;left:0;background:var(--bg-secondary,#f8f9fa);z-index:1;">Empleado</th>';
-      for (var day = 1; day <= diasMes; day++) h += '<th style="padding:4px 2px;text-align:center;min-width:28px;font-weight:600;">' + day + '</th>';
-      h += '<th style="padding:4px 6px;text-align:right;font-weight:700;">Total</th></tr></thead><tbody>';
+      var diasArr = d.dias || []; // array of "YYYY-MM-DD" strings
+      var dietasMap = d.dietas || {}; // "empId_fecha" -> {tipo, importe}
+      if (!empleados.length) { grid.innerHTML = '<p style="padding:1rem;color:var(--text-secondary);">Sin empleados activos</p>'; return; }
+
+      // Build day info
+      var dayInfos = diasArr.map(function (fecha) {
+        var dt = new Date(fecha + "T12:00:00");
+        var dow = dt.getDay(); // 0=Sun
+        var esFestivo = _RRHH_FESTIVOS.indexOf(fecha) >= 0;
+        var esFinSemana = dow === 0 || dow === 6;
+        return { fecha: fecha, num: dt.getDate(), dowLabel: _DIAS_SEMANA[dow], noLab: esFinSemana || esFestivo };
+      });
+
+      var colorMap = { nacional_completa: "#3B82F6", nacional_media: "#93C5FD", internacional_completa: "#F59E0B", internacional_media: "#FDE68A", NC: "#3B82F6", NM: "#93C5FD", IC: "#F59E0B", IM: "#FDE68A" };
+      var abrevMap = { nacional_completa: "NC", nacional_media: "NM", internacional_completa: "IC", internacional_media: "IM", NC: "NC", NM: "NM", IC: "IC", IM: "IM" };
+
+      var h = '<div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:0.72rem;">';
+      // Header row 1: day of week
+      h += '<tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:2px 6px;min-width:120px;position:sticky;left:0;background:var(--bg-secondary,#f8f9fa);z-index:2;"></th>';
+      dayInfos.forEach(function (di) {
+        var bg = di.noLab ? "background:#E5E7EB;" : "";
+        h += '<th style="padding:2px 1px;text-align:center;min-width:26px;font-weight:400;font-size:0.65rem;color:#888;' + bg + '">' + di.dowLabel + '</th>';
+      });
+      h += '<th style="padding:2px 4px;"></th></tr>';
+      // Header row 2: day number
+      h += '<tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:2px 6px;font-weight:700;position:sticky;left:0;background:var(--bg-secondary,#f8f9fa);z-index:2;">Empleado</th>';
+      dayInfos.forEach(function (di) {
+        var bg = di.noLab ? "background:#E5E7EB;" : "";
+        h += '<th style="padding:2px 1px;text-align:center;font-weight:600;' + bg + '">' + di.num + '</th>';
+      });
+      h += '<th style="padding:2px 4px;text-align:right;font-weight:700;">Total</th></tr>';
+
+      // Employee rows
       empleados.forEach(function (emp) {
+        var nombre = (emp.nombre || "") + " " + (emp.apellidos || "");
         h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">';
-        h += '<td style="padding:4px 6px;font-weight:500;white-space:nowrap;position:sticky;left:0;background:var(--bg,#fff);z-index:1;">' + (emp.nombre || "") + '</td>';
-        var dias = emp.dias || {};
-        for (var d2 = 1; d2 <= diasMes; d2++) {
-          var tipo = dias[d2] || dias[String(d2)] || "";
-          var bg = colorMap[tipo] || "#E5E7EB";
-          var cellStyle = tipo ? 'background:' + bg + ';color:#fff;font-weight:600;cursor:pointer;' : 'cursor:pointer;';
-          h += '<td style="padding:2px;text-align:center;' + cellStyle + '" onclick="_rrhhDietaCellClick(' + emp.id + ',' + d2 + ',\'' + periodo + '\')" title="' + tipo + '">' + (tipo || '&middot;') + '</td>';
-        }
-        h += '<td style="padding:4px 6px;text-align:right;font-weight:600;">' + fmtEur(emp.total) + '</td>';
+        h += '<td style="padding:3px 6px;font-weight:500;white-space:nowrap;position:sticky;left:0;background:#fff;z-index:1;font-size:0.72rem;">' + nombre.trim() + '</td>';
+        var total = 0;
+        dayInfos.forEach(function (di) {
+          var key = emp.id + "_" + di.fecha;
+          var dieta = dietasMap[key];
+          var tipo = dieta ? dieta.tipo : "";
+          var abrev = abrevMap[tipo] || "";
+          var bg = colorMap[tipo] || "";
+          var noLabBg = di.noLab ? "#E5E7EB" : "";
+          var cellBg = bg || noLabBg;
+          var style = "padding:1px;text-align:center;cursor:pointer;" + (cellBg ? "background:" + cellBg + ";" : "") + (bg ? "color:#fff;font-weight:600;" : "");
+          h += '<td style="' + style + '" onclick="_rrhhDietaCellClick(' + emp.id + ',\'' + di.fecha + '\',\'' + periodo + '\')" title="' + (tipo || 'Sin dieta') + '">' + (abrev || (di.noLab ? '' : '\u00b7')) + '</td>';
+          if (dieta && dieta.importe) total += dieta.importe;
+        });
+        h += '<td style="padding:3px 4px;text-align:right;font-weight:600;">' + (total > 0 ? fmtEur(total) : '\u2014') + '</td>';
         h += '</tr>';
       });
-      h += '</tbody></table>';
+      h += '</table></div>';
       grid.innerHTML = h;
     })
     .catch(function (err) { grid.innerHTML = '<p style="color:#dc3545;">Error: ' + err.message + '</p>'; });
 }
 
-function _rrhhDietaCellClick(empId, dia, periodo) {
-  var opciones = ["", "NC", "NM", "IC", "IM"];
+function _rrhhDietaCellClick(empId, fecha, periodo) {
+  var opciones = ["", "nacional_completa", "nacional_media", "internacional_completa", "internacional_media"];
   var labels = ["Sin dieta", "Nacional completa", "Nacional media", "Internacional completa", "Internacional media"];
   var msg = "Selecciona tipo de dieta:\n";
   opciones.forEach(function (o, i) { msg += i + " = " + labels[i] + "\n"; });
   var sel = prompt(msg, "0");
   if (sel === null) return;
   var tipo = opciones[parseInt(sel)] || "";
-  var fecha = periodo + "-" + String(dia).padStart(2, "0");
-  fetch("/api/rrhh/dietas/calendario", {
+  fetch("/api/rrhh/dietas/diaria", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ empleado_id: empId, fecha: fecha, tipo: tipo })
+    body: JSON.stringify({ empleado_id: empId, fecha: fecha, tipo: tipo, importe: 0 })
   }).then(function () { _rrhhDietasCalLoad(periodo); });
 }
 
