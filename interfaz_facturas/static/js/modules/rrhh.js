@@ -227,12 +227,16 @@ function _rrhhCargarDashboard() {
 // ===============================================================================
 
 var _rrhhEquipoColapsados = { baja: true, vacaciones: true, reserva: true, exempleado: true };
+var _rrhhEquipoWrapper = null; // cached reference to the rendering container
 
 function _rrhhCargarEmpleados() {
-  var container = document.getElementById("tbody-empleados-activos");
-  if (!container) return;
-  var wrapper = container.closest(".card") || container.parentNode;
-  wrapper.innerHTML = '<p style="text-align:center;padding:2rem;color:var(--text-secondary);">Cargando\u2026</p>';
+  // Find the wrapper once and cache it
+  if (!_rrhhEquipoWrapper) {
+    var container = document.getElementById("tbody-empleados-activos");
+    if (!container) return;
+    _rrhhEquipoWrapper = container.closest(".card") || container.parentNode;
+  }
+  _rrhhEquipoWrapper.innerHTML = '<p style="text-align:center;padding:2rem;color:var(--text-secondary);">Cargando\u2026</p>';
 
   fetch("/api/rrhh/empleados?estado=todos")
     .then(function (r) { return r.json(); })
@@ -241,21 +245,20 @@ function _rrhhCargarEmpleados() {
       _rrhhRenderVistas(_rrhhEmpleadosCache);
     })
     .catch(function (err) {
-      wrapper.innerHTML = '<p style="text-align:center;padding:2rem;color:#dc3545;">Error: ' + err.message + '</p>';
+      _rrhhEquipoWrapper.innerHTML = '<p style="text-align:center;padding:2rem;color:#dc3545;">Error: ' + err.message + '</p>';
     });
 }
 
 function _rrhhRenderVistas(lista) {
   var grupos = [
-    { key: "activo", label: "Activos", color: "#22c55e", chevron: "\u25BC" },
-    { key: "baja", label: "Baja", color: "#f59e0b", chevron: "\u25BC" },
-    { key: "vacaciones", label: "Vacaciones", color: "#3B82F6", chevron: "\u25BC" },
-    { key: "reserva", label: "Reserva", color: "#6B7280", chevron: "\u25BC" },
-    { key: "exempleado", label: "Exempleados", color: "#ef4444", chevron: "\u25BC" }
+    { key: "activo", label: "Activos", color: "#22c55e" },
+    { key: "baja", label: "Baja", color: "#f59e0b" },
+    { key: "vacaciones", label: "Vacaciones", color: "#3B82F6" },
+    { key: "reserva", label: "Reserva", color: "#6B7280" },
+    { key: "exempleado", label: "Exempleados", color: "#ef4444" }
   ];
-  var container = document.getElementById("tbody-empleados-activos");
-  if (!container) return;
-  var wrapper = container.closest(".card") || container.parentNode;
+  var wrapper = _rrhhEquipoWrapper;
+  if (!wrapper) return;
 
   var html = "";
   grupos.forEach(function (g) {
