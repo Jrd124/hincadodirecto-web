@@ -1320,12 +1320,12 @@
         <div id="rrhh-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px;"></div>
         <div class="card" style="padding:16px;margin-bottom:18px;">
           <h4 style="margin:0 0 10px;font-size:0.9rem;font-weight:700;">Evoluci&oacute;n coste empresa (12 meses)</h4>
-          <canvas id="rrhh-chart-evolucion" height="220"></canvas>
+          <div style="position:relative;height:300px;"><canvas id="rrhh-chart-evolucion"></canvas></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
           <div class="card" style="padding:16px;">
             <h4 style="margin:0 0 10px;font-size:0.9rem;font-weight:700;">Distribuci&oacute;n por categor&iacute;a</h4>
-            <canvas id="rrhh-chart-categorias" height="200"></canvas>
+            <div style="position:relative;height:250px;"><canvas id="rrhh-chart-categorias"></canvas></div>
           </div>
           <div>
             <div id="rrhh-top5"></div>
@@ -1511,21 +1511,20 @@
         <!-- Tabla nóminas mes -->
         <div id="rrhh-nominas-tabla-wrapper">
           <div class="card" style="overflow-x:auto;padding:0;">
-            <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.78rem;table-layout:fixed;">
               <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
-                <th style="padding:6px 6px;font-weight:700;">#</th>
+                <th style="padding:6px 6px;font-weight:700;width:28px;">#</th>
                 <th style="padding:6px 6px;font-weight:700;">Empleado</th>
-                <th style="padding:6px 4px;font-weight:700;">Tipo</th>
-                <th style="padding:6px 4px;font-weight:700;text-align:right;">D&iacute;as</th>
-                <th style="padding:6px 4px;font-weight:700;text-align:right;">Sal.Base</th>
-                <th style="padding:6px 4px;font-weight:700;text-align:right;">Compl.</th>
-                <th style="padding:6px 4px;font-weight:700;text-align:right;">Dietas</th>
+                <th style="padding:6px 4px;font-weight:700;width:40px;">DNI</th>
+                <th style="padding:6px 4px;font-weight:700;width:45px;">Tipo</th>
                 <th style="padding:6px 4px;font-weight:700;text-align:right;">Devengado</th>
                 <th style="padding:6px 4px;font-weight:700;text-align:right;">Deducir</th>
                 <th style="padding:6px 4px;font-weight:700;text-align:right;">L&iacute;quido</th>
+                <th style="padding:6px 4px;font-weight:700;text-align:right;">Dietas</th>
                 <th style="padding:6px 4px;font-weight:700;text-align:right;">Coste Emp.</th>
+                <th style="padding:6px 4px;font-weight:700;text-align:right;">Coste/D&iacute;a</th>
               </tr></thead>
-              <tbody id="rrhh-tbody-nominas-mes"><tr><td colspan="11" style="text-align:center;padding:2rem;">Selecciona un periodo</td></tr></tbody>
+              <tbody id="rrhh-tbody-nominas-mes"><tr><td colspan="10" style="text-align:center;padding:2rem;">Selecciona un periodo</td></tr></tbody>
               <tfoot id="rrhh-tfoot-nominas-mes" style="font-weight:700;background:var(--bg-secondary,#f8f9fa);"></tfoot>
             </table>
           </div>
@@ -1546,14 +1545,15 @@
             <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
               <th style="padding:6px 6px;font-weight:700;">Empleado</th>
               <th style="padding:6px 4px;font-weight:700;">Cat.</th>
+              <th style="padding:6px 4px;font-weight:700;">DNI</th>
               <th style="padding:6px 4px;font-weight:700;text-align:right;">D&iacute;as</th>
-              <th style="padding:6px 4px;font-weight:700;text-align:right;">Gest. L&iacute;quido</th>
+              <th style="padding:6px 4px;font-weight:700;text-align:right;">L&iacute;quido</th>
               <th style="padding:6px 4px;font-weight:700;text-align:right;">Adelantos</th>
               <th style="padding:6px 4px;font-weight:700;text-align:right;">Embargo</th>
               <th style="padding:6px 4px;font-weight:700;text-align:right;font-weight:800;">A TRANSFERIR</th>
               <th style="padding:6px 4px;font-weight:700;">Estado</th>
             </tr></thead>
-            <tbody id="rrhh-verif-tbody"><tr><td colspan="8" style="text-align:center;padding:2rem;">Selecciona un mes</td></tr></tbody>
+            <tbody id="rrhh-verif-tbody"><tr><td colspan="9" style="text-align:center;padding:2rem;">Selecciona un mes</td></tr></tbody>
             <tfoot id="rrhh-verif-tfoot" style="font-weight:700;background:var(--bg-secondary,#f8f9fa);"></tfoot>
           </table>
         </div>
@@ -1621,7 +1621,7 @@
         <div id="rrhh-ss-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:16px;"></div>
         <div class="card" style="padding:16px;margin-bottom:16px;">
           <h4 style="margin:0 0 10px;font-size:0.9rem;font-weight:700;">Cotizaciones mensuales</h4>
-          <canvas id="rrhh-chart-ss" height="200"></canvas>
+          <div style="position:relative;height:280px;"><canvas id="rrhh-chart-ss"></canvas></div>
         </div>
         <h4 style="margin:0 0 8px;font-size:0.95rem;font-weight:700;">Desglose mensual</h4>
         <div class="card" style="overflow-x:auto;padding:0;">

@@ -11,6 +11,7 @@ var _rrhhImportInit = false;
 var _rrhhInactivosAbierto = false;
 var _rrhhOCRData = [];
 var _rrhhDashChartEvo = null;
+var _rrhhFichaChart = null;
 var _rrhhDashChartCat = null;
 var _rrhhSSChart = null;
 var _rrhhExpandedRow = null;
@@ -572,7 +573,7 @@ function _rrhhCargarMes(periodo) {
 
       if (tfoot) {
         tfoot.innerHTML = '<tr style="font-weight:700;background:var(--bg-secondary,#f8f9fa);">' +
-          '<td colspan="4" style="padding:8px 8px;text-align:right;">TOTALES</td>' +
+          '<td colspan="4" style="padding:8px 6px;text-align:right;">TOTALES</td>' +
           '<td style="padding:8px 6px;text-align:right;">' + fmtEur(totDev) + '</td>' +
           '<td style="padding:8px 6px;text-align:right;">' + fmtEur(totDed) + '</td>' +
           '<td style="padding:8px 6px;text-align:right;">' + fmtEur(totLiq) + '</td>' +
@@ -605,7 +606,7 @@ function _rrhhToggleNominaDetail(row, idx) {
   _rrhhExpandedRow = idx;
 
   var detailHtml = '<tr class="rrhh-nomina-detail" data-detail-for="' + idx + '">' +
-    '<td colspan="10" style="padding:0;background:var(--bg-secondary,#f8f9fa);">' +
+    '<td colspan="10" style="padding:0;background:#f8fafc;">' +
     '<div style="padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:0.82rem;">';
 
   // Left: Devengos
@@ -706,6 +707,14 @@ function _rrhhVerFichaEmpleado(empId) {
     html += _rrhhKpiCard("Meses activos", (res.meses_activos || 0), "", "0.95rem");
     html += '</div>';
 
+    // Mini chart: evolución coste_empresa
+    if (nominas.length >= 2) {
+      html += '<div class="card" style="padding:12px;margin-bottom:12px;">';
+      html += '<h4 style="margin:0 0 8px;font-size:0.85rem;font-weight:700;">Evoluci\u00f3n coste empresa</h4>';
+      html += '<div style="position:relative;height:180px;"><canvas id="rrhh-ficha-chart"></canvas></div>';
+      html += '</div>';
+    }
+
     // Nominas table (descending)
     html += '<div class="card" style="overflow-x:auto;padding:0;">';
     html += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
@@ -740,6 +749,33 @@ function _rrhhVerFichaEmpleado(empId) {
     html += '</tbody></table></div>';
 
     contenido.innerHTML = html;
+
+    // Render mini chart if available
+    var fichaCanvas = document.getElementById("rrhh-ficha-chart");
+    if (fichaCanvas && nominas.length >= 2) {
+      var chronological = nominas.slice().sort(function (a, b) { return a.periodo > b.periodo ? 1 : -1; });
+      if (_rrhhFichaChart) _rrhhFichaChart.destroy();
+      _rrhhFichaChart = new Chart(fichaCanvas.getContext("2d"), {
+        type: "line",
+        data: {
+          labels: chronological.map(function (n) { return n.periodo; }),
+          datasets: [{
+            label: "Coste empresa",
+            data: chronological.map(function (n) { return n.coste_empresa || 0; }),
+            borderColor: "#3B82F6",
+            backgroundColor: "rgba(59,130,246,0.1)",
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { y: { ticks: { callback: function (v) { return fmtEur(v); } } } }
+        }
+      });
+    }
   }).catch(function (err) {
     contenido.innerHTML = '<p style="color:#dc3545;">Error: ' + err.message + '</p>';
   });
@@ -1284,20 +1320,36 @@ function _rrhhCargarIRPF() {
         tbody.innerHTML = '<tr><td colspan="7">Sin datos</td></tr>';
         return;
       }
+      var hoyStr = new Date().toISOString().slice(0, 10);
       var html = "";
       trs.forEach(function (t) {
-        var esVencido = t.fecha_limite && t.fecha_limite < new Date().toISOString().slice(0, 10);
-        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
+        // Parse fecha_limite "20 abr 2026" to comparable
+        var meses_map = {ene:"01",feb:"02",mar:"03",abr:"04",may:"05",jun:"06",jul:"07",ago:"08",sep:"09",oct:"10",nov:"11",dic:"12"};
+        var esFuturo = false, esPasado = false;
+        if (t.fecha_limite) {
+          var parts = t.fecha_limite.split(" ");
+          if (parts.length >= 3) {
+            var isoDate = parts[2] + "-" + (meses_map[parts[1]] || "01") + "-" + parts[0].padStart(2, "0");
+            esFuturo = isoDate > hoyStr;
+            esPasado = !esFuturo;
+          }
+        }
+        var rowBg = esFuturo ? "background:#FEFCE8;" : "";
+        var pill = "";
+        if (esFuturo) {
+          pill = '<span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:0.7rem;font-weight:600;background:#FEF3C7;color:#92400E;">Pr\u00f3ximo \u23f3</span>';
+        } else if (esPasado) {
+          // Assume paid if past (no bank reconciliation data yet)
+          pill = '<span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:0.7rem;font-weight:600;background:#DCFCE7;color:#166534;">Pagado \u2705</span>';
+        }
+        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);' + rowBg + '">' +
           '<td style="padding:6px 8px;font-weight:600;">' + t.trimestre + '</td>' +
           '<td style="padding:6px 6px;">' + (t.meses_label || '') + '</td>' +
           '<td style="padding:6px 6px;text-align:right;">' + (t.nominas || 0) + '</td>' +
           '<td style="padding:6px 6px;text-align:right;">' + fmtEur(t.base) + '</td>' +
           '<td style="padding:6px 6px;text-align:right;font-weight:600;">' + fmtEur(t.retenido) + '</td>' +
           '<td style="padding:6px 6px;text-align:right;">' + (t.pct_medio || 0) + '%</td>' +
-          '<td style="padding:6px 6px;">' +
-            (esVencido ? '<span style="color:#22c55e;">\u2713 </span>' : '') +
-            (t.fecha_limite || '\u2014') +
-          '</td></tr>';
+          '<td style="padding:6px 6px;">' + (t.fecha_limite || '\u2014') + ' ' + pill + '</td></tr>';
       });
       tbody.innerHTML = html;
     })
