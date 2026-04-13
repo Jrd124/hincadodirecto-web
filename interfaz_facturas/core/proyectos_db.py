@@ -220,6 +220,22 @@ def init_proyectos_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS ix_asig_recurso ON proyecto_asignaciones(recurso_tipo, recurso_id)")
         _backfill_codigos(conn)
 
+        # Migración: añadir estado 'perdido' si no existe en CHECK
+        row_sql = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='proyectos'").fetchone()
+        if row_sql and "'perdido'" not in (row_sql[0] or ""):
+            # SQLite no permite ALTER CHECK, hay que recrear
+            conn.execute("ALTER TABLE proyectos RENAME TO _proyectos_old")
+            old_sql = row_sql[0]
+            new_sql = old_sql.replace(
+                "'cotizado','vivo','pausado','terminado','cancelado'",
+                "'cotizado','vivo','pausado','terminado','cancelado','perdido'"
+            )
+            conn.execute(new_sql)
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(proyectos)").fetchall()]
+            col_list = ", ".join(cols)
+            conn.execute(f"INSERT INTO proyectos ({col_list}) SELECT {col_list} FROM _proyectos_old")
+            conn.execute("DROP TABLE _proyectos_old")
+
         # Migración: campos pricing hinca/perforación
         existing = {r[1] for r in conn.execute("PRAGMA table_info(proyectos)").fetchall()}
         _new_cols = [

@@ -59,6 +59,85 @@ def api_crear_proyecto():
   return jsonify(p), 201
 
 
+@proyectos_bp.post("/api/proyectos/cotizado")
+def api_crear_proyecto_cotizado():
+  """Crea proyecto cotizado + presupuesto vinculado + líneas de pricing."""
+  data = request.get_json(silent=True) or {}
+  if not (data.get("nombre") or "").strip():
+    return _bad_request("El nombre del proyecto es obligatorio")
+  data["estado"] = "cotizado"
+  data.setdefault("empresa_id", "hincado_directo")
+
+  # Create project
+  p = proyectos_db.crear_proyecto(data)
+  proyecto_id = p.get("id")
+
+  # Create linked presupuesto + version + lines
+  try:
+    from core.presupuestos_db import crear_presupuesto, crear_version, guardar_lineas
+    presup = crear_presupuesto({
+      "empresa_id": "hincado_directo",
+      "tercero_id": data.get("cliente_tercero_id"),
+      "proyecto_id": proyecto_id,
+      "nombre_proyecto": data.get("nombre", ""),
+    })
+    presup_id = presup.get("id")
+    if presup_id:
+      # Link to project
+      from core.db import get_conn
+      conn = get_conn()
+      try:
+        conn.execute("UPDATE proyectos SET presupuesto_id=? WHERE id=?", (presup_id, proyecto_id))
+        conn.commit()
+      finally:
+        conn.close()
+
+      # Create version R00
+      ver = crear_version(presup_id)
+      ver_id = ver.get("id") if ver else None
+
+      if ver_id:
+        # Create lines from pricing
+        tipo_act = data.get("tipo_actividad", "hinca")
+        lineas = []
+        orden = 1
+        if tipo_act in ("hinca", "mixto"):
+          hc = int(data.get("hinca_cantidad") or 0)
+          hop = float(data.get("hinca_precio_prod_operador") or 0)
+          hay = float(data.get("hinca_precio_prod_ayudante") or 0)
+          hao = float(data.get("hinca_precio_admin_operador") or 0)
+          haa = float(data.get("hinca_precio_admin_ayudante") or 0)
+          if hc > 0 and hop > 0:
+            lineas.append({"seccion": "principal", "titulo": "Hincado producci\u00f3n (m\u00e1q+operador)", "unidad": "ud", "cantidad": hc, "precio_unitario": hop, "orden": orden}); orden += 1
+          if hc > 0 and hay > 0:
+            lineas.append({"seccion": "principal", "titulo": "Hincado producci\u00f3n (m\u00e1q+oper+ayudante)", "unidad": "ud", "cantidad": hc, "precio_unitario": hay, "orden": orden}); orden += 1
+          if hao > 0:
+            lineas.append({"seccion": "principal", "titulo": "Hincado administraci\u00f3n (m\u00e1q+operador)", "unidad": "d\u00eda", "cantidad": 1, "precio_unitario": hao, "orden": orden}); orden += 1
+          if haa > 0:
+            lineas.append({"seccion": "principal", "titulo": "Hincado administraci\u00f3n (m\u00e1q+oper+ayudante)", "unidad": "d\u00eda", "cantidad": 1, "precio_unitario": haa, "orden": orden}); orden += 1
+        if tipo_act in ("perforacion", "mixto"):
+          pc = int(data.get("perforacion_cantidad") or 0)
+          pop = float(data.get("perforacion_precio_prod_operador") or 0)
+          pay = float(data.get("perforacion_precio_prod_ayudante") or 0)
+          pao = float(data.get("perforacion_precio_admin_operador") or 0)
+          paa = float(data.get("perforacion_precio_admin_ayudante") or 0)
+          if pc > 0 and pop > 0:
+            lineas.append({"seccion": "principal", "titulo": "Perforaci\u00f3n producci\u00f3n (m\u00e1q+operador)", "unidad": "ud", "cantidad": pc, "precio_unitario": pop, "orden": orden}); orden += 1
+          if pc > 0 and pay > 0:
+            lineas.append({"seccion": "principal", "titulo": "Perforaci\u00f3n producci\u00f3n (m\u00e1q+oper+ayudante)", "unidad": "ud", "cantidad": pc, "precio_unitario": pay, "orden": orden}); orden += 1
+          if pao > 0:
+            lineas.append({"seccion": "principal", "titulo": "Perforaci\u00f3n administraci\u00f3n (m\u00e1q+operador)", "unidad": "d\u00eda", "cantidad": 1, "precio_unitario": pao, "orden": orden}); orden += 1
+          if paa > 0:
+            lineas.append({"seccion": "principal", "titulo": "Perforaci\u00f3n administraci\u00f3n (m\u00e1q+oper+ayudante)", "unidad": "d\u00eda", "cantidad": 1, "precio_unitario": paa, "orden": orden}); orden += 1
+        if lineas:
+          guardar_lineas(ver_id, lineas)
+  except Exception as e:
+    import logging
+    logging.getLogger("erp").warning("Error creando presupuesto para cotizado %s: %s", proyecto_id, e)
+
+  return jsonify(proyectos_db.obtener_proyecto(proyecto_id)), 201
+
+
 @proyectos_bp.put("/api/proyectos/<int:proyecto_id>")
 def api_actualizar_proyecto(proyecto_id: int):
   data = request.get_json(silent=True) or {}

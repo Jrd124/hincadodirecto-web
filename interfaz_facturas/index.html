@@ -133,8 +133,8 @@
             <a href="#" class="sidebar-child" id="nav-rrhh-coste-proyecto">Coste Proy.</a>
           </div>
         </div>
-        <!-- Presupuestos -->
-        <div class="sidebar-group">
+        <!-- Presupuestos — integrado en Proyectos, sidebar oculto -->
+        <div class="sidebar-group" style="display:none;">
           <a href="#" class="sidebar-item sidebar-parent" id="nav-presupuestos-modulo" data-group="presupuestos">
             <svg class="sidebar-icon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
               <path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/>
@@ -146,8 +146,8 @@
           <div class="sidebar-children" id="sidebar-children-presupuestos">
             <a href="#" class="sidebar-child" id="nav-presupuestos-todos">Todos</a>
             <a href="#" class="sidebar-child" id="nav-presupuestos-nuevo">+ Nuevo</a>
-            <a href="#" class="sidebar-child" id="nav-presupuestos-catalogo">Catálogo partidas</a>
-            <a href="#" class="sidebar-child" id="nav-presupuestos-plantillas">Plantillas T&C</a>
+            <a href="#" class="sidebar-child" id="nav-presupuestos-catalogo">Cat&aacute;logo partidas</a>
+            <a href="#" class="sidebar-child" id="nav-presupuestos-plantillas">Plantillas T&amp;C</a>
           </div>
         </div>
         <!-- Impuestos -->
@@ -791,7 +791,7 @@
       <!-- ═══ COTIZADOS ═══ -->
       <div id="panel-proyectos-cotizados" class="panel-proyectos">
         <section style="max-width:1300px;margin:0 auto;padding:24px 20px;">
-          <div class="crm-empresas-header"><h1>Proyectos cotizados</h1><button type="button" class="primary" id="btn-nuevo-proyecto" style="font-size:0.85rem;padding:6px 16px;">+ Nuevo proyecto</button></div>
+          <div class="crm-empresas-header"><h1>Proyectos cotizados</h1><div style="display:flex;gap:8px;"><button type="button" class="primary" id="btn-nuevo-proyecto" style="font-size:0.85rem;padding:6px 16px;">+ Nuevo cotizado</button></div></div>
           <div id="proy-cotizados-tabla"></div>
         </section>
       </div>
@@ -843,7 +843,7 @@
                 </div>
                 <div>
                   <label for="proy-estado" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Estado</label>
-                  <select id="proy-estado" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"><option value="cotizado">Cotizado</option><option value="vivo">Vivo</option><option value="pausado">Pausado</option><option value="terminado">Terminado</option></select>
+                  <select id="proy-estado" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"><option value="cotizado">Cotizado</option><option value="vivo">Vivo (Adjudicado)</option><option value="pausado">Pausado</option><option value="terminado">Terminado</option><option value="cancelado">Cancelado</option><option value="perdido">Perdido</option></select>
                 </div>
                 <div style="grid-column:1/-1;">
                   <label for="proy-nombre" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Nombre del proyecto <span style="color:#DC2626;">*</span></label>

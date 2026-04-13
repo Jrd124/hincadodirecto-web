@@ -1096,7 +1096,8 @@
             '<td>' + _esc(p.tipo_trabajo || "") + '</td>' +
             '<td class="numero">' + _fE(p.importe_presupuestado) + '</td>' +
             '<td>' + _esc((p.fecha_inicio_estimada || "").substring(0, 10)) + '</td>' +
-            '<td><button class="primary" style="font-size:0.75rem;padding:2px 10px;" onclick="_proyActivar(' + p.id + ')">Activar</button> ' +
+            '<td style="white-space:nowrap;"><button class="primary" style="font-size:0.75rem;padding:2px 10px;" onclick="_proyActivar(' + p.id + ')">Adjudicar</button> ' +
+            '<button style="font-size:0.75rem;padding:2px 10px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:4px;cursor:pointer;" onclick="_proyPerder(' + p.id + ')">Perder</button> ' +
             '<button class="secondary" style="font-size:0.75rem;padding:2px 10px;" onclick="_proyEditar(' + p.id + ')">Editar</button></td></tr>';
         });
         html += '</tbody></table>';
@@ -1107,10 +1108,17 @@
   if (panelCot) new MutationObserver(function () { if (panelCot.classList.contains("visible")) _proyCotizados(); }).observe(panelCot, { attributes: true, attributeFilter: ["class"] });
 
   window._proyActivar = function (id) {
-    if (!confirm("Activar este proyecto? Pasara a estado 'vivo'.")) return;
+    if (!confirm("Adjudicar este proyecto? Pasara a estado 'vivo'.")) return;
     fetch("/api/proyectos/" + id + "/estado", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ estado: "vivo" }) })
       .then(function (r) { return r.json(); })
-      .then(function () { mostrarToast("Proyecto activado.", "success"); _proyCotizados(); });
+      .then(function () { mostrarToast("Proyecto adjudicado.", "success"); _proyCotizados(); _proyVivos(); });
+  };
+
+  window._proyPerder = function (id) {
+    if (!confirm("Marcar como perdido? El proyecto pasara a estado 'perdido'.")) return;
+    fetch("/api/proyectos/" + id + "/estado", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ estado: "perdido" }) })
+      .then(function (r) { return r.json(); })
+      .then(function () { mostrarToast("Proyecto marcado como perdido.", "success"); _proyCotizados(); });
   };
 
   // ── Vivos ──
@@ -1351,7 +1359,8 @@
       fecha_fin_estimada: document.getElementById("proy-fecha-fin").value || null,
       notas: document.getElementById("proy-notas").value,
     };
-    var url = id ? "/api/proyectos/" + id : "/api/proyectos";
+    var esCotizadoNuevo = !id && body.estado === "cotizado";
+    var url = id ? "/api/proyectos/" + id : (esCotizadoNuevo ? "/api/proyectos/cotizado" : "/api/proyectos");
     var method = id ? "PUT" : "POST";
     fetch(url, { method: method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
