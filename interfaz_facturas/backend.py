@@ -3327,6 +3327,15 @@ def _init_movimientos_db():
     conn.execute("CREATE INDEX IF NOT EXISTS ix_movimientos_factura_proveedor ON movimientos(factura_proveedor_id)")
     # Backfill: assign empresa_id to movimientos that don't have one
     conn.execute("UPDATE movimientos SET empresa_id = 'hincado_directo' WHERE empresa_id IS NULL OR empresa_id = ''")
+    # Cleanup: fix dual-vinculación (RRHH + factura/seguro/albaran)
+    if "rrhh_tipo" in columnas_existentes or "rrhh_tipo" in [c for c, _ in [("rrhh_tipo", "TEXT"), ("rrhh_empleado_id", "INTEGER"), ("rrhh_periodo", "TEXT")]]:
+      conn.execute(
+        "UPDATE movimientos SET factura_proveedor_id=NULL, factura_cliente_id=NULL, factura_cliente_key=NULL, "
+        "seguro_poliza_id=NULL, albaran_ids=NULL "
+        "WHERE rrhh_tipo IS NOT NULL AND rrhh_tipo != '' "
+        "AND (factura_proveedor_id IS NOT NULL OR factura_cliente_id IS NOT NULL "
+        "OR factura_cliente_key IS NOT NULL OR seguro_poliza_id IS NOT NULL OR albaran_ids IS NOT NULL)"
+      )
     conn.commit()
   finally:
     conn.close()

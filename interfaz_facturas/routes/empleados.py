@@ -669,12 +669,22 @@ def api_rrhh_banco_clasificar():
   from datetime import datetime
   bconn = _get_bancos_conn()
   try:
-    bconn.execute(
+    logger.info("Clasificando mov %s como %s (emp=%s, per=%s). Limpiando vinculaciones previas...", mov_id, rrhh_tipo, empleado_id, periodo)
+    cur = bconn.execute(
       "UPDATE movimientos SET rrhh_tipo=?, rrhh_empleado_id=?, rrhh_periodo=?, conciliado_at=?, "
       "factura_proveedor_id=NULL, factura_cliente_id=NULL, factura_cliente_key=NULL, "
-      "seguro_poliza_id=NULL, albaran_ids=NULL, tarjeta_id=NULL, liquidacion_periodo=NULL "
+      "seguro_poliza_id=NULL, albaran_ids=NULL "
       "WHERE id=?",
       (rrhh_tipo, empleado_id, periodo, datetime.now().isoformat(), mov_id),
+    )
+    logger.info("Mov %s clasificado. Rows affected: %s", mov_id, cur.rowcount)
+    # Cleanup: fix any existing dual-vinculación in the DB
+    bconn.execute(
+      "UPDATE movimientos SET factura_proveedor_id=NULL, factura_cliente_id=NULL, factura_cliente_key=NULL, "
+      "seguro_poliza_id=NULL, albaran_ids=NULL "
+      "WHERE rrhh_tipo IS NOT NULL AND rrhh_tipo != '' "
+      "AND (factura_proveedor_id IS NOT NULL OR factura_cliente_id IS NOT NULL "
+      "OR factura_cliente_key IS NOT NULL OR seguro_poliza_id IS NOT NULL OR albaran_ids IS NOT NULL)"
     )
     bconn.commit()
     return jsonify({"ok": True})
