@@ -1993,8 +1993,8 @@ function renderPaginacionBancos(container, actual, total) {
       // % = cuánto del extracto está cubierto por facturas
       var pctVinculado = totalMov > 0 ? Math.min(100, Math.round((totalFact / totalMov) * 100)) : (totalFact > 0 ? 0 : (estado === "conciliado" ? 100 : 0));
       html += "<td><span class=\"badge-estado " + badgeClass + "\">" + estadoLabel + "</span>";
-      var fillClass = pctVinculado >= 100 ? "fill-100" : pctVinculado === 0 ? "fill-0" : "";
-      html += " <span class=\"barra-progreso-extracto\"><span class=\"barra-bg\"><span class=\"barra-fill " + fillClass + "\" style=\"width:" + pctVinculado + "%\"></span></span><span class=\"barra-pct\">" + pctVinculado + "%</span></span>";
+      var barColor = pctVinculado <= 33 ? "#E74C3C" : pctVinculado <= 66 ? "#E8B931" : "#1D9E75";
+      html += " <span class=\"barra-progreso-extracto\"><span class=\"barra-bg\"><span class=\"barra-fill\" style=\"width:" + pctVinculado + "%;background:" + barColor + "\"></span></span><span class=\"barra-pct\">" + pctVinculado + "%</span></span>";
       html += "</td>";
       html += "<td class=\"bancos-conciliacion-btns\">" + btnExcel + " " + btnFacturas + "</td>";
       html += "</tr>";

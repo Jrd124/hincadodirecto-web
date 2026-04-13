@@ -1591,9 +1591,9 @@
         text-transform: capitalize;
         white-space: nowrap;
       }
-      .badge-estado.pendiente { background: #FEF3C7; color: #92400E; }
-      .badge-estado.cargo-recibido { background: #DBEAFE; color: #1E40AF; }
-      .badge-estado.conciliado { background: #D1FAE5; color: #065F46; }
+      .badge-estado.pendiente { background: #FDEDEC; color: #922B21; }
+      .badge-estado.cargo-recibido { background: #FEF9E7; color: #7D6608; }
+      .badge-estado.conciliado { background: #E8F8F5; color: #0E6655; }
 
       /* ===== BARRA DE PROGRESO ===== */
       .barra-progreso-extracto {
@@ -1613,15 +1613,9 @@
       .barra-progreso-extracto .barra-fill {
         display: block;
         height: 100%;
-        background: #F59E0B;
+        background: #E8B931;
         border-radius: 3px;
         transition: width 0.3s ease;
-      }
-      .barra-progreso-extracto .barra-fill.fill-100 {
-        background: var(--color-primary);
-      }
-      .barra-progreso-extracto .barra-fill.fill-0 {
-        background: #E2E8F0;
       }
       .barra-progreso-extracto .barra-pct {
         color: var(--color-text-secondary);
