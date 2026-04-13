@@ -643,11 +643,11 @@ function renderPaginacionBancos(container, actual, total) {
             if (impNum < 0) {
               vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-conciliar-albaran\"" + movDataAttrs + " title=\"Conciliar con albar\u00e1n\" style=\"font-size:11px;opacity:0.7;\">Albar\u00e1n</button>");
               vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-conciliar-seguro\"" + movDataAttrs + " title=\"Conciliar con p\u00f3liza de seguro\" style=\"font-size:11px;opacity:0.7;\">Seguro</button>");
-              vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-conciliar-rrhh\"" + movDataAttrs + " style=\"font-size:11px;opacity:0.7;background:#F3E8FF;color:#6B21A8;\">RRHH</button>");
+              vincParts.push("<button type=\"button\" class=\"btn-small\" onclick=\"_abrirModalRrhhBanco(this)\"" + movDataAttrs + " style=\"font-size:11px;opacity:0.7;background:#F3E8FF;color:#6B21A8;\">RRHH</button>");
             }
           } else if (impNum < 0) {
             // Excluded movements (RRHH keywords etc) — still offer RRHH classification
-            vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-conciliar-rrhh\"" + movDataAttrs + " style=\"background:#F3E8FF;color:#6B21A8;\">RRHH</button>");
+            vincParts.push("<button type=\"button\" class=\"btn-small\" onclick=\"_abrirModalRrhhBanco(this)\"" + movDataAttrs + " style=\"background:#F3E8FF;color:#6B21A8;\">RRHH</button>");
           }
         }
       }
@@ -5921,6 +5921,13 @@ window.renderTablaClientesFacturas = renderTablaClientesFacturas;
   window._comprobarBannerDuplicados = _comprobarBannerDuplicados;
 
   // ── Modal RRHH clasificación banco ──
+  window._abrirModalRrhhBanco = function(btn) {
+    var movId = btn.getAttribute("data-mov-id");
+    var concepto = btn.getAttribute("data-concepto") || "";
+    var fecha = btn.getAttribute("data-fecha") || "";
+    var importe = btn.getAttribute("data-importe") || "";
+    if (movId) _abrirModalConciliarRrhh(movId, concepto, fecha, importe);
+  };
   function _abrirModalConciliarRrhh(movId, concepto, fecha, importe) {
     var existing = document.getElementById("modal-rrhh-banco");
     if (existing) existing.remove();
