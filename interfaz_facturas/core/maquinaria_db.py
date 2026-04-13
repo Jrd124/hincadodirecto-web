@@ -665,7 +665,8 @@ def listar_maquinas(solo_activas: bool = True) -> list:
         try:
             for r in conn.execute(
                 "SELECT pa.recurso_id, pa.proyecto_id, pa.estado as asig_estado, pa.notas, "
-                "p.nombre as proy_nombre, p.codigo as proy_codigo "
+                "COALESCE(p.nombre, 'Proyecto #' || pa.proyecto_id) as proy_nombre, "
+                "COALESCE(p.codigo, '') as proy_codigo "
                 "FROM proyecto_asignaciones pa "
                 "LEFT JOIN proyectos p ON p.id = pa.proyecto_id "
                 "WHERE pa.recurso_tipo = 'maquina' AND pa.fecha = ?", (hoy,)
@@ -800,7 +801,9 @@ def obtener_maquina(maq_id: int) -> dict | None:
         asig = None
         try:
             for r in conn.execute(
-                "SELECT pa.proyecto_id, pa.estado as asig_estado, pa.notas, p.nombre as proy_nombre, p.codigo as proy_codigo "
+                "SELECT pa.proyecto_id, pa.estado as asig_estado, pa.notas, "
+                "COALESCE(p.nombre, 'Proyecto #' || pa.proyecto_id) as proy_nombre, "
+                "COALESCE(p.codigo, '') as proy_codigo "
                 "FROM proyecto_asignaciones pa "
                 "LEFT JOIN proyectos p ON p.id = pa.proyecto_id "
                 "WHERE pa.recurso_tipo = 'maquina' AND pa.recurso_id = ? AND pa.fecha = ?",
