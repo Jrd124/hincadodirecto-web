@@ -212,7 +212,6 @@ function _rrhhCargarDashboard() {
             }
             ah += '<div style="padding:8px 12px;background:' + bg + ';color:' + col + ';border-radius:6px;font-size:0.85rem;margin-bottom:6px;">' + a.texto + nombresHtml + '</div>';
           });
-          ah += '<div style="margin-top:8px;"><button onclick="_rrhhConciliarBanco()" style="padding:6px 14px;font-size:0.82rem;font-weight:600;background:#EFF6FF;color:#1E40AF;border:1px solid #93C5FD;border-radius:6px;cursor:pointer;">\uD83D\uDD04 Conciliar con banco</button></div>';
           alertDiv.innerHTML = ah;
         }
       }
@@ -1714,36 +1713,6 @@ function _rrhhCargarCosteProyecto() {
 // ==  Expose globally (for HTML onclick handlers)                              ==
 // ===============================================================================
 
-// ── Conciliación bancaria ──
-function _rrhhConciliarBanco() {
-  // Get last periodo from estadisticas
-  fetch("/api/rrhh/estadisticas")
-    .then(function (r) { return r.json(); })
-    .then(function (d) {
-      var periodo = d.ultimo_periodo;
-      if (!periodo) { alert("Sin periodo disponible"); return; }
-      if (!confirm("Conciliar pagos RRHH de " + periodo + " con movimientos bancarios?")) return;
-      fetch("/api/rrhh/conciliacion/ejecutar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ periodo: periodo })
-      })
-      .then(function (r) { return r.json(); })
-      .then(function (res) {
-        if (res.error) { alert("Error: " + res.error); return; }
-        var det = res.detalle || {};
-        var msg = "Conciliaci\u00f3n " + periodo + ":\n";
-        if (det.seguridad_social) msg += "SS: " + (det.seguridad_social.conciliados || 0) + " concil., " + (det.seguridad_social.pendientes || 0) + " pend.\n";
-        if (det.irpf) msg += "IRPF: " + (det.irpf.conciliados || 0) + " concil., " + (det.irpf.pendientes || 0) + " pend.\n";
-        if (det.nomina) msg += "N\u00f3minas: " + (det.nomina.conciliados || 0) + " concil., " + (det.nomina.pendientes || 0) + " pend.\n";
-        if (det.adelanto) msg += "Adelantos: " + (det.adelanto.conciliados || 0) + " concil., " + (det.adelanto.pendientes || 0) + " pend.\n";
-        alert(msg);
-      })
-      .catch(function (e) { alert("Error: " + e.message); });
-    });
-}
-
-window._rrhhConciliarBanco = _rrhhConciliarBanco;
 window._rrhhOnPanelShow = _rrhhOnPanelShow;
 window._rrhhCargarEmpleados = _rrhhCargarEmpleados;
 window._rrhhRenderVistas = _rrhhRenderVistas;
