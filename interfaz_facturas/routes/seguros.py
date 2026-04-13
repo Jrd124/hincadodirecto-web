@@ -173,7 +173,7 @@ def api_conciliar_seguro():
             if "seguro_poliza_id" not in cols:
                 conn.execute("ALTER TABLE movimientos ADD COLUMN seguro_poliza_id INTEGER")
             conn.execute(
-                "UPDATE movimientos SET seguro_poliza_id = ?, conciliado_at = ? WHERE id = ?",
+                "UPDATE movimientos SET seguro_poliza_id = ?, conciliado_at = ?, rrhh_tipo=NULL, rrhh_empleado_id=NULL, rrhh_periodo=NULL WHERE id = ?",
                 (int(poliza_id), now, int(movimiento_id)),
             )
             conn.commit()

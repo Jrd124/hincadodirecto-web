@@ -670,7 +670,10 @@ def api_rrhh_banco_clasificar():
   bconn = _get_bancos_conn()
   try:
     bconn.execute(
-      "UPDATE movimientos SET rrhh_tipo=?, rrhh_empleado_id=?, rrhh_periodo=?, conciliado_at=? WHERE id=?",
+      "UPDATE movimientos SET rrhh_tipo=?, rrhh_empleado_id=?, rrhh_periodo=?, conciliado_at=?, "
+      "factura_proveedor_id=NULL, factura_cliente_id=NULL, factura_cliente_key=NULL, "
+      "seguro_poliza_id=NULL, albaran_ids=NULL, tarjeta_id=NULL, liquidacion_periodo=NULL "
+      "WHERE id=?",
       (rrhh_tipo, empleado_id, periodo, datetime.now().isoformat(), mov_id),
     )
     bconn.commit()

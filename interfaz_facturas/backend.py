@@ -4288,12 +4288,12 @@ def conciliacion_confirmar():
   try:
     if mov_empresa:
       conn_bancos.execute(
-        "UPDATE movimientos SET factura_proveedor_id = ?, conciliado_at = ? WHERE id = ?",
+        "UPDATE movimientos SET factura_proveedor_id = ?, conciliado_at = ?, rrhh_tipo=NULL, rrhh_empleado_id=NULL, rrhh_periodo=NULL WHERE id = ?",
         (factura_id, now, mov_id),
       )
     else:
       conn_bancos.execute(
-        "UPDATE movimientos SET factura_proveedor_id = ?, conciliado_at = ?, empresa_id = ? WHERE id = ?",
+        "UPDATE movimientos SET factura_proveedor_id = ?, conciliado_at = ?, empresa_id = ?, rrhh_tipo=NULL, rrhh_empleado_id=NULL, rrhh_periodo=NULL WHERE id = ?",
         (factura_id, now, empresa_id, mov_id),
       )
     conn_bancos.commit()
@@ -4453,7 +4453,7 @@ def conciliacion_confirmar_cliente():
   conn_bancos = _get_bancos_db()
   try:
     conn_bancos.execute(
-      "UPDATE movimientos SET factura_cliente_key = ?, factura_cliente_id = ?, conciliado_at = ?, empresa_id = ? WHERE id = ?",
+      "UPDATE movimientos SET factura_cliente_key = ?, factura_cliente_id = ?, conciliado_at = ?, empresa_id = ?, rrhh_tipo=NULL, rrhh_empleado_id=NULL, rrhh_periodo=NULL WHERE id = ?",
       (key, factura_cli_id, datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"), empresa_id_mov, mov_id),
     )
     conn_bancos.commit()
