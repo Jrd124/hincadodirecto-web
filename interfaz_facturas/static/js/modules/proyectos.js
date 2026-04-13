@@ -1272,6 +1272,20 @@
     document.getElementById("proy-fecha-inicio").value = p ? (p.fecha_inicio_estimada || "").substring(0, 10) : "";
     document.getElementById("proy-fecha-fin").value = p ? (p.fecha_fin_estimada || "").substring(0, 10) : "";
     document.getElementById("proy-notas").value = p ? p.notas || "" : "";
+    // Pricing hinca/perforación
+    document.getElementById("proy-tipo-actividad").value = p ? p.tipo_actividad || "hinca" : "hinca";
+    document.getElementById("proy-hinca-cantidad").value = p ? p.hinca_cantidad || "" : "";
+    document.getElementById("proy-hinca-prod-op").value = p ? p.hinca_precio_prod_operador || "" : "";
+    document.getElementById("proy-hinca-prod-ay").value = p ? p.hinca_precio_prod_ayudante || "" : "";
+    document.getElementById("proy-hinca-admin-op").value = p ? p.hinca_precio_admin_operador || "1300" : "1300";
+    document.getElementById("proy-hinca-admin-ay").value = p ? p.hinca_precio_admin_ayudante || "1600" : "1600";
+    document.getElementById("proy-perf-cantidad").value = p ? p.perforacion_cantidad || "" : "";
+    document.getElementById("proy-perf-prod-op").value = p ? p.perforacion_precio_prod_operador || "" : "";
+    document.getElementById("proy-perf-prod-ay").value = p ? p.perforacion_precio_prod_ayudante || "" : "";
+    document.getElementById("proy-perf-admin-op").value = p ? p.perforacion_precio_admin_operador || "" : "";
+    document.getElementById("proy-perf-admin-ay").value = p ? p.perforacion_precio_admin_ayudante || "" : "";
+    _proyToggleActividad();
+    _proyCalcResumen();
     // Load clientes
     fetch("/api/crm/empresas?activo=1&limit=200&tipo=cliente")
       .then(function (r) { return r.json(); })
@@ -1321,6 +1335,17 @@
       precio_hora_maquina: document.getElementById("proy-precio-hora-maq").value ? parseFloat(document.getElementById("proy-precio-hora-maq").value) : null,
       precio_hora_ayudante: document.getElementById("proy-precio-hora-ay").value ? parseFloat(document.getElementById("proy-precio-hora-ay").value) : null,
       importe_presupuestado: document.getElementById("proy-importe").value ? parseFloat(document.getElementById("proy-importe").value) : null,
+      tipo_actividad: document.getElementById("proy-tipo-actividad").value || "hinca",
+      hinca_cantidad: parseInt(document.getElementById("proy-hinca-cantidad").value) || 0,
+      hinca_precio_prod_operador: parseFloat(document.getElementById("proy-hinca-prod-op").value) || 0,
+      hinca_precio_prod_ayudante: parseFloat(document.getElementById("proy-hinca-prod-ay").value) || 0,
+      hinca_precio_admin_operador: parseFloat(document.getElementById("proy-hinca-admin-op").value) || 1300,
+      hinca_precio_admin_ayudante: parseFloat(document.getElementById("proy-hinca-admin-ay").value) || 1600,
+      perforacion_cantidad: parseInt(document.getElementById("proy-perf-cantidad").value) || 0,
+      perforacion_precio_prod_operador: parseFloat(document.getElementById("proy-perf-prod-op").value) || 0,
+      perforacion_precio_prod_ayudante: parseFloat(document.getElementById("proy-perf-prod-ay").value) || 0,
+      perforacion_precio_admin_operador: parseFloat(document.getElementById("proy-perf-admin-op").value) || 0,
+      perforacion_precio_admin_ayudante: parseFloat(document.getElementById("proy-perf-admin-ay").value) || 0,
       estado: document.getElementById("proy-estado").value,
       fecha_inicio_estimada: document.getElementById("proy-fecha-inicio").value || null,
       fecha_fin_estimada: document.getElementById("proy-fecha-fin").value || null,
@@ -1966,3 +1991,43 @@
       .catch(function () { mostrarToast("Error de conexion", "error"); });
   };
 })();
+
+// ── Pricing hinca/perforación: toggle y cálculo ──
+window._proyToggleActividad = function () {
+  var tipo = document.getElementById("proy-tipo-actividad").value;
+  var hinca = document.getElementById("proy-seccion-hinca");
+  var perf = document.getElementById("proy-seccion-perforacion");
+  if (hinca) hinca.style.display = (tipo === "hinca" || tipo === "mixto") ? "" : "none";
+  if (perf) perf.style.display = (tipo === "perforacion" || tipo === "mixto") ? "" : "none";
+  _proyCalcResumen();
+};
+
+window._proyCalcResumen = function () {
+  var tipo = (document.getElementById("proy-tipo-actividad") || {}).value || "hinca";
+  var fmtN = function (n) { return n ? n.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " \u20ac" : "\u2014"; };
+  var html = "";
+  if (tipo === "hinca" || tipo === "mixto") {
+    var hCant = parseInt(document.getElementById("proy-hinca-cantidad").value) || 0;
+    var hOp = parseFloat(document.getElementById("proy-hinca-prod-op").value) || 0;
+    var hAy = parseFloat(document.getElementById("proy-hinca-prod-ay").value) || 0;
+    if (hCant > 0 && (hOp > 0 || hAy > 0)) {
+      html += '<div style="margin-bottom:6px;"><b style="color:#3B82F6;">Hinca prod.:</b> ';
+      if (hOp > 0) html += hCant + ' x ' + fmtN(hOp) + ' = <b>' + fmtN(hCant * hOp) + '</b> (m\u00e1q+oper) ';
+      if (hAy > 0) html += '| ' + hCant + ' x ' + fmtN(hAy) + ' = <b>' + fmtN(hCant * hAy) + '</b> (con ayud.)';
+      html += '</div>';
+    }
+  }
+  if (tipo === "perforacion" || tipo === "mixto") {
+    var pCant = parseInt(document.getElementById("proy-perf-cantidad").value) || 0;
+    var pOp = parseFloat(document.getElementById("proy-perf-prod-op").value) || 0;
+    var pAy = parseFloat(document.getElementById("proy-perf-prod-ay").value) || 0;
+    if (pCant > 0 && (pOp > 0 || pAy > 0)) {
+      html += '<div style="margin-bottom:6px;"><b style="color:#16A34A;">Perf. prod.:</b> ';
+      if (pOp > 0) html += pCant + ' x ' + fmtN(pOp) + ' = <b>' + fmtN(pCant * pOp) + '</b> (m\u00e1q+oper) ';
+      if (pAy > 0) html += '| ' + pCant + ' x ' + fmtN(pAy) + ' = <b>' + fmtN(pCant * pAy) + '</b> (con ayud.)';
+      html += '</div>';
+    }
+  }
+  var resEl = document.getElementById("proy-resumen-pricing");
+  if (resEl) resEl.innerHTML = html || '<span style="color:#888;">Introduce cantidades y precios para ver el resumen</span>';
+};

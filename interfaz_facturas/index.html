@@ -887,30 +887,87 @@
               </div>
             </div>
 
-            <!-- Seccion 3: Economico -->
+            <!-- Seccion 3: Tipo actividad -->
             <div style="border-left:3px solid #CA8A04;padding:12px 16px;margin-bottom:16px;background:var(--color-bg-page);border-radius:0 8px 8px 0;">
-              <div style="font-size:14px;font-weight:600;color:#CA8A04;margin-bottom:12px;">Economico</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                <div>
-                  <label for="proy-hincas-est" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Hincas estimadas</label>
-                  <input type="number" id="proy-hincas-est" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
+              <div style="font-size:14px;font-weight:600;color:#CA8A04;margin-bottom:12px;">Actividad y Pricing</div>
+              <div style="margin-bottom:12px;">
+                <label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Tipo de actividad</label>
+                <select id="proy-tipo-actividad" onchange="_proyToggleActividad()" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);">
+                  <option value="hinca">Solo hinca</option>
+                  <option value="perforacion">Solo perforaci&oacute;n</option>
+                  <option value="mixto">Mixto (hinca + perforaci&oacute;n)</option>
+                </select>
+              </div>
+              <!-- HINCA -->
+              <div id="proy-seccion-hinca" style="border-left:3px solid #3B82F6;padding:10px 14px;margin-bottom:12px;background:rgba(59,130,246,0.03);border-radius:0 6px 6px 0;">
+                <div style="font-size:13px;font-weight:600;color:#3B82F6;margin-bottom:10px;">&#x2692; HINCA</div>
+                <div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);margin-bottom:6px;text-transform:uppercase;">Producci&oacute;n</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+                  <div>
+                    <label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">Cantidad hincas</label>
+                    <input type="number" id="proy-hinca-cantidad" min="0" oninput="_proyCalcResumen()" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;" />
+                  </div>
+                  <div>
+                    <label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">&euro;/hinca (m&aacute;q+oper)</label>
+                    <input type="number" id="proy-hinca-prod-op" step="0.01" min="0" oninput="_proyCalcResumen()" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;" />
+                  </div>
+                  <div>
+                    <label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">&euro;/hinca (m&aacute;q+oper+ay)</label>
+                    <input type="number" id="proy-hinca-prod-ay" step="0.01" min="0" oninput="_proyCalcResumen()" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;" />
+                  </div>
                 </div>
-                <div>
-                  <label for="proy-precio-hinca" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Precio/hinca</label>
-                  <input type="number" id="proy-precio-hinca" step="0.01" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
+                <div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);margin-bottom:6px;text-transform:uppercase;">Administraci&oacute;n</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                  <div>
+                    <label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">&euro;/d&iacute;a hinca (m&aacute;q+oper)</label>
+                    <input type="number" id="proy-hinca-admin-op" step="0.01" min="0" value="1300" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;" />
+                  </div>
+                  <div>
+                    <label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">&euro;/d&iacute;a hinca (m&aacute;q+oper+ay)</label>
+                    <input type="number" id="proy-hinca-admin-ay" step="0.01" min="0" value="1600" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;" />
+                  </div>
                 </div>
-                <div>
-                  <label for="proy-precio-hora-maq" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Precio/hora administracion</label>
-                  <input type="number" id="proy-precio-hora-maq" step="0.01" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
+              </div>
+              <!-- PERFORACIÓN -->
+              <div id="proy-seccion-perforacion" style="border-left:3px solid #16A34A;padding:10px 14px;margin-bottom:12px;background:rgba(22,163,74,0.03);border-radius:0 6px 6px 0;display:none;">
+                <div style="font-size:13px;font-weight:600;color:#16A34A;margin-bottom:10px;">&#x1F529; PERFORACI&Oacute;N</div>
+                <div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);margin-bottom:6px;text-transform:uppercase;">Producci&oacute;n</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+                  <div>
+                    <label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">Cantidad perforaciones</label>
+                    <input type="number" id="proy-perf-cantidad" min="0" oninput="_proyCalcResumen()" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;" />
+                  </div>
+                  <div>
+                    <label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">&euro;/perf (m&aacute;q+oper)</label>
+                    <input type="number" id="proy-perf-prod-op" step="0.01" min="0" oninput="_proyCalcResumen()" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;" />
+                  </div>
+                  <div>
+                    <label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">&euro;/perf (m&aacute;q+oper+ay)</label>
+                    <input type="number" id="proy-perf-prod-ay" step="0.01" min="0" oninput="_proyCalcResumen()" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;" />
+                  </div>
                 </div>
-                <div>
-                  <label for="proy-precio-hora-ay" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Precio/hora ayudante</label>
-                  <input type="number" id="proy-precio-hora-ay" step="0.01" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
+                <div style="font-size:11px;font-weight:600;color:var(--color-text-secondary);margin-bottom:6px;text-transform:uppercase;">Administraci&oacute;n</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                  <div>
+                    <label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">&euro;/d&iacute;a perf (m&aacute;q+oper)</label>
+                    <input type="number" id="proy-perf-admin-op" step="0.01" min="0" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;" />
+                  </div>
+                  <div>
+                    <label style="display:block;font-size:11px;color:var(--color-text-secondary);margin-bottom:3px;">&euro;/d&iacute;a perf (m&aacute;q+oper+ay)</label>
+                    <input type="number" id="proy-perf-admin-ay" step="0.01" min="0" style="width:100%;box-sizing:border-box;padding:7px;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:13px;" />
+                  </div>
                 </div>
-                <div>
-                  <label for="proy-importe" style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Importe presupuestado</label>
-                  <input type="number" id="proy-importe" step="0.01" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
-                </div>
+              </div>
+              <!-- RESUMEN -->
+              <div id="proy-resumen-pricing" style="padding:10px 14px;background:#FEFCE8;border-radius:6px;font-size:12px;"></div>
+              <!-- Importe presupuestado total (hidden, keep for backwards compat) -->
+              <input type="hidden" id="proy-hincas-est" />
+              <input type="hidden" id="proy-precio-hinca" />
+              <input type="hidden" id="proy-precio-hora-maq" />
+              <input type="hidden" id="proy-precio-hora-ay" />
+              <div style="margin-top:12px;">
+                <label style="display:block;font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">Importe presupuestado total</label>
+                <input type="number" id="proy-importe" step="0.01" min="0" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);" />
               </div>
             </div>
 

@@ -219,6 +219,26 @@ def init_proyectos_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS ix_asig_fecha ON proyecto_asignaciones(fecha)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_asig_recurso ON proyecto_asignaciones(recurso_tipo, recurso_id)")
         _backfill_codigos(conn)
+
+        # Migración: campos pricing hinca/perforación
+        existing = {r[1] for r in conn.execute("PRAGMA table_info(proyectos)").fetchall()}
+        _new_cols = [
+            ("tipo_actividad", "TEXT DEFAULT 'hinca'"),
+            ("hinca_cantidad", "INTEGER DEFAULT 0"),
+            ("hinca_precio_prod_operador", "REAL DEFAULT 0"),
+            ("hinca_precio_prod_ayudante", "REAL DEFAULT 0"),
+            ("hinca_precio_admin_operador", "REAL DEFAULT 1300"),
+            ("hinca_precio_admin_ayudante", "REAL DEFAULT 1600"),
+            ("perforacion_cantidad", "INTEGER DEFAULT 0"),
+            ("perforacion_precio_prod_operador", "REAL DEFAULT 0"),
+            ("perforacion_precio_prod_ayudante", "REAL DEFAULT 0"),
+            ("perforacion_precio_admin_operador", "REAL DEFAULT 0"),
+            ("perforacion_precio_admin_ayudante", "REAL DEFAULT 0"),
+        ]
+        for col_name, col_type in _new_cols:
+            if col_name not in existing:
+                conn.execute(f"ALTER TABLE proyectos ADD COLUMN {col_name} {col_type}")
+
     _initialized = True
 
 
@@ -540,8 +560,12 @@ def crear_proyecto(data: dict) -> dict:
                 ubicacion_lat, ubicacion_lon, provincia, mw_parque, hincas_estimadas,
                 precio_unitario_hinca, precio_hora_maquina, precio_hora_ayudante, precio_jornada,
                 importe_presupuestado, fecha_inicio_estimada, fecha_fin_estimada, notas,
+                tipo_actividad, hinca_cantidad, hinca_precio_prod_operador, hinca_precio_prod_ayudante,
+                hinca_precio_admin_operador, hinca_precio_admin_ayudante,
+                perforacion_cantidad, perforacion_precio_prod_operador, perforacion_precio_prod_ayudante,
+                perforacion_precio_admin_operador, perforacion_precio_admin_ayudante,
                 created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             (data.get("nombre") or "").strip(),
             codigo,
@@ -567,6 +591,17 @@ def crear_proyecto(data: dict) -> dict:
             (data.get("fecha_inicio_estimada") or "").strip() or None,
             (data.get("fecha_fin_estimada") or "").strip() or None,
             (data.get("notas") or "").strip() or None,
+            data.get("tipo_actividad") or "hinca",
+            data.get("hinca_cantidad") or 0,
+            data.get("hinca_precio_prod_operador") or 0,
+            data.get("hinca_precio_prod_ayudante") or 0,
+            data.get("hinca_precio_admin_operador") or 1300,
+            data.get("hinca_precio_admin_ayudante") or 1600,
+            data.get("perforacion_cantidad") or 0,
+            data.get("perforacion_precio_prod_operador") or 0,
+            data.get("perforacion_precio_prod_ayudante") or 0,
+            data.get("perforacion_precio_admin_operador") or 0,
+            data.get("perforacion_precio_admin_ayudante") or 0,
             ahora, ahora,
         ))
         new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -604,7 +639,12 @@ def actualizar_proyecto(proyecto_id: int, data: dict) -> dict | None:
                 ubicacion_lat=?, ubicacion_lon=?, provincia=?, mw_parque=?, hincas_estimadas=?,
                 precio_unitario_hinca=?, precio_hora_maquina=?, precio_hora_ayudante=?, precio_jornada=?,
                 importe_presupuestado=?, fecha_inicio_estimada=?, fecha_fin_estimada=?,
-                fecha_inicio_real=?, fecha_fin_real=?, notas=?, updated_at=?
+                fecha_inicio_real=?, fecha_fin_real=?, notas=?,
+                tipo_actividad=?, hinca_cantidad=?, hinca_precio_prod_operador=?, hinca_precio_prod_ayudante=?,
+                hinca_precio_admin_operador=?, hinca_precio_admin_ayudante=?,
+                perforacion_cantidad=?, perforacion_precio_prod_operador=?, perforacion_precio_prod_ayudante=?,
+                perforacion_precio_admin_operador=?, perforacion_precio_admin_ayudante=?,
+                updated_at=?
             WHERE id=?
         """, (
             (data.get("nombre") or "").strip(),
@@ -632,6 +672,17 @@ def actualizar_proyecto(proyecto_id: int, data: dict) -> dict | None:
             (data.get("fecha_inicio_real") or "").strip() or None,
             (data.get("fecha_fin_real") or "").strip() or None,
             (data.get("notas") or "").strip() or None,
+            data.get("tipo_actividad") or "hinca",
+            data.get("hinca_cantidad") or 0,
+            data.get("hinca_precio_prod_operador") or 0,
+            data.get("hinca_precio_prod_ayudante") or 0,
+            data.get("hinca_precio_admin_operador") or 1300,
+            data.get("hinca_precio_admin_ayudante") or 1600,
+            data.get("perforacion_cantidad") or 0,
+            data.get("perforacion_precio_prod_operador") or 0,
+            data.get("perforacion_precio_prod_ayudante") or 0,
+            data.get("perforacion_precio_admin_operador") or 0,
+            data.get("perforacion_precio_admin_ayudante") or 0,
             ahora, proyecto_id,
         ))
         if nuevo_estado != estado_anterior:
