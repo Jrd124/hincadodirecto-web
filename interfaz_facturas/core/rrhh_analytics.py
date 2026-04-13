@@ -124,6 +124,30 @@ def verificador(periodo):
     """Tabla comparativa para verificar nóminas vs transferencias."""
     conn = get_conn()
     try:
+        # Pre-load adelantos from banco for this month
+        y, m = int(periodo[:4]), int(periodo[5:7])
+        m2 = m + 1; y2 = y
+        if m2 > 12: m2 = 1; y2 += 1
+        fecha_ini = f"{periodo}-01"
+        fecha_fin = f"{y2}-{m2:02d}-01"
+        adelantos_banco = {}
+        try:
+            import sqlite3 as _sql
+            try:
+                from config import MOVIMIENTOS_DB
+            except ImportError:
+                from interfaz_facturas.config import MOVIMIENTOS_DB
+            bconn = _sql.connect(str(MOVIMIENTOS_DB))
+            for r in bconn.execute(
+                "SELECT rrhh_empleado_id, COALESCE(SUM(ABS(importe)),0) as total "
+                "FROM movimientos WHERE rrhh_tipo='adelanto' "
+                "AND fecha_operacion >= ? AND fecha_operacion < ? "
+                "GROUP BY rrhh_empleado_id", (fecha_ini, fecha_fin)
+            ).fetchall():
+                adelantos_banco[r[0]] = r[1]
+            bconn.close()
+        except Exception:
+            pass  # columns may not exist yet
         rows = conn.execute("""
             SELECT n.empleado_id, e.nombre, e.apellidos, e.categoria, e.dni,
                    e.neto_pactado,
@@ -157,11 +181,8 @@ def verificador(periodo):
             estimado = round(neto_proporcional + dietas, 2)
             diferencia = round(estimado - liquido, 2) if estimado > 0 else 0
 
-            # Adelantos pendientes del empleado
-            adel = conn.execute(
-                "SELECT SUM(importe) FROM adelantos WHERE empleado_id=? AND estado='pendiente'",
-                (emp_id,)
-            ).fetchone()[0] or 0
+            # Adelantos del empleado desde banco (pre-loaded)
+            adel = adelantos_banco.get(emp_id, 0)
 
             a_transferir = round(liquido - adel - embargo, 2)
             nombre = (r["nombre"] or "") + " " + (r["apellidos"] or "")

@@ -1433,53 +1433,55 @@ function _rrhhBorrarDieta(id) {
 // ==  6. ADELANTOS                                                             ==
 // ===============================================================================
 
+var _rrhhAdelPeriodo = "";
 function _rrhhCargarAdelantos() {
-  var empSel = document.getElementById("rrhh-adel-empleado");
-  var estadoSel = document.getElementById("rrhh-adel-estado");
-  var empId = empSel ? empSel.value : "";
-  var estado = estadoSel ? estadoSel.value : "";
-  var params = [];
-  if (empId) params.push("empleado_id=" + empId);
-  if (estado) params.push("estado=" + estado);
-  var url = "/api/rrhh/adelantos" + (params.length ? "?" + params.join("&") : "");
+  // Use last periodo from estadisticas if not set
+  if (!_rrhhAdelPeriodo) {
+    fetch("/api/rrhh/estadisticas").then(function(r){return r.json();}).then(function(d){
+      _rrhhAdelPeriodo = d.ultimo_periodo || "";
+      if (_rrhhAdelPeriodo) _rrhhLoadAdelantosMes(_rrhhAdelPeriodo);
+    });
+    return;
+  }
+  _rrhhLoadAdelantosMes(_rrhhAdelPeriodo);
+}
 
-  fetch(url)
+function _rrhhLoadAdelantosMes(periodo) {
+  var kpis = document.getElementById("rrhh-adel-kpis");
+  var tbody = document.getElementById("rrhh-adel-tbody");
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;">Cargando...</td></tr>';
+
+  fetch("/api/rrhh/adelantos-banco/" + periodo)
     .then(function (r) { return r.json(); })
     .then(function (d) {
-      var k = d.kpis || {};
-      var kpis = document.getElementById("rrhh-adel-kpis");
+      var items = d.adelantos || [];
+      // KPIs
+      var totalMes = 0;
+      var empsSet = {};
+      items.forEach(function(a){ totalMes += a.importe || 0; empsSet[a.empleado_id] = true; });
+      var numEmps = Object.keys(empsSet).length;
       if (kpis) {
         kpis.innerHTML =
-          _rrhhKpiCard("Pendientes", k.pendientes || 0, "") +
-          _rrhhKpiCard("Importe pendiente", fmtEurFull(k.importe_pendiente), " tes-card-blue", "0.9rem");
+          _rrhhKpiCard("Total adelantos", fmtEurFull(totalMes), " tes-card-blue", "0.9rem") +
+          _rrhhKpiCard("Empleados", numEmps, "") +
+          _rrhhKpiCard("Media/empleado", numEmps > 0 ? fmtEurFull(totalMes / numEmps) : "\u2014", "", "0.9rem");
       }
 
-      var tbody = document.getElementById("rrhh-adel-tbody");
-      // Sort descending by fecha
-      var items = (d.adelantos || []).slice().sort(function (a, b) {
-        return (b.fecha || "") > (a.fecha || "") ? 1 : (b.fecha || "") < (a.fecha || "") ? -1 : 0;
-      });
-      if (!tbody) return;
       if (!items.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;">Sin adelantos</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-secondary);">No hay adelantos en ' + periodo + '.<br><span style="font-size:0.8rem;">Los adelantos se registran desde Finanzas &gt; Bancos al clasificar un movimiento como "Adelanto empleado".</span></td></tr>';
         return;
       }
       var html = "";
       items.forEach(function (a) {
-        var nombre = ((a.nombre || '') + ' ' + (a.apellidos || '')).trim();
-        var estadoHtml = a.estado === 'pendiente'
-          ? '<span style="color:#f59e0b;font-weight:500;">Pendiente</span>'
-          : '<span style="color:#22c55e;font-weight:500;">Descontado</span>';
         html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
           '<td style="padding:6px 8px;">' + (a.fecha || '') + '</td>' +
-          '<td style="padding:6px 6px;font-weight:500;">' + nombre + '</td>' +
-          '<td style="padding:6px 3px;"><a href="#" onclick="event.preventDefault();event.stopPropagation();_rrhhVerFichaEmpleado(' + a.empleado_id + ',\'adelantos\')" style="color:#3B82F6;font-size:0.75rem;">Ficha</a></td>' +
+          '<td style="padding:6px 6px;font-weight:500;">' + (a.nombre || '\u2014') + '</td>' +
+          '<td style="padding:6px 3px;"><a href="#" onclick="event.preventDefault();_rrhhVerFichaEmpleado(' + a.empleado_id + ',\'adelantos\')" style="color:#3B82F6;font-size:0.75rem;">Ficha</a></td>' +
           '<td style="padding:6px 6px;text-align:right;">' + fmtEur(a.importe) + '</td>' +
-          '<td style="padding:6px 6px;">' + (a.concepto || '\u2014') + '</td>' +
-          '<td style="padding:6px 6px;">' + estadoHtml + '</td>' +
-          '<td style="padding:6px 6px;text-align:center;">' +
-            '<button onclick="_rrhhBorrarAdelanto(' + a.id + ')" class="btn-small danger" style="font-size:0.75rem;padding:2px 8px;">X</button>' +
-          '</td></tr>';
+          '<td style="padding:6px 6px;font-size:0.78rem;">' + (a.concepto || '\u2014').substring(0, 50) + '</td>' +
+          '<td style="padding:6px 6px;"><span style="padding:2px 8px;border-radius:99px;font-size:0.7rem;font-weight:600;background:#DCFCE7;color:#166534;">Banco \u2705</span></td>' +
+          '</tr>';
       });
       tbody.innerHTML = html;
 

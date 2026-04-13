@@ -3317,6 +3317,10 @@ def _init_movimientos_db():
       ("seguro_poliza_id", "INTEGER"),
       # Albaranes: vínculo movimiento ↔ albaranes
       ("albaran_ids", "TEXT"),
+      # RRHH: vínculo movimiento ↔ pago RRHH (adelanto/nomina/SS/IRPF)
+      ("rrhh_tipo", "TEXT"),           # adelanto / nomina / seguridad_social / irpf
+      ("rrhh_empleado_id", "INTEGER"), # FK empleados (para adelanto y nomina)
+      ("rrhh_periodo", "TEXT"),        # "2026-02" o "1T-2026"
     ]:
       if col not in columnas_existentes:
         conn.execute(f"ALTER TABLE movimientos ADD COLUMN {col} {sql_type}")

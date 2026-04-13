@@ -637,3 +637,137 @@ def api_rrhh_dietas_empleado(eid, periodo):
   finally:
     conn.close()
 
+
+# ═══ Conciliación RRHH desde movimientos bancarios ═══════════════════════
+
+
+def _get_bancos_conn():
+  import sqlite3 as _sql
+  try:
+    from config import MOVIMIENTOS_DB
+  except ImportError:
+    from interfaz_facturas.config import MOVIMIENTOS_DB
+  conn = _sql.connect(str(MOVIMIENTOS_DB))
+  conn.row_factory = _sql.Row
+  return conn
+
+
+@empleados_bp.post("/api/rrhh/banco/clasificar")
+def api_rrhh_banco_clasificar():
+  """Clasifica un movimiento bancario como pago RRHH."""
+  data = request.get_json(silent=True) or {}
+  mov_id = data.get("movimiento_id")
+  rrhh_tipo = data.get("rrhh_tipo")  # adelanto / nomina / seguridad_social / irpf
+  empleado_id = data.get("empleado_id")
+  periodo = data.get("periodo", "")
+
+  if not mov_id or not rrhh_tipo:
+    return jsonify({"error": "movimiento_id y rrhh_tipo requeridos"}), 400
+  if rrhh_tipo in ("adelanto", "nomina") and not empleado_id:
+    return jsonify({"error": "empleado_id requerido para adelanto/nomina"}), 400
+
+  from datetime import datetime
+  bconn = _get_bancos_conn()
+  try:
+    bconn.execute(
+      "UPDATE movimientos SET rrhh_tipo=?, rrhh_empleado_id=?, rrhh_periodo=?, conciliado_at=? WHERE id=?",
+      (rrhh_tipo, empleado_id, periodo, datetime.now().isoformat(), mov_id),
+    )
+    bconn.commit()
+    return jsonify({"ok": True})
+  finally:
+    bconn.close()
+
+
+@empleados_bp.post("/api/rrhh/banco/desclasificar")
+def api_rrhh_banco_desclasificar():
+  """Quita la clasificación RRHH de un movimiento bancario."""
+  data = request.get_json(silent=True) or {}
+  mov_id = data.get("movimiento_id")
+  if not mov_id:
+    return jsonify({"error": "movimiento_id requerido"}), 400
+  bconn = _get_bancos_conn()
+  try:
+    bconn.execute(
+      "UPDATE movimientos SET rrhh_tipo=NULL, rrhh_empleado_id=NULL, rrhh_periodo=NULL, conciliado_at=NULL WHERE id=?",
+      (mov_id,),
+    )
+    bconn.commit()
+    return jsonify({"ok": True})
+  finally:
+    bconn.close()
+
+
+@empleados_bp.get("/api/rrhh/adelantos-banco/<periodo>")
+def api_rrhh_adelantos_banco(periodo):
+  """Lee adelantos desde movimientos bancarios clasificados."""
+  bconn = _get_bancos_conn()
+  gconn = get_conn()
+  try:
+    y, m = int(periodo[:4]), int(periodo[5:7])
+    from datetime import date
+    fecha_ini = date(y, m, 1).isoformat()
+    m2 = m + 1; y2 = y
+    if m2 > 12: m2 = 1; y2 += 1
+    fecha_fin = date(y2, m2, 1).isoformat()
+
+    rows = bconn.execute(
+      "SELECT id, fecha_operacion, concepto, importe, rrhh_empleado_id "
+      "FROM movimientos WHERE rrhh_tipo='adelanto' "
+      "AND fecha_operacion >= ? AND fecha_operacion < ? "
+      "ORDER BY fecha_operacion DESC",
+      (fecha_ini, fecha_fin),
+    ).fetchall()
+
+    # Enrich with employee names
+    result = []
+    for r in rows:
+      emp = gconn.execute("SELECT nombre, apellidos FROM empleados WHERE id=?", (r["rrhh_empleado_id"],)).fetchone()
+      result.append({
+        "movimiento_id": r["id"],
+        "fecha": r["fecha_operacion"],
+        "concepto": r["concepto"],
+        "importe": abs(r["importe"]),
+        "empleado_id": r["rrhh_empleado_id"],
+        "nombre": (emp["nombre"] + " " + (emp["apellidos"] or "")).strip() if emp else "?",
+      })
+
+    return jsonify({"adelantos": result, "periodo": periodo})
+  finally:
+    bconn.close()
+    gconn.close()
+
+
+@empleados_bp.get("/api/rrhh/banco/conciliacion-ss/<periodo>")
+def api_rrhh_banco_conc_ss(periodo):
+  """Estado de conciliación SS para un mes."""
+  bconn = _get_bancos_conn()
+  try:
+    row = bconn.execute(
+      "SELECT id, fecha_operacion, concepto, importe FROM movimientos "
+      "WHERE rrhh_tipo='seguridad_social' AND rrhh_periodo=? LIMIT 1",
+      (periodo,),
+    ).fetchone()
+    if row:
+      return jsonify({"estado": "conciliado", "movimiento": dict(row)})
+    return jsonify({"estado": "pendiente", "movimiento": None})
+  finally:
+    bconn.close()
+
+
+@empleados_bp.get("/api/rrhh/banco/conciliacion-irpf/<trimestre>")
+def api_rrhh_banco_conc_irpf(trimestre):
+  """Estado de conciliación IRPF para un trimestre."""
+  bconn = _get_bancos_conn()
+  try:
+    row = bconn.execute(
+      "SELECT id, fecha_operacion, concepto, importe FROM movimientos "
+      "WHERE rrhh_tipo='irpf' AND rrhh_periodo=? LIMIT 1",
+      (trimestre,),
+    ).fetchone()
+    if row:
+      return jsonify({"estado": "conciliado", "movimiento": dict(row)})
+    return jsonify({"estado": "pendiente", "movimiento": None})
+  finally:
+    bconn.close()
+
