@@ -1435,14 +1435,25 @@ function _rrhhBorrarDieta(id) {
 
 var _rrhhAdelPeriodo = "";
 function _rrhhCargarAdelantos() {
-  // Use last periodo from estadisticas if not set
   if (!_rrhhAdelPeriodo) {
-    fetch("/api/rrhh/estadisticas").then(function(r){return r.json();}).then(function(d){
-      _rrhhAdelPeriodo = d.ultimo_periodo || "";
-      if (_rrhhAdelPeriodo) _rrhhLoadAdelantosMes(_rrhhAdelPeriodo);
-    });
-    return;
+    var hoy = new Date();
+    _rrhhAdelPeriodo = hoy.getFullYear() + "-" + String(hoy.getMonth() + 1).padStart(2, "0");
   }
+  _rrhhLoadAdelantosMes(_rrhhAdelPeriodo);
+}
+
+function _rrhhAdelMesPrev() {
+  var p = _rrhhAdelPeriodo.split("-");
+  var y = parseInt(p[0]), m = parseInt(p[1]) - 1;
+  if (m < 1) { m = 12; y--; }
+  _rrhhAdelPeriodo = y + "-" + String(m).padStart(2, "0");
+  _rrhhLoadAdelantosMes(_rrhhAdelPeriodo);
+}
+function _rrhhAdelMesNext() {
+  var p = _rrhhAdelPeriodo.split("-");
+  var y = parseInt(p[0]), m = parseInt(p[1]) + 1;
+  if (m > 12) { m = 1; y++; }
+  _rrhhAdelPeriodo = y + "-" + String(m).padStart(2, "0");
   _rrhhLoadAdelantosMes(_rrhhAdelPeriodo);
 }
 
@@ -1450,13 +1461,17 @@ function _rrhhLoadAdelantosMes(periodo) {
   var kpis = document.getElementById("rrhh-adel-kpis");
   var tbody = document.getElementById("rrhh-adel-tbody");
   if (!tbody) return;
+
+  // Update month label
+  var labelEl = document.querySelector("#panel-rrhh-adelantos h4");
+  if (labelEl) labelEl.innerHTML = '<button onclick="_rrhhAdelMesPrev()" style="background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;padding:2px 6px;margin-right:6px;">&laquo;</button>' + _rrhhPeriodoToLabel(periodo) + '<button onclick="_rrhhAdelMesNext()" style="background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;padding:2px 6px;margin-left:6px;">&raquo;</button>';
+
   tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;">Cargando...</td></tr>';
 
   fetch("/api/rrhh/adelantos-banco/" + periodo)
     .then(function (r) { return r.json(); })
     .then(function (d) {
       var items = d.adelantos || [];
-      // KPIs
       var totalMes = 0;
       var empsSet = {};
       items.forEach(function(a){ totalMes += a.importe || 0; empsSet[a.empleado_id] = true; });
@@ -1469,7 +1484,7 @@ function _rrhhLoadAdelantosMes(periodo) {
       }
 
       if (!items.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-secondary);">No hay adelantos en ' + periodo + '.<br><span style="font-size:0.8rem;">Los adelantos se registran desde Finanzas &gt; Bancos al clasificar un movimiento como "Adelanto empleado".</span></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-secondary);">No hay adelantos en ' + _rrhhPeriodoToLabel(periodo) + '.<br><span style="font-size:0.8rem;">Se registran desde Finanzas &gt; Bancos clasificando movimientos como "Adelanto empleado".</span></td></tr>';
         return;
       }
       var html = "";
@@ -1479,27 +1494,13 @@ function _rrhhLoadAdelantosMes(periodo) {
           '<td style="padding:6px 6px;font-weight:500;">' + (a.nombre || '\u2014') + '</td>' +
           '<td style="padding:6px 3px;"><a href="#" onclick="event.preventDefault();_rrhhVerFichaEmpleado(' + a.empleado_id + ',\'adelantos\')" style="color:#3B82F6;font-size:0.75rem;">Ficha</a></td>' +
           '<td style="padding:6px 6px;text-align:right;">' + fmtEur(a.importe) + '</td>' +
-          '<td style="padding:6px 6px;font-size:0.78rem;">' + (a.concepto || '\u2014').substring(0, 50) + '</td>' +
+          '<td style="padding:6px 6px;font-size:0.78rem;" title="' + ((a.concepto || '').replace(/"/g, '&quot;')) + '">' + (a.concepto || '\u2014').substring(0, 50) + '</td>' +
           '<td style="padding:6px 6px;"><span style="padding:2px 8px;border-radius:99px;font-size:0.7rem;font-weight:600;background:#DCFCE7;color:#166534;">Banco \u2705</span></td>' +
           '</tr>';
       });
       tbody.innerHTML = html;
-
-      // Populate employee dropdown if needed
-      if (empSel && empSel.options.length <= 1) {
-        fetch("/api/rrhh/empleados?estado=todos")
-          .then(function (r) { return r.json(); })
-          .then(function (ed) {
-            (ed.empleados || []).forEach(function (e) {
-              var opt = document.createElement("option");
-              opt.value = e.id;
-              opt.textContent = (e.nombre || '') + ' ' + (e.apellidos || '');
-              empSel.appendChild(opt);
-            });
-          });
-      }
     })
-    .catch(function () {});
+    .catch(function () { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#dc3545;">Error al cargar</td></tr>'; });
 }
 
 function _rrhhNuevoAdelanto() {
@@ -1768,6 +1769,8 @@ window._rrhhDietasEmpLoad = _rrhhDietasEmpLoad;
 window._rrhhNuevaDieta = _rrhhNuevaDieta;
 window._rrhhBorrarDieta = _rrhhBorrarDieta;
 window._rrhhCargarAdelantos = _rrhhCargarAdelantos;
+window._rrhhAdelMesPrev = _rrhhAdelMesPrev;
+window._rrhhAdelMesNext = _rrhhAdelMesNext;
 window._rrhhNuevoAdelanto = _rrhhNuevoAdelanto;
 window._rrhhBorrarAdelanto = _rrhhBorrarAdelanto;
 window._rrhhCargarSS = _rrhhCargarSS;

@@ -727,9 +727,10 @@ def api_rrhh_adelantos_banco(periodo):
     rows = bconn.execute(
       "SELECT id, fecha_operacion, concepto, importe, rrhh_empleado_id "
       "FROM movimientos WHERE rrhh_tipo='adelanto' "
-      "AND fecha_operacion >= ? AND fecha_operacion < ? "
+      "AND (rrhh_periodo = ? OR (rrhh_periodo IS NULL AND fecha_operacion >= ? AND fecha_operacion < ?) "
+      "OR ((rrhh_periodo IS NULL OR rrhh_periodo = '') AND SUBSTR(fecha_operacion,1,7) = ?)) "
       "ORDER BY fecha_operacion DESC",
-      (fecha_ini, fecha_fin),
+      (periodo, fecha_ini, fecha_fin, periodo),
     ).fetchall()
 
     # Enrich with employee names
