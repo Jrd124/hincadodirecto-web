@@ -556,11 +556,13 @@ function renderPaginacionBancos(container, actual, total) {
       var facturaRuta = (m.factura_ruta || "").trim();
       // Build unified vinculación cell
       var vincParts = [];
-      // Factura conciliation
-      if (conciliadoAt) {
+      var rrhhTipo = m.rrhh_tipo || "";
+      // Factura conciliation — only if actually linked to a factura (not just conciliado_at from RRHH)
+      var tieneFactura = m.factura_proveedor_id || m.factura_cliente_id || m.factura_cliente_key || m.multi_n_facturas;
+      if (conciliadoAt && tieneFactura && !rrhhTipo) {
         var fLine = "<span class=\"cel-flex\">";
         if (m.multi_n_facturas) {
-          fLine += "<span class=\"badge-conciliado\">Cobro → " + m.multi_n_facturas + " fact.</span>";
+          fLine += "<span class=\"badge-conciliado\">Cobro \u2192 " + m.multi_n_facturas + " fact.</span>";
           fLine += "<button type=\"button\" class=\"btn-small bancos-btn-ver-multi\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" data-empresa-id=\"" + ((m.empresa_id || "") + "").replace(/\"/g, "&quot;") + "\" title=\"Ver facturas vinculadas\">Ver</button>";
         } else {
           fLine += "<span class=\"badge-conciliado\">Factura</span>";
@@ -569,7 +571,7 @@ function renderPaginacionBancos(container, actual, total) {
             fLine += "<a href=\"/api/archivo?ruta=" + rutaEsc + "\" target=\"_blank\" class=\"btn-small\" title=\"Abrir factura\">Ver</a>";
           }
         }
-        fLine += "<button type=\"button\" class=\"btn-small bancos-btn-desvincular\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Quitar vinculación\">Desvincular</button>";
+        fLine += "<button type=\"button\" class=\"btn-small bancos-btn-desvincular\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Quitar vinculaci\u00f3n\">Desvincular</button>";
         fLine += "</span>";
         vincParts.push(fLine);
       }
@@ -584,7 +586,6 @@ function renderPaginacionBancos(container, actual, total) {
         vincParts.push("<span class=\"cel-flex\"><span class=\"badge-conciliado\" style=\"background:#FEF3C7;color:#92400E;\">Albar\u00e1n</span><button type=\"button\" class=\"btn-small bancos-btn-desvincular-albaran\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Desvincular albar\u00e1n\">Desvincular</button></span>");
       }
       // RRHH conciliado
-      var rrhhTipo = m.rrhh_tipo || "";
       if (rrhhTipo && conciliadoAt) {
         var rrhhLabels = { adelanto: "Adelanto", nomina: "Nómina", seguridad_social: "Seg. Social", irpf: "IRPF" };
         var rrhhColors = { adelanto: "background:#FEF3C7;color:#92400E;", nomina: "background:#DBEAFE;color:#1E40AF;", seguridad_social: "background:#F3E8FF;color:#6B21A8;", irpf: "background:#FEE2E2;color:#991B1B;" };
