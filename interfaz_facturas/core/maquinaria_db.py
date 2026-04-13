@@ -654,24 +654,55 @@ def listar_maquinas(solo_activas: bool = True) -> list:
         q += " ORDER BY m.nombre"
         maquinas = [dict(r) for r in conn.execute(q).fetchall()]
 
-        # Enriquecer con estado computado e incidencias abiertas graves
+        # Enriquecer con estado calculado en tiempo real desde Operaciones
+        from datetime import date
+        hoy = date.today().isoformat()
+
+        # Pre-cargar asignaciones de hoy para todas las máquinas (una sola query)
+        asig_hoy = {}
+        try:
+            for r in conn.execute(
+                "SELECT pa.recurso_id, pa.proyecto_id, pa.estado, p.nombre as proy_nombre, p.codigo as proy_codigo "
+                "FROM proyecto_asignaciones pa "
+                "LEFT JOIN proyectos p ON p.id = pa.proyecto_id "
+                "WHERE pa.recurso_tipo = 'maquina' AND pa.fecha = ?", (hoy,)
+            ).fetchall():
+                asig_hoy[r["recurso_id"]] = dict(r)
+        except Exception:
+            pass  # tabla puede no existir aún
+
         for maq in maquinas:
+            mid = maq["id"]
             inc_graves = conn.execute(
                 "SELECT COUNT(*) FROM maquinaria_incidencias "
                 "WHERE maquina_id = ? AND estado != 'cerrada' "
                 "AND severidad IN ('alta','seguridad')",
-                [maq["id"]],
+                [mid],
             ).fetchone()[0]
             maq["_tiene_incidencia_grave"] = inc_graves > 0
-            # Mini-versión de _computar_estado sin cargar todas las incidencias
-            if not maq.get("activa", 1) or maq.get("estado") == "baja":
+
+            # Estado calculado desde operaciones
+            asig = asig_hoy.get(mid)
+            if not maq.get("activa", 1):
                 maq["estado_computado"] = "baja"
-            elif inc_graves > 0 or maq.get("estado") == "en_taller":
+                maq["proyecto_actual"] = None
+            elif asig and asig.get("estado") == "averia":
                 maq["estado_computado"] = "en_taller"
-            elif maq.get("proyecto_id") or maq.get("estado") == "en_proyecto":
+                maq["proyecto_actual"] = None
+                maq["averia_notas"] = asig.get("notas", "")
+            elif inc_graves > 0:
+                maq["estado_computado"] = "en_taller"
+                maq["proyecto_actual"] = None
+            elif asig:
                 maq["estado_computado"] = "en_proyecto"
+                maq["proyecto_actual"] = {
+                    "id": asig["proyecto_id"],
+                    "nombre": asig.get("proy_nombre", ""),
+                    "codigo": asig.get("proy_codigo", ""),
+                }
             else:
                 maq["estado_computado"] = "disponible"
+                maq["proyecto_actual"] = None
         return maquinas
 
 
@@ -754,8 +785,42 @@ def obtener_maquina(maq_id: int) -> dict | None:
             conn, maq_id, maq["horometro_actual"],
         )
 
-        # Estado computado: baja > en_taller > en_proyecto > disponible
-        maq["estado_computado"] = _computar_estado(maq)
+        # Estado calculado en tiempo real desde Operaciones
+        from datetime import date
+        hoy = date.today().isoformat()
+        asig = None
+        try:
+            asig_row = conn.execute(
+                "SELECT pa.proyecto_id, pa.estado as asig_estado, p.nombre as proy_nombre, p.codigo as proy_codigo "
+                "FROM proyecto_asignaciones pa "
+                "LEFT JOIN proyectos p ON p.id = pa.proyecto_id "
+                "WHERE pa.recurso_tipo = 'maquina' AND pa.recurso_id = ? AND pa.fecha = ?",
+                (maq_id, hoy),
+            ).fetchone()
+            if asig_row:
+                asig = dict(asig_row)
+        except Exception:
+            pass
+
+        if not maq.get("activa", 1):
+            maq["estado_computado"] = "baja"
+            maq["proyecto_actual"] = None
+        elif asig and asig.get("asig_estado") == "averia":
+            maq["estado_computado"] = "en_taller"
+            maq["proyecto_actual"] = None
+        elif maq.get("incidencias"):
+            maq["estado_computado"] = "en_taller"
+            maq["proyecto_actual"] = None
+        elif asig:
+            maq["estado_computado"] = "en_proyecto"
+            maq["proyecto_actual"] = {
+                "id": asig["proyecto_id"],
+                "nombre": asig.get("proy_nombre", ""),
+                "codigo": asig.get("proy_codigo", ""),
+            }
+        else:
+            maq["estado_computado"] = _computar_estado(maq)
+            maq["proyecto_actual"] = None
         return maq
 
 
