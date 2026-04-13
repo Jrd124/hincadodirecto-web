@@ -1653,13 +1653,8 @@
       <!-- ═══ ADELANTOS ═══ -->
       <div id="panel-rrhh-adelantos" class="panel-rrhh">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-          <div style="display:flex;gap:8px;align-items:center;">
-            <select id="rrhh-adel-empleado" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;"><option value="">Todos</option></select>
-            <select id="rrhh-adel-estado" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;">
-              <option value="">Todos</option><option value="pendiente">Pendientes</option><option value="descontado">Descontados</option>
-            </select>
-          </div>
-          <button onclick="_rrhhNuevoAdelanto()" class="btn-small" style="background:#EFF6FF;color:#1E40AF;border:1px solid #93C5FD;">+ Nuevo adelanto</button>
+          <h4 style="margin:0;font-size:0.95rem;font-weight:700;">Adelantos (desde movimientos bancarios)</h4>
+          <span style="font-size:0.78rem;color:#888;">Se registran clasificando movimientos en Finanzas &gt; Bancos</span>
         </div>
         <div id="rrhh-adel-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px;"></div>
         <div class="card" style="overflow-x:auto;padding:0;">
@@ -1693,8 +1688,9 @@
               <th style="padding:6px 4px;font-weight:700;text-align:right;">SS Empresa</th>
               <th style="padding:6px 4px;font-weight:700;text-align:right;">SS Trabajador</th>
               <th style="padding:6px 4px;font-weight:700;text-align:right;font-weight:800;">Total SS</th>
+              <th style="padding:6px 4px;font-weight:700;">Banco</th>
             </tr></thead>
-            <tbody id="rrhh-ss-tbody"><tr><td colspan="6" style="text-align:center;padding:2rem;">Cargando...</td></tr></tbody>
+            <tbody id="rrhh-ss-tbody"><tr><td colspan="7" style="text-align:center;padding:2rem;">Cargando...</td></tr></tbody>
           </table>
         </div>
       </div>

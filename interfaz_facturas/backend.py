@@ -3843,7 +3843,9 @@ def listar_movimientos():
       SELECT id, fecha_operacion, fecha_valor, concepto, importe, divisa, saldo,
              banco, codigo, numero_documento, referencia_1, referencia_2, empresa_id, created_at,
              factura_proveedor_id, factura_cliente_id, factura_cliente_key, conciliado_at,
-             tarjeta_id, liquidacion_periodo
+             tarjeta_id, liquidacion_periodo,
+             seguro_poliza_id, albaran_ids,
+             rrhh_tipo, rrhh_empleado_id, rrhh_periodo
       FROM movimientos
       {where}
       ORDER BY fecha_operacion DESC, id DESC
@@ -3860,6 +3862,8 @@ def listar_movimientos():
       "banco", "codigo", "numero_documento", "referencia_1", "referencia_2", "empresa_id", "created_at",
       "factura_proveedor_id", "factura_cliente_id", "factura_cliente_key", "conciliado_at",
       "tarjeta_id", "liquidacion_periodo",
+      "seguro_poliza_id", "albaran_ids",
+      "rrhh_tipo", "rrhh_empleado_id", "rrhh_periodo",
     ]
     movimientos = [dict(zip(keys, r)) for r in rows]
 

@@ -1553,15 +1553,32 @@ function _rrhhCargarSS() {
       }
       var html = "";
       meses.forEach(function (m) {
-        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_rrhhVerMes(\'' + m.periodo + '\')">' +
+        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
           '<td style="padding:6px 8px;font-weight:500;">' + _rrhhPeriodoToLabel(m.periodo) + '</td>' +
           '<td style="padding:6px 4px;text-align:right;">' + (m.empleados || 0) + '</td>' +
           '<td style="padding:6px 4px;text-align:right;">' + fmtEur(m.base_ss) + '</td>' +
           '<td style="padding:6px 4px;text-align:right;">' + fmtEur(m.ss_empresa) + '</td>' +
           '<td style="padding:6px 4px;text-align:right;">' + fmtEur(m.ss_trabajador) + '</td>' +
-          '<td style="padding:6px 4px;text-align:right;font-weight:600;">' + fmtEur(m.total_ss) + '</td></tr>';
+          '<td style="padding:6px 4px;text-align:right;font-weight:600;">' + fmtEur(m.total_ss) + '</td>' +
+          '<td style="padding:6px 4px;" id="rrhh-ss-banco-' + m.periodo + '"><span style="color:#9ca3af;">\u23f3</span></td></tr>';
       });
       tbody.innerHTML = html;
+
+      // Load conciliation status for each month
+      meses.forEach(function (m) {
+        fetch("/api/rrhh/banco/conciliacion-ss/" + m.periodo)
+          .then(function (r) { return r.json(); })
+          .then(function (c) {
+            var el = document.getElementById("rrhh-ss-banco-" + m.periodo);
+            if (!el) return;
+            if (c.estado === "conciliado" && c.movimiento) {
+              el.innerHTML = '<span style="padding:2px 8px;border-radius:99px;font-size:0.7rem;font-weight:600;background:#DCFCE7;color:#166534;" title="' + (c.movimiento.fecha_operacion || '') + ' | ' + (c.movimiento.importe || '') + ' EUR">\u2705 Conciliado</span>';
+            } else {
+              el.innerHTML = '<span style="padding:2px 8px;border-radius:99px;font-size:0.7rem;font-weight:600;background:#FEE2E2;color:#991B1B;">Pendiente</span>';
+            }
+          })
+          .catch(function () {});
+      });
 
       // Chart.js bar chart
       var canvasSS = document.getElementById("rrhh-chart-ss");
