@@ -659,17 +659,25 @@ def listar_maquinas(solo_activas: bool = True) -> list:
         hoy = date.today().isoformat()
 
         # Pre-cargar asignaciones de hoy para todas las máquinas (una sola query)
+        # Incluir asignaciones de hoy Y averías activas (cualquier fecha futura)
         asig_hoy = {}
+        averias = {}
         try:
             for r in conn.execute(
-                "SELECT pa.recurso_id, pa.proyecto_id, pa.estado, p.nombre as proy_nombre, p.codigo as proy_codigo "
+                "SELECT pa.recurso_id, pa.proyecto_id, pa.estado as asig_estado, pa.notas, "
+                "p.nombre as proy_nombre, p.codigo as proy_codigo "
                 "FROM proyecto_asignaciones pa "
                 "LEFT JOIN proyectos p ON p.id = pa.proyecto_id "
                 "WHERE pa.recurso_tipo = 'maquina' AND pa.fecha = ?", (hoy,)
             ).fetchall():
-                asig_hoy[r["recurso_id"]] = dict(r)
-        except Exception:
-            pass  # tabla puede no existir aún
+                d = dict(r)
+                if d.get("asig_estado") == "averia":
+                    averias[r["recurso_id"]] = d
+                else:
+                    asig_hoy[r["recurso_id"]] = d
+        except Exception as e:
+            import logging
+            logging.getLogger("erp").warning("Error cargando asignaciones maquinas: %s", e)
 
         for maq in maquinas:
             mid = maq["id"]
@@ -683,13 +691,14 @@ def listar_maquinas(solo_activas: bool = True) -> list:
 
             # Estado calculado desde operaciones
             asig = asig_hoy.get(mid)
+            averia = averias.get(mid)
             if not maq.get("activa", 1):
                 maq["estado_computado"] = "baja"
                 maq["proyecto_actual"] = None
-            elif asig and asig.get("estado") == "averia":
+            elif averia:
                 maq["estado_computado"] = "en_taller"
                 maq["proyecto_actual"] = None
-                maq["averia_notas"] = asig.get("notas", "")
+                maq["averia_notas"] = averia.get("notas", "")
             elif inc_graves > 0:
                 maq["estado_computado"] = "en_taller"
                 maq["proyecto_actual"] = None
@@ -790,17 +799,21 @@ def obtener_maquina(maq_id: int) -> dict | None:
         hoy = date.today().isoformat()
         asig = None
         try:
-            asig_row = conn.execute(
-                "SELECT pa.proyecto_id, pa.estado as asig_estado, p.nombre as proy_nombre, p.codigo as proy_codigo "
+            for r in conn.execute(
+                "SELECT pa.proyecto_id, pa.estado as asig_estado, pa.notas, p.nombre as proy_nombre, p.codigo as proy_codigo "
                 "FROM proyecto_asignaciones pa "
                 "LEFT JOIN proyectos p ON p.id = pa.proyecto_id "
                 "WHERE pa.recurso_tipo = 'maquina' AND pa.recurso_id = ? AND pa.fecha = ?",
                 (maq_id, hoy),
-            ).fetchone()
-            if asig_row:
-                asig = dict(asig_row)
-        except Exception:
-            pass
+            ).fetchall():
+                d = dict(r)
+                if d.get("asig_estado") == "averia":
+                    asig = d  # avería tiene prioridad
+                    break
+                asig = d
+        except Exception as e:
+            import logging
+            logging.getLogger("erp").warning("Error cargando asignacion maquina %s: %s", maq_id, e)
 
         if not maq.get("activa", 1):
             maq["estado_computado"] = "baja"
@@ -808,6 +821,7 @@ def obtener_maquina(maq_id: int) -> dict | None:
         elif asig and asig.get("asig_estado") == "averia":
             maq["estado_computado"] = "en_taller"
             maq["proyecto_actual"] = None
+            maq["averia_notas"] = asig.get("notas", "")
         elif maq.get("incidencias"):
             maq["estado_computado"] = "en_taller"
             maq["proyecto_actual"] = None
