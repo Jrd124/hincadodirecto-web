@@ -587,8 +587,8 @@ function renderPaginacionBancos(container, actual, total) {
       }
       // RRHH conciliado
       if (rrhhTipo && conciliadoAt) {
-        var rrhhLabels = { adelanto: "Adelanto", nomina: "Nómina", seguridad_social: "Seg. Social", irpf: "IRPF" };
-        var rrhhColors = { adelanto: "background:#FEF3C7;color:#92400E;", nomina: "background:#DBEAFE;color:#1E40AF;", seguridad_social: "background:#F3E8FF;color:#6B21A8;", irpf: "background:#FEE2E2;color:#991B1B;" };
+        var rrhhLabels = { adelanto: "Adelanto", nomina: "N\u00f3mina", seguridad_social: "Seg. Social", irpf: "IRPF", is: "IS", iva: "IVA" };
+        var rrhhColors = { adelanto: "background:#FEF3C7;color:#92400E;", nomina: "background:#FEF3C7;color:#92400E;", seguridad_social: "background:#FDE8E8;color:#7B1F1F;", irpf: "background:#FDE8E8;color:#7B1F1F;", is: "background:#FDE8E8;color:#7B1F1F;", iva: "background:#FDE8E8;color:#7B1F1F;" };
         var rrhhLabel = rrhhLabels[rrhhTipo] || rrhhTipo;
         vincParts.push("<span class=\"cel-flex\"><span class=\"badge-conciliado\" style=\"" + (rrhhColors[rrhhTipo] || "") + "\">" + rrhhLabel + "</span><button type=\"button\" class=\"btn-small bancos-btn-desvincular-rrhh\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Desvincular RRHH\">Desvincular</button></span>");
       }
@@ -5936,8 +5936,9 @@ window.renderTablaClientesFacturas = renderTablaClientesFacturas;
     // Auto-detect suggestion from concepto
     var conceptoLower = concepto.toLowerCase();
     var sugerencia = "";
-    if (conceptoLower.indexOf("tgss") >= 0 || conceptoLower.indexOf("seguridad social") >= 0 || conceptoLower.indexOf("cotizacion") >= 0) sugerencia = "seguridad_social";
-    else if (conceptoLower.indexOf("aeat") >= 0 || conceptoLower.indexOf("hacienda") >= 0 || conceptoLower.indexOf("retencion") >= 0 || conceptoLower.indexOf("impuesto") >= 0) sugerencia = "irpf";
+    if (conceptoLower.indexOf("tgss") >= 0 || conceptoLower.indexOf("seguridad social") >= 0 || conceptoLower.indexOf("cotizacion") >= 0 || conceptoLower.indexOf("cotización") >= 0) sugerencia = "seguridad_social";
+    else if (conceptoLower.indexOf("retencion") >= 0 || conceptoLower.indexOf("retención") >= 0 || (conceptoLower.indexOf("impuesto") >= 0 && conceptoLower.indexOf("retencion") >= 0)) sugerencia = "irpf";
+    else if (conceptoLower.indexOf("aeat") >= 0 || conceptoLower.indexOf("hacienda") >= 0 || conceptoLower.indexOf("impuesto") >= 0) sugerencia = "irpf";
 
     var mesDefault = fecha ? fecha.substring(0, 7) : "";
 
@@ -5949,13 +5950,19 @@ window.renderTablaClientesFacturas = renderTablaClientesFacturas;
       '<div class="modal-header"><h3>Clasificar como pago RRHH</h3><button class="modal-close" onclick="document.getElementById(\'modal-rrhh-banco\').remove()">&times;</button></div>' +
       '<div class="modal-body">' +
       '<div style="font-size:0.85rem;color:var(--color-text-secondary);margin-bottom:12px;">' + fecha + ' | ' + importe + ' EUR | ' + concepto.substring(0, 80) + '</div>' +
-      (sugerencia ? '<div style="padding:6px 10px;background:#FEF3C7;border-radius:6px;margin-bottom:12px;font-size:0.82rem;">Sugerencia: <b>' + (sugerencia === "seguridad_social" ? "Pago Seg. Social" : "Pago IRPF") + '</b></div>' : '') +
+      (sugerencia ? '<div style="padding:6px 10px;background:#FEF3C7;border-radius:6px;margin-bottom:12px;font-size:0.82rem;">Sugerencia: <b>' + ({seguridad_social:"Seg. Social",irpf:"IRPF",is:"Imp. Sociedades",iva:"IVA"}[sugerencia] || sugerencia) + '</b></div>' : '') +
       '<div style="margin-bottom:12px;"><label style="font-size:12px;color:#888;">Tipo</label>' +
-      '<select id="rrhh-banco-tipo" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:6px;" onchange="document.getElementById(\'rrhh-banco-emp-row\').style.display=this.value===\'adelanto\'||this.value===\'nomina\'?\'block\':\'none\';document.getElementById(\'rrhh-banco-periodo-row\').style.display=this.value===\'irpf\'?\'none\':\'block\';document.getElementById(\'rrhh-banco-trim-row\').style.display=this.value===\'irpf\'?\'block\':\'none\';">' +
-      '<option value="adelanto">Adelanto a empleado</option>' +
-      '<option value="nomina">Pago de n\u00f3mina</option>' +
-      '<option value="seguridad_social"' + (sugerencia === "seguridad_social" ? " selected" : "") + '>Pago Seguridad Social</option>' +
-      '<option value="irpf"' + (sugerencia === "irpf" ? " selected" : "") + '>Pago IRPF</option>' +
+      '<select id="rrhh-banco-tipo" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:6px;" onchange="var v=this.value;document.getElementById(\'rrhh-banco-emp-row\').style.display=(v===\'adelanto\'||v===\'nomina\')?\'block\':\'none\';document.getElementById(\'rrhh-banco-periodo-row\').style.display=(v===\'irpf\'||v===\'is\'||v===\'iva\')?\'none\':\'block\';document.getElementById(\'rrhh-banco-trim-row\').style.display=(v===\'irpf\'||v===\'is\'||v===\'iva\')?\'block\':\'none\';">' +
+      '<optgroup label="RRHH">' +
+      '<option value="adelanto">Adelanto empleado</option>' +
+      '<option value="nomina">Pago n\u00f3mina</option>' +
+      '</optgroup>' +
+      '<optgroup label="Impuestos">' +
+      '<option value="seguridad_social"' + (sugerencia === "seguridad_social" ? " selected" : "") + '>Seguridad Social</option>' +
+      '<option value="irpf"' + (sugerencia === "irpf" ? " selected" : "") + '>IRPF</option>' +
+      '<option value="is">Impuesto de Sociedades</option>' +
+      '<option value="iva">IVA</option>' +
+      '</optgroup>' +
       '</select></div>' +
       '<div id="rrhh-banco-emp-row" style="margin-bottom:12px;' + (sugerencia ? 'display:none;' : '') + '"><label style="font-size:12px;color:#888;">Empleado</label>' +
       '<select id="rrhh-banco-empleado" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:6px;"><option value="">Cargando...</option></select></div>' +
