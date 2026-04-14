@@ -401,68 +401,83 @@ def api_dashboard_director():
       actividad = []
 
       # Partes recientes
-      partes_rec = conn.execute(
-        "SELECT pp.fecha, pp.hincas_realizadas, pp.created_at, p.nombre as proyecto"
-        " FROM proyecto_partes pp JOIN proyectos p ON pp.proyecto_id = p.id"
-        " ORDER BY pp.created_at DESC LIMIT 5"
-      ).fetchall()
-      for p in partes_rec:
-        actividad.append({
-          "fecha": p["created_at"][:16] if p["created_at"] else p["fecha"],
-          "texto": f"Parte registrado: {p['proyecto']} — {p['hincas_realizadas'] or 0} hincas",
-          "tipo": "parte",
-          "categoria": "proyectos",
-        })
+      try:
+        partes_rec = conn.execute(
+          "SELECT pp.fecha, pp.hincas_realizadas, pp.created_at, p.nombre as proyecto"
+          " FROM proyecto_partes pp JOIN proyectos p ON pp.proyecto_id = p.id"
+          " ORDER BY pp.created_at DESC LIMIT 5"
+        ).fetchall()
+        for p in partes_rec:
+          actividad.append({
+            "fecha": (p["created_at"] or "")[:16] or p["fecha"] or "",
+            "texto": f"Parte registrado: {p['proyecto']} — {p['hincas_realizadas'] or 0} hincas",
+            "tipo": "parte",
+            "categoria": "proyectos",
+          })
+      except Exception:
+        pass
 
       # Facturas cliente recientes
-      fac_cli = conn.execute(
-        "SELECT numero_factura, cliente, total_a_pagar, fecha_factura"
-        " FROM facturas_cliente ORDER BY ROWID DESC LIMIT 5"
-      ).fetchall()
-      for f in fac_cli:
-        actividad.append({
-          "fecha": f["fecha_factura"] or "",
-          "texto": f"Factura {f['numero_factura']} emitida a {f['cliente'][:25]} — {f['total_a_pagar']} €",
-          "tipo": "factura",
-          "categoria": "finanzas",
-        })
+      try:
+        fac_cli = conn.execute(
+          "SELECT numero_factura, cliente, total_a_pagar, fecha_factura"
+          " FROM facturas_cliente ORDER BY ROWID DESC LIMIT 5"
+        ).fetchall()
+        for f in fac_cli:
+          actividad.append({
+            "fecha": f["fecha_factura"] or "",
+            "texto": f"Factura {f['numero_factura']} emitida a {(f['cliente'] or '')[:25]} — {f['total_a_pagar']} €",
+            "tipo": "factura",
+            "categoria": "finanzas",
+          })
+      except Exception:
+        pass
 
       # Facturas proveedor recientes
-      fac_prov = conn.execute(
-        "SELECT proveedor, total_a_pagar, fecha_factura"
-        " FROM facturas_proveedor ORDER BY ROWID DESC LIMIT 5"
-      ).fetchall()
-      for f in fac_prov:
-        actividad.append({
-          "fecha": f["fecha_factura"] or "",
-          "texto": f"Factura recibida de {f['proveedor'][:25]} — {f['total_a_pagar']} €",
-          "tipo": "factura_prov",
-          "categoria": "finanzas",
-        })
+      try:
+        fac_prov = conn.execute(
+          "SELECT proveedor, total_a_pagar, fecha_factura"
+          " FROM facturas_proveedor ORDER BY ROWID DESC LIMIT 5"
+        ).fetchall()
+        for f in fac_prov:
+          actividad.append({
+            "fecha": f["fecha_factura"] or "",
+            "texto": f"Factura recibida de {(f['proveedor'] or '')[:25]} — {f['total_a_pagar']} €",
+            "tipo": "factura_prov",
+            "categoria": "finanzas",
+          })
+      except Exception:
+        pass
 
       # Interacciones CRM recientes
-      crm_rows = conn.execute(
-        "SELECT i.asunto, i.tipo, i.fecha, i.fecha_creacion,"
-        " COALESCE(e.nombre, '') as empresa"
-        " FROM crm_interacciones i"
-        " LEFT JOIN crm_empresas e ON i.empresa_id = e.id"
-        " ORDER BY COALESCE(i.fecha_creacion, i.fecha) DESC LIMIT 5"
-      ).fetchall()
-      for r in crm_rows:
-        actividad.append({
-          "fecha": r["fecha_creacion"] or r["fecha"] or "",
-          "texto": f"CRM: {r['tipo'] or 'Interacción'} — {r['asunto'][:40]}" + (f" ({r['empresa'][:20]})" if r["empresa"] else ""),
-          "tipo": "crm",
-          "categoria": "crm",
-        })
+      try:
+        crm_rows = conn.execute(
+          "SELECT i.asunto, i.tipo, i.fecha, i.fecha_creacion,"
+          " COALESCE(e.nombre, '') as empresa"
+          " FROM crm_interacciones i"
+          " LEFT JOIN crm_empresas e ON i.empresa_id = e.id"
+          " ORDER BY COALESCE(i.fecha_creacion, i.fecha) DESC LIMIT 5"
+        ).fetchall()
+        for r in crm_rows:
+          actividad.append({
+            "fecha": r["fecha_creacion"] or r["fecha"] or "",
+            "texto": f"CRM: {r['tipo'] or 'Interacción'} — {(r['asunto'] or '')[:40]}" + (f" ({r['empresa'][:20]})" if r["empresa"] else ""),
+            "tipo": "crm",
+            "categoria": "crm",
+          })
+      except Exception:
+        pass
 
       # Checks de maquinaria recientes
-      maq_rows = conn.execute(
-        "SELECT c.fecha, c.created_at, c.estado, m.nombre as maquina"
-        " FROM maquinaria_checks c"
-        " JOIN maquinas m ON c.maquina_id = m.id"
-        " ORDER BY c.created_at DESC LIMIT 5"
-      ).fetchall()
+      try:
+        maq_rows = conn.execute(
+          "SELECT c.fecha, c.created_at, c.estado, m.nombre as maquina"
+          " FROM maquinaria_checks c"
+          " JOIN maquinas m ON c.maquina_id = m.id"
+          " ORDER BY c.created_at DESC LIMIT 5"
+        ).fetchall()
+      except Exception:
+        maq_rows = []
       for r in maq_rows:
         actividad.append({
           "fecha": r["created_at"] or r["fecha"] or "",
