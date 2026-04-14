@@ -235,7 +235,7 @@ function cargarDashboardDirector() {
             tr.style.cursor = "pointer";
             tr.onclick = function () { location.hash = "proyectos/dashboard/" + ob.id; };
             tr.innerHTML =
-              '<td><strong>' + _esc(ob.codigo || ob.nombre) + '</strong><br><span class="dir-obra-sub">' + _esc(ob.provincia) + '</span></td>' +
+              '<td><strong>' + _esc(ob.nombre) + '</strong><br><span class="dir-obra-sub">' + _esc(ob.ubicacion || ob.provincia || "") + (ob.codigo ? ' \u00b7 ' + _esc(ob.codigo) : '') + '</span></td>' +
               '<td>' + _esc(ob.cliente) + '</td>' +
               '<td><div class="dir-progress-wrap">' +
                 '<div class="dir-progress-bar"><div class="dir-progress-fill" style="width:' + pct + '%"></div></div>' +
@@ -282,7 +282,7 @@ function cargarDashboardDirector() {
           timeline.innerHTML = '<p class="sin-datos" style="padding:16px;text-align:center;">Sin actividad reciente</p>';
         } else {
           acts.forEach(function (a) {
-            var iconMap = { parte: "\uD83D\uDCCB", factura: "\uD83D\uDCE4", factura_prov: "\uD83D\uDCE5", certificacion: "\uD83D\uDCC4", proyecto: "\uD83D\uDCC1", crm: "\uD83E\uDD1D", maquinaria_check: "\uD83D\uDD27" };
+            var iconMap = { parte: "\uD83D\uDCCB", factura: "\uD83D\uDCE4", factura_prov: "\uD83D\uDCE5", certificacion: "\uD83D\uDCC4", proyecto: "\uD83D\uDCC1", crm: "\uD83E\uDD1D", maquinaria_check: "\uD83D\uDD27", nomina: "\uD83D\uDCB0", asignacion: "\uD83D\uDCC5" };
             var div = document.createElement("div");
             div.className = "dir-timeline-item";
             div.dataset.categoria = a.categoria || "";
