@@ -1682,7 +1682,6 @@ function _rrhhEditarTarifa(id, importeActual) {
 
 function _rrhhNuevaDieta() { _rrhhNuevaTarifaModal(); }
 function _rrhhBorrarDieta(id) { _rrhhEditarTarifa(id, 0); }
-}
 
 // ===============================================================================
 // ==  6. ADELANTOS                                                             ==
