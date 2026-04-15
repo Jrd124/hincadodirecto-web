@@ -541,13 +541,37 @@ def api_rrhh_dietas_calendario(periodo):
       "SELECT id, nombre, apellidos FROM empleados WHERE estado='activo' ORDER BY apellidos, nombre"
     ).fetchall()]
 
-    # Get dietas_diarias for this month
+    # Get dietas_diarias for this month + calculate importe from tarifas
+    tarifas_all = conn.execute("SELECT * FROM dietas_config ORDER BY fecha_vigencia_desde DESC").fetchall()
+    emp_cats = {e["id"]: (e.get("categoria") or "").lower().strip() for e in emps}
+    def _calc_imp(tipo_dieta, fecha, emp_id):
+      parts = tipo_dieta.split("_", 1) if tipo_dieta else []
+      if len(parts) != 2: return 0
+      geo, sub = parts
+      cat = emp_cats.get(emp_id, "")
+      for t in tarifas_all:
+        if t["tipo"] != geo or t["subtipo"] != sub: continue
+        if t["fecha_vigencia_desde"] and t["fecha_vigencia_desde"] > fecha: continue
+        if t["fecha_vigencia_hasta"] and t["fecha_vigencia_hasta"] < fecha: continue
+        tc = (t["categoria"] or "").lower().strip()
+        if tc and tc != cat: continue
+        return t["importe"] or 0
+      for t in tarifas_all:
+        if t["tipo"] != geo or t["subtipo"] != sub: continue
+        if t["fecha_vigencia_desde"] and t["fecha_vigencia_desde"] > fecha: continue
+        if t["fecha_vigencia_hasta"] and t["fecha_vigencia_hasta"] < fecha: continue
+        if not (t["categoria"] or "").strip(): return t["importe"] or 0
+      return 0
+
     dietas = {}
     for r in conn.execute(
       "SELECT empleado_id, fecha, tipo, importe, notas FROM dietas_diarias "
       "WHERE fecha >= ? AND fecha <= ?", (dias[0], dias[-1])
     ).fetchall():
-      dietas[(r["empleado_id"], r["fecha"])] = dict(r)
+      d = dict(r)
+      if (not d["importe"] or d["importe"] == 0) and d["tipo"]:
+        d["importe"] = _calc_imp(d["tipo"], d["fecha"], d["empleado_id"])
+      dietas[(r["empleado_id"], r["fecha"])] = d
 
     # Get project assignments for context
     asignaciones = {}
@@ -627,12 +651,54 @@ def api_rrhh_dietas_empleado(eid, periodo):
       dias.append({"fecha": d.isoformat(), "dia_semana": ["L","M","X","J","V","S","D"][d.weekday()], "num": d.day, "laborable": d.weekday() < 5})
       d += timedelta(days=1)
 
+    # Load tarifas for importe calculation
+    tarifas = conn.execute("SELECT * FROM dietas_config ORDER BY fecha_vigencia_desde DESC").fetchall()
+    # Get employee categoria for tarifa matching
+    emp_row = conn.execute("SELECT categoria FROM empleados WHERE id=?", (eid,)).fetchone()
+    emp_cat = (emp_row["categoria"] or "").lower().strip() if emp_row else ""
+
+    def _buscar_tarifa(tipo_dieta, fecha):
+      """Map tipo_dieta to tarifa. Returns importe or 0."""
+      # Map: nacional_completa -> tipo=nacional, subtipo=completa
+      parts = tipo_dieta.split("_", 1) if tipo_dieta else []
+      if len(parts) != 2:
+        return 0
+      geo, sub = parts[0], parts[1]
+      for t in tarifas:
+        if t["tipo"] != geo or t["subtipo"] != sub:
+          continue
+        if t["fecha_vigencia_desde"] and t["fecha_vigencia_desde"] > fecha:
+          continue
+        if t["fecha_vigencia_hasta"] and t["fecha_vigencia_hasta"] < fecha:
+          continue
+        # Match categoria: specific match first, then 'todas' (NULL/empty)
+        t_cat = (t["categoria"] or "").lower().strip()
+        if t_cat and t_cat != emp_cat:
+          continue
+        return t["importe"] or 0
+      # Fallback: try without categoria filter
+      for t in tarifas:
+        if t["tipo"] != geo or t["subtipo"] != sub:
+          continue
+        if t["fecha_vigencia_desde"] and t["fecha_vigencia_desde"] > fecha:
+          continue
+        if t["fecha_vigencia_hasta"] and t["fecha_vigencia_hasta"] < fecha:
+          continue
+        t_cat = (t["categoria"] or "").lower().strip()
+        if not t_cat:
+          return t["importe"] or 0
+      return 0
+
     dietas = {}
     for r in conn.execute(
       "SELECT fecha, tipo, importe, notas FROM dietas_diarias WHERE empleado_id=? AND fecha >= ? AND fecha <= ?",
       (eid, dias[0]["fecha"], dias[-1]["fecha"])
     ).fetchall():
-      dietas[r["fecha"]] = dict(r)
+      d_dict = dict(r)
+      # Calculate importe from tarifa if stored importe is 0
+      if (not d_dict["importe"] or d_dict["importe"] == 0) and d_dict["tipo"]:
+        d_dict["importe"] = _buscar_tarifa(d_dict["tipo"], d_dict["fecha"])
+      dietas[r["fecha"]] = d_dict
 
     proyectos = {}
     for r in conn.execute(
