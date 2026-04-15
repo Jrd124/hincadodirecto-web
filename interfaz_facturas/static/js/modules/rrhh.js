@@ -1422,13 +1422,24 @@ function _rrhhDietasResumen(body) {
     .catch(function (err) { body.innerHTML = '<p style="color:#dc3545;">Error: ' + err.message + '</p>'; });
 }
 
+var _MESES_NOMBRE = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
 function _rrhhDietasEmpleado(body) {
-  body.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
-    '<label style="font-size:0.85rem;font-weight:600;">Empleado:</label>' +
-    '<select id="rrhh-dietas-emp-sel" style="padding:4px 8px;border:1px solid var(--border,#ccc);border-radius:4px;font-size:0.85rem;" onchange="_rrhhDietasEmpLoad()"><option value="">Seleccionar...</option></select>' +
-    '<label style="font-size:0.85rem;font-weight:600;margin-left:12px;">Mes:</label>' +
-    '<input type="month" id="rrhh-dietas-emp-mes" style="padding:4px 8px;border:1px solid var(--border,#ccc);border-radius:4px;font-size:0.85rem;" onchange="_rrhhDietasEmpLoad()">' +
+  var now = new Date();
+  var anioDefault = now.getFullYear();
+  var mesDefault = now.getMonth() + 1;
+  body.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">' +
+    '<label style="font-size:0.82rem;font-weight:600;">Empleado:</label>' +
+    '<select id="rrhh-dietas-emp-sel" style="max-width:280px;padding:5px 8px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;text-overflow:ellipsis;" onchange="_rrhhDietasEmpLoad()"><option value="">Seleccionar...</option></select>' +
+    '<label style="font-size:0.82rem;font-weight:600;margin-left:8px;">A\u00f1o:</label>' +
+    '<select id="rrhh-dietas-emp-anio" style="width:75px;padding:5px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhDietasEmpLoad()">' +
+    '<option value="2025">2025</option><option value="2026"' + (anioDefault === 2026 ? ' selected' : '') + '>2026</option><option value="2027">2027</option></select>' +
+    '<label style="font-size:0.82rem;font-weight:600;margin-left:4px;">Mes:</label>' +
+    '<select id="rrhh-dietas-emp-mesn" style="width:115px;padding:5px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhDietasEmpLoad()">' +
+    _MESES_NOMBRE.map(function (n, i) { return '<option value="' + (i + 1) + '"' + (i + 1 === mesDefault ? ' selected' : '') + '>' + n + '</option>'; }).join("") +
+    '</select>' +
     '</div><div id="rrhh-dietas-emp-body"></div>';
+  // Hidden month input for compatibility
   var sel = document.getElementById("rrhh-dietas-emp-sel");
   fetch("/api/empleados?solo_activos=1")
     .then(function (r) { return r.json(); })
@@ -1440,14 +1451,13 @@ function _rrhhDietasEmpleado(body) {
         sel.appendChild(opt);
       });
     });
-  var mesInput = document.getElementById("rrhh-dietas-emp-mes");
-  var now = new Date();
-  mesInput.value = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0");
 }
 
 function _rrhhDietasEmpLoad() {
   var empId = document.getElementById("rrhh-dietas-emp-sel").value;
-  var mes = document.getElementById("rrhh-dietas-emp-mes").value;
+  var anioSel = document.getElementById("rrhh-dietas-emp-anio");
+  var mesSel = document.getElementById("rrhh-dietas-emp-mesn");
+  var mes = anioSel && mesSel ? anioSel.value + "-" + String(mesSel.value).padStart(2, "0") : "";
   var body = document.getElementById("rrhh-dietas-emp-body");
   if (!empId || !mes || !body) return;
   body.innerHTML = '<p style="color:var(--text-secondary);padding:1rem;">Cargando...</p>';
@@ -1482,7 +1492,7 @@ function _rrhhDietasEmpLoad() {
         var abrev = abrevMap[tipo] || "";
         var imp = dieta ? (dieta.importe || 0) : 0;
         var notas = dieta ? (dieta.notas || "") : "";
-        var proyCodigo = proy ? (proy.codigo || proy.nombre || "") : "";
+        var proyCodigo = proy ? (proy.nombre || proy.codigo || "") : "";
         var tieneProyecto = !!proyCodigo;
         var sinDieta = !tipo;
         var esFestivo = _RRHH_FESTIVOS.indexOf(dd.fecha) >= 0;
