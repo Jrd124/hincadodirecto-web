@@ -1286,6 +1286,7 @@ function _rrhhDietasCalLoad(periodo) {
       h += '<th style="padding:2px 4px;text-align:right;font-weight:700;">Total</th></tr>';
 
       // Employee rows
+      var proyMap = d.proyectos || {}; // "empId_fecha" -> "CODIGO" or object
       empleados.forEach(function (emp) {
         var nombre = (emp.nombre || "") + " " + (emp.apellidos || "");
         h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">';
@@ -1294,13 +1295,24 @@ function _rrhhDietasCalLoad(periodo) {
         dayInfos.forEach(function (di) {
           var key = emp.id + "_" + di.fecha;
           var dieta = dietasMap[key];
+          var proy = proyMap[key]; // string (codigo) or null
+          var proyCodigo = typeof proy === "string" ? proy : (proy && proy.codigo ? proy.codigo : "");
           var tipo = dieta ? dieta.tipo : "";
           var abrev = abrevMap[tipo] || "";
           var bg = colorMap[tipo] || "";
           var noLabBg = di.noLab ? "#E5E7EB" : "";
+          var tieneProyecto = !!proyCodigo;
+          var sinDieta = !tipo;
+          // Alert: proyecto asignado pero sin dieta
+          var alertBorder = (tieneProyecto && sinDieta && !di.noLab) ? "border:2px solid #F59E0B;" : "";
           var cellBg = bg || noLabBg;
-          var style = "padding:1px;text-align:center;cursor:pointer;" + (cellBg ? "background:" + cellBg + ";" : "") + (bg ? "color:#fff;font-weight:600;" : "");
-          h += '<td style="' + style + '" onclick="_rrhhDietaCellClick(this,' + emp.id + ',\'' + di.fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g, "\\'") + '\')" title="' + (tipo || 'Sin dieta') + '">' + (abrev || (di.noLab ? '' : '\u00b7')) + '</td>';
+          if (tieneProyecto && sinDieta && !di.noLab && !cellBg) cellBg = "#FFFBEB"; // yellow hint
+          var style = "padding:0px 1px;text-align:center;cursor:pointer;min-width:28px;vertical-align:top;line-height:1.1;" + (cellBg ? "background:" + cellBg + ";" : "") + alertBorder + (bg ? "color:#fff;font-weight:600;" : "");
+          var proyLabel = tieneProyecto ? '<div style="font-size:7px;color:#888;overflow:hidden;white-space:nowrap;max-width:28px;">' + proyCodigo.substring(0, 4) + '</div>' : '';
+          var dietaLabel = abrev ? '<div style="font-size:9px;font-weight:700;' + (bg ? 'color:#fff;' : '') + '">' + abrev + '</div>' : (tieneProyecto && !di.noLab ? '<div style="font-size:8px;color:#F59E0B;">\u26a0</div>' : (di.noLab ? '' : ''));
+          var title = (proyCodigo ? 'Proy: ' + proyCodigo + ' | ' : '') + (tipo || 'Sin dieta');
+          var proyEsc = proyCodigo.replace(/'/g, "\\'");
+          h += '<td style="' + style + '" onclick="_rrhhDietaCellClick(this,' + emp.id + ',\'' + di.fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g, "\\'") + '\',\'' + proyEsc + '\')" title="' + title + '">' + proyLabel + dietaLabel + '</td>';
           if (dieta && dieta.importe) total += dieta.importe;
         });
         h += '<td style="padding:3px 4px;text-align:right;font-weight:600;">' + (total > 0 ? fmtEur(total) : '\u2014') + '</td>';
@@ -1312,7 +1324,7 @@ function _rrhhDietasCalLoad(periodo) {
     .catch(function (err) { grid.innerHTML = '<p style="color:#dc3545;">Error: ' + err.message + '</p>'; });
 }
 
-function _rrhhDietaCellClick(td, empId, fecha, periodo, empNombre) {
+function _rrhhDietaCellClick(td, empId, fecha, periodo, empNombre, proyCodigo) {
   // Close any existing popup
   var old = document.getElementById("rrhh-dieta-popup");
   if (old) old.remove();
@@ -1327,10 +1339,15 @@ function _rrhhDietaCellClick(td, empId, fecha, periodo, empNombre) {
 
   var popup = document.createElement("div");
   popup.id = "rrhh-dieta-popup";
-  popup.style.cssText = "position:fixed;z-index:1000;background:#fff;border:1px solid var(--color-border,#e2e8f0);border-radius:8px;padding:10px;box-shadow:0 4px 12px rgba(0,0,0,.15);min-width:180px;font-size:13px;";
+  popup.style.cssText = "position:fixed;z-index:1000;background:#fff;border:1px solid var(--color-border,#e2e8f0);border-radius:8px;padding:10px;box-shadow:0 4px 12px rgba(0,0,0,.15);min-width:190px;font-size:13px;";
 
-  var html = '<div style="font-weight:600;margin-bottom:4px;font-size:12px;">' + (empNombre || '') + '</div>';
-  html += '<div style="font-size:11px;color:#888;margin-bottom:8px;">' + fecha + '</div>';
+  var html = '<div style="font-weight:600;margin-bottom:2px;font-size:12px;">' + (empNombre || '') + '</div>';
+  html += '<div style="font-size:11px;color:#888;margin-bottom:2px;">' + fecha + '</div>';
+  if (proyCodigo) {
+    html += '<div style="font-size:11px;margin-bottom:6px;padding:3px 6px;background:#EFF6FF;color:#1E40AF;border-radius:4px;display:inline-block;">Proyecto: <b>' + proyCodigo + '</b></div>';
+  } else {
+    html += '<div style="font-size:10px;color:#9ca3af;margin-bottom:6px;">Sin proyecto asignado</div>';
+  }
   opciones.forEach(function (o) {
     html += '<button type="button" onclick="_rrhhDietaSeleccionar(' + empId + ',\'' + fecha + '\',\'' + periodo + '\',\'' + o.tipo + '\')" style="display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;margin-bottom:3px;border:none;border-radius:5px;cursor:pointer;background:transparent;font-size:12px;text-align:left;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'transparent\'">';
     html += '<span style="display:inline-block;width:24px;height:18px;border-radius:3px;background:' + o.bg + ';color:' + o.color + ';font-size:9px;font-weight:700;text-align:center;line-height:18px;">' + o.abrev + '</span>';
