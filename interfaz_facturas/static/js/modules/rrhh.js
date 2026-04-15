@@ -1300,7 +1300,7 @@ function _rrhhDietasCalLoad(periodo) {
           var noLabBg = di.noLab ? "#E5E7EB" : "";
           var cellBg = bg || noLabBg;
           var style = "padding:1px;text-align:center;cursor:pointer;" + (cellBg ? "background:" + cellBg + ";" : "") + (bg ? "color:#fff;font-weight:600;" : "");
-          h += '<td style="' + style + '" onclick="_rrhhDietaCellClick(' + emp.id + ',\'' + di.fecha + '\',\'' + periodo + '\')" title="' + (tipo || 'Sin dieta') + '">' + (abrev || (di.noLab ? '' : '\u00b7')) + '</td>';
+          h += '<td style="' + style + '" onclick="_rrhhDietaCellClick(this,' + emp.id + ',\'' + di.fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g, "\\'") + '\')" title="' + (tipo || 'Sin dieta') + '">' + (abrev || (di.noLab ? '' : '\u00b7')) + '</td>';
           if (dieta && dieta.importe) total += dieta.importe;
         });
         h += '<td style="padding:3px 4px;text-align:right;font-weight:600;">' + (total > 0 ? fmtEur(total) : '\u2014') + '</td>';
@@ -1312,14 +1312,59 @@ function _rrhhDietasCalLoad(periodo) {
     .catch(function (err) { grid.innerHTML = '<p style="color:#dc3545;">Error: ' + err.message + '</p>'; });
 }
 
-function _rrhhDietaCellClick(empId, fecha, periodo) {
-  var opciones = ["", "nacional_completa", "nacional_media", "internacional_completa", "internacional_media"];
-  var labels = ["Sin dieta", "Nacional completa", "Nacional media", "Internacional completa", "Internacional media"];
-  var msg = "Selecciona tipo de dieta:\n";
-  opciones.forEach(function (o, i) { msg += i + " = " + labels[i] + "\n"; });
-  var sel = prompt(msg, "0");
-  if (sel === null) return;
-  var tipo = opciones[parseInt(sel)] || "";
+function _rrhhDietaCellClick(td, empId, fecha, periodo, empNombre) {
+  // Close any existing popup
+  var old = document.getElementById("rrhh-dieta-popup");
+  if (old) old.remove();
+
+  var opciones = [
+    { tipo: "nacional_completa", label: "Nacional completa", abrev: "NC", bg: "#3B82F6", color: "#fff" },
+    { tipo: "nacional_media", label: "Nacional media", abrev: "NM", bg: "#93C5FD", color: "#1E3A5F" },
+    { tipo: "internacional_completa", label: "Internacional completa", abrev: "IC", bg: "#F59E0B", color: "#fff" },
+    { tipo: "internacional_media", label: "Internacional media", abrev: "IM", bg: "#FDE68A", color: "#78350F" },
+    { tipo: "", label: "Sin dieta", abrev: "\u2014", bg: "#E5E7EB", color: "#666" }
+  ];
+
+  var popup = document.createElement("div");
+  popup.id = "rrhh-dieta-popup";
+  popup.style.cssText = "position:fixed;z-index:1000;background:#fff;border:1px solid var(--color-border,#e2e8f0);border-radius:8px;padding:10px;box-shadow:0 4px 12px rgba(0,0,0,.15);min-width:180px;font-size:13px;";
+
+  var html = '<div style="font-weight:600;margin-bottom:4px;font-size:12px;">' + (empNombre || '') + '</div>';
+  html += '<div style="font-size:11px;color:#888;margin-bottom:8px;">' + fecha + '</div>';
+  opciones.forEach(function (o) {
+    html += '<button type="button" onclick="_rrhhDietaSeleccionar(' + empId + ',\'' + fecha + '\',\'' + periodo + '\',\'' + o.tipo + '\')" style="display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;margin-bottom:3px;border:none;border-radius:5px;cursor:pointer;background:transparent;font-size:12px;text-align:left;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'transparent\'">';
+    html += '<span style="display:inline-block;width:24px;height:18px;border-radius:3px;background:' + o.bg + ';color:' + o.color + ';font-size:9px;font-weight:700;text-align:center;line-height:18px;">' + o.abrev + '</span>';
+    html += '<span>' + o.label + '</span>';
+    html += '</button>';
+  });
+  popup.innerHTML = html;
+
+  document.body.appendChild(popup);
+
+  // Position near the cell (same pattern as Operaciones)
+  var rect = td.getBoundingClientRect();
+  var top = rect.bottom + 4;
+  var left = rect.left;
+  if (left + 200 > window.innerWidth) left = window.innerWidth - 210;
+  if (top + 200 > window.innerHeight) top = rect.top - popup.offsetHeight - 4;
+  if (left < 10) left = 10;
+  popup.style.top = top + "px";
+  popup.style.left = left + "px";
+
+  // Close on outside click
+  setTimeout(function () {
+    document.addEventListener("click", function _closePopup(e) {
+      if (!popup.contains(e.target) && e.target !== td) {
+        popup.remove();
+        document.removeEventListener("click", _closePopup);
+      }
+    });
+  }, 10);
+}
+
+function _rrhhDietaSeleccionar(empId, fecha, periodo, tipo) {
+  var popup = document.getElementById("rrhh-dieta-popup");
+  if (popup) popup.remove();
   fetch("/api/rrhh/dietas/diaria", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1765,6 +1810,7 @@ window._rrhhGenerarRemesa = _rrhhGenerarRemesa;
 window._rrhhCargarDietas = _rrhhCargarDietas;
 window._rrhhDietasCalLoad = _rrhhDietasCalLoad;
 window._rrhhDietaCellClick = _rrhhDietaCellClick;
+window._rrhhDietaSeleccionar = _rrhhDietaSeleccionar;
 window._rrhhDietasEmpLoad = _rrhhDietasEmpLoad;
 window._rrhhNuevaDieta = _rrhhNuevaDieta;
 window._rrhhBorrarDieta = _rrhhBorrarDieta;
