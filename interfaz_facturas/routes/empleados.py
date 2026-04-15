@@ -544,9 +544,10 @@ def api_rrhh_dietas_calendario(periodo):
     # Get dietas_diarias for this month + calculate importe from tarifas
     tarifas_all = conn.execute("SELECT * FROM dietas_config ORDER BY fecha_vigencia_desde DESC").fetchall()
     emp_cats = {e["id"]: (e.get("categoria") or "").lower().strip() for e in emps}
+    _DEFAULTS_CAL = {"nacional_completa": 30.0, "nacional_media": 15.0, "internacional_completa": 50.0, "internacional_media": 25.0}
     def _calc_imp(tipo_dieta, fecha, emp_id):
       parts = tipo_dieta.split("_", 1) if tipo_dieta else []
-      if len(parts) != 2: return 0
+      if len(parts) != 2: return _DEFAULTS_CAL.get(tipo_dieta, 0)
       geo, sub = parts
       cat = emp_cats.get(emp_id, "")
       for t in tarifas_all:
@@ -561,7 +562,7 @@ def api_rrhh_dietas_calendario(periodo):
         if t["fecha_vigencia_desde"] and t["fecha_vigencia_desde"] > fecha: continue
         if t["fecha_vigencia_hasta"] and t["fecha_vigencia_hasta"] < fecha: continue
         if not (t["categoria"] or "").strip(): return t["importe"] or 0
-      return 0
+      return _DEFAULTS_CAL.get(tipo_dieta, 0)
 
     dietas = {}
     for r in conn.execute(
@@ -657,13 +658,19 @@ def api_rrhh_dietas_empleado(eid, periodo):
     emp_row = conn.execute("SELECT categoria FROM empleados WHERE id=?", (eid,)).fetchone()
     emp_cat = (emp_row["categoria"] or "").lower().strip() if emp_row else ""
 
+    # Hardcoded defaults when no tarifas configured
+    _DEFAULTS = {
+      "nacional_completa": 30.0, "nacional_media": 15.0,
+      "internacional_completa": 50.0, "internacional_media": 25.0,
+    }
+
     def _buscar_tarifa(tipo_dieta, fecha):
-      """Map tipo_dieta to tarifa. Returns importe or 0."""
-      # Map: nacional_completa -> tipo=nacional, subtipo=completa
+      """Map tipo_dieta to tarifa. Returns importe."""
       parts = tipo_dieta.split("_", 1) if tipo_dieta else []
       if len(parts) != 2:
-        return 0
+        return _DEFAULTS.get(tipo_dieta, 0)
       geo, sub = parts[0], parts[1]
+      # Search configured tarifas
       for t in tarifas:
         if t["tipo"] != geo or t["subtipo"] != sub:
           continue
@@ -671,7 +678,6 @@ def api_rrhh_dietas_empleado(eid, periodo):
           continue
         if t["fecha_vigencia_hasta"] and t["fecha_vigencia_hasta"] < fecha:
           continue
-        # Match categoria: specific match first, then 'todas' (NULL/empty)
         t_cat = (t["categoria"] or "").lower().strip()
         if t_cat and t_cat != emp_cat:
           continue
@@ -687,7 +693,8 @@ def api_rrhh_dietas_empleado(eid, periodo):
         t_cat = (t["categoria"] or "").lower().strip()
         if not t_cat:
           return t["importe"] or 0
-      return 0
+      # No tarifa found — use hardcoded default
+      return _DEFAULTS.get(tipo_dieta, 0)
 
     dietas = {}
     for r in conn.execute(

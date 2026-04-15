@@ -1387,7 +1387,14 @@ function _rrhhDietaSeleccionar(empId, fecha, periodo, tipo) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ empleado_id: empId, fecha: fecha, tipo: tipo, importe: 0 })
-  }).then(function () { _rrhhDietasCalLoad(periodo); });
+  }).then(function () {
+    // Reload the active view
+    if (_rrhhDietasVista === "empleado") {
+      _rrhhDietasEmpLoad();
+    } else {
+      _rrhhDietasCalLoad(periodo);
+    }
+  });
 }
 
 function _rrhhDietasResumen(body) {
