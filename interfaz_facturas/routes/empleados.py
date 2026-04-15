@@ -862,3 +862,43 @@ def api_rrhh_banco_conc_irpf(trimestre):
   finally:
     bconn.close()
 
+
+@empleados_bp.get("/api/rrhh/seguridad-social/comparar/<periodo>")
+def api_rrhh_ss_comparar(periodo):
+  """Compara estimado SS (nóminas) vs banco (movimiento conciliado)."""
+  empleados_db.init_empleados_db()
+  gconn = get_conn()
+  bconn = _get_bancos_conn()
+  try:
+    row = gconn.execute(
+      "SELECT ROUND(SUM(ss_empresa),2) as total FROM nominas WHERE periodo=? AND tipo='NOMINA'",
+      (periodo,),
+    ).fetchone()
+    estimado = row["total"] if row and row["total"] else 0
+    banco = 0
+    banco_fecha = None
+    banco_concepto = None
+    try:
+      mov = bconn.execute(
+        "SELECT fecha_operacion, concepto, importe FROM movimientos "
+        "WHERE rrhh_tipo='seguridad_social' AND rrhh_periodo=? LIMIT 1",
+        (periodo,),
+      ).fetchone()
+      if mov:
+        banco = abs(mov["importe"] or 0)
+        banco_fecha = mov["fecha_operacion"]
+        banco_concepto = mov["concepto"]
+    except Exception:
+      pass
+    diferencia = round(banco - estimado, 2) if banco > 0 else None
+    return jsonify({
+      "estimado": round(estimado, 2),
+      "banco": round(banco, 2) if banco > 0 else None,
+      "banco_fecha": banco_fecha,
+      "banco_concepto": banco_concepto,
+      "diferencia": diferencia,
+    })
+  finally:
+    gconn.close()
+    bconn.close()
+

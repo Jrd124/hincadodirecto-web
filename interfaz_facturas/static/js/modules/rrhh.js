@@ -1998,10 +1998,11 @@ function _rrhhCargarSS() {
           .then(function (c) {
             var el = document.getElementById("rrhh-ss-banco-" + m.periodo);
             if (!el) return;
+            var comparBtn = ' <button onclick="_rrhhSSComparar(\'' + m.periodo + '\',this)" style="background:none;border:none;cursor:pointer;font-size:0.85rem;" title="Comparar estimado vs banco">\uD83D\uDD0D</button>';
             if (c.estado === "conciliado" && c.movimiento) {
-              el.innerHTML = '<span style="padding:2px 8px;border-radius:99px;font-size:0.7rem;font-weight:600;background:#DCFCE7;color:#166534;" title="' + (c.movimiento.fecha_operacion || '') + ' | ' + (c.movimiento.importe || '') + ' EUR">\u2705 Conciliado</span>';
+              el.innerHTML = '<span style="padding:2px 8px;border-radius:99px;font-size:0.7rem;font-weight:600;background:#DCFCE7;color:#166534;" title="' + (c.movimiento.fecha_operacion || '') + ' | ' + (c.movimiento.importe || '') + ' EUR">\u2705</span>' + comparBtn;
             } else {
-              el.innerHTML = '<span style="padding:2px 8px;border-radius:99px;font-size:0.7rem;font-weight:600;background:#FEE2E2;color:#991B1B;">Pendiente</span>';
+              el.innerHTML = '<span style="padding:2px 8px;border-radius:99px;font-size:0.7rem;font-weight:600;background:#FEE2E2;color:#991B1B;">Pend.</span>' + comparBtn;
             }
           })
           .catch(function () {});
@@ -2061,6 +2062,38 @@ function _rrhhCargarSS() {
 // ===============================================================================
 // ==  8. IRPF                                                                  ==
 // ===============================================================================
+
+function _rrhhSSComparar(periodo, btn) {
+  // Remove any existing comparison card
+  var old = document.getElementById("rrhh-ss-comparar-card");
+  if (old) { old.remove(); return; } // toggle off
+
+  fetch("/api/rrhh/seguridad-social/comparar/" + periodo)
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var card = document.createElement("tr");
+      card.id = "rrhh-ss-comparar-card";
+      var difVal = d.diferencia;
+      var difColor = difVal === null ? "#9ca3af" : Math.abs(difVal) < 50 ? "#16a34a" : Math.abs(difVal) < 200 ? "#ca8a04" : "#dc2626";
+      var difBg = difVal === null ? "" : Math.abs(difVal) < 50 ? "background:#f0fdf4;" : Math.abs(difVal) < 200 ? "background:#fefce8;" : "background:#fef2f2;";
+      var bancoStr = d.banco !== null ? fmtEurFull(d.banco) : '<span style="color:#9ca3af;">Sin conciliar</span>';
+      var difStr = difVal !== null ? '<span style="color:' + difColor + ';font-weight:700;">' + fmtEurFull(difVal) + '</span>' : '<span style="color:#9ca3af;">\u2014</span>';
+      card.innerHTML = '<td colspan="7" style="padding:0;">' +
+        '<div style="padding:10px 16px;background:#f8fafc;border-left:3px solid #3B82F6;margin:2px 0;border-radius:0 6px 6px 0;' + difBg + '">' +
+        '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Comparaci\u00f3n SS \u2014 ' + periodo + '</div>' +
+        '<table style="font-size:0.8rem;border-collapse:collapse;">' +
+        '<tr><td style="padding:3px 12px 3px 0;color:#666;">Estimado (n\u00f3minas)</td><td style="padding:3px 0;font-weight:600;">' + fmtEurFull(d.estimado) + '</td></tr>' +
+        '<tr><td style="padding:3px 12px 3px 0;color:#666;">Banco (movimiento)</td><td style="padding:3px 0;font-weight:600;">' + bancoStr + '</td></tr>' +
+        '<tr style="border-top:1px solid var(--border,#e9ecef);"><td style="padding:5px 12px 3px 0;font-weight:600;">Diferencia</td><td style="padding:5px 0;">' + difStr + '</td></tr>' +
+        '</table>' +
+        (d.banco_fecha ? '<div style="font-size:0.72rem;color:#9ca3af;margin-top:4px;">Mov: ' + d.banco_fecha + ' \u2014 ' + (d.banco_concepto || '').substring(0, 60) + '</div>' : '') +
+        '</div></td>';
+      // Insert after the current row
+      var tr = btn.closest("tr");
+      if (tr && tr.parentNode) tr.parentNode.insertBefore(card, tr.nextSibling);
+    })
+    .catch(function (e) { alert("Error: " + e.message); });
+}
 
 function _rrhhCargarIRPF() {
   fetch("/api/rrhh/irpf")
@@ -2209,6 +2242,7 @@ window._rrhhAdelMesNext = _rrhhAdelMesNext;
 window._rrhhNuevoAdelanto = _rrhhNuevoAdelanto;
 window._rrhhBorrarAdelanto = _rrhhBorrarAdelanto;
 window._rrhhCargarSS = _rrhhCargarSS;
+window._rrhhSSComparar = _rrhhSSComparar;
 window._rrhhCargarIRPF = _rrhhCargarIRPF;
 window._rrhhCargarCosteProyecto = _rrhhCargarCosteProyecto;
 window._rrhhRenderOCRPreview = _rrhhRenderOCRPreview;
