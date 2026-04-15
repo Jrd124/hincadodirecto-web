@@ -1325,10 +1325,21 @@ function _rrhhDietasCalLoad(periodo) {
     .catch(function (err) { grid.innerHTML = '<p style="color:#dc3545;">Error: ' + err.message + '</p>'; });
 }
 
+var _rrhhDietaFuncion = "operador"; // current function selection in popup
+
 function _rrhhDietaCellClick(td, empId, fecha, periodo, empNombre, proyCodigo) {
-  // Close any existing popup
   var old = document.getElementById("rrhh-dieta-popup");
   if (old) old.remove();
+
+  // Default function based on employee category (from cache if available)
+  _rrhhDietaFuncion = "operador";
+  var empCache = (_rrhhEmpleadosCache || []).find(function (e) { return e.id === empId; });
+  if (empCache) {
+    var cat = ((empCache.categoria || empCache.puesto || "").toLowerCase());
+    if (cat.indexOf("ayudante") >= 0 || cat.indexOf("peon") >= 0 || cat.indexOf("pe\u00f3n") >= 0 || cat.indexOf("peones") >= 0) {
+      _rrhhDietaFuncion = "ayudante";
+    }
+  }
 
   var opciones = [
     { tipo: "nacional_completa", label: "Nacional completa", abrev: "NC", bg: "#3B82F6", color: "#fff" },
@@ -1340,17 +1351,21 @@ function _rrhhDietaCellClick(td, empId, fecha, periodo, empNombre, proyCodigo) {
 
   var popup = document.createElement("div");
   popup.id = "rrhh-dieta-popup";
-  popup.style.cssText = "position:fixed;z-index:1000;background:#fff;border:1px solid var(--color-border,#e2e8f0);border-radius:8px;padding:10px;box-shadow:0 4px 12px rgba(0,0,0,.15);min-width:190px;font-size:13px;";
+  popup.style.cssText = "position:fixed;z-index:1000;background:#fff;border:1px solid var(--color-border,#e2e8f0);border-radius:8px;padding:10px;box-shadow:0 4px 12px rgba(0,0,0,.15);min-width:200px;font-size:13px;";
 
   var html = '<div style="font-weight:600;margin-bottom:2px;font-size:12px;">' + (empNombre || '') + '</div>';
-  html += '<div style="font-size:11px;color:#888;margin-bottom:2px;">' + fecha + '</div>';
+  html += '<div style="font-size:11px;color:#888;margin-bottom:4px;">' + fecha + '</div>';
   if (proyCodigo) {
-    html += '<div style="font-size:11px;margin-bottom:6px;padding:3px 6px;background:#EFF6FF;color:#1E40AF;border-radius:4px;display:inline-block;">Proyecto: <b>' + proyCodigo + '</b></div>';
-  } else {
-    html += '<div style="font-size:10px;color:#9ca3af;margin-bottom:6px;">Sin proyecto asignado</div>';
+    html += '<div style="font-size:10px;margin-bottom:6px;padding:2px 6px;background:#EFF6FF;color:#1E40AF;border-radius:4px;display:inline-block;">Proy: <b>' + proyCodigo + '</b></div>';
   }
+  // Function toggle
+  html += '<div style="display:flex;gap:4px;margin-bottom:8px;">';
+  html += '<button type="button" id="rrhh-fn-op" onclick="_rrhhDietaSetFn(\'operador\')" style="flex:1;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid ' + (_rrhhDietaFuncion === "operador" ? '#3B82F6' : '#ccc') + ';background:' + (_rrhhDietaFuncion === "operador" ? '#EFF6FF' : 'transparent') + ';color:' + (_rrhhDietaFuncion === "operador" ? '#3B82F6' : '#666') + ';">Operador</button>';
+  html += '<button type="button" id="rrhh-fn-ay" onclick="_rrhhDietaSetFn(\'ayudante\')" style="flex:1;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid ' + (_rrhhDietaFuncion === "ayudante" ? '#10B981' : '#ccc') + ';background:' + (_rrhhDietaFuncion === "ayudante" ? '#ECFDF5' : 'transparent') + ';color:' + (_rrhhDietaFuncion === "ayudante" ? '#10B981' : '#666') + ';">Ayudante</button>';
+  html += '</div>';
+  // Options
   opciones.forEach(function (o) {
-    html += '<button type="button" onclick="_rrhhDietaSeleccionar(' + empId + ',\'' + fecha + '\',\'' + periodo + '\',\'' + o.tipo + '\')" style="display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;margin-bottom:3px;border:none;border-radius:5px;cursor:pointer;background:transparent;font-size:12px;text-align:left;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'transparent\'">';
+    html += '<button type="button" onclick="_rrhhDietaSeleccionar(' + empId + ',\'' + fecha + '\',\'' + periodo + '\',\'' + o.tipo + '\')" style="display:flex;align-items:center;gap:8px;width:100%;padding:5px 8px;margin-bottom:2px;border:none;border-radius:5px;cursor:pointer;background:transparent;font-size:12px;text-align:left;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'transparent\'">';
     html += '<span style="display:inline-block;width:24px;height:18px;border-radius:3px;background:' + o.bg + ';color:' + o.color + ';font-size:9px;font-weight:700;text-align:center;line-height:18px;">' + o.abrev + '</span>';
     html += '<span>' + o.label + '</span>';
     html += '</button>';
@@ -1380,15 +1395,22 @@ function _rrhhDietaCellClick(td, empId, fecha, periodo, empNombre, proyCodigo) {
   }, 10);
 }
 
+function _rrhhDietaSetFn(fn) {
+  _rrhhDietaFuncion = fn;
+  var opBtn = document.getElementById("rrhh-fn-op");
+  var ayBtn = document.getElementById("rrhh-fn-ay");
+  if (opBtn) { opBtn.style.borderColor = fn === "operador" ? "#3B82F6" : "#ccc"; opBtn.style.background = fn === "operador" ? "#EFF6FF" : "transparent"; opBtn.style.color = fn === "operador" ? "#3B82F6" : "#666"; }
+  if (ayBtn) { ayBtn.style.borderColor = fn === "ayudante" ? "#10B981" : "#ccc"; ayBtn.style.background = fn === "ayudante" ? "#ECFDF5" : "transparent"; ayBtn.style.color = fn === "ayudante" ? "#10B981" : "#666"; }
+}
+
 function _rrhhDietaSeleccionar(empId, fecha, periodo, tipo) {
   var popup = document.getElementById("rrhh-dieta-popup");
   if (popup) popup.remove();
   fetch("/api/rrhh/dietas/diaria", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ empleado_id: empId, fecha: fecha, tipo: tipo, importe: 0 })
+    body: JSON.stringify({ empleado_id: empId, fecha: fecha, tipo: tipo, importe: 0, funcion: _rrhhDietaFuncion })
   }).then(function () {
-    // Reload the active view
     if (_rrhhDietasVista === "empleado") {
       _rrhhDietasEmpLoad();
     } else {
@@ -1485,8 +1507,9 @@ function _rrhhDietasEmpLoad() {
         '<th style="padding:6px 6px;font-weight:700;width:30px;">D\u00eda</th>' +
         '<th style="padding:6px 4px;font-weight:700;width:25px;">DS</th>' +
         '<th style="padding:6px 6px;font-weight:700;">Proyecto</th>' +
-        '<th style="padding:6px 6px;font-weight:700;width:70px;">Dieta</th>' +
-        '<th style="padding:6px 6px;font-weight:700;text-align:right;width:70px;">Importe</th>' +
+        '<th style="padding:6px 4px;font-weight:700;width:45px;">Funci\u00f3n</th>' +
+        '<th style="padding:6px 6px;font-weight:700;width:65px;">Dieta</th>' +
+        '<th style="padding:6px 6px;font-weight:700;text-align:right;width:65px;">Importe</th>' +
         '<th style="padding:6px 6px;font-weight:700;">Comentario</th>' +
         '</tr></thead><tbody>';
 
@@ -1516,10 +1539,14 @@ function _rrhhDietasEmpLoad() {
         var pillColor = colorMap[abrev] || "";
         var pillHtml = abrev ? '<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:' + pillColor + ';color:#fff;font-size:10px;font-weight:700;">' + abrev + '</span>' : (tieneProyecto && !noLab ? '<span style="color:#F59E0B;">\u26a0</span>' : '\u2014');
 
+        var fn = dieta ? (dieta.funcion || "operador") : "";
+        var fnPill = fn === "ayudante" ? '<span style="padding:1px 4px;border-radius:3px;background:#ECFDF5;color:#10B981;font-size:9px;font-weight:600;">Ay.</span>' : (fn === "operador" && tipo ? '<span style="padding:1px 4px;border-radius:3px;background:#EFF6FF;color:#3B82F6;font-size:9px;font-weight:600;">Op.</span>' : '\u2014');
+
         h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);' + rowBg + rowBorder + '">' +
           '<td style="padding:4px 6px;font-weight:600;">' + dd.num + '</td>' +
           '<td style="padding:4px 4px;color:' + (noLab ? '#9ca3af' : 'inherit') + ';">' + dd.dia_semana + '</td>' +
           '<td style="padding:4px 6px;">' + (proyCodigo || '\u2014') + '</td>' +
+          '<td style="padding:4px 4px;">' + fnPill + '</td>' +
           '<td style="padding:4px 6px;cursor:pointer;" onclick="_rrhhDietaEmpCellClick(this,' + empId + ',\'' + dd.fecha + '\',\'' + mes + '\')">' + pillHtml + '</td>' +
           '<td style="padding:4px 6px;text-align:right;">' + (imp > 0 ? fmtEur(imp) : '\u2014') + '</td>' +
           '<td style="padding:2px 4px;"><input type="text" value="' + notas.replace(/"/g, '&quot;') + '" data-emp="' + empId + '" data-fecha="' + dd.fecha + '" style="width:100%;padding:2px 4px;border:1px solid transparent;border-radius:3px;font-size:0.78rem;background:transparent;" onfocus="this.style.borderColor=\'var(--border)\';this.style.background=\'#fff\'" onblur="_rrhhDietaGuardarNota(this)"></td>' +
@@ -1536,6 +1563,7 @@ function _rrhhDietasEmpLoad() {
       h += '</tbody><tfoot><tr style="font-weight:700;background:var(--bg-secondary,#f8f9fa);">' +
         '<td colspan="2" style="padding:6px 6px;">TOTAL</td>' +
         '<td style="padding:6px 6px;">' + diasProy + ' d\u00edas</td>' +
+        '<td></td>' +
         '<td style="padding:6px 6px;">' + diasDieta + ' d\u00edas' + (desglose.length ? ' (' + desglose.join(', ') + ')' : '') + '</td>' +
         '<td style="padding:6px 6px;text-align:right;">' + fmtEurFull(totalImporte) + '</td>' +
         '<td></td></tr></tfoot></table>';
@@ -1574,7 +1602,7 @@ function _rrhhDietasConfigView(body) {
       var historial = cfg.filter(function (c) { return !!c.fecha_vigencia_hasta; });
       var _lbl = function (t) { return { nacional: "Nacional", internacional: "Internacional" }[t] || t || "\u2014"; };
       var _slbl = function (s) { return { completa: "Completa", media: "Media" }[s] || s || "\u2014"; };
-      var _clbl = function (c) { return c ? ({"peon":"Pe\u00f3n","hincador":"Hincador","oficial":"Oficial"}[c] || c) : "Todas"; };
+      var _clbl = function (c) { return c ? ({"operador":"Operador","ayudante":"Ayudante","peon":"Pe\u00f3n","hincador":"Hincador","oficial":"Oficial"}[c] || c) : "Todas"; };
       var _fmtFecha = function (f) { if (!f) return "\u2014"; var p = f.split("-"); return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : f; };
 
       var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
@@ -1589,7 +1617,7 @@ function _rrhhDietasConfigView(body) {
         h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);">' +
           '<th style="padding:6px 8px;font-weight:700;">Geograf\u00eda</th>' +
           '<th style="padding:6px 6px;font-weight:700;">Tipo</th>' +
-          '<th style="padding:6px 6px;font-weight:700;">Categor\u00eda</th>' +
+          '<th style="padding:6px 6px;font-weight:700;">Funci\u00f3n</th>' +
           '<th style="padding:6px 6px;font-weight:700;text-align:right;">Importe/d\u00eda</th>' +
           '<th style="padding:6px 6px;font-weight:700;">Desde</th>' +
           '<th style="padding:6px 6px;font-weight:700;text-align:center;">Acciones</th>' +
@@ -1637,7 +1665,7 @@ function _rrhhNuevaTarifaModal() {
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">' +
     '<div><label style="font-size:11px;color:#888;text-transform:uppercase;">Geograf\u00eda</label><select id="nt-tipo" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:5px;"><option value="nacional">Nacional</option><option value="internacional">Internacional</option></select></div>' +
     '<div><label style="font-size:11px;color:#888;text-transform:uppercase;">Tipo</label><select id="nt-subtipo" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:5px;"><option value="completa">Completa</option><option value="media">Media</option></select></div>' +
-    '<div><label style="font-size:11px;color:#888;text-transform:uppercase;">Categor\u00eda</label><select id="nt-cat" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:5px;"><option value="">Todas</option><option value="peon">Pe\u00f3n</option><option value="hincador">Hincador</option><option value="oficial">Oficial</option></select></div>' +
+    '<div><label style="font-size:11px;color:#888;text-transform:uppercase;">Funci\u00f3n</label><select id="nt-cat" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:5px;"><option value="operador">Operador</option><option value="ayudante">Ayudante</option></select></div>' +
     '<div><label style="font-size:11px;color:#888;text-transform:uppercase;">Importe/d\u00eda \u20ac</label><input id="nt-importe" type="number" step="0.01" min="0" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:5px;"></div>' +
     '</div>' +
     '<div style="margin-bottom:12px;"><label style="font-size:11px;color:#888;text-transform:uppercase;">Vigencia desde</label><input id="nt-desde" type="date" value="' + new Date().toISOString().slice(0, 10) + '" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:5px;"></div>' +
@@ -2027,6 +2055,7 @@ window._rrhhCargarDietas = _rrhhCargarDietas;
 window._rrhhDietasCalLoad = _rrhhDietasCalLoad;
 window._rrhhDietaCellClick = _rrhhDietaCellClick;
 window._rrhhDietaSeleccionar = _rrhhDietaSeleccionar;
+window._rrhhDietaSetFn = _rrhhDietaSetFn;
 window._rrhhDietasEmpLoad = _rrhhDietasEmpLoad;
 window._rrhhDietaEmpCellClick = _rrhhDietaEmpCellClick;
 window._rrhhDietaGuardarNota = _rrhhDietaGuardarNota;

@@ -544,34 +544,34 @@ def api_rrhh_dietas_calendario(periodo):
     # Get dietas_diarias for this month + calculate importe from tarifas
     tarifas_all = conn.execute("SELECT * FROM dietas_config ORDER BY fecha_vigencia_desde DESC").fetchall()
     emp_cats = {e["id"]: (e.get("categoria") or "").lower().strip() for e in emps}
-    _DEFAULTS_CAL = {"nacional_completa": 30.0, "nacional_media": 15.0, "internacional_completa": 50.0, "internacional_media": 25.0}
-    def _calc_imp(tipo_dieta, fecha, emp_id):
+    def _calc_imp(tipo_dieta, fecha, funcion="operador"):
       parts = tipo_dieta.split("_", 1) if tipo_dieta else []
-      if len(parts) != 2: return _DEFAULTS_CAL.get(tipo_dieta, 0)
+      if len(parts) != 2: return 0
       geo, sub = parts
-      cat = emp_cats.get(emp_id, "")
+      fn = (funcion or "operador").lower().strip()
       for t in tarifas_all:
         if t["tipo"] != geo or t["subtipo"] != sub: continue
         if t["fecha_vigencia_desde"] and t["fecha_vigencia_desde"] > fecha: continue
         if t["fecha_vigencia_hasta"] and t["fecha_vigencia_hasta"] < fecha: continue
         tc = (t["categoria"] or "").lower().strip()
-        if tc and tc != cat: continue
-        return t["importe"] or 0
+        if tc == fn: return t["importe"] or 0
       for t in tarifas_all:
         if t["tipo"] != geo or t["subtipo"] != sub: continue
         if t["fecha_vigencia_desde"] and t["fecha_vigencia_desde"] > fecha: continue
         if t["fecha_vigencia_hasta"] and t["fecha_vigencia_hasta"] < fecha: continue
         if not (t["categoria"] or "").strip(): return t["importe"] or 0
-      return _DEFAULTS_CAL.get(tipo_dieta, 0)
+      return 0
 
     dietas = {}
     for r in conn.execute(
-      "SELECT empleado_id, fecha, tipo, importe, notas FROM dietas_diarias "
+      "SELECT empleado_id, fecha, tipo, importe, notas, funcion FROM dietas_diarias "
       "WHERE fecha >= ? AND fecha <= ?", (dias[0], dias[-1])
     ).fetchall():
       d = dict(r)
+      fn = d.get("funcion") or "operador"
+      d["funcion"] = fn
       if (not d["importe"] or d["importe"] == 0) and d["tipo"]:
-        d["importe"] = _calc_imp(d["tipo"], d["fecha"], d["empleado_id"])
+        d["importe"] = _calc_imp(d["tipo"], d["fecha"], fn)
       dietas[(r["empleado_id"], r["fecha"])] = d
 
     # Get project assignments for context
@@ -607,8 +607,8 @@ def api_rrhh_dietas_diaria():
         conn.execute("INSERT INTO dietas_diarias (empleado_id, fecha, tipo, importe, notas) VALUES (?,?,?,?,?)", (emp_id, fecha, "", 0, data.get("notas", "")))
     else:
       conn.execute(
-        "INSERT OR REPLACE INTO dietas_diarias (empleado_id, fecha, tipo, importe, notas) VALUES (?,?,?,?,?)",
-        (emp_id, fecha, data.get("tipo", ""), data.get("importe", 0), data.get("notas", "")),
+        "INSERT OR REPLACE INTO dietas_diarias (empleado_id, fecha, tipo, importe, notas, funcion) VALUES (?,?,?,?,?,?)",
+        (emp_id, fecha, data.get("tipo", ""), data.get("importe", 0), data.get("notas", ""), data.get("funcion", "operador")),
       )
     conn.commit()
     return jsonify({"ok": True})
@@ -658,19 +658,14 @@ def api_rrhh_dietas_empleado(eid, periodo):
     emp_row = conn.execute("SELECT categoria FROM empleados WHERE id=?", (eid,)).fetchone()
     emp_cat = (emp_row["categoria"] or "").lower().strip() if emp_row else ""
 
-    # Hardcoded defaults when no tarifas configured
-    _DEFAULTS = {
-      "nacional_completa": 30.0, "nacional_media": 15.0,
-      "internacional_completa": 50.0, "internacional_media": 25.0,
-    }
-
-    def _buscar_tarifa(tipo_dieta, fecha):
-      """Map tipo_dieta to tarifa. Returns importe."""
+    def _buscar_tarifa(tipo_dieta, fecha, funcion=None):
+      """Map tipo_dieta + funcion to tarifa. Returns importe."""
       parts = tipo_dieta.split("_", 1) if tipo_dieta else []
       if len(parts) != 2:
-        return _DEFAULTS.get(tipo_dieta, 0)
+        return 0
       geo, sub = parts[0], parts[1]
-      # Search configured tarifas
+      fn = (funcion or "operador").lower().strip()
+      # Search: match by funcion (stored in categoria field)
       for t in tarifas:
         if t["tipo"] != geo or t["subtipo"] != sub:
           continue
@@ -679,10 +674,9 @@ def api_rrhh_dietas_empleado(eid, periodo):
         if t["fecha_vigencia_hasta"] and t["fecha_vigencia_hasta"] < fecha:
           continue
         t_cat = (t["categoria"] or "").lower().strip()
-        if t_cat and t_cat != emp_cat:
-          continue
-        return t["importe"] or 0
-      # Fallback: try without categoria filter
+        if t_cat == fn:
+          return t["importe"] or 0
+      # Fallback: any tarifa without specific funcion
       for t in tarifas:
         if t["tipo"] != geo or t["subtipo"] != sub:
           continue
@@ -693,18 +687,18 @@ def api_rrhh_dietas_empleado(eid, periodo):
         t_cat = (t["categoria"] or "").lower().strip()
         if not t_cat:
           return t["importe"] or 0
-      # No tarifa found — use hardcoded default
-      return _DEFAULTS.get(tipo_dieta, 0)
+      return 0
 
     dietas = {}
     for r in conn.execute(
-      "SELECT fecha, tipo, importe, notas FROM dietas_diarias WHERE empleado_id=? AND fecha >= ? AND fecha <= ?",
+      "SELECT fecha, tipo, importe, notas, funcion FROM dietas_diarias WHERE empleado_id=? AND fecha >= ? AND fecha <= ?",
       (eid, dias[0]["fecha"], dias[-1]["fecha"])
     ).fetchall():
       d_dict = dict(r)
-      # Calculate importe from tarifa if stored importe is 0
+      fn = d_dict.get("funcion") or "operador"
+      d_dict["funcion"] = fn
       if (not d_dict["importe"] or d_dict["importe"] == 0) and d_dict["tipo"]:
-        d_dict["importe"] = _buscar_tarifa(d_dict["tipo"], d_dict["fecha"])
+        d_dict["importe"] = _buscar_tarifa(d_dict["tipo"], d_dict["fecha"], fn)
       dietas[r["fecha"]] = d_dict
 
     proyectos = {}

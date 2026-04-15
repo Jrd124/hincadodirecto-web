@@ -179,12 +179,17 @@ def init_empleados_db() -> None:
                 importe REAL DEFAULT 0,
                 proyecto_id INTEGER,
                 notas TEXT,
+                funcion TEXT DEFAULT 'operador',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (empleado_id) REFERENCES empleados(id),
                 FOREIGN KEY (proyecto_id) REFERENCES proyectos(id),
                 UNIQUE(empleado_id, fecha)
             )
         """)
+        # Migration: add funcion column if missing
+        dd_cols = {r[1] for r in conn.execute("PRAGMA table_info(dietas_diarias)").fetchall()}
+        if "funcion" not in dd_cols:
+            conn.execute("ALTER TABLE dietas_diarias ADD COLUMN funcion TEXT DEFAULT 'operador'")
 
     _initialized = True
 
