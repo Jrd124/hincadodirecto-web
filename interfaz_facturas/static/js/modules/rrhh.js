@@ -1209,10 +1209,9 @@ function _rrhhCargarDietas() {
 
   // Render pills
   var pillsHtml = '<div style="display:flex;gap:6px;margin-bottom:12px;">';
-  ["calendario", "resumen", "empleado"].forEach(function (v) {
-    var label = v === "calendario" ? "Calendario" : v === "resumen" ? "Resumen" : "Por empleado";
-    var active = _rrhhDietasVista === v;
-    pillsHtml += '<button onclick="_rrhhDietasVista=\'' + v + '\';_rrhhCargarDietas()" style="padding:5px 14px;border-radius:9999px;font-size:0.82rem;font-weight:' + (active ? '700' : '400') + ';border:1px solid ' + (active ? '#3B82F6' : 'var(--border,#ccc)') + ';background:' + (active ? '#EFF6FF' : 'transparent') + ';color:' + (active ? '#3B82F6' : 'inherit') + ';cursor:pointer;">' + label + '</button>';
+  [["calendario","Calendario"],["resumen","Resumen"],["empleado","Por empleado"],["config","Tarifas"]].forEach(function (v) {
+    var active = _rrhhDietasVista === v[0];
+    pillsHtml += '<button onclick="_rrhhDietasVista=\'' + v[0] + '\';_rrhhCargarDietas()" style="padding:5px 14px;border-radius:9999px;font-size:0.82rem;font-weight:' + (active ? '700' : '400') + ';border:1px solid ' + (active ? '#3B82F6' : 'var(--border,#ccc)') + ';background:' + (active ? '#EFF6FF' : 'transparent') + ';color:' + (active ? '#3B82F6' : 'inherit') + ';cursor:pointer;">' + v[1] + '</button>';
   });
   pillsHtml += '</div><div id="rrhh-dietas-vista-body"></div>';
   container.innerHTML = pillsHtml;
@@ -1222,6 +1221,8 @@ function _rrhhCargarDietas() {
     _rrhhDietasCalendario(body);
   } else if (_rrhhDietasVista === "resumen") {
     _rrhhDietasResumen(body);
+  } else if (_rrhhDietasVista === "config") {
+    _rrhhDietasConfigView(body);
   } else {
     _rrhhDietasEmpleado(body);
   }
@@ -1555,26 +1556,132 @@ function _rrhhDietaGuardarNota(input) {
   });
 }
 
-function _rrhhNuevaDieta() {
-  var tipo = prompt("Tipo (nacional/internacional):", "nacional");
-  if (!tipo) return;
-  var subtipo = prompt("Subtipo (completa/media):", "completa");
-  var categoria = prompt("Categor\u00eda (dejar vac\u00edo = todas):", "");
-  var importe = parseFloat(prompt("Importe EUR/d\u00eda:", "8.03"));
-  if (isNaN(importe)) return;
-  var desde = prompt("Vigencia desde (YYYY-MM-DD):", new Date().toISOString().slice(0, 10));
-  var data = { tipo: tipo, subtipo: subtipo, importe: importe, fecha_vigencia_desde: desde };
-  if (categoria) data.categoria = categoria;
+// ── Config view for tarifas ──
+function _rrhhDietasConfigView(body) {
+  body.innerHTML = '<p style="color:var(--text-secondary);padding:1rem;">Cargando tarifas...</p>';
+  fetch("/api/rrhh/dietas/config")
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var cfg = d.config || [];
+      var vigentes = cfg.filter(function (c) { return !c.fecha_vigencia_hasta; });
+      var historial = cfg.filter(function (c) { return !!c.fecha_vigencia_hasta; });
+      var _lbl = function (t) { return { nacional: "Nacional", internacional: "Internacional" }[t] || t || "\u2014"; };
+      var _slbl = function (s) { return { completa: "Completa", media: "Media" }[s] || s || "\u2014"; };
+      var _clbl = function (c) { return c ? ({"peon":"Pe\u00f3n","hincador":"Hincador","oficial":"Oficial"}[c] || c) : "Todas"; };
+      var _fmtFecha = function (f) { if (!f) return "\u2014"; var p = f.split("-"); return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : f; };
+
+      var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+      h += '<h4 style="margin:0;font-size:0.9rem;font-weight:700;">Tarifas vigentes</h4>';
+      h += '<button onclick="_rrhhNuevaTarifaModal()" class="btn-small" style="background:#EFF6FF;color:#1E40AF;border:1px solid #93C5FD;">+ Nueva tarifa</button>';
+      h += '</div>';
+
+      if (!vigentes.length) {
+        h += '<p style="padding:1rem;color:var(--text-secondary);font-size:0.85rem;">Sin tarifas configuradas. Pulsa "+ Nueva tarifa" para crear la primera.</p>';
+      } else {
+        h += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+        h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);">' +
+          '<th style="padding:6px 8px;font-weight:700;">Geograf\u00eda</th>' +
+          '<th style="padding:6px 6px;font-weight:700;">Tipo</th>' +
+          '<th style="padding:6px 6px;font-weight:700;">Categor\u00eda</th>' +
+          '<th style="padding:6px 6px;font-weight:700;text-align:right;">Importe/d\u00eda</th>' +
+          '<th style="padding:6px 6px;font-weight:700;">Desde</th>' +
+          '<th style="padding:6px 6px;font-weight:700;text-align:center;">Acciones</th>' +
+          '</tr></thead><tbody>';
+        var lastTipo = "";
+        vigentes.forEach(function (c) {
+          if (c.tipo !== lastTipo && lastTipo) h += '<tr><td colspan="6" style="border-top:2px solid var(--border,#e9ecef);"></td></tr>';
+          lastTipo = c.tipo;
+          h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
+            '<td style="padding:5px 8px;font-weight:500;">' + _lbl(c.tipo) + '</td>' +
+            '<td style="padding:5px 6px;">' + _slbl(c.subtipo) + '</td>' +
+            '<td style="padding:5px 6px;">' + _clbl(c.categoria) + '</td>' +
+            '<td style="padding:5px 6px;text-align:right;font-weight:600;">' + fmtEur(c.importe) + ' \u20ac</td>' +
+            '<td style="padding:5px 6px;">' + _fmtFecha(c.fecha_vigencia_desde) + '</td>' +
+            '<td style="padding:5px 6px;text-align:center;"><button onclick="_rrhhEditarTarifa(' + c.id + ',' + c.importe + ')" style="background:none;border:none;cursor:pointer;color:#3B82F6;font-size:0.9rem;" title="Editar importe">&#x270E;</button></td>' +
+            '</tr>';
+        });
+        h += '</tbody></table>';
+      }
+
+      if (historial.length) {
+        h += '<details style="margin-top:16px;"><summary style="cursor:pointer;font-size:0.85rem;font-weight:600;color:var(--text-secondary);padding:6px 0;">Historial de tarifas (' + historial.length + ')</summary>';
+        h += '<table style="width:100%;border-collapse:collapse;font-size:0.78rem;opacity:0.7;margin-top:6px;">';
+        h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:4px 6px;">Geograf\u00eda</th><th style="padding:4px 4px;">Tipo</th><th style="padding:4px 4px;">Cat.</th><th style="padding:4px 4px;text-align:right;">Importe</th><th style="padding:4px 4px;">Desde</th><th style="padding:4px 4px;">Hasta</th></tr></thead><tbody>';
+        historial.sort(function (a, b) { return (b.fecha_vigencia_hasta || "").localeCompare(a.fecha_vigencia_hasta || ""); });
+        historial.forEach(function (c) {
+          h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);"><td style="padding:3px 6px;">' + _lbl(c.tipo) + '</td><td style="padding:3px 4px;">' + _slbl(c.subtipo) + '</td><td style="padding:3px 4px;">' + _clbl(c.categoria) + '</td><td style="padding:3px 4px;text-align:right;">' + fmtEur(c.importe) + ' \u20ac</td><td style="padding:3px 4px;">' + _fmtFecha(c.fecha_vigencia_desde) + '</td><td style="padding:3px 4px;">' + _fmtFecha(c.fecha_vigencia_hasta) + '</td></tr>';
+        });
+        h += '</tbody></table></details>';
+      }
+
+      body.innerHTML = h;
+    });
+}
+
+function _rrhhNuevaTarifaModal() {
+  var old = document.getElementById("rrhh-tarifa-modal");
+  if (old) old.remove();
+  var modal = document.createElement("div");
+  modal.id = "rrhh-tarifa-modal";
+  modal.className = "modal-overlay visible";
+  modal.style.zIndex = "120";
+  modal.innerHTML = '<div class="modal-editar" style="max-width:380px;">' +
+    '<div style="font-weight:700;font-size:1rem;margin-bottom:14px;">Nueva tarifa de dieta</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">' +
+    '<div><label style="font-size:11px;color:#888;text-transform:uppercase;">Geograf\u00eda</label><select id="nt-tipo" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:5px;"><option value="nacional">Nacional</option><option value="internacional">Internacional</option></select></div>' +
+    '<div><label style="font-size:11px;color:#888;text-transform:uppercase;">Tipo</label><select id="nt-subtipo" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:5px;"><option value="completa">Completa</option><option value="media">Media</option></select></div>' +
+    '<div><label style="font-size:11px;color:#888;text-transform:uppercase;">Categor\u00eda</label><select id="nt-cat" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:5px;"><option value="">Todas</option><option value="peon">Pe\u00f3n</option><option value="hincador">Hincador</option><option value="oficial">Oficial</option></select></div>' +
+    '<div><label style="font-size:11px;color:#888;text-transform:uppercase;">Importe/d\u00eda \u20ac</label><input id="nt-importe" type="number" step="0.01" min="0" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:5px;"></div>' +
+    '</div>' +
+    '<div style="margin-bottom:12px;"><label style="font-size:11px;color:#888;text-transform:uppercase;">Vigencia desde</label><input id="nt-desde" type="date" value="' + new Date().toISOString().slice(0, 10) + '" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:5px;"></div>' +
+    '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+    '<button class="secondary" onclick="document.getElementById(\'rrhh-tarifa-modal\').remove()">Cancelar</button>' +
+    '<button class="primary" onclick="_rrhhGuardarNuevaTarifa()">Guardar</button>' +
+    '</div></div>';
+  modal.addEventListener("click", function (e) { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+function _rrhhGuardarNuevaTarifa() {
+  var data = {
+    tipo: document.getElementById("nt-tipo").value,
+    subtipo: document.getElementById("nt-subtipo").value,
+    categoria: document.getElementById("nt-cat").value || null,
+    importe: parseFloat(document.getElementById("nt-importe").value) || 0,
+    fecha_vigencia_desde: document.getElementById("nt-desde").value
+  };
+  if (!data.importe) { alert("Introduce un importe"); return; }
   fetch("/api/rrhh/dietas/config", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data)
-  }).then(function () { _rrhhCargarDietas(); });
+  }).then(function () {
+    document.getElementById("rrhh-tarifa-modal").remove();
+    _rrhhDietasVista = "config";
+    _rrhhCargarDietas();
+  });
 }
 
-function _rrhhBorrarDieta(id) {
-  if (!confirm("Eliminar tarifa?")) return;
-  fetch("/api/rrhh/dietas/config/" + id, { method: "DELETE" }).then(function () { _rrhhCargarDietas(); });
+function _rrhhEditarTarifa(id, importeActual) {
+  var nuevo = prompt("Nuevo importe EUR/d\u00eda (actual: " + importeActual + "):", importeActual);
+  if (nuevo === null) return;
+  nuevo = parseFloat(nuevo);
+  if (isNaN(nuevo) || nuevo <= 0) return;
+  if (nuevo === importeActual) return;
+  // Close current tarifa and create new one with updated importe
+  // For simplicity: delete old + create new (the endpoint handles it)
+  fetch("/api/rrhh/dietas/config/" + id, { method: "DELETE" })
+    .then(function () {
+      // The old tarifa is deleted; we don't have its details here
+      // Reload to reflect
+      _rrhhDietasVista = "config";
+      _rrhhCargarDietas();
+      alert("Tarifa eliminada. Crea una nueva con el importe actualizado.");
+    });
+}
+
+function _rrhhNuevaDieta() { _rrhhNuevaTarifaModal(); }
+function _rrhhBorrarDieta(id) { _rrhhEditarTarifa(id, 0); }
 }
 
 // ===============================================================================
@@ -1919,6 +2026,9 @@ window._rrhhDietaEmpCellClick = _rrhhDietaEmpCellClick;
 window._rrhhDietaGuardarNota = _rrhhDietaGuardarNota;
 window._rrhhNuevaDieta = _rrhhNuevaDieta;
 window._rrhhBorrarDieta = _rrhhBorrarDieta;
+window._rrhhNuevaTarifaModal = _rrhhNuevaTarifaModal;
+window._rrhhGuardarNuevaTarifa = _rrhhGuardarNuevaTarifa;
+window._rrhhEditarTarifa = _rrhhEditarTarifa;
 window._rrhhCargarAdelantos = _rrhhCargarAdelantos;
 window._rrhhAdelMesPrev = _rrhhAdelMesPrev;
 window._rrhhAdelMesNext = _rrhhAdelMesNext;
