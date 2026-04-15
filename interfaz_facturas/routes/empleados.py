@@ -571,10 +571,20 @@ def api_rrhh_dietas_diaria():
   data = request.get_json(silent=True) or {}
   conn = get_conn()
   try:
-    conn.execute(
-      "INSERT OR REPLACE INTO dietas_diarias (empleado_id, fecha, tipo, importe, notas) VALUES (?,?,?,?,?)",
-      (data.get("empleado_id"), data.get("fecha"), data.get("tipo", ""), data.get("importe", 0), data.get("notas", "")),
-    )
+    emp_id = data.get("empleado_id")
+    fecha = data.get("fecha")
+    # Check if only updating notas (partial update)
+    if "tipo" not in data or data.get("_only_notas"):
+      existing = conn.execute("SELECT id FROM dietas_diarias WHERE empleado_id=? AND fecha=?", (emp_id, fecha)).fetchone()
+      if existing:
+        conn.execute("UPDATE dietas_diarias SET notas=? WHERE empleado_id=? AND fecha=?", (data.get("notas", ""), emp_id, fecha))
+      else:
+        conn.execute("INSERT INTO dietas_diarias (empleado_id, fecha, tipo, importe, notas) VALUES (?,?,?,?,?)", (emp_id, fecha, "", 0, data.get("notas", "")))
+    else:
+      conn.execute(
+        "INSERT OR REPLACE INTO dietas_diarias (empleado_id, fecha, tipo, importe, notas) VALUES (?,?,?,?,?)",
+        (emp_id, fecha, data.get("tipo", ""), data.get("importe", 0), data.get("notas", "")),
+      )
     conn.commit()
     return jsonify({"ok": True})
   finally:

@@ -1455,18 +1455,94 @@ function _rrhhDietasEmpLoad() {
     .then(function (r) { return r.json(); })
     .then(function (d) {
       var dias = d.dias || [];
-      if (!dias.length) { body.innerHTML = '<p style="padding:1rem;color:var(--text-secondary);">Sin registros de dietas</p>'; return; }
-      var h = '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;max-width:500px;">';
-      h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:6px 8px;">Fecha</th><th style="padding:6px 6px;">Tipo</th><th style="padding:6px 6px;text-align:right;">Importe</th></tr></thead><tbody>';
-      var total = 0;
+      var dietasMap = d.dietas || {};
+      var proyMap = d.proyectos || {};
+      if (!dias.length) { body.innerHTML = '<p style="padding:1rem;color:var(--text-secondary);">Sin datos</p>'; return; }
+
+      var abrevMap = { nacional_completa: "NC", nacional_media: "NM", internacional_completa: "IC", internacional_media: "IM" };
+      var colorMap = { NC: "#3B82F6", NM: "#93C5FD", IC: "#F59E0B", IM: "#FDE68A" };
+
+      var h = '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;">';
+      h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);">' +
+        '<th style="padding:6px 6px;font-weight:700;width:30px;">D\u00eda</th>' +
+        '<th style="padding:6px 4px;font-weight:700;width:25px;">DS</th>' +
+        '<th style="padding:6px 6px;font-weight:700;">Proyecto</th>' +
+        '<th style="padding:6px 6px;font-weight:700;width:70px;">Dieta</th>' +
+        '<th style="padding:6px 6px;font-weight:700;text-align:right;width:70px;">Importe</th>' +
+        '<th style="padding:6px 6px;font-weight:700;">Comentario</th>' +
+        '</tr></thead><tbody>';
+
+      var totalImporte = 0, diasProy = 0, diasDieta = 0;
+      var conteo = { NC: 0, NM: 0, IC: 0, IM: 0 };
+
       dias.forEach(function (dd) {
-        total += dd.importe || 0;
-        h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);"><td style="padding:5px 8px;">' + (dd.fecha || '') + '</td><td style="padding:5px 6px;">' + (dd.tipo || '') + '</td><td style="padding:5px 6px;text-align:right;">' + fmtEur(dd.importe) + '</td></tr>';
+        var dieta = dietasMap[dd.fecha];
+        var proy = proyMap[dd.fecha];
+        var tipo = dieta ? dieta.tipo : "";
+        var abrev = abrevMap[tipo] || "";
+        var imp = dieta ? (dieta.importe || 0) : 0;
+        var notas = dieta ? (dieta.notas || "") : "";
+        var proyCodigo = proy ? (proy.codigo || proy.nombre || "") : "";
+        var tieneProyecto = !!proyCodigo;
+        var sinDieta = !tipo;
+        var esFestivo = _RRHH_FESTIVOS.indexOf(dd.fecha) >= 0;
+        var esFinSemana = dd.dia_semana === "S" || dd.dia_semana === "D";
+        var noLab = esFinSemana || esFestivo;
+
+        if (tieneProyecto) diasProy++;
+        if (abrev) { diasDieta++; conteo[abrev] = (conteo[abrev] || 0) + 1; }
+        totalImporte += imp;
+
+        var rowBg = noLab ? "background:#E5E7EB;" : (tieneProyecto && sinDieta ? "background:#FFFBEB;" : "");
+        var rowBorder = (tieneProyecto && sinDieta && !noLab) ? "border-left:3px solid #F59E0B;" : "";
+        var pillColor = colorMap[abrev] || "";
+        var pillHtml = abrev ? '<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:' + pillColor + ';color:#fff;font-size:10px;font-weight:700;">' + abrev + '</span>' : (tieneProyecto && !noLab ? '<span style="color:#F59E0B;">\u26a0</span>' : '\u2014');
+
+        h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);' + rowBg + rowBorder + '">' +
+          '<td style="padding:4px 6px;font-weight:600;">' + dd.num + '</td>' +
+          '<td style="padding:4px 4px;color:' + (noLab ? '#9ca3af' : 'inherit') + ';">' + dd.dia_semana + '</td>' +
+          '<td style="padding:4px 6px;">' + (proyCodigo || '\u2014') + '</td>' +
+          '<td style="padding:4px 6px;cursor:pointer;" onclick="_rrhhDietaEmpCellClick(this,' + empId + ',\'' + dd.fecha + '\',\'' + mes + '\')">' + pillHtml + '</td>' +
+          '<td style="padding:4px 6px;text-align:right;">' + (imp > 0 ? fmtEur(imp) : '\u2014') + '</td>' +
+          '<td style="padding:2px 4px;"><input type="text" value="' + notas.replace(/"/g, '&quot;') + '" data-emp="' + empId + '" data-fecha="' + dd.fecha + '" style="width:100%;padding:2px 4px;border:1px solid transparent;border-radius:3px;font-size:0.78rem;background:transparent;" onfocus="this.style.borderColor=\'var(--border)\';this.style.background=\'#fff\'" onblur="_rrhhDietaGuardarNota(this)"></td>' +
+          '</tr>';
       });
-      h += '</tbody><tfoot><tr style="font-weight:700;background:var(--bg-secondary,#f8f9fa);"><td colspan="2" style="padding:6px 8px;">Total</td><td style="padding:6px 6px;text-align:right;">' + fmtEur(total) + '</td></tr></tfoot></table>';
+
+      // Totals
+      var desglose = [];
+      if (conteo.NC) desglose.push(conteo.NC + " NC");
+      if (conteo.NM) desglose.push(conteo.NM + " NM");
+      if (conteo.IC) desglose.push(conteo.IC + " IC");
+      if (conteo.IM) desglose.push(conteo.IM + " IM");
+
+      h += '</tbody><tfoot><tr style="font-weight:700;background:var(--bg-secondary,#f8f9fa);">' +
+        '<td colspan="2" style="padding:6px 6px;">TOTAL</td>' +
+        '<td style="padding:6px 6px;">' + diasProy + ' d\u00edas</td>' +
+        '<td style="padding:6px 6px;">' + diasDieta + ' d\u00edas' + (desglose.length ? ' (' + desglose.join(', ') + ')' : '') + '</td>' +
+        '<td style="padding:6px 6px;text-align:right;">' + fmtEurFull(totalImporte) + '</td>' +
+        '<td></td></tr></tfoot></table>';
+
       body.innerHTML = h;
     })
     .catch(function (err) { body.innerHTML = '<p style="color:#dc3545;">Error: ' + err.message + '</p>'; });
+}
+
+function _rrhhDietaEmpCellClick(td, empId, fecha, periodo) {
+  // Reuse the same popup as calendar
+  _rrhhDietaCellClick(td, empId, fecha, periodo, '', '');
+}
+
+function _rrhhDietaGuardarNota(input) {
+  input.style.borderColor = "transparent";
+  input.style.background = "transparent";
+  var empId = input.getAttribute("data-emp");
+  var fecha = input.getAttribute("data-fecha");
+  var notas = input.value;
+  fetch("/api/rrhh/dietas/diaria", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ empleado_id: parseInt(empId), fecha: fecha, notas: notas, _only_notas: true })
+  });
 }
 
 function _rrhhNuevaDieta() {
@@ -1829,6 +1905,8 @@ window._rrhhDietasCalLoad = _rrhhDietasCalLoad;
 window._rrhhDietaCellClick = _rrhhDietaCellClick;
 window._rrhhDietaSeleccionar = _rrhhDietaSeleccionar;
 window._rrhhDietasEmpLoad = _rrhhDietasEmpLoad;
+window._rrhhDietaEmpCellClick = _rrhhDietaEmpCellClick;
+window._rrhhDietaGuardarNota = _rrhhDietaGuardarNota;
 window._rrhhNuevaDieta = _rrhhNuevaDieta;
 window._rrhhBorrarDieta = _rrhhBorrarDieta;
 window._rrhhCargarAdelantos = _rrhhCargarAdelantos;
