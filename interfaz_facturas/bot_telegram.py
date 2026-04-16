@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, time, timedelta
 from functools import partial
 from pathlib import Path
+import unicodedata
 
 # Ensure the app root is on sys.path so `core.*` and `config` resolve
 _APP_DIR = Path(__file__).resolve().parent
@@ -70,6 +71,22 @@ async def _run_sync(fn, *args, **kwargs):
     """Run a blocking function in a thread so it doesn't block the event loop."""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(_executor, partial(fn, *args, **kwargs))
+
+
+def _normalize(text):
+    """Strip diacritics and lowercase for accent-insensitive search."""
+    if not text:
+        return ""
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", str(text))
+        if not unicodedata.category(c).startswith("M")
+    ).lower()
+
+
+def _like_norm(rows, campo, termino):
+    """Filter rows (list of dicts) by normalized partial match on campo."""
+    t = _normalize(termino)
+    return [r for r in rows if t in _normalize(r.get(campo, "") if isinstance(r, dict) else r[campo])]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -233,9 +250,6 @@ def consultar_proyectos(proyecto_nombre: str | None = None, solo_activos: bool =
         params: list = []
         if solo_activos:
             where += " AND p.estado IN ('vivo','en_curso','cotizado','pendiente')"
-        if proyecto_nombre:
-            where += " AND p.nombre LIKE ?"
-            params.append(f"%{proyecto_nombre}%")
 
         # terceros may not exist — use LEFT JOIN + safe fallback
         has_terceros = bool(conn.execute(
@@ -266,7 +280,9 @@ def consultar_proyectos(proyecto_nombre: str | None = None, solo_activos: bool =
                 {where} GROUP BY p.id ORDER BY p.nombre
             """
 
-        rows = conn.execute(sql, params).fetchall()
+        rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+        if proyecto_nombre:
+            rows = _like_norm(rows, "nombre", proyecto_nombre)
         if not rows:
             return "No se encontraron proyectos."
 
@@ -293,9 +309,6 @@ def consultar_partes(proyecto_nombre: str | None = None, fecha: str | None = Non
     try:
         where = "WHERE 1=1"
         params: list = []
-        if proyecto_nombre:
-            where += " AND p.nombre LIKE ?"
-            params.append(f"%{proyecto_nombre}%")
         if fecha:
             where += " AND pp.fecha = ?"
             params.append(fecha)
@@ -304,15 +317,17 @@ def consultar_partes(proyecto_nombre: str | None = None, fecha: str | None = Non
             where += " AND pp.fecha >= ?"
             params.append(desde)
 
-        rows = _safe_query(conn, f"""
+        rows = [dict(r) for r in _safe_query(conn, f"""
             SELECT pp.fecha, p.nombre as proyecto, pp.hincas_realizadas,
                    pp.horas_maquina, pp.num_operadores, pp.incidencias,
                    COALESCE(pp.estado_firma, 'borrador') as estado_firma
             FROM proyecto_partes pp
             JOIN proyectos p ON p.id = pp.proyecto_id
             {where}
-            ORDER BY pp.fecha DESC LIMIT 30
-        """, params)
+            ORDER BY pp.fecha DESC LIMIT 50
+        """, params)]
+        if proyecto_nombre:
+            rows = _like_norm(rows, "proyecto", proyecto_nombre)
 
         if not rows:
             return "No hay partes en el periodo consultado."
@@ -393,19 +408,13 @@ def consultar_maquinaria(maquina_nombre: str | None = None) -> str:
         if not _table_exists(conn, "maquinas"):
             return "📭 No hay datos de maquinaria cargados."
 
+        rows = [dict(r) for r in conn.execute(
+            "SELECT m.nombre, m.estado, p.nombre as proyecto_nombre"
+            " FROM maquinas m LEFT JOIN proyectos p ON m.proyecto_id = p.id"
+            " WHERE m.activa = 1 ORDER BY m.estado, m.nombre"
+        ).fetchall()]
         if maquina_nombre:
-            rows = conn.execute(
-                "SELECT m.nombre, m.estado, p.nombre as proyecto_nombre"
-                " FROM maquinas m LEFT JOIN proyectos p ON m.proyecto_id = p.id"
-                " WHERE m.nombre LIKE ? AND m.activa = 1",
-                (f"%{maquina_nombre}%",),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT m.nombre, m.estado, p.nombre as proyecto_nombre"
-                " FROM maquinas m LEFT JOIN proyectos p ON m.proyecto_id = p.id"
-                " WHERE m.activa = 1 ORDER BY m.estado, m.nombre"
-            ).fetchall()
+            rows = _like_norm(rows, "nombre", maquina_nombre)
 
         if not rows:
             return "No se encontraron máquinas."
@@ -481,17 +490,13 @@ def consultar_equipo(empleado_nombre: str | None = None) -> str:
         if not _table_exists(conn, "empleados"):
             return "📭 No hay datos de empleados cargados."
 
+        rows = [dict(r) for r in conn.execute(
+            "SELECT nombre, COALESCE(apellidos,'') as apellidos, puesto"
+            " FROM empleados WHERE estado = 'activo' ORDER BY nombre"
+        ).fetchall()]
         if empleado_nombre:
-            rows = conn.execute(
-                "SELECT nombre, COALESCE(apellidos,'') as apellidos, puesto"
-                " FROM empleados WHERE (nombre || ' ' || COALESCE(apellidos,'')) LIKE ? AND estado = 'activo'",
-                (f"%{empleado_nombre}%",),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT nombre, COALESCE(apellidos,'') as apellidos, puesto"
-                " FROM empleados WHERE estado = 'activo' ORDER BY nombre"
-            ).fetchall()
+            t = _normalize(empleado_nombre)
+            rows = [r for r in rows if t in _normalize(r["nombre"] + " " + r["apellidos"])]
 
         if not rows:
             return "No se encontraron empleados."
@@ -520,10 +525,9 @@ def consultar_seguros(tipo=None, recurso_nombre=None, incluir_documentos=False):
         if tipo:
             query += " AND tipo = ?"
             params.append(tipo)
+        polizas = [dict(r) for r in conn.execute(query + " ORDER BY fecha_vencimiento", params).fetchall()]
         if recurso_nombre:
-            query += " AND recurso_nombre LIKE ?"
-            params.append(f"%{recurso_nombre}%")
-        polizas = conn.execute(query + " ORDER BY fecha_vencimiento", params).fetchall()
+            polizas = _like_norm(polizas, "recurso_nombre", recurso_nombre)
         if not polizas:
             return "No se encontraron pólizas con esos criterios."
         iconos = {"maquinaria": "🏗️", "vehiculo": "🚗", "responsabilidad_civil": "🏢", "accidentes_convenio": "👷", "dyo": "👔", "otro": "📋"}
@@ -625,10 +629,11 @@ def consultar_facturas_pendientes(tipo="cobro", importe_minimo=None, proveedor_o
         params = []
         if importe_minimo:
             q += " AND total >= ?"; params.append(importe_minimo)
+        q += " ORDER BY total DESC LIMIT 50"
+        rows = [dict(r) for r in _safe_query(conn, q, tuple(params))]
         if proveedor_o_cliente:
-            q += " AND nombre LIKE ?"; params.append(f"%{proveedor_o_cliente}%")
-        q += " ORDER BY total DESC LIMIT 20"
-        rows = _safe_query(conn, q, tuple(params))
+            rows = _like_norm(rows, "nombre", proveedor_o_cliente)
+            rows = rows[:20]
         if not rows:
             return f"No hay facturas pendientes de {'cobro' if tipo == 'cobro' else 'pago'}."
         def _to_float(v):
@@ -661,17 +666,17 @@ def consultar_facturas_historico(tipo="proveedor", nombre=None, fecha_desde=None
                  "CAST(COALESCE(fp.total, fp.total_a_pagar, 0) AS REAL) as total, fp.estado_pago as estado "
                  "FROM facturas_proveedor fp LEFT JOIN terceros t ON fp.tercero_id = t.id WHERE 1=1")
         params = []
-        if nombre:
-            q += " AND nombre LIKE ?"; params.append(f"%{nombre}%")
         if fecha_desde:
             q += " AND fecha_factura >= ?"; params.append(fecha_desde)
         if fecha_hasta:
             q += " AND fecha_factura <= ?"; params.append(fecha_hasta)
-        if concepto:
-            if tipo == "proveedor":
-                q += " AND resumen_concepto LIKE ?"; params.append(f"%{concepto}%")
-        q += " ORDER BY fecha_factura DESC LIMIT 20"
-        rows = _safe_query(conn, q, tuple(params))
+        q += " ORDER BY fecha_factura DESC LIMIT 50"
+        rows = [dict(r) for r in _safe_query(conn, q, tuple(params))]
+        if nombre:
+            rows = _like_norm(rows, "nombre", nombre)
+        if concepto and tipo == "proveedor":
+            rows = _like_norm(rows, "resumen_concepto", concepto)
+        rows = rows[:20]
         if not rows:
             return "No se encontraron facturas con esos criterios."
         def _to_float(v):
@@ -708,10 +713,11 @@ def enviar_pdf_factura(tipo="proveedor", numero_factura=None, proveedor_o_client
         params = []
         if numero_factura:
             q += " AND numero_factura LIKE ?"; params.append(f"%{numero_factura}%")
+        q += " LIMIT 50"
+        rows = [dict(r) for r in _safe_query(conn, q, tuple(params))]
         if proveedor_o_cliente:
-            q += " AND nombre_canonico LIKE ?"; params.append(f"%{proveedor_o_cliente}%")
-        q += " LIMIT 5"
-        rows = _safe_query(conn, q, tuple(params))
+            rows = _like_norm(rows, "nombre", proveedor_o_cliente)
+        rows = rows[:5]
         if not rows:
             return "No se encontró la factura."
         found = []
@@ -738,7 +744,9 @@ def consultar_empleados(nombre=None, info="general"):
     conn = get_conn()
     try:
         if nombre:
-            emps = _safe_query(conn, "SELECT * FROM empleados WHERE (nombre || ' ' || COALESCE(apellidos,'')) LIKE ? ORDER BY apellidos", (f"%{nombre}%",))
+            all_emps = _safe_query(conn, "SELECT * FROM empleados ORDER BY apellidos")
+            t = _normalize(nombre)
+            emps = [r for r in all_emps if t in _normalize((r["nombre"] or "") + " " + (r["apellidos"] or ""))]
         else:
             emps = _safe_query(conn, "SELECT * FROM empleados WHERE estado='activo' ORDER BY apellidos LIMIT 20")
         if not emps:
@@ -788,9 +796,12 @@ def modificar_empleado(nombre, campo, valor):
         return f"❌ Campo '{campo}' no modificable. Permitidos: {', '.join(campos_ok)}"
     conn = get_conn()
     try:
-        emp = conn.execute("SELECT id, nombre, apellidos FROM empleados WHERE (nombre || ' ' || COALESCE(apellidos,'')) LIKE ?", (f"%{nombre}%",)).fetchone()
-        if not emp:
+        all_emps = conn.execute("SELECT id, nombre, apellidos FROM empleados").fetchall()
+        t = _normalize(nombre)
+        matches = [r for r in all_emps if t in _normalize((r["nombre"] or "") + " " + (r["apellidos"] or ""))]
+        if not matches:
             return f"No se encontró empleado '{nombre}'."
+        emp = matches[0]
         if campo == "neto_pactado":
             valor = float(valor)
         conn.execute(f"UPDATE empleados SET {campo} = ?, updated_at = ? WHERE id = ?", (valor, datetime.now().isoformat(), emp["id"]))
@@ -837,19 +848,20 @@ def consultar_operaciones(consulta_tipo, proyecto_nombre=None, empleado_nombre=N
         elif consulta_tipo == "asignaciones_proyecto":
             if not proyecto_nombre:
                 return "Indica el nombre del proyecto."
-            rows = _safe_query(conn, """
-                SELECT pa.recurso_nombre, pa.recurso_tipo, COALESCE(pa.funcion_dia, e.puesto) as funcion
+            rows = [dict(r) for r in _safe_query(conn, """
+                SELECT pa.recurso_nombre, pa.recurso_tipo, p.nombre as proyecto,
+                       COALESCE(pa.funcion_dia, e.puesto) as funcion
                 FROM proyecto_asignaciones pa
                 JOIN proyectos p ON pa.proyecto_id = p.id
                 LEFT JOIN empleados e ON pa.recurso_id = e.id AND pa.recurso_tipo = 'empleado'
-                WHERE pa.fecha = ? AND p.nombre LIKE ?
+                WHERE pa.fecha = ?
                 ORDER BY pa.recurso_tipo
-            """, (fecha, f"%{proyecto_nombre}%"))
+            """, (fecha,))]
+            rows = _like_norm(rows, "proyecto", proyecto_nombre)
             if not rows:
                 return f"No hay recursos asignados a '{proyecto_nombre}' el {fecha}."
             lines = [f"🏗 *{proyecto_nombre}* ({fecha}):\n"]
-            for r in rows:
-                rd = dict(r)
+            for rd in rows:
                 fn = f" ({rd['funcion']})" if rd.get("funcion") else ""
                 lines.append(f"  {'👷' if rd['recurso_tipo']=='empleado' else '🏗'} {rd['recurso_nombre']}{fn}")
             return "\n".join(lines)
@@ -870,15 +882,15 @@ def consultar_operaciones(consulta_tipo, proyecto_nombre=None, empleado_nombre=N
         elif consulta_tipo == "historico_empleado":
             if not empleado_nombre:
                 return "Indica el nombre del empleado."
-            rows = _safe_query(conn, """
-                SELECT pa.fecha, p.nombre as proyecto, pa.estado
+            rows = [dict(r) for r in _safe_query(conn, """
+                SELECT pa.fecha, p.nombre as proyecto, pa.estado, pa.recurso_nombre
                 FROM proyecto_asignaciones pa
                 JOIN proyectos p ON pa.proyecto_id = p.id
                 WHERE pa.recurso_tipo='empleado'
-                  AND pa.recurso_nombre LIKE ?
                   AND pa.fecha >= date(?, '-30 days')
-                ORDER BY pa.fecha DESC LIMIT 30
-            """, (f"%{empleado_nombre}%", fecha))
+                ORDER BY pa.fecha DESC LIMIT 100
+            """, (fecha,))]
+            rows = _like_norm(rows, "recurso_nombre", empleado_nombre)[:30]
             if not rows:
                 return f"No hay asignaciones recientes para '{empleado_nombre}'."
             lines = [f"📋 *Historial de {empleado_nombre}* (últimos 30 días):\n"]
@@ -951,6 +963,9 @@ _GPT_SYSTEM = (
     "más legibles. Cuando des cifras monetarias, usa formato español (punto para "
     "miles, coma para decimales). Si no tienes datos suficientes para responder, "
     "dilo claramente.\n\n"
+    "Las búsquedas por nombre son flexibles con tildes y acentos: puedes escribir "
+    "'Ivan' y encontrará 'Iván', 'Tabernas' encontrará 'Tabérnas', etc. No necesitas "
+    "preocuparte de escribir los nombres exactos.\n\n"
     "Tienes acceso a una herramienta de SQL genérica (ejecutar_sql_erp) que te permite "
     "consultar cualquier dato del ERP. Úsala cuando las tools específicas no cubran la "
     "pregunta o cuando necesites hacer consultas complejas con JOINs, agregaciones, o "
@@ -2322,7 +2337,9 @@ async def callback_firma(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = get_conn()
         try:
             obra = datos.get("obra", "")
-            row = conn.execute("SELECT id, nombre FROM proyectos WHERE nombre LIKE ? LIMIT 1", (f"%{obra}%",)).fetchone()
+            all_proys = [dict(r) for r in conn.execute("SELECT id, nombre FROM proyectos WHERE estado IN ('vivo','en_curso')").fetchall()]
+            matches = _like_norm(all_proys, "nombre", obra)
+            row = matches[0] if matches else None
             if not row:
                 clear_estado(tid)
                 return await query.edit_message_text(
