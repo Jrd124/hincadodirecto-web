@@ -14,7 +14,7 @@ var _rrhhInactivosAbierto = false;
 var _rrhhOCRData = [];
 var _rrhhDashChartEvo = null;
 var _rrhhFichaChart = null;
-var _rrhhDashChartCat = null;
+var _rrhhDashChartCat = null; // unused, kept for compat
 var _rrhhSSChart = null;
 var _rrhhExpandedRow = null;
 var _rrhhFichaOrigen = "nominas"; // track which section opened the ficha
@@ -149,29 +149,30 @@ function _rrhhCargarDashboard() {
         });
       }
 
-      // -- Chart.js: Donut (categorias) --
-      var cats = d.categorias || [];
-      var canvasCat = document.getElementById("rrhh-chart-categorias");
-      if (canvasCat && cats.length) {
-        if (_rrhhDashChartCat) _rrhhDashChartCat.destroy();
-        var catLabels = cats.map(function (c) { return c.categoria || "Sin cat."; });
-        var catData = cats.map(function (c) { return c.coste_medio_mes || c.coste || 0; });
-        var catColors = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16"];
-        _rrhhDashChartCat = new Chart(canvasCat.getContext("2d"), {
-          type: "doughnut",
-          data: {
-            labels: catLabels,
-            datasets: [{ data: catData, backgroundColor: catColors.slice(0, catLabels.length) }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { position: "bottom" },
-              tooltip: { callbacks: { label: function (ctx) { return ctx.label + ": " + fmtEurFull(ctx.raw); } } }
-            }
-          }
+      // -- Asignación de empleados a proyectos --
+      var asig = d.asignacion_empleados || {};
+      var asigDiv = document.getElementById("rrhh-dash-asignacion");
+      if (asigDiv) {
+        var proys = asig.proyectos || [];
+        var ah = '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+        ah += '<thead><tr style="border-bottom:2px solid var(--border,#e9ecef);"><th style="padding:5px 6px;text-align:left;font-weight:700;">Proyecto</th><th style="padding:5px 6px;text-align:right;font-weight:700;">Empleados</th></tr></thead><tbody>';
+        proys.forEach(function (p) {
+          ah += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="if(typeof _navToProyecto===\'function\')_navToProyecto(' + p.proyecto_id + ')">' +
+            '<td style="padding:5px 6px;">' + (p.proyecto_nombre || "") + '</td>' +
+            '<td style="padding:5px 6px;text-align:right;font-weight:600;">' + p.empleados + '</td></tr>';
         });
+        ah += '<tr style="border-bottom:1px solid var(--border,#e9ecef);background:#FFFBEB;">' +
+          '<td style="padding:5px 6px;color:#92400E;">Sin asignar</td>' +
+          '<td style="padding:5px 6px;text-align:right;font-weight:600;color:#92400E;">' + (asig.sin_asignar || 0) + '</td></tr>';
+        if (asig.baja_vacaciones) {
+          ah += '<tr style="border-bottom:1px solid var(--border,#e9ecef);background:#F3F4F6;">' +
+            '<td style="padding:5px 6px;color:#6B7280;">Baja / Vacaciones</td>' +
+            '<td style="padding:5px 6px;text-align:right;font-weight:600;color:#6B7280;">' + asig.baja_vacaciones + '</td></tr>';
+        }
+        ah += '</tbody><tfoot><tr style="border-top:2px solid var(--border,#e9ecef);">' +
+          '<td style="padding:6px 6px;font-weight:700;">TOTAL</td>' +
+          '<td style="padding:6px 6px;text-align:right;font-weight:800;">' + (asig.total || 0) + '</td></tr></tfoot></table>';
+        asigDiv.innerHTML = ah;
       }
 
       // -- Top 5 coste/dia --

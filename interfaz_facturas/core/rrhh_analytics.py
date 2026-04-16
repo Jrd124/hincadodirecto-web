@@ -66,14 +66,40 @@ def dashboard():
             FROM nominas WHERE tipo='NOMINA' GROUP BY periodo ORDER BY periodo
         """).fetchall()]
 
-        # Distribución categoría
-        categorias = [dict(r) for r in conn.execute("""
-            SELECT e.categoria, COUNT(DISTINCT n.empleado_id) as empleados,
-                   ROUND(AVG(n.coste_empresa),2) as coste_medio_mes
-            FROM nominas n JOIN empleados e ON e.id=n.empleado_id
-            WHERE n.periodo=? AND n.tipo='NOMINA'
-            GROUP BY e.categoria ORDER BY coste_medio_mes DESC
-        """, (ultimo,)).fetchall()]
+        # Asignación de empleados a proyectos (hoy)
+        hoy = date.today().isoformat()
+        asig_proy = [dict(r) for r in conn.execute("""
+            SELECT pa.proyecto_id, p.nombre as proyecto_nombre,
+                   COUNT(DISTINCT pa.recurso_id) as empleados
+            FROM proyecto_asignaciones pa
+            JOIN proyectos p ON p.id = pa.proyecto_id
+            WHERE pa.recurso_tipo IN ('hincador','ayudante','operador','empleado')
+              AND pa.fecha = ?
+            GROUP BY pa.proyecto_id
+            ORDER BY empleados DESC
+        """, (hoy,)).fetchall()]
+        ids_asignados = set()
+        for r in conn.execute(
+            "SELECT DISTINCT recurso_id FROM proyecto_asignaciones "
+            "WHERE recurso_tipo IN ('hincador','ayudante','operador','empleado') AND fecha=?",
+            (hoy,)
+        ).fetchall():
+            ids_asignados.add(r["recurso_id"])
+        sin_asignar = conn.execute(
+            "SELECT COUNT(*) FROM empleados WHERE estado='activo' AND id NOT IN ({})".format(
+                ",".join(str(i) for i in ids_asignados) if ids_asignados else "0"
+            )
+        ).fetchone()[0]
+        baja_vac = conn.execute(
+            "SELECT COUNT(*) FROM empleados WHERE estado IN ('baja','vacaciones')"
+        ).fetchone()[0]
+        total_asig = sum(r["empleados"] for r in asig_proy) + sin_asignar + baja_vac
+        asignacion_empleados = {
+            "proyectos": asig_proy,
+            "sin_asignar": sin_asignar,
+            "baja_vacaciones": baja_vac,
+            "total": total_asig,
+        }
 
         # Top 5
         top5 = [dict(r) for r in conn.execute("""
@@ -112,7 +138,7 @@ def dashboard():
                 "ultimo_periodo": ultimo,
             },
             "evolucion": evolucion,
-            "categorias": categorias,
+            "asignacion_empleados": asignacion_empleados,
             "top5": top5,
             "alertas": alertas,
         }
