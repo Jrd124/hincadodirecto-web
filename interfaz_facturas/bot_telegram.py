@@ -604,9 +604,345 @@ def enviar_documento_seguro(poliza_id, tipo_documento=None):
         conn.close()
 
 
+# ── Mejora 2: Facturas pendientes ──────────────────────────────────────────
+
+def consultar_facturas_pendientes(tipo="cobro", importe_minimo=None, proveedor_o_cliente=None):
+    _init_all()
+    conn = get_conn()
+    try:
+        if tipo == "cobro":
+            q = ("SELECT fc.numero_factura, COALESCE(t.nombre_canonico, fc.cliente) as nombre, "
+                 "fc.fecha_factura, fc.total_a_pagar as total FROM facturas_cliente fc "
+                 "LEFT JOIN terceros t ON fc.tercero_id = t.id "
+                 "WHERE fc.estado_cobro IN ('pendiente','parcial')")
+        else:
+            q = ("SELECT fp.numero_factura, COALESCE(t.nombre_canonico, fp.proveedor) as nombre, "
+                 "fp.fecha_factura, fp.resumen_concepto as concepto, "
+                 "CAST(COALESCE(fp.total, fp.total_a_pagar, 0) AS REAL) as total "
+                 "FROM facturas_proveedor fp "
+                 "LEFT JOIN terceros t ON fp.tercero_id = t.id "
+                 "WHERE fp.estado_pago IN ('pendiente','parcial')")
+        params = []
+        if importe_minimo:
+            q += " AND total >= ?"; params.append(importe_minimo)
+        if proveedor_o_cliente:
+            q += " AND nombre LIKE ?"; params.append(f"%{proveedor_o_cliente}%")
+        q += " ORDER BY total DESC LIMIT 20"
+        rows = _safe_query(conn, q, tuple(params))
+        if not rows:
+            return f"No hay facturas pendientes de {'cobro' if tipo == 'cobro' else 'pago'}."
+        def _to_float(v):
+            if not v: return 0.0
+            try: return float(v)
+            except (ValueError, TypeError): return float(str(v).replace(".", "").replace(",", "."))
+        total_sum = sum(_to_float(r["total"]) for r in rows)
+        lines = [f"📄 *Facturas pendientes de {'cobro' if tipo == 'cobro' else 'pago'}* ({len(rows)}):\n"]
+        for r in rows:
+            lines.append(f"• {r['numero_factura'] or '?'} — {r['nombre'] or '?'}: {_to_float(r['total']):,.2f}€ ({r['fecha_factura'] or '?'})")
+        lines.append(f"\n💰 *Total pendiente: {total_sum:,.2f}€*")
+        return "\n".join(lines)
+    finally:
+        conn.close()
+
+
+# ── Mejora 3: Facturas histórico ─────────────────────────────���────────────
+
+def consultar_facturas_historico(tipo="proveedor", nombre=None, fecha_desde=None, fecha_hasta=None, concepto=None):
+    _init_all()
+    conn = get_conn()
+    try:
+        if tipo == "cliente":
+            q = ("SELECT fc.numero_factura, COALESCE(t.nombre_canonico, fc.cliente) as nombre, "
+                 "fc.fecha_factura, fc.total_a_pagar as total, fc.estado_cobro as estado "
+                 "FROM facturas_cliente fc LEFT JOIN terceros t ON fc.tercero_id = t.id WHERE 1=1")
+        else:
+            q = ("SELECT fp.numero_factura, COALESCE(t.nombre_canonico, fp.proveedor) as nombre, "
+                 "fp.fecha_factura, fp.resumen_concepto, "
+                 "CAST(COALESCE(fp.total, fp.total_a_pagar, 0) AS REAL) as total, fp.estado_pago as estado "
+                 "FROM facturas_proveedor fp LEFT JOIN terceros t ON fp.tercero_id = t.id WHERE 1=1")
+        params = []
+        if nombre:
+            q += " AND nombre LIKE ?"; params.append(f"%{nombre}%")
+        if fecha_desde:
+            q += " AND fecha_factura >= ?"; params.append(fecha_desde)
+        if fecha_hasta:
+            q += " AND fecha_factura <= ?"; params.append(fecha_hasta)
+        if concepto:
+            if tipo == "proveedor":
+                q += " AND resumen_concepto LIKE ?"; params.append(f"%{concepto}%")
+        q += " ORDER BY fecha_factura DESC LIMIT 20"
+        rows = _safe_query(conn, q, tuple(params))
+        if not rows:
+            return "No se encontraron facturas con esos criterios."
+        def _to_float(v):
+            if not v: return 0.0
+            try: return float(v)
+            except (ValueError, TypeError): return float(str(v).replace(".", "").replace(",", "."))
+        total_sum = sum(_to_float(r["total"]) for r in rows)
+        label = "emitidas" if tipo == "cliente" else "recibidas"
+        lines = [f"📄 *Facturas {label}* ({len(rows)}):\n"]
+        for r in rows:
+            lines.append(f"• {r['numero_factura'] or '?'} — {r['nombre'] or '?'}: {_to_float(r['total']):,.2f}€ ({r['fecha_factura'] or '?'}) [{r.get('estado') or '?'}]")
+        lines.append(f"\n💰 *Total: {total_sum:,.2f}€*")
+        return "\n".join(lines)
+    finally:
+        conn.close()
+
+
+# ── Mejora 4: Enviar PDF factura ───────────────────────────��──────────────
+
+_pending_factura_docs = []  # Shared state for sending docs after GPT response
+
+def enviar_pdf_factura(tipo="proveedor", numero_factura=None, proveedor_o_cliente=None):
+    _init_all()
+    conn = get_conn()
+    try:
+        if tipo == "cliente":
+            q = ("SELECT fc.numero_factura, fc.ruta_archivo as pdf_path, "
+                 "COALESCE(t.nombre_canonico, fc.cliente) as nombre "
+                 "FROM facturas_cliente fc LEFT JOIN terceros t ON fc.tercero_id = t.id WHERE 1=1")
+        else:
+            q = ("SELECT fp.numero_factura, COALESCE(fp.ruta_destino, fp.ruta_archivo) as pdf_path, "
+                 "COALESCE(t.nombre_canonico, fp.proveedor) as nombre "
+                 "FROM facturas_proveedor fp LEFT JOIN terceros t ON fp.tercero_id = t.id WHERE 1=1")
+        params = []
+        if numero_factura:
+            q += " AND numero_factura LIKE ?"; params.append(f"%{numero_factura}%")
+        if proveedor_o_cliente:
+            q += " AND nombre_canonico LIKE ?"; params.append(f"%{proveedor_o_cliente}%")
+        q += " LIMIT 5"
+        rows = _safe_query(conn, q, tuple(params))
+        if not rows:
+            return "No se encontró la factura."
+        found = []
+        for r in rows:
+            pdf = r.get("pdf_path") or ""
+            if pdf:
+                full = DATOS_DIR / pdf if not os.path.isabs(pdf) else Path(pdf)
+                if full.exists():
+                    _pending_factura_docs.append(str(full))
+                    found.append(f"📄 {r['numero_factura']} ({r['nombre'] or '?'}) — enviando PDF...")
+                else:
+                    found.append(f"📄 {r['numero_factura']} ({r['nombre'] or '?'}) — PDF no encontrado en disco")
+            else:
+                found.append(f"📄 {r['numero_factura']} ({r['nombre'] or '?'}) — sin PDF asociado")
+        return "\n".join(found)
+    finally:
+        conn.close()
+
+
+# ── Mejora 5: Consultar/Modificar empleados ───────────────────────────────
+
+def consultar_empleados(nombre=None, info="general"):
+    _init_all()
+    conn = get_conn()
+    try:
+        if nombre:
+            emps = _safe_query(conn, "SELECT * FROM empleados WHERE (nombre || ' ' || COALESCE(apellidos,'')) LIKE ? ORDER BY apellidos", (f"%{nombre}%",))
+        else:
+            emps = _safe_query(conn, "SELECT * FROM empleados WHERE estado='activo' ORDER BY apellidos LIMIT 20")
+        if not emps:
+            return "No se encontraron empleados."
+        emps = [dict(e) for e in emps]
+        lines = []
+        for e in emps:
+            nm = f"{e['nombre']} {e.get('apellidos', '') or ''}".strip()
+            if info == "general" or info == "todos":
+                lines.append(f"👤 *{nm}*: {e.get('puesto') or '?'} | Tel: {e.get('telefono') or '?'} | Estado: {e.get('estado')} | Neto: {e.get('neto_pactado') or 0}€")
+            if info in ("nominas", "todos"):
+                noms = _safe_query(conn, "SELECT periodo, liquido, coste_empresa FROM nominas WHERE empleado_id=? AND tipo='NOMINA' ORDER BY periodo DESC LIMIT 3", (e["id"],))
+                if noms:
+                    lines.append("  📋 Últimas nóminas: " + ", ".join(f"{n['periodo']}: {n['liquido'] or 0:.0f}€ líq / {n['coste_empresa'] or 0:.0f}€ coste" for n in noms))
+            if info in ("adelantos", "todos"):
+                from datetime import date
+                anio = date.today().year
+                adel = _safe_scalar(conn, "SELECT COUNT(*) FROM vacaciones_dias WHERE empleado_id=? AND fecha LIKE ?", (e["id"], f"{anio}%"), 0)
+                # Adelantos from movimientos
+                try:
+                    from config import MOVIMIENTOS_DB
+                    import sqlite3
+                    bconn = sqlite3.connect(str(MOVIMIENTOS_DB))
+                    bconn.row_factory = sqlite3.Row
+                    a = bconn.execute("SELECT COUNT(*) as c, COALESCE(SUM(ABS(importe)),0) as t FROM movimientos WHERE rrhh_empleado_id=? AND rrhh_tipo='adelanto' AND SUBSTR(fecha_operacion,1,4)=?", (e["id"], str(anio))).fetchone()
+                    bconn.close()
+                    if a and a["c"] > 0:
+                        lines.append(f"  💸 Adelantos {anio}: {a['c']} por {a['t']:.2f}€")
+                except Exception:
+                    pass
+            if info in ("vacaciones", "todos"):
+                from datetime import date
+                anio = date.today().year
+                vac_count = _safe_scalar(conn, "SELECT COUNT(*) FROM vacaciones_dias WHERE empleado_id=? AND fecha LIKE ?", (e["id"], f"{anio}%"), 0)
+                dias_anuales = e.get("dias_vacaciones_anuales") or 22
+                lines.append(f"  🏖 Vacaciones {anio}: {vac_count} disfrutadas de {dias_anuales} anuales ({dias_anuales - vac_count} pendientes)")
+        return "\n".join(lines) if lines else "Sin datos."
+    finally:
+        conn.close()
+
+
+def modificar_empleado(nombre, campo, valor):
+    """Solo superadmin. Caller must check role."""
+    _init_all()
+    campos_ok = {"telefono", "email", "direccion", "notas", "neto_pactado"}
+    if campo not in campos_ok:
+        return f"❌ Campo '{campo}' no modificable. Permitidos: {', '.join(campos_ok)}"
+    conn = get_conn()
+    try:
+        emp = conn.execute("SELECT id, nombre, apellidos FROM empleados WHERE (nombre || ' ' || COALESCE(apellidos,'')) LIKE ?", (f"%{nombre}%",)).fetchone()
+        if not emp:
+            return f"No se encontró empleado '{nombre}'."
+        if campo == "neto_pactado":
+            valor = float(valor)
+        conn.execute(f"UPDATE empleados SET {campo} = ?, updated_at = ? WHERE id = ?", (valor, datetime.now().isoformat(), emp["id"]))
+        conn.commit()
+        nm = f"{emp['nombre']} {emp['apellidos'] or ''}".strip()
+        return f"✅ {nm}: {campo} actualizado a '{valor}'."
+    finally:
+        conn.close()
+
+
+# ── Mejora 6: Consultar operaciones ───────────────────────────────────────
+
+def consultar_operaciones(consulta_tipo, proyecto_nombre=None, empleado_nombre=None, fecha=None):
+    _init_all()
+    conn = get_conn()
+    try:
+        from datetime import date
+        fecha = fecha or date.today().isoformat()
+        if consulta_tipo == "asignaciones_hoy":
+            rows = _safe_query(conn, """
+                SELECT pa.recurso_nombre, pa.recurso_tipo, p.nombre as proyecto,
+                       COALESCE(pa.funcion_dia, e.puesto) as funcion
+                FROM proyecto_asignaciones pa
+                JOIN proyectos p ON pa.proyecto_id = p.id
+                LEFT JOIN empleados e ON pa.recurso_id = e.id AND pa.recurso_tipo = 'empleado'
+                WHERE pa.fecha = ? ORDER BY p.nombre, pa.recurso_tipo
+            """, (fecha,))
+            if not rows:
+                return f"No hay asignaciones para {fecha}."
+            by_proy = {}
+            for r in rows:
+                rd = dict(r)
+                pn = rd.get("proyecto") or "?"
+                if pn not in by_proy: by_proy[pn] = []
+                fn = f" ({rd['funcion']})" if rd.get("funcion") else ""
+                by_proy[pn].append(f"{'👷' if rd['recurso_tipo']=='empleado' else '🏗'} {rd['recurso_nombre']}{fn}")
+            lines = [f"📋 *Asignaciones {fecha}:*\n"]
+            for pn, recursos in by_proy.items():
+                lines.append(f"🏗 *{pn}* ({len(recursos)}):")
+                for rec in recursos:
+                    lines.append(f"  {rec}")
+            return "\n".join(lines)
+
+        elif consulta_tipo == "asignaciones_proyecto":
+            if not proyecto_nombre:
+                return "Indica el nombre del proyecto."
+            rows = _safe_query(conn, """
+                SELECT pa.recurso_nombre, pa.recurso_tipo, COALESCE(pa.funcion_dia, e.puesto) as funcion
+                FROM proyecto_asignaciones pa
+                JOIN proyectos p ON pa.proyecto_id = p.id
+                LEFT JOIN empleados e ON pa.recurso_id = e.id AND pa.recurso_tipo = 'empleado'
+                WHERE pa.fecha = ? AND p.nombre LIKE ?
+                ORDER BY pa.recurso_tipo
+            """, (fecha, f"%{proyecto_nombre}%"))
+            if not rows:
+                return f"No hay recursos asignados a '{proyecto_nombre}' el {fecha}."
+            lines = [f"🏗 *{proyecto_nombre}* ({fecha}):\n"]
+            for r in rows:
+                rd = dict(r)
+                fn = f" ({rd['funcion']})" if rd.get("funcion") else ""
+                lines.append(f"  {'👷' if rd['recurso_tipo']=='empleado' else '🏗'} {rd['recurso_nombre']}{fn}")
+            return "\n".join(lines)
+
+        elif consulta_tipo == "disponibilidad":
+            asignados = set()
+            for r in _safe_query(conn, "SELECT DISTINCT recurso_id FROM proyecto_asignaciones WHERE recurso_tipo='empleado' AND fecha=?", (fecha,)):
+                asignados.add(r["recurso_id"])
+            libres = _safe_query(conn, "SELECT id, nombre, apellidos, puesto FROM empleados WHERE estado='activo' ORDER BY apellidos")
+            libre_list = [dict(e) for e in libres if e["id"] not in asignados]
+            if not libre_list:
+                return f"Todos los empleados activos están asignados el {fecha}."
+            lines = [f"✅ *Empleados disponibles el {fecha}* ({len(libre_list)}):\n"]
+            for e in libre_list:
+                lines.append(f"  👷 {e['nombre']} {e.get('apellidos') or ''} ({e.get('puesto') or '?'})")
+            return "\n".join(lines)
+
+        elif consulta_tipo == "historico_empleado":
+            if not empleado_nombre:
+                return "Indica el nombre del empleado."
+            rows = _safe_query(conn, """
+                SELECT pa.fecha, p.nombre as proyecto, pa.estado
+                FROM proyecto_asignaciones pa
+                JOIN proyectos p ON pa.proyecto_id = p.id
+                WHERE pa.recurso_tipo='empleado'
+                  AND pa.recurso_nombre LIKE ?
+                  AND pa.fecha >= date(?, '-30 days')
+                ORDER BY pa.fecha DESC LIMIT 30
+            """, (f"%{empleado_nombre}%", fecha))
+            if not rows:
+                return f"No hay asignaciones recientes para '{empleado_nombre}'."
+            lines = [f"📋 *Historial de {empleado_nombre}* (últimos 30 días):\n"]
+            for r in rows:
+                lines.append(f"  {r['fecha']}: {r['proyecto']}")
+            return "\n".join(lines)
+
+        return "Tipo de consulta no reconocido."
+    finally:
+        conn.close()
+
+
+# ── Mejora 7: SQL genérica ────────────────────────────────────────────────
+
+import re as _re
+
+def ejecutar_sql_erp(sql, bd="gestion"):
+    """Execute read-only SQL against the ERP database."""
+    sql_clean = sql.strip().rstrip(";")
+    sql_upper = sql_clean.upper()
+
+    # Security: only SELECT
+    if not sql_upper.startswith("SELECT"):
+        return json.dumps({"error": "Solo se permiten consultas SELECT."})
+
+    forbidden = ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "TRUNCATE", "REPLACE", "ATTACH"]
+    for word in forbidden:
+        if _re.search(r"\b" + word + r"\b", sql_upper):
+            return json.dumps({"error": f"Operación '{word}' no permitida."})
+
+    if ";" in sql_clean:
+        return json.dumps({"error": "No se permiten múltiples statements."})
+
+    import sqlite3
+    if bd == "movimientos":
+        from config import MOVIMIENTOS_DB
+        db_path = str(MOVIMIENTOS_DB)
+    else:
+        from config import GESTION_DB
+        db_path = str(GESTION_DB)
+
+    try:
+        conn = sqlite3.connect(db_path, timeout=5)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.execute(sql_clean)
+        columns = [desc[0] for desc in cursor.description] if cursor.description else []
+        rows = cursor.fetchmany(50)
+        result = {
+            "columnas": columns,
+            "filas": [dict(zip(columns, row)) for row in rows],
+            "total_filas": len(rows),
+            "truncado": len(rows) == 50,
+        }
+        conn.close()
+        return json.dumps(result, ensure_ascii=False, default=str)
+    except sqlite3.OperationalError as e:
+        return json.dumps({"error": f"Error SQL: {e}"})
+    except Exception as e:
+        return json.dumps({"error": f"Error: {e}"})
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  GPT-4 FUNCTION CALLING (superadmin natural language)
-# ═══════════════════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════���═══════════════
 
 _GPT_SYSTEM = (
     "Eres el asistente del ERP de Hincado Directo, empresa española de hincado "
@@ -614,7 +950,13 @@ _GPT_SYSTEM = (
     "de forma concisa y con datos concretos. Usa emojis para hacer las respuestas "
     "más legibles. Cuando des cifras monetarias, usa formato español (punto para "
     "miles, coma para decimales). Si no tienes datos suficientes para responder, "
-    "dilo claramente."
+    "dilo claramente.\n\n"
+    "Tienes acceso a una herramienta de SQL genérica (ejecutar_sql_erp) que te permite "
+    "consultar cualquier dato del ERP. Úsala cuando las tools específicas no cubran la "
+    "pregunta o cuando necesites hacer consultas complejas con JOINs, agregaciones, o "
+    "filtros que las tools específicas no soportan. Siempre que devuelvas datos numéricos "
+    "de importes, formatea con 2 decimales y símbolo €. Si el resultado tiene muchas filas, "
+    "haz un resumen en vez de listar todas."
 )
 
 _GPT_FUNCTIONS = [
@@ -700,6 +1042,96 @@ _GPT_FUNCTIONS = [
             "required": ["poliza_id"],
         },
     },
+    {
+        "name": "consultar_facturas_pendientes",
+        "description": "Lista facturas pendientes de cobro o pago con detalle: cliente/proveedor, fecha, concepto, importe.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "tipo": {"type": "string", "enum": ["cobro", "pago"], "description": "cobro = clientes pendientes de cobrar. pago = proveedores pendientes de pagar."},
+                "importe_minimo": {"type": "number", "description": "Filtrar por importe mínimo (opcional)"},
+                "proveedor_o_cliente": {"type": "string", "description": "Filtrar por nombre (búsqueda parcial, opcional)"},
+            },
+            "required": ["tipo"],
+        },
+    },
+    {
+        "name": "consultar_facturas_historico",
+        "description": "Consulta histórica de facturas: cuántas, totales facturados, búsqueda por concepto, fechas.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "tipo": {"type": "string", "enum": ["proveedor", "cliente"]},
+                "nombre": {"type": "string", "description": "Nombre del proveedor o cliente (parcial)"},
+                "fecha_desde": {"type": "string", "description": "Fecha inicio YYYY-MM-DD"},
+                "fecha_hasta": {"type": "string", "description": "Fecha fin YYYY-MM-DD"},
+                "concepto": {"type": "string", "description": "Buscar en concepto"},
+            },
+            "required": ["tipo"],
+        },
+    },
+    {
+        "name": "enviar_pdf_factura",
+        "description": "Busca y envía por Telegram el PDF de una factura de cliente o proveedor.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "tipo": {"type": "string", "enum": ["proveedor", "cliente"]},
+                "numero_factura": {"type": "string", "description": "Número de factura (parcial OK)"},
+                "proveedor_o_cliente": {"type": "string", "description": "Nombre del proveedor/cliente"},
+            },
+        },
+    },
+    {
+        "name": "consultar_empleados",
+        "description": "Consulta información de empleados: datos personales, nóminas, adelantos, vacaciones.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "nombre": {"type": "string", "description": "Nombre del empleado (búsqueda parcial)"},
+                "info": {"type": "string", "enum": ["general", "nominas", "adelantos", "vacaciones", "todos"], "description": "Qué información devolver"},
+            },
+        },
+    },
+    {
+        "name": "modificar_empleado",
+        "description": "Modifica información de un empleado: teléfono, email, notas. Solo superadmin.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "nombre": {"type": "string", "description": "Nombre del empleado"},
+                "campo": {"type": "string", "enum": ["telefono", "email", "direccion", "notas", "neto_pactado"]},
+                "valor": {"type": "string", "description": "Nuevo valor"},
+            },
+            "required": ["nombre", "campo", "valor"],
+        },
+    },
+    {
+        "name": "consultar_operaciones",
+        "description": "Consulta el planificador de operaciones: asignaciones a proyectos, disponibilidad de recursos.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "consulta_tipo": {"type": "string", "enum": ["asignaciones_hoy", "asignaciones_proyecto", "disponibilidad", "historico_empleado"]},
+                "proyecto_nombre": {"type": "string", "description": "Nombre del proyecto"},
+                "empleado_nombre": {"type": "string", "description": "Nombre del empleado"},
+                "fecha": {"type": "string", "description": "Fecha YYYY-MM-DD (default: hoy)"},
+            },
+            "required": ["consulta_tipo"],
+        },
+    },
+    {
+        "name": "ejecutar_sql_erp",
+        "description": "Ejecuta una consulta SQL SELECT contra la BD del ERP. SOLO lectura.\n\nTABLAS en gestion.db: empleados (id,nombre,apellidos,dni,categoria,puesto,estado,telefono,email,neto_pactado,dias_vacaciones_anuales,fecha_alta), nominas (id,empleado_id,periodo,tipo,dias,salario_base,total_devengado,dietas,irpf_euros,liquido,coste_empresa,coste_dia,ss_empresa), proyectos (id,codigo,nombre,estado,provincia,tipo_actividad,hinca_cantidad,hincas_ejecutadas,cliente_tercero_id), proyecto_asignaciones (id,proyecto_id,recurso_tipo,recurso_id,recurso_nombre,fecha,estado,funcion_dia), proyecto_partes (id,proyecto_id,fecha,hincas_realizadas,horas_admin,num_operadores,incidencias,estado_firma), facturas_proveedor (id,numero_factura,proveedor_tercero_id,fecha_factura,concepto,base_imponible,iva,total,estado_cobro,pdf_path), facturas_cliente (id,numero_factura,cliente_tercero_id,fecha_factura,concepto,base_imponible,total,estado_cobro), terceros (id,nombre_canonico,nif,tipo), maquinas (id,nombre,codigo,modelo,activa), vacaciones_dias (id,empleado_id,fecha,estado,notas), dietas_diarias (id,empleado_id,fecha,tipo,funcion,importe), combustible_transacciones (id,fecha,vehiculo,litros,importe,matricula).\n\nTABLA en movimientos.db: movimientos (id,fecha_operacion,concepto,importe,banco,saldo,rrhh_tipo,rrhh_empleado_id).\n\nREGLAS: SOLO SELECT. Máximo 50 filas. Para movimientos.db usa bd='movimientos'.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sql": {"type": "string", "description": "Query SQL SELECT a ejecutar"},
+                "bd": {"type": "string", "enum": ["gestion", "movimientos"], "description": "Base de datos (default: gestion)"},
+            },
+            "required": ["sql"],
+        },
+    },
 ]
 
 _FN_MAP = {
@@ -711,6 +1143,13 @@ _FN_MAP = {
     "consultar_equipo": consultar_equipo,
     "consultar_seguros": consultar_seguros,
     "enviar_documento_seguro": enviar_documento_seguro,
+    "consultar_facturas_pendientes": consultar_facturas_pendientes,
+    "consultar_facturas_historico": consultar_facturas_historico,
+    "enviar_pdf_factura": enviar_pdf_factura,
+    "consultar_empleados": consultar_empleados,
+    "modificar_empleado": modificar_empleado,
+    "consultar_operaciones": consultar_operaciones,
+    "ejecutar_sql_erp": ejecutar_sql_erp,
 }
 
 
@@ -904,6 +1343,7 @@ async def handle_text_superadmin(update: Update, context: ContextTypes.DEFAULT_T
     await update.message.reply_text("⏳ Consultando...")
     # Clear pending docs before query
     _pending_docs.clear()
+    _pending_factura_docs.clear()
     answer = await _run_sync(_gpt_query_sync, update.message.text)
     for chunk in _split_msg(answer):
         await update.message.reply_text(chunk, parse_mode=ParseMode.MARKDOWN)
@@ -921,6 +1361,15 @@ async def handle_text_superadmin(update: Update, context: ContextTypes.DEFAULT_T
                 logger.warning("Error enviando documento %s: %s", doc["nombre"], exc)
                 await update.message.reply_text(f"⚠️ No se pudo enviar: {doc['nombre']}")
         _pending_docs.clear()
+    # Send any pending factura PDFs
+    if _pending_factura_docs:
+        for path in _pending_factura_docs:
+            try:
+                with open(path, "rb") as f:
+                    await update.message.reply_document(document=f, filename=os.path.basename(path), caption=f"📄 {os.path.basename(path)}")
+            except Exception as exc:
+                logger.warning("Error enviando factura PDF %s: %s", path, exc)
+        _pending_factura_docs.clear()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1089,9 +1538,20 @@ async def callback_parte_datos(update: Update, context: ContextTypes.DEFAULT_TYP
     datos = estado["datos"]
 
     if query.data == "parte_datos_ok":
-        # Data confirmed — go to project selection
-        await query.edit_message_text("✅ Datos confirmados.")
-        await _enviar_selector_proyecto_parte(tid, context, datos)
+        # Data confirmed — ask date confirmation before project selection
+        fecha_ocr = datos.get("fecha") or datetime.now().strftime("%Y-%m-%d")
+        try:
+            fecha_fmt = datetime.strptime(fecha_ocr, "%Y-%m-%d").strftime("%d/%m/%Y")
+        except Exception:
+            fecha_fmt = fecha_ocr
+        set_estado(tid, "parte_confirmar_fecha", datos)
+        kb = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(f"✅ Sí ({fecha_fmt})", callback_data="partefecha_ok"),
+                InlineKeyboardButton("📅 Cambiar", callback_data="partefecha_cambiar"),
+            ]
+        ])
+        await query.edit_message_text(f"✅ Datos confirmados.\n\n📅 Fecha del parte: *{fecha_fmt}*\n¿Es correcta?", reply_markup=kb, parse_mode=ParseMode.MARKDOWN)
     else:
         # Start correction flow — step 1: hincas
         set_estado(tid, "parte_corregir_hincas", datos)
@@ -1185,6 +1645,42 @@ async def _handle_parte_corregir_incidencias(update: Update, context: ContextTyp
     set_estado(tid, "parte_seleccionar_proyecto", datos)
     await update.message.reply_text(resumen, parse_mode=ParseMode.MARKDOWN)
     await _enviar_selector_proyecto_parte(tid, context, datos)
+
+
+async def callback_parte_fecha(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle date confirmation for OCR parte."""
+    query = update.callback_query
+    await query.answer()
+    tid = query.from_user.id
+    estado = get_estado(tid)
+    if not estado or estado["estado"] != "parte_confirmar_fecha":
+        return await query.edit_message_text("⚠️ No hay parte pendiente.")
+    datos = estado["datos"]
+    if query.data == "partefecha_ok":
+        await query.edit_message_text("📅 Fecha confirmada.")
+        await _enviar_selector_proyecto_parte(tid, context, datos)
+    else:
+        set_estado(tid, "parte_escribir_fecha", datos)
+        await query.edit_message_text("📅 Escribe la fecha del parte (DD/MM/YYYY):")
+
+
+async def _handle_parte_escribir_fecha(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle typed date for OCR parte."""
+    tid = update.effective_user.id
+    estado = get_estado(tid)
+    datos = estado["datos"]
+    texto = update.message.text.strip()
+    try:
+        d = datetime.strptime(texto, "%d/%m/%Y")
+        if d.date() > datetime.now().date():
+            await update.message.reply_text("❌ No se pueden crear partes para el futuro. Escribe otra fecha (DD/MM/YYYY):")
+            return
+        datos["fecha"] = d.strftime("%Y-%m-%d")
+        set_estado(tid, "parte_seleccionar_proyecto", datos)
+        await update.message.reply_text(f"📅 Fecha: *{texto}*", parse_mode=ParseMode.MARKDOWN)
+        await _enviar_selector_proyecto_parte(tid, context, datos)
+    except ValueError:
+        await update.message.reply_text("❌ Formato inválido. Escribe DD/MM/YYYY:")
 
 
 async def _enviar_selector_proyecto_parte(tid, context, datos):
@@ -1918,7 +2414,7 @@ async def callback_firma(update: Update, context: ContextTypes.DEFAULT_TYPE):
 #  OPERARIO: /manual ConversationHandler
 # ═══════════════════════════════════════════════════════════════════════════
 
-MANUAL_PROYECTO, MANUAL_HINCAS, MANUAL_HORAS_ADMIN, MANUAL_HINCADORAS, MANUAL_INCIDENCIAS, MANUAL_CONFIRMAR = range(6)
+MANUAL_PROYECTO, MANUAL_FECHA, MANUAL_HINCAS, MANUAL_HORAS_ADMIN, MANUAL_HINCADORAS, MANUAL_INCIDENCIAS, MANUAL_CONFIRMAR = range(7)
 
 
 async def cmd_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1949,9 +2445,46 @@ async def manual_proyecto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     parts = query.data.split("_", 2)
-    context.user_data["manual"] = {"proyecto_id": int(parts[1]), "proyecto_nombre": parts[2], "fecha": datetime.now().strftime("%Y-%m-%d")}
-    await query.edit_message_text(f"🏗 Proyecto: *{parts[2]}*\n\n🔨 ¿Cuántas hincas hoy? (escribe 0 si no hay)", parse_mode=ParseMode.MARKDOWN)
-    return MANUAL_HINCAS
+    hoy = datetime.now().strftime("%Y-%m-%d")
+    hoy_fmt = datetime.now().strftime("%d/%m/%Y")
+    context.user_data["manual"] = {"proyecto_id": int(parts[1]), "proyecto_nombre": parts[2], "fecha": hoy}
+    kb = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(f"✅ Sí, es hoy ({hoy_fmt})", callback_data="manfecha_hoy"),
+            InlineKeyboardButton("📅 Cambiar fecha", callback_data="manfecha_cambiar"),
+        ]
+    ])
+    await query.edit_message_text(
+        f"🏗 Proyecto: *{parts[2]}*\n\n📅 Fecha del parte: *{hoy_fmt}* (hoy)\n¿Es correcta?",
+        reply_markup=kb, parse_mode=ParseMode.MARKDOWN,
+    )
+    return MANUAL_FECHA
+
+
+async def manual_fecha(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "manfecha_hoy":
+        await query.edit_message_text(f"📅 Fecha: {context.user_data['manual']['fecha']}\n\n🔨 ¿Cuántas hincas? (escribe 0 si no hay)")
+        return MANUAL_HINCAS
+    else:
+        await query.edit_message_text("📅 Escribe la fecha del parte (DD/MM/YYYY):")
+        return MANUAL_FECHA
+
+
+async def manual_fecha_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    texto = update.message.text.strip()
+    try:
+        d = datetime.strptime(texto, "%d/%m/%Y")
+        if d.date() > datetime.now().date():
+            await update.message.reply_text("❌ No se pueden crear partes para el futuro. Escribe otra fecha:")
+            return MANUAL_FECHA
+        context.user_data["manual"]["fecha"] = d.strftime("%Y-%m-%d")
+        await update.message.reply_text(f"📅 Fecha: *{texto}*\n\n🔨 ¿Cuántas hincas? (escribe 0 si no hay)", parse_mode=ParseMode.MARKDOWN)
+        return MANUAL_HINCAS
+    except ValueError:
+        await update.message.reply_text("❌ Formato inválido. Escribe DD/MM/YYYY:")
+        return MANUAL_FECHA
 
 
 async def manual_hincas(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2516,6 +3049,10 @@ def main():
         entry_points=[CommandHandler("manual", cmd_manual)],
         states={
             MANUAL_PROYECTO: [CallbackQueryHandler(manual_proyecto, pattern=r"^manproy_")],
+            MANUAL_FECHA: [
+                CallbackQueryHandler(manual_fecha, pattern=r"^manfecha_"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, manual_fecha_texto),
+            ],
             MANUAL_HINCAS: [MessageHandler(filters.TEXT & ~filters.COMMAND, manual_hincas)],
             MANUAL_HORAS_ADMIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, manual_horas_admin)],
             MANUAL_HINCADORAS: [MessageHandler(filters.TEXT & ~filters.COMMAND, manual_hincadoras)],
@@ -2548,6 +3085,7 @@ def main():
     app.add_handler(CallbackQueryHandler(callback_aprobar, pattern=r"^aprobar_"))
     app.add_handler(CallbackQueryHandler(callback_foto_tipo, pattern=r"^foto_tipo_"))
     app.add_handler(CallbackQueryHandler(callback_parte_datos, pattern=r"^parte_datos_"))
+    app.add_handler(CallbackQueryHandler(callback_parte_fecha, pattern=r"^partefecha_"))
     app.add_handler(CallbackQueryHandler(callback_parte_proyecto, pattern=r"^parteproy_"))
     app.add_handler(CallbackQueryHandler(callback_firma, pattern=r"^firma_"))
     app.add_handler(CallbackQueryHandler(callback_albaran_pago, pattern=r"^albpago_"))
@@ -2584,6 +3122,7 @@ def main():
         "parte_corregir_horas": _handle_parte_corregir_horas,
         "parte_corregir_operadores": _handle_parte_corregir_operadores,
         "parte_corregir_incidencias": _handle_parte_corregir_incidencias,
+        "parte_escribir_fecha": _handle_parte_escribir_fecha,
     }
 
     async def _text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
