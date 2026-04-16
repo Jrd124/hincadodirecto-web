@@ -812,7 +812,7 @@ def api_rrhh_adelantos_banco(periodo):
       "FROM movimientos WHERE rrhh_tipo='adelanto' "
       "AND (rrhh_periodo = ? OR (rrhh_periodo IS NULL AND fecha_operacion >= ? AND fecha_operacion < ?) "
       "OR ((rrhh_periodo IS NULL OR rrhh_periodo = '') AND SUBSTR(fecha_operacion,1,7) = ?)) "
-      "ORDER BY fecha_operacion DESC",
+      "ORDER BY fecha_operacion ASC",
       (periodo, fecha_ini, fecha_fin, periodo),
     ).fetchall()
 
