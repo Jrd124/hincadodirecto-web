@@ -148,6 +148,12 @@ def init_proyectos_db() -> None:
                 conn.execute("ALTER TABLE proyecto_partes ADD COLUMN horas_admin REAL DEFAULT 0")
         except Exception:
             pass
+        # Migration: add perforaciones_realizadas to proyecto_partes if missing
+        try:
+            if "perforaciones_realizadas" not in pp_cols:
+                conn.execute("ALTER TABLE proyecto_partes ADD COLUMN perforaciones_realizadas INTEGER DEFAULT 0")
+        except Exception:
+            pass
         # Migration: add imagen_archivo to proyecto_partes if missing
         try:
             if "imagen_archivo" not in pp_cols:
@@ -1199,3 +1205,227 @@ def recursos_disponibles(fecha: str, recurso_tipo: str = "") -> list[dict]:
 def _get_conn():
     from core.db import get_conn
     return get_conn()
+
+
+# ── Dashboard V2: enrichment with adaptive KPIs ──────────────────────────
+
+def _safe_float(val):
+    """Convert possibly Spanish-formatted money string to float."""
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    s = str(val).strip()
+    if not s:
+        return 0.0
+    try:
+        return float(s)
+    except ValueError:
+        return float(s.replace(".", "").replace(",", "."))
+
+
+def calcular_dashboard_v2(proyecto_id: int) -> dict | None:
+    """Enrich project dashboard with adaptive KPIs, cost breakdown, curve S, financials."""
+    data = obtener_dashboard_proyecto(proyecto_id)
+    if not data:
+        return None
+
+    tipo = data.get("tipo_actividad") or "hinca"
+    modalidad = data.get("modalidad_facturacion") or "produccion"
+    partes = data.get("partes") or []
+
+    # ── Adaptive production metrics ──
+    total_hincas = sum(p.get("hincas_realizadas") or 0 for p in partes)
+    total_perforaciones = sum(p.get("perforaciones_realizadas") or 0 for p in partes)
+    total_horas_maquina = sum(p.get("horas_maquina") or 0 for p in partes)
+    total_horas_admin = sum(p.get("horas_admin") or 0 for p in partes)
+    total_partes = len(partes)
+    partes_sin_firmar = sum(1 for p in partes if (p.get("estado_firma") or "borrador") != "firmado")
+    partes_con_incidencia = sum(1 for p in partes if p.get("incidencias"))
+
+    obj_hinca = data.get("hinca_cantidad") or 0
+    obj_perforacion = data.get("perforacion_cantidad") or 0
+
+    # Determine primary unit and objective
+    if tipo == "hinca":
+        unidad_principal = "hincas"
+        ejecutadas = total_hincas
+        objetivo = obj_hinca
+    elif tipo == "perforacion":
+        unidad_principal = "perforaciones"
+        ejecutadas = total_perforaciones
+        objetivo = obj_perforacion
+    else:  # mixto
+        unidad_principal = "hincas+perforaciones"
+        ejecutadas = total_hincas + total_perforaciones
+        objetivo = obj_hinca + obj_perforacion
+
+    avance_pct = round(ejecutadas / objetivo * 100, 1) if objetivo > 0 else 0
+
+    # Days with actual work
+    fechas_partes = sorted(set(p.get("fecha") for p in partes if p.get("fecha")))
+    dias_con_partes = len(fechas_partes)
+
+    # Ritmo and prediction
+    ritmo_diario = round(ejecutadas / dias_con_partes, 2) if dias_con_partes > 0 else 0
+    restantes = max(objetivo - ejecutadas, 0)
+    dias_restantes = round(restantes / ritmo_diario) if ritmo_diario > 0 else None
+
+    from datetime import date, timedelta
+    hoy = date.today()
+    fecha_fin_estimada = (hoy + timedelta(days=dias_restantes)).isoformat() if dias_restantes else None
+    fecha_fin_plan = data.get("fecha_fin_estimada") or data.get("fecha_fin")
+
+    desviacion_dias = None
+    if fecha_fin_estimada and fecha_fin_plan:
+        try:
+            d_est = date.fromisoformat(fecha_fin_estimada)
+            d_plan = date.fromisoformat(fecha_fin_plan)
+            desviacion_dias = (d_est - d_plan).days
+        except Exception:
+            pass
+
+    data["kpis"] = {
+        "tipo_actividad": tipo,
+        "modalidad": modalidad,
+        "unidad_principal": unidad_principal,
+        "ejecutadas": ejecutadas,
+        "objetivo": objetivo,
+        "avance_pct": avance_pct,
+        "total_hincas": total_hincas,
+        "total_perforaciones": total_perforaciones,
+        "total_horas_maquina": round(total_horas_maquina, 1),
+        "total_horas_admin": round(total_horas_admin, 1),
+        "total_partes": total_partes,
+        "partes_sin_firmar": partes_sin_firmar,
+        "partes_con_incidencia": partes_con_incidencia,
+        "dias_con_partes": dias_con_partes,
+        "ritmo_diario": ritmo_diario,
+        "dias_restantes": dias_restantes,
+        "fecha_fin_estimada": fecha_fin_estimada,
+        "fecha_fin_plan": fecha_fin_plan,
+        "desviacion_dias": desviacion_dias,
+    }
+
+    # ── Curve S series ──
+    serie = []
+    acum = 0
+    for fecha in fechas_partes:
+        dia_hincas = sum(p.get("hincas_realizadas") or 0 for p in partes if p.get("fecha") == fecha)
+        dia_perf = sum(p.get("perforaciones_realizadas") or 0 for p in partes if p.get("fecha") == fecha)
+        dia_total = dia_hincas + dia_perf if tipo == "mixto" else (dia_hincas if tipo == "hinca" else dia_perf)
+        acum += dia_total
+        obj_lineal = round(objetivo * (len(serie) + 1) / max(dias_con_partes + (dias_restantes or 0), 1), 1) if objetivo > 0 else 0
+        serie.append({
+            "fecha": fecha,
+            "produccion": dia_total,
+            "hincas": dia_hincas,
+            "perforaciones": dia_perf,
+            "acumulado": acum,
+            "objetivo_lineal": obj_lineal,
+        })
+    data["serie_curva_s"] = serie
+
+    # ── Rendimiento por día semana ──
+    dias_semana = {i: {"total": 0, "count": 0} for i in range(7)}
+    for fecha in fechas_partes:
+        try:
+            d = date.fromisoformat(fecha)
+            dia_prod = sum((p.get("hincas_realizadas") or 0) + (p.get("perforaciones_realizadas") or 0)
+                           for p in partes if p.get("fecha") == fecha)
+            dias_semana[d.weekday()]["total"] += dia_prod
+            dias_semana[d.weekday()]["count"] += 1
+        except Exception:
+            pass
+    data["rendimiento_dia_semana"] = [
+        round(dias_semana[i]["total"] / dias_semana[i]["count"], 1) if dias_semana[i]["count"] > 0 else 0
+        for i in range(7)
+    ]
+
+    # ── Financial metrics ──
+    facturas_cli = data.get("facturas_cliente") or []
+    total_facturado = sum(_safe_float(f.get("total_a_pagar") or f.get("total")) for f in facturas_cli)
+    total_cobrado = sum(_safe_float(f.get("total_a_pagar") or f.get("total"))
+                        for f in facturas_cli if (f.get("estado_cobro") or "") == "cobrada")
+
+    costes_list = data.get("costes") or []
+    total_costes = sum(_safe_float(c.get("total_a_pagar") or c.get("total")) for c in costes_list)
+
+    presupuesto = _safe_float(data.get("importe_presupuestado"))
+    margen = total_facturado - total_costes
+    margen_pct = round(margen / total_facturado * 100, 1) if total_facturado > 0 else 0
+
+    data["financiero"] = {
+        "presupuesto": round(presupuesto, 2),
+        "facturado": round(total_facturado, 2),
+        "cobrado": round(total_cobrado, 2),
+        "pendiente_cobro": round(total_facturado - total_cobrado, 2),
+        "costes": round(total_costes, 2),
+        "margen": round(margen, 2),
+        "margen_pct": margen_pct,
+    }
+
+    # ── Cost breakdown by category ──
+    desglose = {}
+    for c in costes_list:
+        cat = (c.get("categoria") or "otros").lower()
+        concepto = (c.get("resumen_concepto") or "").lower()
+        if "gasoil" in concepto or "combustible" in concepto or "carburante" in concepto:
+            cat = "gasoil"
+        elif "hotel" in concepto or "alojamiento" in concepto:
+            cat = "hoteles"
+        elif "transporte" in concepto or "grua" in concepto:
+            cat = "transporte"
+        elif cat not in ("gasoil", "hoteles", "transporte", "personal"):
+            cat = "otros"
+        desglose[cat] = desglose.get(cat, 0) + _safe_float(c.get("total_a_pagar") or c.get("total"))
+    data["desglose_costes"] = {k: round(v, 2) for k, v in desglose.items()}
+
+    # ── Alerts ──
+    alertas = []
+    if partes_sin_firmar > 0:
+        alertas.append({"nivel": "alta", "texto": f"{partes_sin_firmar} parte(s) sin firmar"})
+    facturas_pend = [f for f in facturas_cli if (f.get("estado_cobro") or "") in ("pendiente", "parcial")]
+    if facturas_pend:
+        alertas.append({"nivel": "media", "texto": f"{len(facturas_pend)} factura(s) pendiente(s) de cobro"})
+    certs = data.get("certificaciones") or []
+    certs_pendientes = [c for c in certs if (c.get("estado") or "") in ("borrador", "enviada")]
+    if certs_pendientes:
+        alertas.append({"nivel": "info", "texto": f"{len(certs_pendientes)} certificación(es) sin facturar"})
+    # Suggest certification
+    ultima_cert_fecha = None
+    for c in certs:
+        if c.get("fecha_hasta") and (not ultima_cert_fecha or c["fecha_hasta"] > ultima_cert_fecha):
+            ultima_cert_fecha = c["fecha_hasta"]
+    partes_sin_cert = [p for p in partes if not ultima_cert_fecha or (p.get("fecha") or "") > ultima_cert_fecha]
+    unidades_sin_cert = sum((p.get("hincas_realizadas") or 0) + (p.get("perforaciones_realizadas") or 0) for p in partes_sin_cert)
+    if unidades_sin_cert > 0:
+        alertas.append({"nivel": "info", "texto": f"{unidades_sin_cert} unidades desde última certificación"})
+    data["alertas"] = alertas
+
+    # ── Certificaciones resumen ──
+    cert_resumen = {"borrador": 0, "enviada": 0, "aprobada": 0, "total_importe": 0}
+    for c in certs:
+        est = c.get("estado") or "borrador"
+        cert_resumen[est] = cert_resumen.get(est, 0) + 1
+        cert_resumen["total_importe"] += _safe_float(c.get("importe_total"))
+    data["certificaciones_resumen"] = cert_resumen
+
+    # ── Equipo asignado hoy ──
+    conn = _get_conn()
+    try:
+        equipo_hoy = [dict(r) for r in conn.execute("""
+            SELECT pa.recurso_nombre, pa.recurso_tipo,
+                   COALESCE(pa.funcion_dia, e.puesto) as funcion
+            FROM proyecto_asignaciones pa
+            LEFT JOIN empleados e ON pa.recurso_id = e.id AND pa.recurso_tipo = 'empleado'
+            WHERE pa.proyecto_id = ? AND pa.fecha = ?
+            ORDER BY pa.recurso_tipo, pa.recurso_nombre
+        """, (proyecto_id, hoy.isoformat())).fetchall()]
+    except Exception:
+        equipo_hoy = []
+    finally:
+        conn.close()
+    data["equipo_hoy"] = equipo_hoy
+
+    return data
