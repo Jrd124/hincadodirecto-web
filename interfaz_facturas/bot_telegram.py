@@ -28,7 +28,8 @@ sys.path.insert(0, str(_APP_DIR))
 from dotenv import load_dotenv
 load_dotenv(_APP_DIR / ".env")
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
+from telegram import BotCommandScopeChat, BotCommandScopeDefault
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -136,13 +137,37 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🚫 Tu acceso ha sido bloqueado.")
         return
 
-    rol_emoji = "👑" if user["rol"] == "superadmin" else "👷"
-    await update.message.reply_text(
-        f"👋 *Hola {nombre}* {rol_emoji}\n\n"
-        f"Rol: *{user['rol']}*\n"
-        "Escribe /help para ver los comandos disponibles.",
-        parse_mode=ParseMode.MARKDOWN,
-    )
+    if user["rol"] == "superadmin":
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📊 Resumen", callback_data="menu_resumen"),
+             InlineKeyboardButton("🚨 Alertas", callback_data="menu_alertas")],
+            [InlineKeyboardButton("🏗 Proyectos", callback_data="menu_proyectos"),
+             InlineKeyboardButton("💰 Finanzas", callback_data="menu_finanzas")],
+            [InlineKeyboardButton("👷 Equipo hoy", callback_data="menu_equipo"),
+             InlineKeyboardButton("🏗️ Máquinas", callback_data="menu_maquinas")],
+            [InlineKeyboardButton("📋 Crear parte", callback_data="menu_manual"),
+             InlineKeyboardButton("📄 Mis partes", callback_data="menu_mispartes")],
+        ])
+        await update.message.reply_text(
+            f"👋 *Hola {nombre}* 👑\n\n"
+            "Soy el asistente del ERP de Hincado Directo.\n\n"
+            "📷 Envía una *foto* de parte, albarán o factura\n"
+            "💬 *Pregúntame lo que quieras* sobre el ERP\n"
+            "👇 O usa los botones de acceso rápido:",
+            reply_markup=kb, parse_mode=ParseMode.MARKDOWN,
+        )
+    else:
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📋 Crear parte", callback_data="menu_manual"),
+             InlineKeyboardButton("📄 Mis partes", callback_data="menu_mispartes")],
+            [InlineKeyboardButton("❓ Ayuda", callback_data="menu_help")],
+        ])
+        await update.message.reply_text(
+            f"👋 *Hola {nombre}* 👷\n\n"
+            "📷 Envía una *foto del parte* y lo proceso\n"
+            "👇 O usa los botones:",
+            reply_markup=kb, parse_mode=ParseMode.MARKDOWN,
+        )
 
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -151,29 +176,145 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No tienes acceso. Usa /start para solicitar acceso.")
         return
 
-    txt = "📖 *Comandos disponibles:*\n\n"
     if rol == "superadmin":
-        txt += (
-            "/resumen — Resumen del día\n"
-            "/alertas — Alertas urgentes\n"
-            "/proyectos — Proyectos con progreso\n"
-            "/finanzas — Facturación y pendientes\n"
-            "/pendientes — Partes sin firmar\n"
-            "/aprobar — Aprobar usuarios nuevos\n"
-            "/usuarios — Lista de usuarios del bot\n"
-            "/vertarjetas — Tarjetas asignadas\n"
-            "/asignartarjeta — Asignar tarjeta a operario\n\n"
-            "📷 Envía una foto de: parte, albarán, factura proveedor o cliente\n\n"
-            "💬 También puedes preguntarme lo que quieras en lenguaje natural.\n"
-            '_Ej: "¿Cuántas hincas lleva Logroño?"_'
+        txt = (
+            "📖 *Comandos disponibles:*\n\n"
+            "📊 /resumen — Resumen del día\n"
+            "🚨 /alertas — Alertas urgentes\n"
+            "🏗 /proyectos — Proyectos con progreso\n"
+            "💰 /finanzas — Facturación y pendientes\n"
+            "📝 /pendientes — Partes sin firmar\n"
+            "👥 /aprobar — Aprobar usuarios nuevos\n"
+            "👤 /usuarios — Lista de usuarios del bot\n"
+            "📋 /manual — Crear parte paso a paso\n"
+            "📄 /mispartes — Ver tus últimos partes\n"
+            "🔧 /incidencias — Incidencias maquinaria\n\n"
+            "📷 *Envía una foto* de parte, albarán o factura\n\n"
+            "💬 *Pregunta en lenguaje natural:*\n"
+            '_• "¿Cuántas hincas lleva Tabernas?"_\n'
+            '_• "¿Qué facturas pendientes de más de 1.000€?"_\n'
+            '_• "¿Quién está libre mañana?"_\n'
+            '_• "¿Cuántas vacaciones le quedan a Carlos?"_\n'
+            '_• "Cambia el teléfono de Iván a 654321098"_\n'
+            '_• "¿Cuánto hemos gastado en gasoil en 2026?"_\n'
         )
     else:
-        txt += (
-            "📷 Envía una *foto del parte* y lo proceso automáticamente\n"
-            "/manual — Introducir parte paso a paso\n"
-            "/mispartes — Ver tus últimos partes\n"
+        txt = (
+            "📖 *Comandos disponibles:*\n\n"
+            "📷 Envía una *foto del parte* → lo proceso automáticamente\n"
+            "📋 /manual — Introducir parte paso a paso\n"
+            "📄 /mispartes — Ver tus últimos partes\n"
+            "🔧 /incidencia — Reportar incidencia de máquina\n"
         )
     await update.message.reply_text(txt, parse_mode=ParseMode.MARKDOWN)
+
+
+# ── Menu button callbacks ─────────────────────────────────────────────────
+
+async def callback_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle inline menu button presses from /start."""
+    query = update.callback_query
+    await query.answer()
+    tid = query.from_user.id
+    action = query.data.replace("menu_", "")
+
+    if action == "resumen":
+        if _user_rol(tid) != "superadmin":
+            return
+        answer = await _run_sync(_gpt_query_sync, "Dame un resumen del día de hoy")
+        for chunk in _split_msg(answer):
+            await context.bot.send_message(chat_id=tid, text=chunk, parse_mode=ParseMode.MARKDOWN)
+    elif action == "alertas":
+        if _user_rol(tid) != "superadmin":
+            return
+        answer = await _run_sync(_gpt_query_sync, "¿Hay alertas urgentes?")
+        for chunk in _split_msg(answer):
+            await context.bot.send_message(chat_id=tid, text=chunk, parse_mode=ParseMode.MARKDOWN)
+    elif action == "proyectos":
+        if _user_rol(tid) != "superadmin":
+            return
+        answer = await _run_sync(_gpt_query_sync, "¿Cómo van los proyectos activos?")
+        for chunk in _split_msg(answer):
+            await context.bot.send_message(chat_id=tid, text=chunk, parse_mode=ParseMode.MARKDOWN)
+    elif action == "finanzas":
+        if _user_rol(tid) != "superadmin":
+            return
+        answer = await _run_sync(_gpt_query_sync, "Resumen financiero: facturación y pendientes")
+        for chunk in _split_msg(answer):
+            await context.bot.send_message(chat_id=tid, text=chunk, parse_mode=ParseMode.MARKDOWN)
+    elif action == "equipo":
+        if _user_rol(tid) != "superadmin":
+            return
+        answer = await _run_sync(_gpt_query_sync, "¿Quién está asignado hoy a cada proyecto?")
+        for chunk in _split_msg(answer):
+            await context.bot.send_message(chat_id=tid, text=chunk, parse_mode=ParseMode.MARKDOWN)
+    elif action == "maquinas":
+        if _user_rol(tid) != "superadmin":
+            return
+        answer = await _run_sync(_gpt_query_sync, "Estado de las máquinas")
+        for chunk in _split_msg(answer):
+            await context.bot.send_message(chat_id=tid, text=chunk, parse_mode=ParseMode.MARKDOWN)
+    elif action == "manual":
+        # Trigger the /manual flow — send the command text
+        await context.bot.send_message(chat_id=tid, text="Usa /manual para crear un parte paso a paso.")
+    elif action == "mispartes":
+        await context.bot.send_message(chat_id=tid, text="Usa /mispartes para ver tus últimos partes.")
+    elif action == "help":
+        txt = (
+            "📖 *Ayuda:*\n\n"
+            "📷 Envía una *foto del parte* → lo proceso automáticamente\n"
+            "📋 /manual — Introducir parte paso a paso\n"
+            "📄 /mispartes — Ver tus últimos partes\n"
+        )
+        await context.bot.send_message(chat_id=tid, text=txt, parse_mode=ParseMode.MARKDOWN)
+
+
+# ── Set bot commands per role ─────────────────────────────────────────────
+
+async def _setup_bot_commands(app: Application):
+    """Register command menus — different for superadmins and operarios."""
+    bot = app.bot
+
+    # Default commands (for operarios and everyone)
+    await bot.set_my_commands(
+        [
+            BotCommand("start", "Iniciar / Menú principal"),
+            BotCommand("manual", "Crear parte paso a paso"),
+            BotCommand("mispartes", "Ver mis últimos partes"),
+            BotCommand("incidencia", "Reportar incidencia máquina"),
+            BotCommand("help", "Ayuda"),
+        ],
+        scope=BotCommandScopeDefault(),
+    )
+
+    # Superadmin commands (per chat)
+    superadmin_cmds = [
+        BotCommand("start", "Menú principal con accesos rápidos"),
+        BotCommand("resumen", "Resumen del día"),
+        BotCommand("alertas", "Alertas urgentes"),
+        BotCommand("proyectos", "Proyectos con progreso"),
+        BotCommand("finanzas", "Facturación y pendientes"),
+        BotCommand("pendientes", "Partes sin firmar"),
+        BotCommand("manual", "Crear parte paso a paso"),
+        BotCommand("mispartes", "Ver mis últimos partes"),
+        BotCommand("incidencias", "Incidencias maquinaria"),
+        BotCommand("aprobar", "Aprobar usuarios nuevos"),
+        BotCommand("usuarios", "Lista de usuarios del bot"),
+        BotCommand("help", "Ayuda y ejemplos"),
+    ]
+
+    try:
+        admin_ids = listar_superadmins()  # returns list of telegram_id ints
+    except Exception:
+        admin_ids = []
+
+    for tid in admin_ids:
+        try:
+            await bot.set_my_commands(superadmin_cmds, scope=BotCommandScopeChat(chat_id=tid))
+        except Exception as exc:
+            logger.warning("No se pudo configurar menú para admin %s: %s", tid, exc)
+
+    logger.info("Bot commands configured for %d superadmins", len(admin_ids))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -3059,7 +3200,7 @@ def main():
     init_proyectos_db()
     init_bot_db()
 
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).post_init(_setup_bot_commands).build()
 
     # ConversationHandler for /manual (must be added before generic handlers)
     manual_conv = ConversationHandler(
@@ -3099,6 +3240,7 @@ def main():
     app.add_handler(CommandHandler("asignartarjeta", cmd_asignartarjeta))
 
     # Callbacks
+    app.add_handler(CallbackQueryHandler(callback_menu, pattern=r"^menu_"))
     app.add_handler(CallbackQueryHandler(callback_aprobar, pattern=r"^aprobar_"))
     app.add_handler(CallbackQueryHandler(callback_foto_tipo, pattern=r"^foto_tipo_"))
     app.add_handler(CallbackQueryHandler(callback_parte_datos, pattern=r"^parte_datos_"))
