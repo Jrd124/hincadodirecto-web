@@ -48,9 +48,9 @@ def init_empleados_db() -> None:
                 updated_at TEXT
             )
         """)
-        # Migrar CHECK constraint si falta 'exempleado'
+        # Migrar CHECK constraint: necesita incluir 'reserva' y 'exempleado'
         row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='empleados'").fetchone()
-        if row and "'exempleado'" not in (row[0] or ""):
+        if row and "'reserva'" not in (row[0] or ""):
             conn.execute("ALTER TABLE empleados RENAME TO _empleados_old")
             conn.execute("""
                 CREATE TABLE empleados (
@@ -64,7 +64,7 @@ def init_empleados_db() -> None:
                     email TEXT,
                     fecha_alta TEXT,
                     fecha_baja TEXT,
-                    estado TEXT DEFAULT 'activo' CHECK(estado IN ('activo','baja','vacaciones','exempleado')),
+                    estado TEXT DEFAULT 'activo' CHECK(estado IN ('activo','baja','vacaciones','reserva','exempleado')),
                     notas TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT
@@ -79,9 +79,22 @@ def init_empleados_db() -> None:
             if col_name not in existing:
                 conn.execute(f"ALTER TABLE empleados ADD COLUMN {col_name} {col_type}")
 
-        # Columna fecha_antiguedad para dato de nómina
+        # Columnas extra para nóminas y verificador
         if "fecha_antiguedad" not in existing:
             conn.execute("ALTER TABLE empleados ADD COLUMN fecha_antiguedad TEXT")
+        if "neto_pactado" not in existing:
+            conn.execute("ALTER TABLE empleados ADD COLUMN neto_pactado REAL DEFAULT 0")
+        if "iban" not in existing:
+            conn.execute("ALTER TABLE empleados ADD COLUMN iban TEXT")
+        if "direccion" not in existing:
+            conn.execute("ALTER TABLE empleados ADD COLUMN direccion TEXT")
+        if "dias_vacaciones_anuales" not in existing:
+            conn.execute("ALTER TABLE empleados ADD COLUMN dias_vacaciones_anuales INTEGER DEFAULT 22")
+
+        # Normalizar puesto a operador/ayudante
+        conn.execute("UPDATE empleados SET puesto = 'operador' WHERE LOWER(puesto) IN ('hincador','hincador, perforador','hincador/perforador','perforador')")
+        conn.execute("UPDATE empleados SET puesto = 'ayudante' WHERE LOWER(puesto) = 'ayudante'")
+        conn.execute("UPDATE empleados SET puesto = NULL WHERE puesto IN ('', 'None')")
 
         # ── Tablas de nóminas ──────────────────────────────────────────
         conn.execute("""
@@ -164,6 +177,40 @@ def init_empleados_db() -> None:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS dietas_diarias (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                empleado_id INTEGER NOT NULL,
+                fecha TEXT NOT NULL,
+                tipo TEXT NOT NULL,
+                importe REAL DEFAULT 0,
+                proyecto_id INTEGER,
+                notas TEXT,
+                funcion TEXT DEFAULT 'operador',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (empleado_id) REFERENCES empleados(id),
+                FOREIGN KEY (proyecto_id) REFERENCES proyectos(id),
+                UNIQUE(empleado_id, fecha)
+            )
+        """)
+        # Migration: add funcion column if missing
+        dd_cols = {r[1] for r in conn.execute("PRAGMA table_info(dietas_diarias)").fetchall()}
+        if "funcion" not in dd_cols:
+            conn.execute("ALTER TABLE dietas_diarias ADD COLUMN funcion TEXT DEFAULT 'operador'")
+
+        # ── Tabla de vacaciones ───────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS vacaciones_dias (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                empleado_id INTEGER NOT NULL,
+                fecha TEXT NOT NULL,
+                estado TEXT DEFAULT 'aprobada',
+                notas TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (empleado_id) REFERENCES empleados(id),
+                UNIQUE(empleado_id, fecha)
+            )
+        """)
 
     _initialized = True
 
@@ -180,6 +227,7 @@ _CAMPOS = [
     "prl_especifico", "prl_especifico_caducidad",
     "apto_medico", "apto_medico_caducidad",
     "formacion_especifica", "foto_url", "fecha_antiguedad",
+    "neto_pactado", "iban", "direccion", "dias_vacaciones_anuales",
 ]
 
 

@@ -66,14 +66,63 @@ def dashboard():
             FROM nominas WHERE tipo='NOMINA' GROUP BY periodo ORDER BY periodo
         """).fetchall()]
 
-        # Distribución categoría
-        categorias = [dict(r) for r in conn.execute("""
-            SELECT e.categoria, COUNT(DISTINCT n.empleado_id) as empleados,
-                   ROUND(AVG(n.coste_empresa),2) as coste_medio_mes
-            FROM nominas n JOIN empleados e ON e.id=n.empleado_id
-            WHERE n.periodo=? AND n.tipo='NOMINA'
-            GROUP BY e.categoria ORDER BY coste_medio_mes DESC
-        """, (ultimo,)).fetchall()]
+        # Asignación de empleados a proyectos (hoy) con split operadores/ayudantes
+        hoy = date.today().isoformat()
+        asig_rows = conn.execute("""
+            SELECT pa.proyecto_id, p.nombre as proyecto_nombre,
+                   pa.recurso_id,
+                   COALESCE(pa.funcion_dia, e.puesto, '') as funcion_efectiva
+            FROM proyecto_asignaciones pa
+            JOIN proyectos p ON p.id = pa.proyecto_id
+            LEFT JOIN empleados e ON e.id = pa.recurso_id
+            WHERE pa.recurso_tipo = 'empleado'
+              AND pa.fecha = ?
+        """, (hoy,)).fetchall()
+        proy_data = {}  # proyecto_id -> {nombre, oper set, ayud set}
+        ids_asignados = set()
+        for r in asig_rows:
+            pid = r["proyecto_id"]
+            if pid not in proy_data:
+                proy_data[pid] = {"nombre": r["proyecto_nombre"], "oper": set(), "ayud": set()}
+            funcion = (r["funcion_efectiva"] or "").lower()
+            rid = r["recurso_id"]
+            ids_asignados.add(rid)
+            if funcion == "ayudante":
+                proy_data[pid]["ayud"].add(rid)
+            else:
+                proy_data[pid]["oper"].add(rid)
+        asig_proy = []
+        total_oper = 0
+        total_ayud = 0
+        for pid, pd in sorted(proy_data.items(), key=lambda x: len(x[1]["oper"]) + len(x[1]["ayud"]), reverse=True):
+            o = len(pd["oper"])
+            a = len(pd["ayud"])
+            total_oper += o
+            total_ayud += a
+            asig_proy.append({
+                "proyecto_id": pid,
+                "proyecto_nombre": pd["nombre"],
+                "operadores": o,
+                "ayudantes": a,
+                "total": o + a,
+            })
+        sin_asignar = conn.execute(
+            "SELECT COUNT(*) FROM empleados WHERE estado='activo' AND id NOT IN ({})".format(
+                ",".join(str(i) for i in ids_asignados) if ids_asignados else "0"
+            )
+        ).fetchone()[0]
+        baja_vac = conn.execute(
+            "SELECT COUNT(*) FROM empleados WHERE estado IN ('baja','vacaciones')"
+        ).fetchone()[0]
+        total_asig = total_oper + total_ayud + sin_asignar + baja_vac
+        asignacion_empleados = {
+            "proyectos": asig_proy,
+            "sin_asignar": sin_asignar,
+            "baja_vacaciones": baja_vac,
+            "total_operadores": total_oper,
+            "total_ayudantes": total_ayud,
+            "total": total_asig,
+        }
 
         # Top 5
         top5 = [dict(r) for r in conn.execute("""
@@ -85,13 +134,15 @@ def dashboard():
 
         # Alertas
         alertas = []
-        # Empleados activos sin nómina este mes
-        sin_nomina = conn.execute("""
-            SELECT COUNT(*) FROM empleados e WHERE e.estado='activo'
+        # Empleados activos sin nómina este mes — listar nombres
+        sin_nomina_rows = conn.execute("""
+            SELECT e.nombre, e.apellidos FROM empleados e WHERE e.estado='activo'
             AND e.id NOT IN (SELECT empleado_id FROM nominas WHERE periodo=? AND tipo='NOMINA')
-        """, (ultimo,)).fetchone()[0]
-        if sin_nomina > 0:
-            alertas.append({"tipo": "warning", "texto": f"{sin_nomina} empleado(s) activo(s) sin nomina en {ultimo}"})
+            ORDER BY e.apellidos, e.nombre
+        """, (ultimo,)).fetchall()
+        if sin_nomina_rows:
+            nombres = [f"{r['nombre']} {r['apellidos'] or ''}".strip() for r in sin_nomina_rows]
+            alertas.append({"tipo": "warning", "texto": f"{len(nombres)} empleado(s) activo(s) sin nomina en {ultimo}:", "nombres": nombres})
 
         adelantos_pend = conn.execute(
             "SELECT COUNT(*), SUM(importe) FROM adelantos WHERE estado='pendiente'"
@@ -110,7 +161,7 @@ def dashboard():
                 "ultimo_periodo": ultimo,
             },
             "evolucion": evolucion,
-            "categorias": categorias,
+            "asignacion_empleados": asignacion_empleados,
             "top5": top5,
             "alertas": alertas,
         }
@@ -122,8 +173,33 @@ def verificador(periodo):
     """Tabla comparativa para verificar nóminas vs transferencias."""
     conn = get_conn()
     try:
+        # Pre-load adelantos from banco for this month
+        y, m = int(periodo[:4]), int(periodo[5:7])
+        m2 = m + 1; y2 = y
+        if m2 > 12: m2 = 1; y2 += 1
+        fecha_ini = f"{periodo}-01"
+        fecha_fin = f"{y2}-{m2:02d}-01"
+        adelantos_banco = {}
+        try:
+            import sqlite3 as _sql
+            try:
+                from config import MOVIMIENTOS_DB
+            except ImportError:
+                from interfaz_facturas.config import MOVIMIENTOS_DB
+            bconn = _sql.connect(str(MOVIMIENTOS_DB))
+            for r in bconn.execute(
+                "SELECT rrhh_empleado_id, COALESCE(SUM(ABS(importe)),0) as total "
+                "FROM movimientos WHERE rrhh_tipo='adelanto' "
+                "AND fecha_operacion >= ? AND fecha_operacion < ? "
+                "GROUP BY rrhh_empleado_id", (fecha_ini, fecha_fin)
+            ).fetchall():
+                adelantos_banco[r[0]] = r[1]
+            bconn.close()
+        except Exception:
+            pass  # columns may not exist yet
         rows = conn.execute("""
             SELECT n.empleado_id, e.nombre, e.apellidos, e.categoria, e.dni,
+                   e.neto_pactado,
                    n.dias, n.liquido, n.embargo, n.coste_empresa,
                    n.total_devengado, n.total_deducir, n.dietas,
                    n.salario_base, n.plus_asistencia, n.extra_mes,
@@ -139,17 +215,23 @@ def verificador(periodo):
         total_adelantos = 0
         total_embargo = 0
         total_transferir = 0
+        total_estimado = 0
 
         for r in rows:
             emp_id = r["empleado_id"]
             liquido = r["liquido"] or 0
             embargo = r["embargo"] or 0
+            dias = r["dias"] or 30
+            dietas = r["dietas"] or 0
+            neto_pactado = r["neto_pactado"] or 0
 
-            # Adelantos pendientes del empleado
-            adel = conn.execute(
-                "SELECT SUM(importe) FROM adelantos WHERE empleado_id=? AND estado='pendiente'",
-                (emp_id,)
-            ).fetchone()[0] or 0
+            # Estimación: neto pactado proporcional a días + dietas
+            neto_proporcional = round(neto_pactado * dias / 30, 2) if neto_pactado > 0 else 0
+            estimado = round(neto_proporcional + dietas, 2)
+            diferencia = round(estimado - liquido, 2) if estimado > 0 else 0
+
+            # Adelantos del empleado desde banco (pre-loaded)
+            adel = adelantos_banco.get(emp_id, 0)
 
             a_transferir = round(liquido - adel - embargo, 2)
             nombre = (r["nombre"] or "") + " " + (r["apellidos"] or "")
@@ -160,30 +242,265 @@ def verificador(periodo):
                 "categoria": r["categoria"] or "",
                 "dni": r["dni"] or "",
                 "tipo": r["tipo"],
-                "dias": r["dias"] or 0,
+                "dias": dias,
+                "neto_pactado": neto_pactado,
+                "neto_proporcional": neto_proporcional,
+                "dietas": round(dietas, 2),
+                "estimado": estimado,
                 "liquido": round(liquido, 2),
+                "diferencia": diferencia,
                 "adelantos": round(adel, 2),
                 "embargo": round(embargo, 2),
                 "a_transferir": round(a_transferir, 2),
                 "coste_empresa": round(r["coste_empresa"] or 0, 2),
                 "total_devengado": round(r["total_devengado"] or 0, 2),
-                "dietas": round(r["dietas"] or 0, 2),
             })
 
             total_liquido += liquido
             total_adelantos += adel
             total_embargo += embargo
             total_transferir += a_transferir
+            total_estimado += estimado
 
         return {
             "periodo": periodo,
             "lineas": lineas,
             "totales": {
+                "estimado": round(total_estimado, 2),
                 "liquido": round(total_liquido, 2),
                 "adelantos": round(total_adelantos, 2),
                 "embargo": round(total_embargo, 2),
                 "transferir": round(total_transferir, 2),
                 "nominas": len(lineas),
+            },
+        }
+    finally:
+        conn.close()
+
+
+def estimacion_nominas(periodo):
+    """Proyección de coste nóminas del mes usando gross-up desde neto pactado."""
+    import calendar
+    conn = get_conn()
+    try:
+        y, m = int(periodo[:4]), int(periodo[5:7])
+        dias_mes = calendar.monthrange(y, m)[1]
+        fecha_ini = f"{periodo}-01"
+        m2 = m + 1; y2 = y
+        if m2 > 12: m2 = 1; y2 += 1
+        fecha_fin = f"{y2}-{m2:02d}-01"
+
+        # -- 1. Empleados activos --
+        emps = conn.execute(
+            "SELECT id, nombre, apellidos, categoria, dni, neto_pactado "
+            "FROM empleados WHERE estado='activo' ORDER BY apellidos, nombre"
+        ).fetchall()
+
+        # -- 2. Ratios históricos de las últimas 3 nóminas por empleado --
+        ratios = {}
+        for e in emps:
+            eid = e["id"]
+            noms = conn.execute(
+                "SELECT total_devengado, irpf_euros, "
+                "       cot_cc, cot_mei, cot_fp, cot_desempleo, "
+                "       ss_empresa, liquido, coste_empresa "
+                "FROM nominas WHERE empleado_id=? AND tipo='NOMINA' "
+                "AND total_devengado > 0 "
+                "ORDER BY periodo DESC LIMIT 3", (eid,)
+            ).fetchall()
+            if noms:
+                pct_irpf_list = []
+                pct_ss_list = []
+                ratio_ss_emp_list = []
+                for n in noms:
+                    td = n["total_devengado"]
+                    if td <= 0:
+                        continue
+                    irpf_e = n["irpf_euros"] or 0
+                    ss_trab = (n["cot_cc"] or 0) + (n["cot_mei"] or 0) + (n["cot_fp"] or 0) + (n["cot_desempleo"] or 0)
+                    ss_emp = n["ss_empresa"] or 0
+                    pct_irpf_list.append(irpf_e / td * 100)
+                    pct_ss_list.append(ss_trab / td * 100)
+                    ratio_ss_emp_list.append(ss_emp / td)
+                if pct_irpf_list:
+                    ratios[eid] = {
+                        "pct_irpf": sum(pct_irpf_list) / len(pct_irpf_list),
+                        "pct_ss": sum(pct_ss_list) / len(pct_ss_list),
+                        "ratio_ss_emp": sum(ratio_ss_emp_list) / len(ratio_ss_emp_list),
+                        "fallback": False,
+                    }
+            if eid not in ratios:
+                ratios[eid] = {
+                    "pct_irpf": 15.0,
+                    "pct_ss": 6.35,
+                    "ratio_ss_emp": 0.32,
+                    "fallback": True,
+                }
+
+        # -- 3. Días planificados por empleado (asignaciones + dietas) --
+        dias_plan = {}
+        for r in conn.execute(
+            "SELECT recurso_id, COUNT(DISTINCT fecha) as cnt "
+            "FROM proyecto_asignaciones "
+            "WHERE recurso_tipo='empleado' AND fecha >= ? AND fecha < ? "
+            "GROUP BY recurso_id", (fecha_ini, fecha_fin)
+        ).fetchall():
+            dias_plan[r["recurso_id"]] = r["cnt"]
+        # Also count distinct dieta days not already counted
+        for r in conn.execute(
+            "SELECT empleado_id, GROUP_CONCAT(DISTINCT fecha) as fechas "
+            "FROM dietas_diarias WHERE fecha >= ? AND fecha < ? "
+            "GROUP BY empleado_id", (fecha_ini, fecha_fin)
+        ).fetchall():
+            eid = r["empleado_id"]
+            fechas_dieta = set(r["fechas"].split(",")) if r["fechas"] else set()
+            # Get assignment dates for this employee to avoid double-counting
+            asig_fechas = set()
+            for a in conn.execute(
+                "SELECT DISTINCT fecha FROM proyecto_asignaciones "
+                "WHERE recurso_tipo='empleado' AND recurso_id=? AND fecha >= ? AND fecha < ?",
+                (eid, fecha_ini, fecha_fin)
+            ).fetchall():
+                asig_fechas.add(a["fecha"])
+            extra = len(fechas_dieta - asig_fechas)
+            dias_plan[eid] = dias_plan.get(eid, 0) + extra
+
+        # -- 4. Dietas estimadas del mes (from dietas_diarias with tarifa calc) --
+        try:
+            tarifas_all = conn.execute(
+                "SELECT * FROM dietas_config ORDER BY fecha_vigencia_desde DESC"
+            ).fetchall()
+        except Exception:
+            tarifas_all = []
+
+        def _calc_imp(tipo_dieta, fecha, funcion="operador"):
+            parts = tipo_dieta.split("_", 1) if tipo_dieta else []
+            if len(parts) != 2:
+                return 0
+            geo, sub = parts
+            fn = (funcion or "operador").lower().strip()
+            for t in tarifas_all:
+                if t["tipo"] != geo or t["subtipo"] != sub:
+                    continue
+                if t["fecha_vigencia_desde"] and t["fecha_vigencia_desde"] > fecha:
+                    continue
+                if t["fecha_vigencia_hasta"] and t["fecha_vigencia_hasta"] < fecha:
+                    continue
+                tc = (t["categoria"] or "").lower().strip()
+                if tc == fn:
+                    return t["importe"] or 0
+            for t in tarifas_all:
+                if t["tipo"] != geo or t["subtipo"] != sub:
+                    continue
+                if t["fecha_vigencia_desde"] and t["fecha_vigencia_desde"] > fecha:
+                    continue
+                if t["fecha_vigencia_hasta"] and t["fecha_vigencia_hasta"] < fecha:
+                    continue
+                if not (t["categoria"] or "").strip():
+                    return t["importe"] or 0
+            return 0
+
+        dietas_emp = {}
+        for r in conn.execute(
+            "SELECT empleado_id, fecha, tipo, importe, funcion "
+            "FROM dietas_diarias WHERE fecha >= ? AND fecha < ?",
+            (fecha_ini, fecha_fin)
+        ).fetchall():
+            imp = r["importe"] or 0
+            if imp == 0 and r["tipo"]:
+                imp = _calc_imp(r["tipo"], r["fecha"], r["funcion"] or "operador")
+            eid = r["empleado_id"]
+            dietas_emp[eid] = dietas_emp.get(eid, 0) + imp
+
+        # -- 5. Adelantos del mes (from movimientos.db) --
+        adelantos_banco = {}
+        try:
+            import sqlite3 as _sql
+            try:
+                from config import MOVIMIENTOS_DB
+            except ImportError:
+                from interfaz_facturas.config import MOVIMIENTOS_DB
+            bconn = _sql.connect(str(MOVIMIENTOS_DB))
+            for r in bconn.execute(
+                "SELECT rrhh_empleado_id, COALESCE(SUM(ABS(importe)),0) as total "
+                "FROM movimientos WHERE rrhh_tipo='adelanto' "
+                "AND fecha_operacion >= ? AND fecha_operacion < ? "
+                "GROUP BY rrhh_empleado_id", (fecha_ini, fecha_fin)
+            ).fetchall():
+                adelantos_banco[r[0]] = r[1]
+            bconn.close()
+        except Exception:
+            pass
+
+        # -- 6. Build result per employee --
+        lineas = []
+        t_neto = 0; t_devengado = 0; t_coste = 0; t_dietas = 0; t_adelantos = 0; t_liquido_pend = 0
+
+        for e in emps:
+            eid = e["id"]
+            nombre = ((e["nombre"] or "") + " " + (e["apellidos"] or "")).strip()
+            neto_pactado = e["neto_pactado"] or 0
+            r = ratios[eid]
+            dp = dias_plan.get(eid, 0)
+            dietas = round(dietas_emp.get(eid, 0), 2)
+            adel = round(adelantos_banco.get(eid, 0), 2)
+
+            # Proporción del mes
+            proporcion = dp / dias_mes if dp > 0 and dias_mes > 0 else 1.0
+            neto_proporcional = round(neto_pactado * proporcion, 2)
+
+            # Gross-up
+            divisor = 1 - r["pct_irpf"] / 100 - r["pct_ss"] / 100
+            if divisor <= 0:
+                divisor = 0.7865  # safe fallback
+            total_devengado = round(neto_proporcional / divisor, 2)
+            ss_empresa = round(total_devengado * r["ratio_ss_emp"], 2)
+            coste_empresa = round(total_devengado + ss_empresa, 2)
+            coste_total = round(coste_empresa + dietas, 2)
+
+            liquido_total = round(neto_proporcional + dietas, 2)
+            liquido_pendiente = round(liquido_total - adel, 2)
+
+            lineas.append({
+                "empleado_id": eid,
+                "nombre": nombre,
+                "categoria": e["categoria"] or "",
+                "dni": e["dni"] or "",
+                "dias_planif": dp,
+                "neto_pactado": neto_pactado,
+                "pct_irpf": round(r["pct_irpf"], 2),
+                "pct_ss": round(r["pct_ss"], 2),
+                "ratio_ss_emp": round(r["ratio_ss_emp"] * 100, 2),
+                "fallback": r["fallback"],
+                "neto_proporcional": neto_proporcional,
+                "total_devengado": total_devengado,
+                "coste_empresa": coste_empresa,
+                "coste_total": coste_total,
+                "dietas": dietas,
+                "adelantos": adel,
+                "liquido_total": liquido_total,
+                "liquido_pendiente": liquido_pendiente,
+            })
+
+            t_neto += neto_proporcional
+            t_devengado += total_devengado
+            t_coste += coste_total
+            t_dietas += dietas
+            t_adelantos += adel
+            t_liquido_pend += liquido_pendiente
+
+        return {
+            "periodo": periodo,
+            "dias_mes": dias_mes,
+            "lineas": lineas,
+            "totales": {
+                "empleados": len(lineas),
+                "neto_proporcional": round(t_neto, 2),
+                "total_devengado": round(t_devengado, 2),
+                "coste_total": round(t_coste, 2),
+                "dietas": round(t_dietas, 2),
+                "adelantos": round(t_adelantos, 2),
+                "liquido_pendiente": round(t_liquido_pend, 2),
             },
         }
     finally:
@@ -331,23 +648,17 @@ def dietas_dashboard():
         # Config
         config = [dict(r) for r in conn.execute("SELECT * FROM dietas_config ORDER BY tipo, subtipo").fetchall()]
 
-        # Dietas por empleado (últimos 3 meses de datos)
-        ultimo = conn.execute("SELECT MAX(periodo) FROM nominas WHERE tipo='NOMINA'").fetchone()[0] or ""
-        y, m = int(ultimo[:4]), int(ultimo[5:7])
-        periodos = []
-        for i in range(3):
-            periodos.append(f"{y}-{m:02d}")
-            m -= 1
-            if m < 1:
-                m = 12; y -= 1
-        periodos.reverse()
+        # Dietas por empleado — todos los meses con datos
+        periodos = [r[0] for r in conn.execute(
+            "SELECT DISTINCT periodo FROM nominas WHERE tipo='NOMINA' AND dietas > 0 ORDER BY periodo"
+        ).fetchall()]
 
         emp_dietas = [dict(r) for r in conn.execute("""
             SELECT e.id, e.nombre, e.apellidos, n.periodo, ROUND(n.dietas,2) as dietas
             FROM nominas n JOIN empleados e ON e.id=n.empleado_id
-            WHERE n.tipo='NOMINA' AND n.periodo IN (?,?,?)
+            WHERE n.tipo='NOMINA' AND n.dietas > 0
             ORDER BY e.apellidos, e.nombre, n.periodo
-        """, tuple(periodos)).fetchall()]
+        """).fetchall()]
 
         return {"config": config, "emp_dietas": emp_dietas, "periodos": periodos}
     finally:

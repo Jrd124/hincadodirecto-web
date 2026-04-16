@@ -66,8 +66,8 @@ const MODULOS = {
   rrhh: {
     linkId: "nav-rrhh-modulo",
     submenuId: "submenu-rrhh",
-    paneles: { inicio: "panel-rrhh-inicio", equipo: "panel-rrhh-equipo", nominas: "panel-rrhh-nominas", verificador: "panel-rrhh-verificador", dietas: "panel-rrhh-dietas", adelantos: "panel-rrhh-adelantos", ss: "panel-rrhh-ss", irpf: "panel-rrhh-irpf", costeproyecto: "panel-rrhh-coste-proyecto" },
-    subNavLinks: { equipo: "nav-rrhh-equipo", nominas: "nav-rrhh-nominas", verificador: "nav-rrhh-verificador", dietas: "nav-rrhh-dietas", adelantos: "nav-rrhh-adelantos", ss: "nav-rrhh-ss", irpf: "nav-rrhh-irpf", costeproyecto: "nav-rrhh-coste-proyecto" },
+    paneles: { inicio: "panel-rrhh-inicio", equipo: "panel-rrhh-equipo", nominas: "panel-rrhh-nominas", verificador: "panel-rrhh-verificador", dietas: "panel-rrhh-dietas", vacaciones: "panel-rrhh-vacaciones", adelantos: "panel-rrhh-adelantos", ss: "panel-rrhh-ss", irpf: "panel-rrhh-irpf", costeproyecto: "panel-rrhh-coste-proyecto" },
+    subNavLinks: { equipo: "nav-rrhh-equipo", nominas: "nav-rrhh-nominas", verificador: "nav-rrhh-verificador", dietas: "nav-rrhh-dietas", vacaciones: "nav-rrhh-vacaciones", adelantos: "nav-rrhh-adelantos", ss: "nav-rrhh-ss", irpf: "nav-rrhh-irpf", costeproyecto: "nav-rrhh-coste-proyecto" },
     defecto: "inicio",
   },
   onboarding: {
@@ -235,7 +235,7 @@ function cargarDashboardDirector() {
             tr.style.cursor = "pointer";
             tr.onclick = function () { location.hash = "proyectos/dashboard/" + ob.id; };
             tr.innerHTML =
-              '<td><strong>' + _esc(ob.codigo || ob.nombre) + '</strong><br><span class="dir-obra-sub">' + _esc(ob.provincia) + '</span></td>' +
+              '<td><strong>' + _esc(ob.nombre) + '</strong><br><span class="dir-obra-sub">' + _esc(ob.ubicacion || ob.provincia || "") + (ob.codigo ? ' \u00b7 ' + _esc(ob.codigo) : '') + '</span></td>' +
               '<td>' + _esc(ob.cliente) + '</td>' +
               '<td><div class="dir-progress-wrap">' +
                 '<div class="dir-progress-bar"><div class="dir-progress-fill" style="width:' + pct + '%"></div></div>' +
@@ -282,7 +282,7 @@ function cargarDashboardDirector() {
           timeline.innerHTML = '<p class="sin-datos" style="padding:16px;text-align:center;">Sin actividad reciente</p>';
         } else {
           acts.forEach(function (a) {
-            var iconMap = { parte: "\uD83D\uDCCB", factura: "\uD83D\uDCE4", factura_prov: "\uD83D\uDCE5", certificacion: "\uD83D\uDCC4", proyecto: "\uD83D\uDCC1", crm: "\uD83E\uDD1D", maquinaria_check: "\uD83D\uDD27" };
+            var iconMap = { parte: "\uD83D\uDCCB", factura: "\uD83D\uDCE4", factura_prov: "\uD83D\uDCE5", certificacion: "\uD83D\uDCC4", proyecto: "\uD83D\uDCC1", crm: "\uD83E\uDD1D", maquinaria_check: "\uD83D\uDD27", nomina: "\uD83D\uDCB0", asignacion: "\uD83D\uDCC5" };
             var div = document.createElement("div");
             div.className = "dir-timeline-item";
             div.dataset.categoria = a.categoria || "";

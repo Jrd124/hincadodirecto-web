@@ -404,6 +404,12 @@ def api_rrhh_verificador(periodo):
   return jsonify(verificador(periodo))
 
 
+@empleados_bp.get("/api/rrhh/verificador/estimacion/<periodo>")
+def api_rrhh_verificador_estimacion(periodo):
+  from core.rrhh_analytics import estimacion_nominas
+  return jsonify(estimacion_nominas(periodo))
+
+
 @empleados_bp.get("/api/rrhh/seguridad-social")
 def api_rrhh_ss():
   from core.rrhh_analytics import seguridad_social
@@ -521,3 +527,636 @@ def api_rrhh_generar_remesa(periodo):
     mimetype="text/csv",
     headers={"Content-Disposition": f"attachment; filename=remesa_{periodo}.csv"},
   )
+
+
+@empleados_bp.get("/api/rrhh/dietas/calendario/<periodo>")
+def api_rrhh_dietas_calendario(periodo):
+  """Matriz empleados × días con tipo dieta para el calendario."""
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    from datetime import date, timedelta
+    y, m = int(periodo[:4]), int(periodo[5:7])
+    d = date(y, m, 1)
+    dias = []
+    while d.month == m:
+      dias.append(d.isoformat())
+      d += timedelta(days=1)
+
+    emps = [dict(r) for r in conn.execute(
+      "SELECT id, nombre, apellidos FROM empleados WHERE estado='activo' ORDER BY apellidos, nombre"
+    ).fetchall()]
+
+    # Get dietas_diarias for this month + calculate importe from tarifas
+    tarifas_all = conn.execute("SELECT * FROM dietas_config ORDER BY fecha_vigencia_desde DESC").fetchall()
+    emp_cats = {e["id"]: (e.get("categoria") or "").lower().strip() for e in emps}
+    def _calc_imp(tipo_dieta, fecha, funcion="operador"):
+      parts = tipo_dieta.split("_", 1) if tipo_dieta else []
+      if len(parts) != 2: return 0
+      geo, sub = parts
+      fn = (funcion or "operador").lower().strip()
+      for t in tarifas_all:
+        if t["tipo"] != geo or t["subtipo"] != sub: continue
+        if t["fecha_vigencia_desde"] and t["fecha_vigencia_desde"] > fecha: continue
+        if t["fecha_vigencia_hasta"] and t["fecha_vigencia_hasta"] < fecha: continue
+        tc = (t["categoria"] or "").lower().strip()
+        if tc == fn: return t["importe"] or 0
+      for t in tarifas_all:
+        if t["tipo"] != geo or t["subtipo"] != sub: continue
+        if t["fecha_vigencia_desde"] and t["fecha_vigencia_desde"] > fecha: continue
+        if t["fecha_vigencia_hasta"] and t["fecha_vigencia_hasta"] < fecha: continue
+        if not (t["categoria"] or "").strip(): return t["importe"] or 0
+      return 0
+
+    dietas = {}
+    for r in conn.execute(
+      "SELECT empleado_id, fecha, tipo, importe, notas, funcion FROM dietas_diarias "
+      "WHERE fecha >= ? AND fecha <= ?", (dias[0], dias[-1])
+    ).fetchall():
+      d = dict(r)
+      fn = d.get("funcion") or "operador"
+      d["funcion"] = fn
+      if (not d["importe"] or d["importe"] == 0) and d["tipo"]:
+        d["importe"] = _calc_imp(d["tipo"], d["fecha"], fn)
+      dietas[(r["empleado_id"], r["fecha"])] = d
+
+    # Get project assignments for context (include funcion_dia)
+    asignaciones = {}
+    asig_funcion = {}  # (emp_id, fecha) -> funcion_dia or None
+    for r in conn.execute(
+      "SELECT pa.recurso_id, pa.fecha, p.codigo, pa.funcion_dia FROM proyecto_asignaciones pa "
+      "JOIN proyectos p ON p.id = pa.proyecto_id "
+      "WHERE pa.recurso_tipo='empleado' AND pa.fecha >= ? AND pa.fecha <= ?",
+      (dias[0], dias[-1])
+    ).fetchall():
+      asignaciones[(r["recurso_id"], r["fecha"])] = r["codigo"]
+      if r["funcion_dia"]:
+        asig_funcion[(r["recurso_id"], r["fecha"])] = r["funcion_dia"]
+
+    # Build puesto map for employees
+    emp_puestos = {}
+    for e in conn.execute("SELECT id, puesto FROM empleados WHERE estado='activo'").fetchall():
+      emp_puestos[e["id"]] = e["puesto"] or None
+
+    # Build effective function map: funcion_dia > puesto habitual
+    funciones_efectivas = {}
+    for (eid, fecha), codigo in asignaciones.items():
+      fn = asig_funcion.get((eid, fecha)) or emp_puestos.get(eid)
+      if fn:
+        funciones_efectivas[f"{eid}_{fecha}"] = fn
+
+    return jsonify({"dias": dias, "empleados": emps, "dietas": {f"{k[0]}_{k[1]}": v for k, v in dietas.items()}, "proyectos": {f"{k[0]}_{k[1]}": v for k, v in asignaciones.items()}, "funciones": funciones_efectivas})
+  finally:
+    conn.close()
+
+
+@empleados_bp.post("/api/rrhh/dietas/diaria")
+def api_rrhh_dietas_diaria():
+  """Guardar/actualizar dieta de un día."""
+  empleados_db.init_empleados_db()
+  data = request.get_json(silent=True) or {}
+  conn = get_conn()
+  try:
+    emp_id = data.get("empleado_id")
+    fecha = data.get("fecha")
+    # Check if only updating notas (partial update)
+    if "tipo" not in data or data.get("_only_notas"):
+      existing = conn.execute("SELECT id FROM dietas_diarias WHERE empleado_id=? AND fecha=?", (emp_id, fecha)).fetchone()
+      if existing:
+        conn.execute("UPDATE dietas_diarias SET notas=? WHERE empleado_id=? AND fecha=?", (data.get("notas", ""), emp_id, fecha))
+      else:
+        conn.execute("INSERT INTO dietas_diarias (empleado_id, fecha, tipo, importe, notas) VALUES (?,?,?,?,?)", (emp_id, fecha, "", 0, data.get("notas", "")))
+    else:
+      conn.execute(
+        "INSERT OR REPLACE INTO dietas_diarias (empleado_id, fecha, tipo, importe, notas, funcion) VALUES (?,?,?,?,?,?)",
+        (emp_id, fecha, data.get("tipo", ""), data.get("importe", 0), data.get("notas", ""), data.get("funcion", "operador")),
+      )
+    conn.commit()
+    return jsonify({"ok": True})
+  finally:
+    conn.close()
+
+
+@empleados_bp.get("/api/rrhh/dietas/resumen-pivot")
+def api_rrhh_dietas_pivot():
+  """Tabla pivot empleados × meses con totales de dietas."""
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    periodos = [r[0] for r in conn.execute(
+      "SELECT DISTINCT periodo FROM nominas WHERE tipo='NOMINA' ORDER BY periodo"
+    ).fetchall()]
+
+    rows = [dict(r) for r in conn.execute("""
+      SELECT e.id, e.nombre, e.apellidos, n.periodo, ROUND(n.dietas,2) as dietas
+      FROM nominas n JOIN empleados e ON e.id=n.empleado_id
+      WHERE n.tipo='NOMINA' AND n.dietas > 0
+      ORDER BY e.apellidos, e.nombre, n.periodo
+    """).fetchall()]
+
+    return jsonify({"periodos": periodos, "datos": rows})
+  finally:
+    conn.close()
+
+
+@empleados_bp.get("/api/rrhh/dietas/empleado/<int:eid>/<periodo>")
+def api_rrhh_dietas_empleado(eid, periodo):
+  """Detalle diario de dietas de un empleado con proyecto de operaciones."""
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    from datetime import date, timedelta
+    y, m = int(periodo[:4]), int(periodo[5:7])
+    d = date(y, m, 1)
+    dias = []
+    while d.month == m:
+      dias.append({"fecha": d.isoformat(), "dia_semana": ["L","M","X","J","V","S","D"][d.weekday()], "num": d.day, "laborable": d.weekday() < 5})
+      d += timedelta(days=1)
+
+    # Load tarifas for importe calculation
+    tarifas = conn.execute("SELECT * FROM dietas_config ORDER BY fecha_vigencia_desde DESC").fetchall()
+    # Get employee categoria for tarifa matching
+    emp_row = conn.execute("SELECT categoria FROM empleados WHERE id=?", (eid,)).fetchone()
+    emp_cat = (emp_row["categoria"] or "").lower().strip() if emp_row else ""
+
+    def _buscar_tarifa(tipo_dieta, fecha, funcion=None):
+      """Map tipo_dieta + funcion to tarifa. Returns importe."""
+      parts = tipo_dieta.split("_", 1) if tipo_dieta else []
+      if len(parts) != 2:
+        return 0
+      geo, sub = parts[0], parts[1]
+      fn = (funcion or "operador").lower().strip()
+      # Search: match by funcion (stored in categoria field)
+      for t in tarifas:
+        if t["tipo"] != geo or t["subtipo"] != sub:
+          continue
+        if t["fecha_vigencia_desde"] and t["fecha_vigencia_desde"] > fecha:
+          continue
+        if t["fecha_vigencia_hasta"] and t["fecha_vigencia_hasta"] < fecha:
+          continue
+        t_cat = (t["categoria"] or "").lower().strip()
+        if t_cat == fn:
+          return t["importe"] or 0
+      # Fallback: any tarifa without specific funcion
+      for t in tarifas:
+        if t["tipo"] != geo or t["subtipo"] != sub:
+          continue
+        if t["fecha_vigencia_desde"] and t["fecha_vigencia_desde"] > fecha:
+          continue
+        if t["fecha_vigencia_hasta"] and t["fecha_vigencia_hasta"] < fecha:
+          continue
+        t_cat = (t["categoria"] or "").lower().strip()
+        if not t_cat:
+          return t["importe"] or 0
+      return 0
+
+    dietas = {}
+    for r in conn.execute(
+      "SELECT fecha, tipo, importe, notas, funcion FROM dietas_diarias WHERE empleado_id=? AND fecha >= ? AND fecha <= ?",
+      (eid, dias[0]["fecha"], dias[-1]["fecha"])
+    ).fetchall():
+      d_dict = dict(r)
+      fn = d_dict.get("funcion") or "operador"
+      d_dict["funcion"] = fn
+      if (not d_dict["importe"] or d_dict["importe"] == 0) and d_dict["tipo"]:
+        d_dict["importe"] = _buscar_tarifa(d_dict["tipo"], d_dict["fecha"], fn)
+      dietas[r["fecha"]] = d_dict
+
+    proyectos = {}
+    for r in conn.execute(
+      "SELECT pa.fecha, p.codigo, p.nombre FROM proyecto_asignaciones pa "
+      "JOIN proyectos p ON p.id=pa.proyecto_id "
+      "WHERE pa.recurso_tipo='empleado' AND pa.recurso_id=? AND pa.fecha >= ? AND pa.fecha <= ?",
+      (eid, dias[0]["fecha"], dias[-1]["fecha"])
+    ).fetchall():
+      proyectos[r["fecha"]] = {"codigo": r["codigo"], "nombre": r["nombre"]}
+
+    return jsonify({"dias": dias, "dietas": dietas, "proyectos": proyectos})
+  finally:
+    conn.close()
+
+
+# ═══ Conciliación RRHH desde movimientos bancarios ═══════════════════════
+
+
+def _get_bancos_conn():
+  import sqlite3 as _sql
+  try:
+    from config import MOVIMIENTOS_DB
+  except ImportError:
+    from interfaz_facturas.config import MOVIMIENTOS_DB
+  conn = _sql.connect(str(MOVIMIENTOS_DB))
+  conn.row_factory = _sql.Row
+  return conn
+
+
+@empleados_bp.post("/api/rrhh/banco/clasificar")
+def api_rrhh_banco_clasificar():
+  """Clasifica un movimiento bancario como pago RRHH."""
+  data = request.get_json(silent=True) or {}
+  mov_id = data.get("movimiento_id")
+  rrhh_tipo = data.get("rrhh_tipo")  # adelanto / nomina / seguridad_social / irpf
+  empleado_id = data.get("empleado_id")
+  periodo = data.get("periodo", "")
+
+  if not mov_id or not rrhh_tipo:
+    return jsonify({"error": "movimiento_id y rrhh_tipo requeridos"}), 400
+  if rrhh_tipo in ("adelanto", "nomina") and not empleado_id:
+    return jsonify({"error": "empleado_id requerido para adelanto/nomina"}), 400
+
+  from datetime import datetime
+  bconn = _get_bancos_conn()
+  try:
+    logger.info("Clasificando mov %s como %s (emp=%s, per=%s). Limpiando vinculaciones previas...", mov_id, rrhh_tipo, empleado_id, periodo)
+    cur = bconn.execute(
+      "UPDATE movimientos SET rrhh_tipo=?, rrhh_empleado_id=?, rrhh_periodo=?, conciliado_at=?, "
+      "factura_proveedor_id=NULL, factura_cliente_id=NULL, factura_cliente_key=NULL, "
+      "seguro_poliza_id=NULL, albaran_ids=NULL "
+      "WHERE id=?",
+      (rrhh_tipo, empleado_id, periodo, datetime.now().isoformat(), mov_id),
+    )
+    logger.info("Mov %s clasificado. Rows affected: %s", mov_id, cur.rowcount)
+    # Cleanup: fix any existing dual-vinculación in the DB
+    bconn.execute(
+      "UPDATE movimientos SET factura_proveedor_id=NULL, factura_cliente_id=NULL, factura_cliente_key=NULL, "
+      "seguro_poliza_id=NULL, albaran_ids=NULL "
+      "WHERE rrhh_tipo IS NOT NULL AND rrhh_tipo != '' "
+      "AND (factura_proveedor_id IS NOT NULL OR factura_cliente_id IS NOT NULL "
+      "OR factura_cliente_key IS NOT NULL OR seguro_poliza_id IS NOT NULL OR albaran_ids IS NOT NULL)"
+    )
+    bconn.commit()
+    return jsonify({"ok": True})
+  finally:
+    bconn.close()
+
+
+@empleados_bp.post("/api/rrhh/banco/desclasificar")
+def api_rrhh_banco_desclasificar():
+  """Quita la clasificación RRHH de un movimiento bancario."""
+  data = request.get_json(silent=True) or {}
+  mov_id = data.get("movimiento_id")
+  if not mov_id:
+    return jsonify({"error": "movimiento_id requerido"}), 400
+  bconn = _get_bancos_conn()
+  try:
+    bconn.execute(
+      "UPDATE movimientos SET rrhh_tipo=NULL, rrhh_empleado_id=NULL, rrhh_periodo=NULL, conciliado_at=NULL WHERE id=?",
+      (mov_id,),
+    )
+    bconn.commit()
+    return jsonify({"ok": True})
+  finally:
+    bconn.close()
+
+
+# ── Vacaciones ────────────────────────────────────────────────────────────
+
+_FESTIVOS = {
+  '2025-01-01','2025-01-06','2025-04-17','2025-04-18','2025-05-01','2025-08-15',
+  '2025-10-12','2025-11-01','2025-12-06','2025-12-08','2025-12-25',
+  '2026-01-01','2026-01-06','2026-04-02','2026-04-03','2026-05-01','2026-08-15',
+  '2026-10-12','2026-11-02','2026-12-07','2026-12-08','2026-12-25',
+  '2027-01-01','2027-01-06','2027-03-25','2027-03-26','2027-05-01','2027-08-15',
+  '2027-10-12','2027-11-01','2027-12-06','2027-12-08','2027-12-25',
+}
+
+def _es_laborable(fecha_str):
+  from datetime import date as _d
+  d = _d.fromisoformat(fecha_str)
+  return d.weekday() < 5 and fecha_str not in _FESTIVOS
+
+def _dias_devengados(fecha_alta_str, dias_anuales, fecha_ref):
+  """Devengo proporcional de vacaciones."""
+  from datetime import date as _d
+  if not fecha_alta_str:
+    return float(dias_anuales)
+  fa = _d.fromisoformat(fecha_alta_str)
+  anio = fecha_ref.year
+  inicio = _d(anio, 1, 1)
+  if fa.year == anio and fa > inicio:
+    inicio = fa
+  elif fa.year > anio:
+    return 0.0
+  transcurridos = (fecha_ref - inicio).days + 1
+  dev = dias_anuales * transcurridos / 365
+  return round(min(dev, dias_anuales), 2)
+
+
+@empleados_bp.get("/api/rrhh/vacaciones/calendario/<periodo>")
+def api_rrhh_vacaciones_calendario(periodo):
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    from datetime import date, timedelta
+    y, m = int(periodo[:4]), int(periodo[5:7])
+    d = date(y, m, 1)
+    dias = []
+    while d.month == m:
+      dias.append(d.isoformat())
+      d += timedelta(days=1)
+
+    emps = [dict(r) for r in conn.execute(
+      "SELECT id, nombre, apellidos, fecha_alta, dias_vacaciones_anuales "
+      "FROM empleados WHERE estado='activo' ORDER BY apellidos, nombre"
+    ).fetchall()]
+
+    vac = {}
+    for r in conn.execute(
+      "SELECT empleado_id, fecha, estado, notas FROM vacaciones_dias "
+      "WHERE fecha >= ? AND fecha <= ?", (dias[0], dias[-1])
+    ).fetchall():
+      vac[f"{r['empleado_id']}_{r['fecha']}"] = {
+        "estado": r["estado"], "notas": r["notas"] or ""
+      }
+
+    return jsonify({"dias": dias, "empleados": emps, "vacaciones": vac})
+  finally:
+    conn.close()
+
+
+@empleados_bp.post("/api/rrhh/vacaciones/dia")
+def api_rrhh_vacaciones_dia():
+  empleados_db.init_empleados_db()
+  data = request.get_json(silent=True) or {}
+  conn = get_conn()
+  try:
+    conn.execute(
+      "INSERT OR REPLACE INTO vacaciones_dias (empleado_id, fecha, estado, notas) VALUES (?,?,?,?)",
+      (data["empleado_id"], data["fecha"], data.get("estado", "aprobada"), data.get("notas", "")),
+    )
+    conn.commit()
+    return jsonify({"ok": True})
+  finally:
+    conn.close()
+
+
+@empleados_bp.post("/api/rrhh/vacaciones/rango")
+def api_rrhh_vacaciones_rango():
+  empleados_db.init_empleados_db()
+  data = request.get_json(silent=True) or {}
+  conn = get_conn()
+  try:
+    from datetime import date as _d, timedelta as _td
+    emp_id = data["empleado_id"]
+    d = _d.fromisoformat(data["fecha_inicio"])
+    fin = _d.fromisoformat(data["fecha_fin"])
+    estado = data.get("estado", "aprobada")
+    notas = data.get("notas", "")
+    count = 0
+    while d <= fin:
+      f = d.isoformat()
+      if _es_laborable(f):
+        try:
+          conn.execute(
+            "INSERT OR IGNORE INTO vacaciones_dias (empleado_id, fecha, estado, notas) VALUES (?,?,?,?)",
+            (emp_id, f, estado, notas),
+          )
+          count += 1
+        except Exception:
+          pass
+      d += _td(days=1)
+    conn.commit()
+    return jsonify({"ok": True, "dias_creados": count})
+  finally:
+    conn.close()
+
+
+@empleados_bp.delete("/api/rrhh/vacaciones/dia")
+def api_rrhh_vacaciones_dia_delete():
+  empleados_db.init_empleados_db()
+  data = request.get_json(silent=True) or {}
+  conn = get_conn()
+  try:
+    conn.execute(
+      "DELETE FROM vacaciones_dias WHERE empleado_id=? AND fecha=?",
+      (data["empleado_id"], data["fecha"]),
+    )
+    conn.commit()
+    return jsonify({"ok": True})
+  finally:
+    conn.close()
+
+
+@empleados_bp.get("/api/rrhh/vacaciones/resumen/<int:anio>")
+def api_rrhh_vacaciones_resumen(anio):
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    from datetime import date
+    hoy = date.today()
+    ref = hoy if hoy.year == anio else date(anio, 12, 31)
+    emps = [dict(r) for r in conn.execute(
+      "SELECT id, nombre, apellidos, fecha_alta, dias_vacaciones_anuales "
+      "FROM empleados WHERE estado='activo' ORDER BY apellidos, nombre"
+    ).fetchall()]
+
+    # Count vacation days per employee this year (only working days)
+    vac_count = {}
+    for r in conn.execute(
+      "SELECT empleado_id, fecha FROM vacaciones_dias "
+      "WHERE fecha >= ? AND fecha <= ?",
+      (f"{anio}-01-01", f"{anio}-12-31")
+    ).fetchall():
+      if _es_laborable(r["fecha"]):
+        vac_count[r["empleado_id"]] = vac_count.get(r["empleado_id"], 0) + 1
+
+    # Next vacation date per employee
+    proxima = {}
+    for r in conn.execute(
+      "SELECT empleado_id, MIN(fecha) as prox FROM vacaciones_dias "
+      "WHERE fecha > ? GROUP BY empleado_id", (hoy.isoformat(),)
+    ).fetchall():
+      proxima[r["empleado_id"]] = r["prox"]
+
+    lineas = []
+    t_anuales = 0; t_dev = 0; t_disf = 0; t_pend = 0
+    for e in emps:
+      eid = e["id"]
+      anuales = e["dias_vacaciones_anuales"] or 22
+      dev = _dias_devengados(e["fecha_alta"], anuales, ref)
+      disf = vac_count.get(eid, 0)
+      pend = round(dev - disf, 2)
+      t_anuales += anuales; t_dev += dev; t_disf += disf; t_pend += pend
+      lineas.append({
+        "empleado_id": eid,
+        "nombre": ((e["nombre"] or "") + " " + (e["apellidos"] or "")).strip(),
+        "dias_anuales": anuales,
+        "devengados": dev,
+        "disfrutados": disf,
+        "pendientes": pend,
+        "proxima_fecha": proxima.get(eid),
+      })
+    lineas.sort(key=lambda x: x["pendientes"])
+
+    return jsonify({
+      "anio": anio,
+      "lineas": lineas,
+      "totales": {
+        "dias_anuales": t_anuales,
+        "devengados": round(t_dev, 2),
+        "disfrutados": t_disf,
+        "pendientes": round(t_pend, 2),
+      },
+    })
+  finally:
+    conn.close()
+
+
+@empleados_bp.get("/api/rrhh/vacaciones/empleado/<int:eid>/<int:anio>")
+def api_rrhh_vacaciones_empleado(eid, anio):
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    from datetime import date
+    hoy = date.today()
+    ref = hoy if hoy.year == anio else date(anio, 12, 31)
+    e = conn.execute(
+      "SELECT id, nombre, apellidos, fecha_alta, dias_vacaciones_anuales "
+      "FROM empleados WHERE id=?", (eid,)
+    ).fetchone()
+    if not e:
+      return jsonify({"error": "Empleado no encontrado"}), 404
+    anuales = e["dias_vacaciones_anuales"] or 22
+    dev = _dias_devengados(e["fecha_alta"], anuales, ref)
+
+    dias_vac = [dict(r) for r in conn.execute(
+      "SELECT fecha, estado, notas FROM vacaciones_dias "
+      "WHERE empleado_id=? AND fecha >= ? AND fecha <= ? ORDER BY fecha DESC",
+      (eid, f"{anio}-01-01", f"{anio}-12-31")
+    ).fetchall()]
+    disf = sum(1 for d in dias_vac if _es_laborable(d["fecha"]))
+
+    # Add dia_semana
+    DIAS_ES = ["L","M","X","J","V","S","D"]
+    for d in dias_vac:
+      dt = date.fromisoformat(d["fecha"])
+      d["dia_semana"] = DIAS_ES[dt.weekday()]
+
+    return jsonify({
+      "empleado_id": eid,
+      "nombre": ((e["nombre"] or "") + " " + (e["apellidos"] or "")).strip(),
+      "anio": anio,
+      "dias_anuales": anuales,
+      "devengados": dev,
+      "disfrutados": disf,
+      "pendientes": round(dev - disf, 2),
+      "dias": dias_vac,
+    })
+  finally:
+    conn.close()
+
+
+@empleados_bp.get("/api/rrhh/adelantos-banco/<periodo>")
+def api_rrhh_adelantos_banco(periodo):
+  """Lee adelantos desde movimientos bancarios clasificados."""
+  bconn = _get_bancos_conn()
+  gconn = get_conn()
+  try:
+    y, m = int(periodo[:4]), int(periodo[5:7])
+    from datetime import date
+    fecha_ini = date(y, m, 1).isoformat()
+    m2 = m + 1; y2 = y
+    if m2 > 12: m2 = 1; y2 += 1
+    fecha_fin = date(y2, m2, 1).isoformat()
+
+    rows = bconn.execute(
+      "SELECT id, fecha_operacion, concepto, importe, rrhh_empleado_id "
+      "FROM movimientos WHERE rrhh_tipo='adelanto' "
+      "AND (rrhh_periodo = ? OR (rrhh_periodo IS NULL AND fecha_operacion >= ? AND fecha_operacion < ?) "
+      "OR ((rrhh_periodo IS NULL OR rrhh_periodo = '') AND SUBSTR(fecha_operacion,1,7) = ?)) "
+      "ORDER BY fecha_operacion ASC",
+      (periodo, fecha_ini, fecha_fin, periodo),
+    ).fetchall()
+
+    # Enrich with employee names
+    result = []
+    for r in rows:
+      emp = gconn.execute("SELECT nombre, apellidos FROM empleados WHERE id=?", (r["rrhh_empleado_id"],)).fetchone()
+      result.append({
+        "movimiento_id": r["id"],
+        "fecha": r["fecha_operacion"],
+        "concepto": r["concepto"],
+        "importe": abs(r["importe"]),
+        "empleado_id": r["rrhh_empleado_id"],
+        "nombre": (emp["nombre"] + " " + (emp["apellidos"] or "")).strip() if emp else "?",
+      })
+
+    return jsonify({"adelantos": result, "periodo": periodo})
+  finally:
+    bconn.close()
+    gconn.close()
+
+
+@empleados_bp.get("/api/rrhh/banco/conciliacion-ss/<periodo>")
+def api_rrhh_banco_conc_ss(periodo):
+  """Estado de conciliación SS para un mes."""
+  bconn = _get_bancos_conn()
+  try:
+    row = bconn.execute(
+      "SELECT id, fecha_operacion, concepto, importe FROM movimientos "
+      "WHERE rrhh_tipo='seguridad_social' AND rrhh_periodo=? LIMIT 1",
+      (periodo,),
+    ).fetchone()
+    if row:
+      return jsonify({"estado": "conciliado", "movimiento": dict(row)})
+    return jsonify({"estado": "pendiente", "movimiento": None})
+  finally:
+    bconn.close()
+
+
+@empleados_bp.get("/api/rrhh/banco/conciliacion-irpf/<trimestre>")
+def api_rrhh_banco_conc_irpf(trimestre):
+  """Estado de conciliación IRPF para un trimestre."""
+  bconn = _get_bancos_conn()
+  try:
+    row = bconn.execute(
+      "SELECT id, fecha_operacion, concepto, importe FROM movimientos "
+      "WHERE rrhh_tipo='irpf' AND rrhh_periodo=? LIMIT 1",
+      (trimestre,),
+    ).fetchone()
+    if row:
+      return jsonify({"estado": "conciliado", "movimiento": dict(row)})
+    return jsonify({"estado": "pendiente", "movimiento": None})
+  finally:
+    bconn.close()
+
+
+@empleados_bp.get("/api/rrhh/seguridad-social/comparar/<periodo>")
+def api_rrhh_ss_comparar(periodo):
+  """Compara estimado SS (nóminas) vs banco (movimiento conciliado)."""
+  empleados_db.init_empleados_db()
+  gconn = get_conn()
+  bconn = _get_bancos_conn()
+  try:
+    row = gconn.execute(
+      "SELECT ROUND(SUM(ss_empresa),2) as total FROM nominas WHERE periodo=? AND tipo='NOMINA'",
+      (periodo,),
+    ).fetchone()
+    estimado = row["total"] if row and row["total"] else 0
+    banco = 0
+    banco_fecha = None
+    banco_concepto = None
+    try:
+      mov = bconn.execute(
+        "SELECT fecha_operacion, concepto, importe FROM movimientos "
+        "WHERE rrhh_tipo='seguridad_social' AND rrhh_periodo=? LIMIT 1",
+        (periodo,),
+      ).fetchone()
+      if mov:
+        banco = abs(mov["importe"] or 0)
+        banco_fecha = mov["fecha_operacion"]
+        banco_concepto = mov["concepto"]
+    except Exception:
+      pass
+    diferencia = round(banco - estimado, 2) if banco > 0 else None
+    return jsonify({
+      "estimado": round(estimado, 2),
+      "banco": round(banco, 2) if banco > 0 else None,
+      "banco_fecha": banco_fecha,
+      "banco_concepto": banco_concepto,
+      "diferencia": diferencia,
+    })
+  finally:
+    gconn.close()
+    bconn.close()
+

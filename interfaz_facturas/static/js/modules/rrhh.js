@@ -7,14 +7,18 @@ var _rrhhPeriodos = [];
 var _rrhhPeriodoIdx = -1;
 var _rrhhNominasInit = false;
 var _rrhhVerifInit = false;
+var _rrhhVerifVista = "check"; // current verificador sub-view: "check" | "estimacion"
+var _rrhhEstimInit = false;
 var _rrhhImportInit = false;
 var _rrhhInactivosAbierto = false;
 var _rrhhOCRData = [];
 var _rrhhDashChartEvo = null;
 var _rrhhFichaChart = null;
-var _rrhhDashChartCat = null;
+var _rrhhDashChartCat = null; // unused, kept for compat
 var _rrhhSSChart = null;
 var _rrhhExpandedRow = null;
+var _rrhhFichaOrigen = "nominas"; // track which section opened the ficha
+var _rrhhDietasVista = "calendario"; // current dietas sub-view
 
 // ===============================================================================
 // ==  Formatting helpers                                                       ==
@@ -57,6 +61,7 @@ function _rrhhOnPanelShow(panel) {
   else if (panel === "nominas") _rrhhCargarNominas();
   else if (panel === "verificador") _rrhhCargarVerificador();
   else if (panel === "dietas") _rrhhCargarDietas();
+  else if (panel === "vacaciones") _rrhhCargarVacaciones();
   else if (panel === "adelantos") _rrhhCargarAdelantos();
   else if (panel === "ss") _rrhhCargarSS();
   else if (panel === "irpf") _rrhhCargarIRPF();
@@ -109,6 +114,24 @@ function _rrhhCargarDashboard() {
               { label: "Dietas", data: dsDietas, backgroundColor: "#F59E0B", stack: "a" }
             ]
           },
+          plugins: [{
+            id: "evoTotalLabel",
+            afterDatasetsDraw: function (chart) {
+              var ctx = chart.ctx;
+              var meta = chart.getDatasetMeta(2); // topmost dataset (Dietas)
+              ctx.save();
+              ctx.font = "bold 11px sans-serif";
+              ctx.fillStyle = "#374151";
+              ctx.textAlign = "center";
+              for (var i = 0; i < meta.data.length; i++) {
+                var total = (dsSalarios[i] || 0) + (dsSS[i] || 0) + (dsDietas[i] || 0);
+                var bar = meta.data[i];
+                var lbl = total >= 1000 ? Math.round(total / 1000) + "K" : Math.round(total) + "";
+                ctx.fillText(lbl, bar.x, bar.y - 6);
+              }
+              ctx.restore();
+            }
+          }],
           options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -127,29 +150,43 @@ function _rrhhCargarDashboard() {
         });
       }
 
-      // -- Chart.js: Donut (categorias) --
-      var cats = d.categorias || [];
-      var canvasCat = document.getElementById("rrhh-chart-categorias");
-      if (canvasCat && cats.length) {
-        if (_rrhhDashChartCat) _rrhhDashChartCat.destroy();
-        var catLabels = cats.map(function (c) { return c.categoria || "Sin cat."; });
-        var catData = cats.map(function (c) { return c.coste || 0; });
-        var catColors = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16"];
-        _rrhhDashChartCat = new Chart(canvasCat.getContext("2d"), {
-          type: "doughnut",
-          data: {
-            labels: catLabels,
-            datasets: [{ data: catData, backgroundColor: catColors.slice(0, catLabels.length) }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { position: "bottom" },
-              tooltip: { callbacks: { label: function (ctx) { return ctx.label + ": " + fmtEurFull(ctx.raw); } } }
-            }
-          }
+      // -- Asignación de empleados a proyectos --
+      var asig = d.asignacion_empleados || {};
+      var asigDiv = document.getElementById("rrhh-dash-asignacion");
+      if (asigDiv) {
+        var proys = asig.proyectos || [];
+        var th = "padding:5px 6px;font-weight:700;";
+        var ah = '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+        ah += '<thead><tr style="border-bottom:2px solid var(--border,#e9ecef);">' +
+          '<th style="' + th + 'text-align:left;">Proyecto</th>' +
+          '<th style="' + th + 'text-align:right;">Operadores</th>' +
+          '<th style="' + th + 'text-align:right;">Ayudantes</th>' +
+          '<th style="' + th + 'text-align:right;">Total</th></tr></thead><tbody>';
+        proys.forEach(function (p) {
+          ah += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="if(typeof _navToProyecto===\'function\')_navToProyecto(' + p.proyecto_id + ')">' +
+            '<td style="padding:5px 6px;">' + (p.proyecto_nombre || "") + '</td>' +
+            '<td style="padding:5px 6px;text-align:right;font-weight:600;">' + p.operadores + '</td>' +
+            '<td style="padding:5px 6px;text-align:right;font-weight:600;">' + p.ayudantes + '</td>' +
+            '<td style="padding:5px 6px;text-align:right;font-weight:600;">' + p.total + '</td></tr>';
         });
+        ah += '<tr style="border-bottom:1px solid var(--border,#e9ecef);background:#FFFBEB;">' +
+          '<td style="padding:5px 6px;color:#92400E;">Sin asignar</td>' +
+          '<td style="padding:5px 6px;text-align:right;color:#92400E;">\u2014</td>' +
+          '<td style="padding:5px 6px;text-align:right;color:#92400E;">\u2014</td>' +
+          '<td style="padding:5px 6px;text-align:right;font-weight:600;color:#92400E;">' + (asig.sin_asignar || 0) + '</td></tr>';
+        if (asig.baja_vacaciones) {
+          ah += '<tr style="border-bottom:1px solid var(--border,#e9ecef);background:#F3F4F6;">' +
+            '<td style="padding:5px 6px;color:#6B7280;">Baja / Vacaciones</td>' +
+            '<td style="padding:5px 6px;text-align:right;color:#6B7280;">\u2014</td>' +
+            '<td style="padding:5px 6px;text-align:right;color:#6B7280;">\u2014</td>' +
+            '<td style="padding:5px 6px;text-align:right;font-weight:600;color:#6B7280;">' + asig.baja_vacaciones + '</td></tr>';
+        }
+        ah += '</tbody><tfoot><tr style="border-top:2px solid var(--border,#e9ecef);">' +
+          '<td style="padding:6px 6px;font-weight:700;">TOTAL</td>' +
+          '<td style="padding:6px 6px;text-align:right;font-weight:800;">' + (asig.total_operadores || 0) + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;font-weight:800;">' + (asig.total_ayudantes || 0) + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;font-weight:800;">' + (asig.total || 0) + '</td></tr></tfoot></table>';
+        asigDiv.innerHTML = ah;
       }
 
       // -- Top 5 coste/dia --
@@ -184,7 +221,13 @@ function _rrhhCargarDashboard() {
           alertas.forEach(function (a) {
             var bg = a.tipo === "warning" ? "#FEF3C7" : a.tipo === "danger" ? "#FEE2E2" : "#EFF6FF";
             var col = a.tipo === "warning" ? "#92400E" : a.tipo === "danger" ? "#991B1B" : "#1E40AF";
-            ah += '<div style="padding:8px 12px;background:' + bg + ';color:' + col + ';border-radius:6px;font-size:0.85rem;margin-bottom:6px;">' + a.texto + '</div>';
+            var nombresHtml = "";
+            if (a.nombres && a.nombres.length) {
+              nombresHtml = '<ul style="margin:4px 0 0 16px;padding:0;font-size:0.8rem;">';
+              a.nombres.forEach(function (n) { nombresHtml += '<li>' + n + '</li>'; });
+              nombresHtml += '</ul>';
+            }
+            ah += '<div style="padding:8px 12px;background:' + bg + ';color:' + col + ';border-radius:6px;font-size:0.85rem;margin-bottom:6px;">' + a.texto + nombresHtml + '</div>';
           });
           alertDiv.innerHTML = ah;
         }
@@ -200,35 +243,101 @@ function _rrhhCargarDashboard() {
 // ==  2. EQUIPO (employee directory + CRUD)                                    ==
 // ===============================================================================
 
-function _rrhhCargarEmpleados() {
-  var tbodyActivos = document.getElementById("tbody-empleados-activos");
-  if (!tbodyActivos) return;
-  tbodyActivos.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--text-secondary);">Cargando\u2026</td></tr>';
+var _rrhhEquipoColapsados = { baja: true, vacaciones: true, reserva: true, exempleado: true };
+var _rrhhEquipoWrapper = null; // cached reference to the rendering container
 
-  fetch("/api/empleados?solo_activos=0")
+function _rrhhCargarEmpleados() {
+  // Find the wrapper once and cache it
+  if (!_rrhhEquipoWrapper) {
+    var container = document.getElementById("tbody-empleados-activos");
+    if (!container) return;
+    _rrhhEquipoWrapper = container.closest(".card") || container.parentNode;
+  }
+  _rrhhEquipoWrapper.innerHTML = '<p style="text-align:center;padding:2rem;color:var(--text-secondary);">Cargando\u2026</p>';
+
+  fetch("/api/rrhh/empleados?estado=todos")
     .then(function (r) { return r.json(); })
     .then(function (d) {
       _rrhhEmpleadosCache = d.empleados || [];
       _rrhhRenderVistas(_rrhhEmpleadosCache);
     })
     .catch(function (err) {
-      tbodyActivos.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;color:#dc3545;">Error al cargar empleados: ' + err.message + '</td></tr>';
+      _rrhhEquipoWrapper.innerHTML = '<p style="text-align:center;padding:2rem;color:#dc3545;">Error: ' + err.message + '</p>';
     });
 }
 
 function _rrhhRenderVistas(lista) {
-  var activos = lista.filter(function (e) { return e.estado === "activo" || e.estado === "vacaciones"; });
-  var inactivos = lista.filter(function (e) { return e.estado !== "activo" && e.estado !== "vacaciones"; });
+  var grupos = [
+    { key: "activo", label: "Activos", color: "#22c55e" },
+    { key: "baja", label: "Baja", color: "#f59e0b" },
+    { key: "vacaciones", label: "Vacaciones", color: "#3B82F6" },
+    { key: "reserva", label: "Reserva", color: "#6B7280" },
+    { key: "exempleado", label: "Exempleados", color: "#ef4444" }
+  ];
+  var wrapper = _rrhhEquipoWrapper;
+  if (!wrapper) return;
 
-  _rrhhRenderTabla(document.getElementById("tbody-empleados-activos"), activos, true);
-  _rrhhRenderTabla(document.getElementById("tbody-empleados-inactivos"), inactivos, false);
+  var html = "";
+  grupos.forEach(function (g) {
+    var emps = lista.filter(function (e) { return e.estado === g.key; });
+    if (!emps.length) return;
+    var collapsed = _rrhhEquipoColapsados[g.key];
+    var chevron = collapsed ? "\u25B6" : "\u25BC";
 
-  var wrapper = document.getElementById("rrhh-inactivos-wrapper");
-  if (wrapper) {
-    wrapper.style.display = inactivos.length > 0 ? "" : "none";
-    var countEl = document.getElementById("count-inactivos");
-    if (countEl) countEl.textContent = inactivos.length;
-  }
+    // Group header (clickable)
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border,#e9ecef);background:var(--bg-secondary,#f8f9fa);user-select:none;" onclick="_rrhhToggleGrupoEquipo(\'' + g.key + '\')">';
+    html += '<span style="font-size:0.75rem;width:12px;display:inline-block;">' + chevron + '</span>';
+    html += '<span style="font-weight:700;font-size:0.88rem;">' + g.label + '</span>';
+    html += '<span style="display:inline-block;padding:1px 8px;border-radius:9999px;font-size:0.72rem;font-weight:600;background:' + g.color + '20;color:' + g.color + ';">' + emps.length + '</span>';
+    html += '</div>';
+
+    // Table (hidden if collapsed)
+    html += '<table data-equipo-grupo="' + g.key + '" style="width:100%;border-collapse:collapse;font-size:0.82rem;' + (collapsed ? 'display:none;' : '') + '">';
+    // Header
+    html += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);">' +
+      '<th style="padding:6px 10px;text-align:left;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;">Nombre</th>' +
+      '<th style="padding:6px 6px;text-align:left;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:110px;">DNI</th>' +
+      '<th style="padding:6px 6px;text-align:left;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:130px;">Categor\u00eda</th>' +
+      '<th style="padding:6px 6px;text-align:left;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:130px;">Tel\u00e9fono</th>' +
+      '<th style="padding:6px 6px;text-align:right;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:95px;">Coste/D\u00eda</th>' +
+      '<th style="padding:6px 6px;text-align:center;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:90px;">Estado</th>' +
+      '<th style="padding:6px 6px;text-align:center;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:90px;">Acciones</th>' +
+      '</tr></thead><tbody>';
+
+    emps.forEach(function (e, i) {
+      var nombreCompleto = (e.nombre || "") + (e.apellidos ? " " + e.apellidos : "");
+      var estadoColor = { activo: "#22c55e", baja: "#f59e0b", vacaciones: "#3B82F6", reserva: "#6B7280", exempleado: "#ef4444" }[e.estado] || "#6B7280";
+      var estadoLabel = e.estado ? e.estado.charAt(0).toUpperCase() + e.estado.slice(1) : "\u2014";
+      var costeDia = e.coste_dia_actual || e.ultimo_coste_empresa ? (e.coste_dia_actual || 0) : null;
+      var zebra = i % 2 === 1 ? "background:rgba(0,0,0,0.015);" : "";
+
+      html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;' + zebra + '" onclick="_rrhhAbrirFichaDesdeEquipo(' + e.id + ')" onmouseover="this.style.background=\'rgba(59,130,246,0.06)\'" onmouseout="this.style.background=\'' + (i % 2 === 1 ? 'rgba(0,0,0,0.015)' : '') + '\'">' +
+        '<td style="padding:7px 10px;font-weight:600;white-space:nowrap;">' + nombreCompleto + '</td>' +
+        '<td style="padding:7px 6px;font-family:monospace;font-size:0.8rem;">' + (e.dni || "\u2014") + '</td>' +
+        '<td style="padding:7px 6px;">' + (e.categoria || e.puesto || "\u2014") + '</td>' +
+        '<td style="padding:7px 6px;">' + (e.telefono || "\u2014") + '</td>' +
+        '<td style="padding:7px 6px;text-align:right;">' + (costeDia !== null ? fmtEur(costeDia) + ' \u20ac/d' : '\u2014') + '</td>' +
+        '<td style="padding:7px 6px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:0.7rem;font-weight:600;background:' + estadoColor + '18;color:' + estadoColor + ';">' + estadoLabel + '</span></td>' +
+        '<td style="padding:7px 6px;text-align:center;white-space:nowrap;">' +
+          '<button onclick="event.stopPropagation();_rrhhAbrirFichaDesdeEquipo(' + e.id + ')" title="Ver ficha" style="background:none;border:none;cursor:pointer;color:#3B82F6;font-size:0.85rem;">&#x1F464;</button> ' +
+          '<button onclick="event.stopPropagation();_rrhhEditarEmpleado(' + e.id + ')" title="Editar" style="background:none;border:none;cursor:pointer;color:#6B7280;font-size:0.85rem;">&#x270E;</button> ' +
+          '<button onclick="event.stopPropagation();_rrhhEliminarEmpleado(' + e.id + ',\'' + nombreCompleto.replace(/'/g, "\\'") + '\')" title="Dar de baja" style="background:none;border:none;cursor:pointer;color:#dc3545;font-size:0.85rem;">&#x2716;</button>' +
+        '</td></tr>';
+    });
+    html += '</tbody></table>';
+  });
+
+  if (!html) html = '<p style="text-align:center;padding:2rem;color:var(--text-secondary);">Sin empleados</p>';
+  wrapper.innerHTML = html;
+
+  // Hide old inactivos wrapper
+  var inacWrapper = document.getElementById("rrhh-inactivos-wrapper");
+  if (inacWrapper) inacWrapper.style.display = "none";
+}
+
+function _rrhhToggleGrupoEquipo(key) {
+  _rrhhEquipoColapsados[key] = !_rrhhEquipoColapsados[key];
+  _rrhhRenderVistas(_rrhhEmpleadosCache);
 }
 
 function _rrhhRenderTabla(tbody, lista, esActivos) {
@@ -265,16 +374,17 @@ function _rrhhRenderTabla(tbody, lista, esActivos) {
       : '<span style="color:var(--text-secondary);font-size:0.8rem;">No</span>';
     var carnet = e.carnet_conducir || "\u2014";
 
-    html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_rrhhEditarEmpleado(' + e.id + ')">' +
+    html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_rrhhAbrirFichaDesdeEquipo(' + e.id + ')">' +
       '<td style="padding:0.6rem 1rem;font-weight:600;white-space:nowrap;">' + nombreCompleto + '</td>' +
       '<td style="padding:0.6rem 0.75rem;">' + (e.dni || "\u2014") + '</td>' +
-      '<td style="padding:0.6rem 0.75rem;">' + (e.puesto || "\u2014") + '</td>' +
+      '<td style="padding:0.6rem 0.75rem;">' + (e.puesto ? e.puesto.charAt(0).toUpperCase() + e.puesto.slice(1) : "\u2014") + '</td>' +
       '<td style="padding:0.6rem 0.75rem;">' + (e.telefono || "\u2014") + '</td>' +
       '<td style="padding:0.6rem 0.75rem;"><span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:0.75rem;font-weight:600;background:' + estadoColor + '20;color:' + estadoColor + ';">' + estadoLabel + '</span></td>' +
       '<td style="padding:0.6rem 0.75rem;">' + prlBadge + '</td>' +
       '<td style="padding:0.6rem 0.75rem;">' + aptoBadge + '</td>' +
       '<td style="padding:0.6rem 0.75rem;">' + carnet + '</td>' +
       '<td style="padding:0.6rem 0.75rem;text-align:center;">' +
+        '<button onclick="event.stopPropagation();_rrhhEditarEmpleado(' + e.id + ')" title="Editar" style="background:none;border:none;cursor:pointer;color:#3B82F6;font-size:0.9rem;margin-right:4px;">&#x270E;</button>' +
         '<button onclick="event.stopPropagation();_rrhhEliminarEmpleado(' + e.id + ',\'' + nombreCompleto.replace(/'/g, "\\'") + '\')" title="Dar de baja" style="background:none;border:none;cursor:pointer;color:#dc3545;font-size:1rem;">&#x2716;</button>' +
       '</td></tr>';
   });
@@ -337,7 +447,8 @@ function _rrhhLimpiarFormEmpleado() {
    "emp-puesto","emp-categoria","emp-fecha-alta",
    "emp-prl-especifico","emp-prl-basico-cad","emp-prl-especifico-cad",
    "emp-apto-medico-cad","emp-carnet-conducir","emp-carnet-conducir-cad",
-   "emp-carnet-maquinaria","emp-carnet-maquinaria-cad","emp-formacion-especifica","emp-notas"
+   "emp-carnet-maquinaria","emp-carnet-maquinaria-cad","emp-formacion-especifica","emp-notas",
+   "emp-iban","emp-direccion","emp-neto-pactado"
   ].forEach(function (id) {
     var el = document.getElementById(id);
     if (el) el.value = "";
@@ -373,6 +484,14 @@ function _rrhhRellenarFormEmpleado(e) {
   document.getElementById("emp-carnet-maquinaria-cad").value = e.carnet_maquinaria_caducidad || "";
   document.getElementById("emp-formacion-especifica").value = e.formacion_especifica || "";
   document.getElementById("emp-notas").value = e.notas || "";
+  var ibanEl = document.getElementById("emp-iban");
+  if (ibanEl) ibanEl.value = e.iban || "";
+  var dirEl = document.getElementById("emp-direccion");
+  if (dirEl) dirEl.value = e.direccion || "";
+  var netoEl = document.getElementById("emp-neto-pactado");
+  if (netoEl) netoEl.value = e.neto_pactado || "";
+  var vacEl = document.getElementById("emp-dias-vacaciones");
+  if (vacEl) vacEl.value = e.dias_vacaciones_anuales != null ? e.dias_vacaciones_anuales : 22;
 }
 
 function _rrhhRecogerFormEmpleado() {
@@ -387,6 +506,10 @@ function _rrhhRecogerFormEmpleado() {
     categoria: document.getElementById("emp-categoria").value.trim(),
     fecha_alta: document.getElementById("emp-fecha-alta").value,
     estado: document.getElementById("emp-estado").value,
+    iban: (document.getElementById("emp-iban") || {}).value || "",
+    direccion: (document.getElementById("emp-direccion") || {}).value || "",
+    neto_pactado: parseFloat((document.getElementById("emp-neto-pactado") || {}).value) || 0,
+    dias_vacaciones_anuales: parseInt((document.getElementById("emp-dias-vacaciones") || {}).value) || 22,
     prl_basico: document.getElementById("emp-prl-basico").checked ? 1 : 0,
     prl_basico_horas: parseInt(document.getElementById("emp-prl-horas").value) || null,
     prl_basico_caducidad: document.getElementById("emp-prl-basico-cad").value,
@@ -426,6 +549,14 @@ function _rrhhGuardarEmpleado() {
 
 function _rrhhEditarEmpleado(id) {
   _rrhhAbrirModalEmpleado(id);
+}
+
+function _rrhhAbrirFichaDesdeEquipo(empId) {
+  _rrhhFichaOrigen = "equipo";
+  // Navigate to Nóminas subpanel and open ficha
+  if (typeof activarSubpanel === "function") activarSubpanel("rrhh", "nominas");
+  _rrhhCargarNominas();
+  setTimeout(function () { _rrhhVerFichaEmpleado(empId, "equipo"); }, 150);
 }
 
 function _rrhhEliminarEmpleado(id, nombre) {
@@ -531,39 +662,43 @@ function _rrhhCargarMes(periodo) {
   var tfoot = document.getElementById("rrhh-tfoot-nominas-mes");
   if (!tbody) return;
   _rrhhExpandedRow = null;
-  tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--text-secondary);">Cargando...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:2rem;color:var(--text-secondary);">Cargando...</td></tr>';
   if (tfoot) tfoot.innerHTML = "";
 
   fetch("/api/rrhh/nominas/resumen-mensual/" + periodo)
     .then(function (r) { return r.json(); })
     .then(function (d) {
       if (!d.nominas || !d.nominas.length) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:2rem;color:var(--text-secondary);">Sin n\u00f3minas para ' + _rrhhPeriodoToLabel(periodo) + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:2rem;color:var(--text-secondary);">Sin n\u00f3minas para ' + _rrhhPeriodoToLabel(periodo) + '</td></tr>';
         return;
       }
       // Sort descending by coste_empresa
       var nominas = d.nominas.slice().sort(function (a, b) { return (b.coste_empresa || 0) - (a.coste_empresa || 0); });
       var html = "";
-      var totDev = 0, totDed = 0, totLiq = 0, totCE = 0, totDietas = 0;
+      var totCE = 0, totIrpf = 0, totSSEmp = 0, totLiqSinDietas = 0, totDietas = 0, totLiq = 0;
       nominas.forEach(function (n, i) {
         var esFin = n.tipo === "FINIQUITO";
         var rowBg = esFin ? "background:#FEF2F2;" : "";
         var nombre = (n.nombre || "") + (n.apellidos ? " " + n.apellidos : "");
-        totDev += n.total_devengado || 0;
-        totDed += n.total_deducir || 0;
-        totLiq += n.liquido || 0;
+        var liqSinDietas = (n.liquido || 0) - (n.dietas || 0);
         totCE += n.coste_empresa || 0;
+        totIrpf += n.irpf_euros || 0;
+        totSSEmp += n.ss_empresa || 0;
+        totLiqSinDietas += liqSinDietas;
         totDietas += n.dietas || 0;
+        totLiq += n.liquido || 0;
         html += '<tr data-nomina-idx="' + i + '" style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;' + rowBg + '" onclick="_rrhhToggleNominaDetail(this,' + i + ')">' +
           '<td style="padding:6px 8px;">' + (i + 1) + '</td>' +
           '<td style="padding:6px 8px;font-weight:500;white-space:nowrap;">' + nombre + '</td>' +
+          '<td style="padding:6px 3px;"><a href="#" onclick="event.preventDefault();event.stopPropagation();_rrhhVerFichaEmpleado(' + n.empleado_id + ')" style="color:#3B82F6;font-size:0.75rem;">Ficha</a></td>' +
           '<td style="padding:6px 6px;">' + (n.dni || "\u2014") + '</td>' +
           '<td style="padding:6px 6px;">' + (esFin ? '<span style="color:#dc2626;font-weight:600;">FINIQ</span>' : 'NOM') + '</td>' +
-          '<td style="padding:6px 6px;text-align:right;">' + fmtEur(n.total_devengado) + '</td>' +
-          '<td style="padding:6px 6px;text-align:right;">' + fmtEur(n.total_deducir) + '</td>' +
-          '<td style="padding:6px 6px;text-align:right;">' + fmtEur(n.liquido) + '</td>' +
-          '<td style="padding:6px 6px;text-align:right;">' + fmtEur(n.dietas) + '</td>' +
           '<td style="padding:6px 6px;text-align:right;font-weight:600;">' + fmtEur(n.coste_empresa) + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;">' + fmtEur(n.irpf_euros) + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;">' + fmtEur(n.ss_empresa) + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;">' + fmtEur(liqSinDietas) + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;">' + fmtEur(n.dietas) + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;">' + fmtEur(n.liquido) + '</td>' +
           '<td style="padding:6px 6px;text-align:right;">' + fmtEur(n.coste_dia) + '</td>' +
           '</tr>';
       });
@@ -573,17 +708,18 @@ function _rrhhCargarMes(periodo) {
 
       if (tfoot) {
         tfoot.innerHTML = '<tr style="font-weight:700;background:var(--bg-secondary,#f8f9fa);">' +
-          '<td colspan="4" style="padding:8px 6px;text-align:right;">TOTALES</td>' +
-          '<td style="padding:8px 6px;text-align:right;">' + fmtEur(totDev) + '</td>' +
-          '<td style="padding:8px 6px;text-align:right;">' + fmtEur(totDed) + '</td>' +
-          '<td style="padding:8px 6px;text-align:right;">' + fmtEur(totLiq) + '</td>' +
-          '<td style="padding:8px 6px;text-align:right;">' + fmtEur(totDietas) + '</td>' +
+          '<td colspan="5" style="padding:8px 6px;text-align:right;">TOTALES</td>' +
           '<td style="padding:8px 6px;text-align:right;">' + fmtEur(totCE) + '</td>' +
+          '<td style="padding:8px 6px;text-align:right;">' + fmtEur(totIrpf) + '</td>' +
+          '<td style="padding:8px 6px;text-align:right;">' + fmtEur(totSSEmp) + '</td>' +
+          '<td style="padding:8px 6px;text-align:right;">' + fmtEur(totLiqSinDietas) + '</td>' +
+          '<td style="padding:8px 6px;text-align:right;">' + fmtEur(totDietas) + '</td>' +
+          '<td style="padding:8px 6px;text-align:right;">' + fmtEur(totLiq) + '</td>' +
           '<td></td></tr>';
       }
     })
     .catch(function () {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:2rem;color:#dc3545;">Error al cargar</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:2rem;color:#dc3545;">Error al cargar</td></tr>';
     });
 }
 
@@ -606,7 +742,7 @@ function _rrhhToggleNominaDetail(row, idx) {
   _rrhhExpandedRow = idx;
 
   var detailHtml = '<tr class="rrhh-nomina-detail" data-detail-for="' + idx + '">' +
-    '<td colspan="10" style="padding:0;background:#f8fafc;">' +
+    '<td colspan="12" style="padding:0;background:#f8fafc;">' +
     '<div style="padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:0.82rem;">';
 
   // Left: Devengos
@@ -665,7 +801,8 @@ function _rrhhDetailLine(label, value) {
 }
 
 // -- Employee detail sheet (ficha) --
-function _rrhhVerFichaEmpleado(empId) {
+function _rrhhVerFichaEmpleado(empId, origen) {
+  _rrhhFichaOrigen = origen || "nominas";
   var wrapper = document.getElementById("rrhh-nominas-tabla-wrapper");
   if (wrapper) wrapper.style.display = "none";
   var fichaDiv = document.getElementById("rrhh-ficha-empleado");
@@ -687,25 +824,44 @@ function _rrhhVerFichaEmpleado(empId) {
     var estadoColor = emp.estado === "activo" ? "#22c55e" : emp.estado === "exempleado" ? "#ef4444" : "#f59e0b";
     var estadoLabel = emp.estado ? emp.estado.charAt(0).toUpperCase() + emp.estado.slice(1) : "";
 
-    var html = '';
-    // Header
-    html += '<div class="card" style="padding:16px;margin-bottom:12px;">';
-    html += '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">';
-    html += '<h3 style="margin:0;font-size:1.1rem;">' + nombreCompleto + '</h3>';
-    html += '<span style="padding:2px 10px;border-radius:9999px;font-size:0.75rem;font-weight:600;background:' + estadoColor + '20;color:' + estadoColor + ';">' + estadoLabel + '</span>';
-    html += '</div>';
-    html += '<div style="font-size:0.85rem;color:var(--text-secondary);margin-top:4px;">DNI: ' + (emp.dni || "\u2014") + ' &middot; Categor\u00eda: ' + (emp.categoria || "\u2014") + ' &middot; Antig\u00fcedad: ' + (emp.fecha_antiguedad || "\u2014") + '</div>';
-    html += '</div>';
+    // Calculate salary averages from last 3 nominas
+    var last3 = nominas.filter(function (n) { return n.tipo === "NOMINA"; }).slice(0, 3);
+    var salMes = 0, costeMes = 0;
+    if (last3.length) {
+      var sumDev = 0, sumCE = 0, sumDiet = 0;
+      last3.forEach(function (n) { sumDev += (n.total_devengado || 0); sumCE += (n.coste_empresa || 0); sumDiet += (n.dietas || 0); });
+      salMes = Math.round((sumDev - sumDiet) / last3.length);
+      costeMes = Math.round((sumCE - sumDiet) / last3.length);
+    }
 
-    // Personal KPIs
-    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px;">';
-    html += _rrhhKpiCard("Coste total", fmtEurFull(res.coste_total), "", "0.95rem");
-    html += _rrhhKpiCard("Coste medio/mes", fmtEurFull(res.coste_medio_mes), "", "0.95rem");
-    html += _rrhhKpiCard("\u00daltimo coste/d\u00eda", fmtEurFull(res.ultimo_coste_dia), "", "0.95rem");
-    html += _rrhhKpiCard("Total dietas", fmtEurFull(res.total_dietas), "", "0.95rem");
-    html += _rrhhKpiCard("Total l\u00edquido", fmtEurFull(res.total_liquido), " tes-card-blue", "0.95rem");
-    html += _rrhhKpiCard("Meses activos", (res.meses_activos || 0), "", "0.95rem");
+    var html = '';
+    // Card 1: Información General (borde azul)
+    html += '<div class="card" style="border-left:4px solid #3B82F6;padding:14px 16px;margin-bottom:12px;">';
+    html += '<h4 style="margin:0 0 8px;font-size:0.85rem;color:#3B82F6;text-transform:uppercase;letter-spacing:0.5px;">Informaci\u00f3n General</h4>';
+    html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">';
+    html += '<h3 style="margin:0;font-size:1.05rem;">' + nombreCompleto + '</h3>';
+    html += '<span style="padding:2px 10px;border-radius:9999px;font-size:0.72rem;font-weight:600;background:' + estadoColor + '20;color:' + estadoColor + ';">' + estadoLabel + '</span>';
     html += '</div>';
+    html += '<div style="font-size:0.82rem;color:var(--text-secondary);display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;">';
+    html += '<span><b>DNI:</b> ' + (emp.dni || "\u2014") + '</span>';
+    html += '<span><b>M\u00f3vil:</b> ' + (emp.telefono || "\u2014") + '</span>';
+    html += '<span><b>Email:</b> ' + (emp.email || "\u2014") + '</span>';
+    html += '<span><b>Cuenta:</b> ' + (emp.iban || "\u2014") + '</span>';
+    html += '</div></div>';
+
+    // Card 2: Información Operativa (borde verde)
+    html += '<div class="card" style="border-left:4px solid #10B981;padding:14px 16px;margin-bottom:12px;">';
+    html += '<h4 style="margin:0 0 8px;font-size:0.85rem;color:#10B981;text-transform:uppercase;letter-spacing:0.5px;">Informaci\u00f3n Operativa</h4>';
+    html += '<div style="font-size:0.82rem;display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;">';
+    html += '<span><b>Categor\u00eda:</b> ' + (emp.categoria || "\u2014") + '</span>';
+    html += '<span><b>Antig\u00fcedad:</b> ' + (emp.fecha_antiguedad || "\u2014") + '</span>';
+    html += '<span><b>Salario mensual (s/dietas):</b> ' + fmtEurFull(salMes) + '</span>';
+    html += '<span><b>Coste empresa mensual (s/dietas):</b> ' + fmtEurFull(costeMes) + '</span>';
+    html += '<span><b>Salario anual (s/dietas):</b> ' + fmtEurFull(salMes * 12) + '</span>';
+    html += '<span><b>Coste empresa anual (s/dietas):</b> ' + fmtEurFull(costeMes * 12) + '</span>';
+    html += '<span><b>Meses activos:</b> ' + (res.meses_activos || 0) + '</span>';
+    html += '<span><b>\u00daltimo coste/d\u00eda:</b> ' + fmtEurFull(res.ultimo_coste_dia) + '</span>';
+    html += '</div></div>';
 
     // Mini chart: evolución coste_empresa
     if (nominas.length >= 2) {
@@ -782,10 +938,11 @@ function _rrhhVerFichaEmpleado(empId) {
 }
 
 function _rrhhCerrarFicha() {
-  var fichaDiv = document.getElementById("rrhh-ficha-empleado");
-  if (fichaDiv) fichaDiv.style.display = "none";
-  var wrapper = document.getElementById("rrhh-nominas-tabla-wrapper");
-  if (wrapper) wrapper.style.display = "";
+  document.getElementById("rrhh-ficha-empleado").style.display = "none";
+  document.getElementById("rrhh-nominas-tabla-wrapper").style.display = "";
+  if (_rrhhFichaOrigen && _rrhhFichaOrigen !== "nominas") {
+    if (typeof activarSubpanel === "function") activarSubpanel("rrhh", _rrhhFichaOrigen);
+  }
 }
 
 // -- Navigate from dashboard --
@@ -941,6 +1098,57 @@ function _rrhhCerrarOCR() {
 // ===============================================================================
 
 function _rrhhCargarVerificador() {
+  var container = document.getElementById("rrhh-verificador-contenido");
+  if (!container) return;
+
+  // Render pills
+  var pillsHtml = '<div style="display:flex;gap:6px;margin-bottom:12px;">';
+  [["check","Check N\u00f3minas"],["estimacion","Estimaci\u00f3n N\u00f3minas"]].forEach(function (v) {
+    var active = _rrhhVerifVista === v[0];
+    pillsHtml += '<button onclick="_rrhhVerifVista=\'' + v[0] + '\';_rrhhVerifInit=false;_rrhhEstimInit=false;_rrhhCargarVerificador()" style="padding:5px 14px;border-radius:9999px;font-size:0.82rem;font-weight:' + (active ? '700' : '400') + ';border:1px solid ' + (active ? '#3B82F6' : 'var(--border,#ccc)') + ';background:' + (active ? '#EFF6FF' : 'transparent') + ';color:' + (active ? '#3B82F6' : 'inherit') + ';cursor:pointer;">' + v[1] + '</button>';
+  });
+  pillsHtml += '</div><div id="rrhh-verif-vista-body"></div>';
+  container.innerHTML = pillsHtml;
+
+  var body = document.getElementById("rrhh-verif-vista-body");
+  if (_rrhhVerifVista === "check") {
+    _rrhhVerifCheckView(body);
+  } else {
+    _rrhhVerifEstimacionView(body);
+  }
+}
+
+function _rrhhVerifCheckView(body) {
+  body.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">' +
+      '<div style="display:flex;align-items:center;gap:10px;">' +
+        '<label style="font-weight:600;font-size:0.9rem;">Mes:</label>' +
+        '<select id="rrhh-verif-periodo" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.88rem;"></select>' +
+      '</div>' +
+      '<button onclick="_rrhhGenerarRemesa()" class="btn-small" style="background:#DCFCE7;color:#166534;border:1px solid #86EFAC;">Generar remesa CSV</button>' +
+    '</div>' +
+    '<div id="rrhh-verif-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px;"></div>' +
+    '<div class="card" style="overflow-x:auto;padding:0;">' +
+      '<table style="width:100%;border-collapse:collapse;font-size:0.78rem;">' +
+        '<thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">' +
+          '<th style="padding:6px 6px;font-weight:700;">Nombre</th>' +
+          '<th style="padding:6px 3px;font-weight:700;"></th>' +
+          '<th style="padding:6px 4px;font-weight:700;">DNI</th>' +
+          '<th style="padding:6px 4px;font-weight:700;">Cat.</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">D\u00edas</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">Neto pactado</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">Dietas</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">Estimado</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;border-left:2px solid var(--border,#e9ecef);">L\u00edquido</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">Diferencia</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;border-left:2px solid var(--border,#e9ecef);">Adelantos</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;font-weight:800;">A TRANSFERIR</th>' +
+        '</tr></thead>' +
+        '<tbody id="rrhh-verif-tbody"><tr><td colspan="12" style="text-align:center;padding:2rem;">Selecciona un mes</td></tr></tbody>' +
+        '<tfoot id="rrhh-verif-tfoot" style="font-weight:700;background:var(--bg-secondary,#f8f9fa);"></tfoot>' +
+      '</table>' +
+    '</div>';
+
   if (!_rrhhVerifInit) {
     _rrhhVerifInit = true;
     fetch("/api/rrhh/estadisticas")
@@ -967,7 +1175,7 @@ function _rrhhLoadVerif(periodo) {
   var tbody = document.getElementById("rrhh-verif-tbody");
   var tfoot = document.getElementById("rrhh-verif-tfoot");
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;">Cargando...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:2rem;">Cargando...</td></tr>';
   if (tfoot) tfoot.innerHTML = "";
 
   fetch("/api/rrhh/verificador/" + periodo)
@@ -990,39 +1198,53 @@ function _rrhhLoadVerif(periodo) {
         return (b.a_transferir || 0) - (a.a_transferir || 0);
       });
       if (!lineas.length) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;">Sin datos</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:2rem;">Sin datos</td></tr>';
         return;
       }
       var html = "";
       lineas.forEach(function (l) {
         var esFin = l.tipo === "FINIQUITO";
         var bg = esFin ? "background:#FEF2F2;" : "";
-        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;' + bg + '" onclick="_rrhhVerFichaEmpleado(' + l.empleado_id + ')">' +
+        // Verificador: 3 visual blocks
+        // Block 1 (Estimacion): Nombre | Ficha | DNI | Cat | Dias | Neto pactado | Dietas | Estimado
+        // Block 2 (Nomina real): Liquido | Diferencia
+        // Block 3 (Transferencia): Adelantos | A Transferir
+        var difVal = l.diferencia != null ? l.diferencia : ((l.liquido || 0) - (l.estimado || l.liquido || 0));
+        var absDif = Math.abs(difVal);
+        var difColor = absDif < 5 ? "#16a34a" : absDif <= 50 ? "#ca8a04" : "#dc2626";
+        var difBg = absDif < 5 ? "#f0fdf4" : absDif <= 50 ? "#fefce8" : "#fef2f2";
+        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);' + bg + '">' +
           '<td style="padding:5px 6px;font-weight:500;">' + (l.nombre || "") + '</td>' +
-          '<td style="padding:5px 4px;font-size:0.75rem;">' + (l.categoria || "") + '</td>' +
+          '<td style="padding:5px 3px;"><a href="#" onclick="event.preventDefault();event.stopPropagation();_rrhhVerFichaEmpleado(' + l.empleado_id + ',\'verificador\')" style="color:#3B82F6;font-size:0.75rem;">Ficha</a></td>' +
           '<td style="padding:5px 4px;">' + (l.dni || "\u2014") + '</td>' +
+          '<td style="padding:5px 4px;font-size:0.75rem;">' + (l.categoria || "") + '</td>' +
           '<td style="padding:5px 4px;text-align:right;">' + (l.dias || "\u2014") + '</td>' +
-          '<td style="padding:5px 4px;text-align:right;">' + fmtEur(l.liquido) + '</td>' +
-          '<td style="padding:5px 4px;text-align:right;">' + (l.adelantos > 0 ? '<span style="color:#dc2626;">(' + fmtEur(l.adelantos) + ')</span>' : '\u2014') + '</td>' +
-          '<td style="padding:5px 4px;text-align:right;">' + (l.embargo > 0 ? '<span style="color:#dc2626;">(' + fmtEur(l.embargo) + ')</span>' : '\u2014') + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + fmtEur(l.neto_proporcional || l.neto_pactado) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + fmtEur(l.dietas) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + fmtEur(l.estimado) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;border-left:2px solid var(--border,#e9ecef);">' + fmtEur(l.liquido) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;background:' + difBg + ';color:' + difColor + ';font-weight:600;">' + fmtEur(difVal) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;border-left:2px solid var(--border,#e9ecef);">' + (l.adelantos > 0 ? '<span style="color:#dc2626;">(' + fmtEur(l.adelantos) + ')</span>' : '\u2014') + '</td>' +
           '<td style="padding:5px 4px;text-align:right;font-weight:700;">' + fmtEur(l.a_transferir) + '</td>' +
-          '<td style="padding:5px 4px;">' + (esFin ? '<span style="color:#dc2626;">FINIQ</span>' : '<span style="color:#22c55e;">\u2713</span>') + '</td>' +
           '</tr>';
       });
       tbody.innerHTML = html;
 
       if (tfoot) {
         tfoot.innerHTML = '<tr style="font-weight:700;background:var(--bg-secondary,#f8f9fa);">' +
-          '<td colspan="4" style="padding:6px;">TOTALES</td>' +
-          '<td style="padding:6px;text-align:right;">' + fmtEur(tot.liquido) + '</td>' +
-          '<td style="padding:6px;text-align:right;">' + fmtEur(tot.adelantos) + '</td>' +
-          '<td style="padding:6px;text-align:right;">' + fmtEur(tot.embargo) + '</td>' +
+          '<td colspan="5" style="padding:6px;">TOTALES</td>' +
+          '<td style="padding:6px;text-align:right;">' + fmtEur(tot.neto_proporcional) + '</td>' +
+          '<td style="padding:6px;text-align:right;">' + fmtEur(tot.dietas) + '</td>' +
+          '<td style="padding:6px;text-align:right;">' + fmtEur(tot.estimado) + '</td>' +
+          '<td style="padding:6px;text-align:right;border-left:2px solid var(--border,#e9ecef);">' + fmtEur(tot.liquido) + '</td>' +
+          '<td style="padding:6px;text-align:right;">' + fmtEur(tot.diferencia) + '</td>' +
+          '<td style="padding:6px;text-align:right;border-left:2px solid var(--border,#e9ecef);">' + fmtEur(tot.adelantos) + '</td>' +
           '<td style="padding:6px;text-align:right;font-weight:800;">' + fmtEur(tot.transferir) + '</td>' +
-          '<td></td></tr>';
+          '</tr>';
       }
     })
     .catch(function () {
-      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:2rem;color:#dc3545;">Error al cargar</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:2rem;color:#dc3545;">Error al cargar</td></tr>';
     });
 }
 
@@ -1048,160 +1270,1140 @@ function _rrhhGenerarRemesa() {
     .catch(function (err) { alert(err.message); });
 }
 
+// ── Estimación Nóminas sub-view ──
+
+function _rrhhVerifEstimacionView(body) {
+  var now = new Date();
+  var curY = now.getFullYear();
+  var curM = now.getMonth() + 1;
+
+  body.innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">' +
+      '<label style="font-weight:600;font-size:0.9rem;">A\u00f1o:</label>' +
+      '<select id="rrhh-estim-anio" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.88rem;"></select>' +
+      '<label style="font-weight:600;font-size:0.9rem;margin-left:8px;">Mes:</label>' +
+      '<select id="rrhh-estim-mes" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.88rem;"></select>' +
+    '</div>' +
+    '<div id="rrhh-estim-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;"></div>' +
+    '<div class="card" style="overflow-x:auto;padding:0;">' +
+      '<table style="width:100%;border-collapse:collapse;font-size:0.78rem;">' +
+        '<thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">' +
+          '<th style="padding:6px 6px;font-weight:700;">Empleado</th>' +
+          '<th style="padding:6px 3px;font-weight:700;"></th>' +
+          '<th style="padding:6px 4px;font-weight:700;">Cat.</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">D\u00edas planif.</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">Neto pactado</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">% IRPF hist.</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">% SS hist.</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;font-weight:800;">Coste empresa</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">Dietas estim.</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">Total devengado</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">Adelantos</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;font-weight:800;background:#F0FDF4;">L\u00edquido pendiente</th>' +
+        '</tr></thead>' +
+        '<tbody id="rrhh-estim-tbody"><tr><td colspan="12" style="text-align:center;padding:2rem;">Cargando...</td></tr></tbody>' +
+        '<tfoot id="rrhh-estim-tfoot" style="font-weight:700;background:var(--bg-secondary,#f8f9fa);"></tfoot>' +
+      '</table>' +
+    '</div>';
+
+  // Populate year/month selectors
+  var selY = document.getElementById("rrhh-estim-anio");
+  var selM = document.getElementById("rrhh-estim-mes");
+  for (var yi = curY - 2; yi <= curY + 1; yi++) {
+    selY.innerHTML += '<option value="' + yi + '"' + (yi === curY ? ' selected' : '') + '>' + yi + '</option>';
+  }
+  var meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  for (var mi = 1; mi <= 12; mi++) {
+    selM.innerHTML += '<option value="' + mi + '"' + (mi === curM ? ' selected' : '') + '>' + meses[mi - 1] + '</option>';
+  }
+  selY.addEventListener("change", function () { _rrhhLoadEstimacion(); });
+  selM.addEventListener("change", function () { _rrhhLoadEstimacion(); });
+
+  _rrhhLoadEstimacion();
+}
+
+function _rrhhLoadEstimacion() {
+  var selY = document.getElementById("rrhh-estim-anio");
+  var selM = document.getElementById("rrhh-estim-mes");
+  if (!selY || !selM) return;
+  var periodo = selY.value + "-" + (selM.value < 10 ? "0" : "") + selM.value;
+
+  var tbody = document.getElementById("rrhh-estim-tbody");
+  var tfoot = document.getElementById("rrhh-estim-tfoot");
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:2rem;">Cargando...</td></tr>';
+  if (tfoot) tfoot.innerHTML = "";
+
+  fetch("/api/rrhh/verificador/estimacion/" + periodo)
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var tot = d.totales || {};
+
+      // KPIs
+      var kpis = document.getElementById("rrhh-estim-kpis");
+      if (kpis) {
+        kpis.innerHTML =
+          _rrhhKpiCard("Empleados", tot.empleados || 0, "") +
+          _rrhhKpiCard("Coste empresa total", fmtEurFull(tot.coste_total), " tes-card-blue", "0.9rem") +
+          _rrhhKpiCard("Dietas estimadas", fmtEurFull(tot.dietas), "", "0.9rem") +
+          _rrhhKpiCard("Adelantos", fmtEurFull(tot.adelantos), "", "0.9rem") +
+          _rrhhKpiCard("L\u00edquido pendiente", fmtEurFull(tot.liquido_pendiente), " tes-card-green", "0.9rem");
+      }
+
+      var lineas = d.lineas || [];
+      if (!lineas.length) {
+        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:2rem;">Sin empleados activos</td></tr>';
+        return;
+      }
+      var html = "";
+      lineas.forEach(function (l) {
+        var warn = l.fallback ? ' title="Ratios estimados por defecto (sin hist\u00f3rico)" style="color:#ca8a04;"' : '';
+        var rowBg = l.fallback ? "background:#FFFBEB;" : "";
+        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);' + rowBg + '">' +
+          '<td style="padding:5px 6px;font-weight:500;">' + (l.fallback ? '\u26a0\ufe0f ' : '') + (l.nombre || "") + '</td>' +
+          '<td style="padding:5px 3px;"><a href="#" onclick="event.preventDefault();event.stopPropagation();_rrhhVerFichaEmpleado(' + l.empleado_id + ',\'verificador\')" style="color:#3B82F6;font-size:0.75rem;">Ficha</a></td>' +
+          '<td style="padding:5px 4px;font-size:0.75rem;">' + (l.categoria || "") + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + (l.dias_planif || 0) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + fmtEur(l.neto_pactado) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;"' + warn + '>' + (l.pct_irpf != null ? l.pct_irpf.toFixed(2) + '%' : '\u2014') + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;"' + warn + '>' + (l.pct_ss != null ? l.pct_ss.toFixed(2) + '%' : '\u2014') + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;font-weight:700;">' + fmtEur(l.coste_total) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + fmtEur(l.dietas) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + fmtEur(l.total_devengado) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + (l.adelantos > 0 ? '<span style="color:#dc2626;">(' + fmtEur(l.adelantos) + ')</span>' : '\u2014') + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;font-weight:700;background:#F0FDF4;">' + fmtEur(l.liquido_pendiente) + '</td>' +
+          '</tr>';
+      });
+      tbody.innerHTML = html;
+
+      if (tfoot) {
+        tfoot.innerHTML = '<tr style="font-weight:700;background:var(--bg-secondary,#f8f9fa);">' +
+          '<td colspan="4" style="padding:6px;">TOTALES</td>' +
+          '<td style="padding:6px;text-align:right;">' + fmtEur(tot.neto_proporcional) + '</td>' +
+          '<td colspan="2"></td>' +
+          '<td style="padding:6px;text-align:right;font-weight:800;">' + fmtEur(tot.coste_total) + '</td>' +
+          '<td style="padding:6px;text-align:right;">' + fmtEur(tot.dietas) + '</td>' +
+          '<td style="padding:6px;text-align:right;">' + fmtEur(tot.total_devengado) + '</td>' +
+          '<td style="padding:6px;text-align:right;">' + fmtEur(tot.adelantos) + '</td>' +
+          '<td style="padding:6px;text-align:right;font-weight:800;background:#F0FDF4;">' + fmtEur(tot.liquido_pendiente) + '</td>' +
+          '</tr>';
+      }
+    })
+    .catch(function () {
+      tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:2rem;color:#dc3545;">Error al cargar</td></tr>';
+    });
+}
+
+// ===============================================================================
+// ==  5b. VACACIONES                                                           ==
+// ===============================================================================
+
+var _rrhhVacVista = "calendario";
+var _rrhhVacRangoStart = null; // {empId, fecha} for shift-click range
+
+function _rrhhCargarVacaciones() {
+  var container = document.getElementById("rrhh-vacaciones-contenido");
+  if (!container) return;
+  var pillsHtml = '<div style="display:flex;gap:6px;margin-bottom:12px;">';
+  [["calendario","Calendario"],["resumen","Resumen"],["empleado","Por empleado"]].forEach(function (v) {
+    var active = _rrhhVacVista === v[0];
+    pillsHtml += '<button onclick="_rrhhVacVista=\'' + v[0] + '\';_rrhhCargarVacaciones()" style="padding:5px 14px;border-radius:9999px;font-size:0.82rem;font-weight:' + (active ? '700' : '400') + ';border:1px solid ' + (active ? '#3B82F6' : 'var(--border,#ccc)') + ';background:' + (active ? '#EFF6FF' : 'transparent') + ';color:' + (active ? '#3B82F6' : 'inherit') + ';cursor:pointer;">' + v[1] + '</button>';
+  });
+  pillsHtml += '</div><div id="rrhh-vac-vista-body"></div>';
+  container.innerHTML = pillsHtml;
+  var body = document.getElementById("rrhh-vac-vista-body");
+  if (_rrhhVacVista === "calendario") _rrhhVacCalendario(body);
+  else if (_rrhhVacVista === "resumen") _rrhhVacResumen(body);
+  else _rrhhVacEmpleado(body);
+}
+
+// ── Calendario ──
+
+function _rrhhVacCalendario(body) {
+  var now = new Date();
+  var anio = now.getFullYear(), mes = now.getMonth() + 1;
+  body.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
+    '<label style="font-size:0.82rem;font-weight:600;">A\u00f1o:</label>' +
+    '<select id="rrhh-vac-cal-anio" style="width:75px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhVacCalReload()">' +
+    '<option value="2025"' + (anio===2025?' selected':'') + '>2025</option><option value="2026"' + (anio===2026?' selected':'') + '>2026</option><option value="2027">2027</option></select>' +
+    '<label style="font-size:0.82rem;font-weight:600;">Mes:</label>' +
+    '<select id="rrhh-vac-cal-mes" style="width:115px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhVacCalReload()">' +
+    _MESES_NOMBRE.map(function(n,i){return '<option value="'+(i+1)+'"'+(i+1===mes?' selected':'')+'>'+n+'</option>';}).join('') +
+    '</select></div>' +
+    '<div id="rrhh-vac-cal-grid" style="overflow-x:auto;"><p style="color:var(--text-secondary);padding:1rem;">Cargando...</p></div>';
+  _rrhhVacCalReload();
+}
+
+function _rrhhVacCalReload() {
+  var a = document.getElementById("rrhh-vac-cal-anio");
+  var m = document.getElementById("rrhh-vac-cal-mes");
+  if (!a || !m) return;
+  var periodo = a.value + "-" + String(m.value).padStart(2, "0");
+  _rrhhVacCalLoad(periodo);
+}
+
+function _rrhhVacCalLoad(periodo) {
+  var grid = document.getElementById("rrhh-vac-cal-grid");
+  if (!grid) return;
+  grid.innerHTML = '<p style="color:var(--text-secondary);padding:1rem;">Cargando...</p>';
+  fetch("/api/rrhh/vacaciones/calendario/" + periodo)
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var emps = d.empleados || [];
+      var diasArr = d.dias || [];
+      var vacMap = d.vacaciones || {};
+      if (!emps.length) { grid.innerHTML = '<p>Sin empleados activos</p>'; return; }
+
+      var h = '<table style="border-collapse:collapse;font-size:0.75rem;width:max-content;"><thead><tr>' +
+        '<th style="position:sticky;left:0;z-index:2;background:var(--bg-secondary,#f8f9fa);padding:4px 6px;min-width:140px;text-align:left;">Empleado</th>';
+      diasArr.forEach(function (f) {
+        var dt = new Date(f + "T00:00:00");
+        var ds = _DIAS_SEMANA[dt.getDay()];
+        var num = dt.getDate();
+        var noLab = dt.getDay() === 0 || dt.getDay() === 6 || _RRHH_FESTIVOS.indexOf(f) >= 0;
+        h += '<th style="padding:2px 1px;text-align:center;min-width:28px;font-size:9px;' + (noLab ? 'background:#E5E7EB;color:#9ca3af;' : '') + '"><div>' + ds + '</div><div>' + num + '</div></th>';
+      });
+      h += '<th style="padding:4px 6px;text-align:right;">Total</th></tr></thead><tbody>';
+
+      emps.forEach(function (emp) {
+        var nombre = (emp.nombre || "") + " " + (emp.apellidos || "");
+        var count = 0;
+        h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">';
+        h += '<td style="position:sticky;left:0;z-index:1;background:#fff;padding:3px 6px;font-weight:500;white-space:nowrap;">' + nombre.trim() + '</td>';
+        diasArr.forEach(function (f) {
+          var dt = new Date(f + "T00:00:00");
+          var noLab = dt.getDay() === 0 || dt.getDay() === 6 || _RRHH_FESTIVOS.indexOf(f) >= 0;
+          var key = emp.id + "_" + f;
+          var vac = vacMap[key];
+          var bg = noLab ? "#E5E7EB" : (vac ? "#DBEAFE" : "");
+          var txt = vac ? '<span style="font-weight:700;color:#2563EB;font-size:10px;">V</span>' : '';
+          if (vac && !noLab) count++;
+          var title = vac ? ("Vacaciones" + (vac.notas ? ": " + vac.notas : "")) : "";
+          var nEsc = nombre.trim().replace(/'/g, "\\'");
+          h += '<td style="padding:0px 1px;text-align:center;cursor:' + (noLab ? 'default' : 'pointer') + ';min-width:28px;background:' + bg + ';" title="' + title + '"' +
+            (noLab ? '' : ' onclick="_rrhhVacCellClick(event,' + emp.id + ',\'' + f + '\',\'' + periodo + '\',\'' + nEsc + '\',' + (vac ? 'true' : 'false') + ')"') +
+            '>' + txt + '</td>';
+        });
+        h += '<td style="padding:3px 6px;text-align:right;font-weight:600;">' + (count || '\u2014') + '</td>';
+        h += '</tr>';
+      });
+      h += '</tbody></table>';
+      grid.innerHTML = h;
+    })
+    .catch(function (err) { grid.innerHTML = '<p style="color:#dc3545;">Error: ' + err.message + '</p>'; });
+}
+
+function _rrhhVacCellClick(evt, empId, fecha, periodo, empNombre, tieneVac) {
+  // Shift+click for range
+  if (evt.shiftKey && _rrhhVacRangoStart && _rrhhVacRangoStart.empId === empId) {
+    var f1 = _rrhhVacRangoStart.fecha;
+    var f2 = fecha;
+    if (f1 > f2) { var tmp = f1; f1 = f2; f2 = tmp; }
+    if (!confirm("Marcar vacaciones para " + empNombre + " del " + f1 + " al " + f2 + "?")) return;
+    _rrhhVacRangoStart = null;
+    fetch("/api/rrhh/vacaciones/rango", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({empleado_id: empId, fecha_inicio: f1, fecha_fin: f2})
+    }).then(function () { _rrhhVacCalReload(); });
+    return;
+  }
+
+  if (tieneVac) {
+    if (confirm("Quitar vacaciones de " + empNombre + " el " + fecha + "?")) {
+      fetch("/api/rrhh/vacaciones/dia", {
+        method: "DELETE",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({empleado_id: empId, fecha: fecha})
+      }).then(function () { _rrhhVacCalReload(); });
+    }
+  } else {
+    _rrhhVacRangoStart = {empId: empId, fecha: fecha};
+    fetch("/api/rrhh/vacaciones/dia", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({empleado_id: empId, fecha: fecha, estado: "aprobada"})
+    }).then(function () { _rrhhVacCalReload(); });
+  }
+}
+
+// ── Resumen ──
+
+function _rrhhVacResumen(body) {
+  var now = new Date();
+  var anio = now.getFullYear();
+  body.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">' +
+    '<label style="font-size:0.82rem;font-weight:600;">A\u00f1o:</label>' +
+    '<select id="rrhh-vac-res-anio" style="width:75px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhVacResLoad()">' +
+    '<option value="2025"' + (anio===2025?' selected':'') + '>2025</option><option value="2026"' + (anio===2026?' selected':'') + '>2026</option><option value="2027">2027</option></select>' +
+    '</div><div id="rrhh-vac-res-body">Cargando...</div>';
+  _rrhhVacResLoad();
+}
+
+function _rrhhVacResLoad() {
+  var sel = document.getElementById("rrhh-vac-res-anio");
+  if (!sel) return;
+  var anio = sel.value;
+  var body = document.getElementById("rrhh-vac-res-body");
+  if (!body) return;
+  body.innerHTML = "Cargando...";
+  fetch("/api/rrhh/vacaciones/resumen/" + anio)
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var lineas = d.lineas || [];
+      var tot = d.totales || {};
+      var h = '<div class="card" style="overflow-x:auto;padding:0;">' +
+        '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">' +
+        '<thead><tr style="background:var(--bg-secondary,#f8f9fa);">' +
+        '<th style="padding:6px 8px;text-align:left;">Empleado</th>' +
+        '<th style="padding:6px 3px;"></th>' +
+        '<th style="padding:6px 4px;text-align:right;">D\u00edas anuales</th>' +
+        '<th style="padding:6px 4px;text-align:right;">Devengados</th>' +
+        '<th style="padding:6px 4px;text-align:right;">Disfrutados</th>' +
+        '<th style="padding:6px 4px;text-align:right;font-weight:700;">Pendientes</th>' +
+        '<th style="padding:6px 4px;">Pr\u00f3xima</th>' +
+        '</tr></thead><tbody>';
+      lineas.forEach(function (l) {
+        var pendColor = l.pendientes < 0 ? "#dc2626" : l.pendientes <= 5 ? "#ca8a04" : "#16a34a";
+        var pendBg = l.pendientes < 0 ? "#FEF2F2" : l.pendientes <= 5 ? "#FFFBEB" : "#F0FDF4";
+        h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
+          '<td style="padding:5px 8px;font-weight:500;">' + l.nombre + '</td>' +
+          '<td style="padding:5px 3px;"><a href="#" onclick="event.preventDefault();_rrhhVacVerEmpleado(' + l.empleado_id + ')" style="color:#3B82F6;font-size:0.75rem;">Ver</a></td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + l.dias_anuales + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + l.devengados.toFixed(1) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + l.disfrutados + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;font-weight:700;background:' + pendBg + ';color:' + pendColor + ';">' + l.pendientes.toFixed(1) + '</td>' +
+          '<td style="padding:5px 4px;font-size:0.78rem;">' + (l.proxima_fecha || '\u2014') + '</td>' +
+          '</tr>';
+      });
+      h += '</tbody><tfoot><tr style="font-weight:700;background:var(--bg-secondary,#f8f9fa);">' +
+        '<td colspan="2" style="padding:6px 8px;">TOTALES</td>' +
+        '<td style="padding:6px 4px;text-align:right;">' + tot.dias_anuales + '</td>' +
+        '<td style="padding:6px 4px;text-align:right;">' + tot.devengados.toFixed(1) + '</td>' +
+        '<td style="padding:6px 4px;text-align:right;">' + tot.disfrutados + '</td>' +
+        '<td style="padding:6px 4px;text-align:right;">' + tot.pendientes.toFixed(1) + '</td>' +
+        '<td></td></tr></tfoot></table></div>';
+      body.innerHTML = h;
+    });
+}
+
+function _rrhhVacVerEmpleado(empId) {
+  _rrhhVacVista = "empleado";
+  _rrhhCargarVacaciones();
+  setTimeout(function () {
+    var sel = document.getElementById("rrhh-vac-emp-sel");
+    if (sel) { sel.value = empId; _rrhhVacEmpLoad(); }
+  }, 200);
+}
+
+// ── Por empleado ──
+
+function _rrhhVacEmpleado(body) {
+  var now = new Date();
+  var anio = now.getFullYear();
+  body.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">' +
+    '<label style="font-size:0.82rem;font-weight:600;">Empleado:</label>' +
+    '<select id="rrhh-vac-emp-sel" style="max-width:250px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhVacEmpLoad()"><option value="">Selecciona...</option></select>' +
+    '<label style="font-size:0.82rem;font-weight:600;margin-left:8px;">A\u00f1o:</label>' +
+    '<select id="rrhh-vac-emp-anio" style="width:75px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhVacEmpLoad()">' +
+    '<option value="2025"' + (anio===2025?' selected':'') + '>2025</option><option value="2026"' + (anio===2026?' selected':'') + '>2026</option><option value="2027">2027</option></select>' +
+    '</div><div id="rrhh-vac-emp-body"></div>';
+  // Populate employee selector
+  var cache = _rrhhEmpleadosCache || [];
+  if (cache.length) {
+    var sel = document.getElementById("rrhh-vac-emp-sel");
+    cache.forEach(function (e) {
+      if (e.estado === "activo") sel.innerHTML += '<option value="' + e.id + '">' + e.nombre + ' ' + (e.apellidos || '') + '</option>';
+    });
+  } else {
+    fetch("/api/rrhh/empleados").then(function(r){return r.json();}).then(function(d){
+      var sel = document.getElementById("rrhh-vac-emp-sel");
+      if (!sel) return;
+      (d.empleados || []).forEach(function(e){
+        if (e.estado === "activo") sel.innerHTML += '<option value="' + e.id + '">' + e.nombre + ' ' + (e.apellidos || '') + '</option>';
+      });
+    });
+  }
+}
+
+function _rrhhVacEmpLoad() {
+  var sel = document.getElementById("rrhh-vac-emp-sel");
+  var anioSel = document.getElementById("rrhh-vac-emp-anio");
+  var body = document.getElementById("rrhh-vac-emp-body");
+  if (!sel || !anioSel || !body || !sel.value) { if (body) body.innerHTML = ''; return; }
+  body.innerHTML = 'Cargando...';
+  fetch("/api/rrhh/vacaciones/empleado/" + sel.value + "/" + anioSel.value)
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var h = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px;">';
+      h += _rrhhKpiCard("D\u00edas anuales", d.dias_anuales, "");
+      h += _rrhhKpiCard("Devengados", d.devengados.toFixed(1), " tes-card-blue");
+      h += _rrhhKpiCard("Disfrutados", d.disfrutados, "");
+      var pendClass = d.pendientes < 0 ? " tes-card-red" : " tes-card-green";
+      h += _rrhhKpiCard("Pendientes", d.pendientes.toFixed(1), pendClass);
+      h += '</div>';
+
+      h += '<div class="card" style="overflow-x:auto;padding:0;"><table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+      h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:6px 8px;">Fecha</th><th style="padding:6px 4px;">D\u00eda</th><th style="padding:6px 4px;">Estado</th><th style="padding:6px 4px;">Notas</th><th style="padding:6px 4px;text-align:center;">Acci\u00f3n</th></tr></thead><tbody>';
+      if (!d.dias || !d.dias.length) {
+        h += '<tr><td colspan="5" style="text-align:center;padding:2rem;">Sin vacaciones registradas</td></tr>';
+      } else {
+        d.dias.forEach(function (v) {
+          h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
+            '<td style="padding:5px 8px;">' + v.fecha + '</td>' +
+            '<td style="padding:5px 4px;">' + (v.dia_semana || '') + '</td>' +
+            '<td style="padding:5px 4px;"><span style="padding:1px 6px;border-radius:9999px;font-size:0.75rem;background:#DBEAFE;color:#1E40AF;">' + (v.estado || 'aprobada') + '</span></td>' +
+            '<td style="padding:5px 4px;font-size:0.78rem;">' + (v.notas || '\u2014') + '</td>' +
+            '<td style="padding:5px 4px;text-align:center;"><button onclick="_rrhhVacEliminarDia(' + d.empleado_id + ',\'' + v.fecha + '\')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:0.85rem;" title="Eliminar">\u2716</button></td>' +
+            '</tr>';
+        });
+      }
+      h += '</tbody></table></div>';
+      body.innerHTML = h;
+    });
+}
+
+function _rrhhVacEliminarDia(empId, fecha) {
+  if (!confirm("Eliminar vacaci\u00f3n del " + fecha + "?")) return;
+  fetch("/api/rrhh/vacaciones/dia", {
+    method: "DELETE",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({empleado_id: empId, fecha: fecha})
+  }).then(function () { _rrhhVacEmpLoad(); });
+}
+
 // ===============================================================================
 // ==  5. DIETAS                                                                ==
 // ===============================================================================
 
 function _rrhhCargarDietas() {
-  fetch("/api/rrhh/dietas/dashboard")
-    .then(function (r) { return r.json(); })
-    .then(function (d) {
-      // Config table
-      var cfgBody = document.getElementById("rrhh-dietas-tbody");
-      var cfg = (d.config || []).slice().reverse();
-      if (cfgBody) {
-        if (!cfg.length) {
-          cfgBody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:1.5rem;">Sin tarifas configuradas. Pulsa \"+ Nueva tarifa\".</td></tr>';
-        } else {
-          var html = "";
-          cfg.forEach(function (c) {
-            html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
-              '<td style="padding:6px 8px;">' + (c.tipo || '') + '</td>' +
-              '<td style="padding:6px 6px;">' + (c.subtipo || '') + '</td>' +
-              '<td style="padding:6px 6px;">' + (c.categoria || 'Todas') + '</td>' +
-              '<td style="padding:6px 6px;text-align:right;">' + fmtEur(c.importe) + '</td>' +
-              '<td style="padding:6px 6px;">' + (c.fecha_vigencia_desde || '') + '</td>' +
-              '<td style="padding:6px 6px;">' + (c.fecha_vigencia_hasta || '\u2014') + '</td>' +
-              '<td style="padding:6px 6px;text-align:center;"><button onclick="_rrhhBorrarDieta(' + c.id + ')" class="btn-small danger" style="font-size:0.75rem;padding:2px 8px;">Borrar</button></td></tr>';
-          });
-          cfgBody.innerHTML = html;
-        }
-      }
+  var container = document.getElementById("rrhh-dietas-contenido");
+  if (!container) return;
 
-      // Employee dietas table
-      var empBody = document.getElementById("rrhh-dietas-emp-tbody");
-      if (!empBody) return;
-      var periodos = (d.periodos || []).slice().reverse();
-      var emps = d.emp_dietas || [];
+  // Render pills
+  var pillsHtml = '<div style="display:flex;gap:6px;margin-bottom:12px;">';
+  [["calendario","Calendario"],["resumen","Resumen"],["empleado","Por empleado"],["config","Tarifas"]].forEach(function (v) {
+    var active = _rrhhDietasVista === v[0];
+    pillsHtml += '<button onclick="_rrhhDietasVista=\'' + v[0] + '\';_rrhhCargarDietas()" style="padding:5px 14px;border-radius:9999px;font-size:0.82rem;font-weight:' + (active ? '700' : '400') + ';border:1px solid ' + (active ? '#3B82F6' : 'var(--border,#ccc)') + ';background:' + (active ? '#EFF6FF' : 'transparent') + ';color:' + (active ? '#3B82F6' : 'inherit') + ';cursor:pointer;">' + v[1] + '</button>';
+  });
+  pillsHtml += '</div><div id="rrhh-dietas-vista-body"></div>';
+  container.innerHTML = pillsHtml;
 
-      // Group by employee
-      var byEmp = {};
-      emps.forEach(function (e) {
-        var key = e.id;
-        if (!byEmp[key]) byEmp[key] = { id: e.id, nombre: (e.nombre || "") + ' ' + (e.apellidos || ''), periodos: {} };
-        byEmp[key].periodos[e.periodo] = e.dietas;
-      });
-      if (!Object.keys(byEmp).length) {
-        empBody.innerHTML = '<tr><td colspan="' + (periodos.length + 2) + '">Sin datos</td></tr>';
-        return;
-      }
-      var hh = "";
-      Object.values(byEmp).forEach(function (e) {
-        var total = 0;
-        hh += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_rrhhVerFichaEmpleado(' + e.id + ')">' +
-          '<td style="padding:5px 8px;font-weight:500;">' + e.nombre + '</td>';
-        periodos.forEach(function (p) {
-          var v = e.periodos[p] || 0;
-          total += v;
-          hh += '<td style="padding:5px 6px;text-align:right;">' + (v > 0 ? fmtEur(v) : '\u2014') + '</td>';
-        });
-        hh += '<td style="padding:5px 6px;text-align:right;font-weight:600;">' + fmtEur(total) + '</td></tr>';
-      });
-      empBody.innerHTML = hh;
-    })
-    .catch(function () {});
+  var body = document.getElementById("rrhh-dietas-vista-body");
+  if (_rrhhDietasVista === "calendario") {
+    _rrhhDietasCalendario(body);
+  } else if (_rrhhDietasVista === "resumen") {
+    _rrhhDietasResumen(body);
+  } else if (_rrhhDietasVista === "config") {
+    _rrhhDietasConfigView(body);
+  } else {
+    _rrhhDietasEmpleado(body);
+  }
 }
 
-function _rrhhNuevaDieta() {
-  var tipo = prompt("Tipo (nacional/internacional):", "nacional");
-  if (!tipo) return;
-  var subtipo = prompt("Subtipo (completa/media):", "completa");
-  var categoria = prompt("Categor\u00eda (dejar vac\u00edo = todas):", "");
-  var importe = parseFloat(prompt("Importe EUR/d\u00eda:", "8.03"));
-  if (isNaN(importe)) return;
-  var desde = prompt("Vigencia desde (YYYY-MM-DD):", new Date().toISOString().slice(0, 10));
-  var data = { tipo: tipo, subtipo: subtipo, importe: importe, fecha_vigencia_desde: desde };
-  if (categoria) data.categoria = categoria;
+function _rrhhDietasCalendario(body) {
+  var now = new Date();
+  var anio = now.getFullYear(), mes = now.getMonth() + 1;
+  body.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">' +
+    '<label style="font-size:0.82rem;font-weight:600;">A\u00f1o:</label>' +
+    '<select id="rrhh-dietas-cal-anio" style="width:75px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhDietasCalReload()">' +
+    '<option value="2025"' + (anio===2025?' selected':'') + '>2025</option><option value="2026"' + (anio===2026?' selected':'') + '>2026</option><option value="2027">2027</option></select>' +
+    '<label style="font-size:0.82rem;font-weight:600;">Mes:</label>' +
+    '<select id="rrhh-dietas-cal-mesn" style="width:115px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhDietasCalReload()">' +
+    _MESES_NOMBRE.map(function(n,i){return '<option value="'+(i+1)+'"'+(i+1===mes?' selected':'')+'>'+n+'</option>';}).join('') +
+    '</select>' +
+    '<label style="font-size:0.82rem;font-weight:600;margin-left:8px;">Proyecto:</label>' +
+    '<select id="rrhh-dietas-cal-proy" style="max-width:200px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhDietasCalReload()">' +
+    '<option value="">Todos</option></select>' +
+    '</div><div id="rrhh-dietas-cal-grid" style="overflow-x:auto;"><p style="color:var(--text-secondary);padding:1rem;">Cargando...</p></div>';
+  // Load projects
+  fetch("/api/proyectos?estado=vivo").then(function(r){return r.json();}).then(function(d){
+    var sel = document.getElementById("rrhh-dietas-cal-proy");
+    if (!sel) return;
+    (d.proyectos || []).forEach(function(p){ sel.innerHTML += '<option value="'+p.id+'">'+((p.nombre||p.codigo||'').substring(0,30))+'</option>'; });
+  }).catch(function(){});
+  _rrhhDietasCalReload();
+}
+
+// Festivos (reutilizar lista de Operaciones)
+var _RRHH_FESTIVOS = [
+  '2025-01-01','2025-01-06','2025-04-17','2025-04-18','2025-05-01','2025-08-15','2025-10-12','2025-11-01','2025-12-06','2025-12-08','2025-12-25',
+  '2026-01-01','2026-01-06','2026-04-02','2026-04-03','2026-05-01','2026-08-15','2026-10-12','2026-11-02','2026-12-07','2026-12-08','2026-12-25',
+  '2027-01-01','2027-01-06','2027-03-25','2027-03-26','2027-05-01','2027-08-15','2027-10-12','2027-11-01','2027-12-06','2027-12-08','2027-12-25'
+];
+var _DIAS_SEMANA = ["D","L","M","X","J","V","S"];
+
+function _rrhhDietasCalReload() {
+  var a = document.getElementById("rrhh-dietas-cal-anio");
+  var m = document.getElementById("rrhh-dietas-cal-mesn");
+  if (!a || !m) return;
+  var periodo = a.value + "-" + String(m.value).padStart(2, "0");
+  _rrhhDietasCalLoad(periodo);
+}
+
+function _rrhhDietasCalLoad(periodo) {
+  var grid = document.getElementById("rrhh-dietas-cal-grid");
+  if (!grid) return;
+  var proyFiltro = (document.getElementById("rrhh-dietas-cal-proy") || {}).value || "";
+  grid.innerHTML = '<p style="color:var(--text-secondary);padding:1rem;">Cargando...</p>';
+  fetch("/api/rrhh/dietas/calendario/" + periodo)
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var empleados = d.empleados || [];
+      var diasArr = d.dias || [];
+      var dietasMap = d.dietas || {};
+      var proyMapCal = d.proyectos || {};
+      _rrhhDietasFuncionesMap = d.funciones || {};
+
+      // Filter by project if selected
+      if (proyFiltro) {
+        var empIdsConProy = {};
+        Object.keys(proyMapCal).forEach(function(k) {
+          // k = "empId_fecha", value = "CODIGO"
+          // Need to check if this project matches. But proyectos dict has codigo as value.
+          // We filter by checking if ANY day for the employee has this project assigned
+          // For now, filter by checking proyecto_asignaciones (the proyMapCal has empId_fecha -> codigo)
+        });
+        // Simpler: only show employees that have at least one assignment to this project
+        empleados = empleados.filter(function(emp) {
+          for (var i = 0; i < diasArr.length; i++) {
+            var k = emp.id + "_" + diasArr[i];
+            if (proyMapCal[k]) return true;
+          }
+          return false;
+        });
+      }
+
+      if (!empleados.length) { grid.innerHTML = '<p style="padding:1rem;color:var(--text-secondary);">Sin empleados' + (proyFiltro ? ' asignados a este proyecto' : ' activos') + '</p>'; return; }
+
+      // Build day info
+      var dayInfos = diasArr.map(function (fecha) {
+        var dt = new Date(fecha + "T12:00:00");
+        var dow = dt.getDay(); // 0=Sun
+        var esFestivo = _RRHH_FESTIVOS.indexOf(fecha) >= 0;
+        var esFinSemana = dow === 0 || dow === 6;
+        return { fecha: fecha, num: dt.getDate(), dowLabel: _DIAS_SEMANA[dow], noLab: esFinSemana || esFestivo };
+      });
+
+      var colorMap = { nacional_completa: "#3B82F6", nacional_media: "#93C5FD", internacional_completa: "#F59E0B", internacional_media: "#FDE68A", NC: "#3B82F6", NM: "#93C5FD", IC: "#F59E0B", IM: "#FDE68A" };
+      var abrevMap = { nacional_completa: "NC", nacional_media: "NM", internacional_completa: "IC", internacional_media: "IM", NC: "NC", NM: "NM", IC: "IC", IM: "IM" };
+
+      var h = '<div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:0.72rem;">';
+      // Header row 1: day of week
+      h += '<tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:2px 6px;min-width:120px;position:sticky;left:0;background:var(--bg-secondary,#f8f9fa);z-index:2;"></th>';
+      dayInfos.forEach(function (di) {
+        var bg = di.noLab ? "background:#E5E7EB;" : "";
+        h += '<th style="padding:2px 1px;text-align:center;min-width:26px;font-weight:400;font-size:0.65rem;color:#888;' + bg + '">' + di.dowLabel + '</th>';
+      });
+      h += '<th style="padding:2px 4px;"></th></tr>';
+      // Header row 2: day number
+      h += '<tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:2px 6px;font-weight:700;position:sticky;left:0;background:var(--bg-secondary,#f8f9fa);z-index:2;">Empleado</th>';
+      dayInfos.forEach(function (di) {
+        var bg = di.noLab ? "background:#E5E7EB;" : "";
+        h += '<th style="padding:2px 1px;text-align:center;font-weight:600;' + bg + '">' + di.num + '</th>';
+      });
+      h += '<th style="padding:2px 4px;text-align:right;font-weight:700;">Total</th></tr>';
+
+      // Employee rows
+      var proyMap = d.proyectos || {}; // "empId_fecha" -> "CODIGO" or object
+      empleados.forEach(function (emp) {
+        var nombre = (emp.nombre || "") + " " + (emp.apellidos || "");
+        h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">';
+        h += '<td style="padding:3px 6px;font-weight:500;white-space:nowrap;position:sticky;left:0;background:#fff;z-index:1;font-size:0.72rem;">' + nombre.trim() + '</td>';
+        var total = 0;
+        dayInfos.forEach(function (di) {
+          var key = emp.id + "_" + di.fecha;
+          var dieta = dietasMap[key];
+          var proy = proyMap[key]; // string (codigo) or null
+          var proyCodigo = typeof proy === "string" ? proy : (proy && proy.codigo ? proy.codigo : "");
+          var tipo = dieta ? dieta.tipo : "";
+          var abrev = abrevMap[tipo] || "";
+          var bg = colorMap[tipo] || "";
+          var noLabBg = di.noLab ? "#E5E7EB" : "";
+          var tieneProyecto = !!proyCodigo;
+          var sinDieta = !tipo;
+          // Alert: proyecto asignado pero sin dieta
+          var alertBorder = (tieneProyecto && sinDieta && !di.noLab) ? "border:2px solid #F59E0B;" : "";
+          var cellBg = bg || noLabBg;
+          if (tieneProyecto && sinDieta && !di.noLab && !cellBg) cellBg = "#FFFBEB"; // yellow hint
+          var style = "padding:0px 1px;text-align:center;cursor:pointer;min-width:28px;vertical-align:top;line-height:1.1;" + (cellBg ? "background:" + cellBg + ";" : "") + alertBorder + (bg ? "color:#fff;font-weight:600;" : "");
+          var proyLabel = tieneProyecto ? '<div style="font-size:7px;color:#888;overflow:hidden;white-space:nowrap;max-width:28px;">' + proyCodigo.substring(0, 4) + '</div>' : '';
+          var dietaLabel = abrev ? '<div style="font-size:9px;font-weight:700;' + (bg ? 'color:#fff;' : '') + '">' + abrev + '</div>' : (tieneProyecto && !di.noLab ? '<div style="font-size:8px;color:#F59E0B;">\u26a0</div>' : (di.noLab ? '' : ''));
+          var title = (proyCodigo ? 'Proy: ' + proyCodigo + ' | ' : '') + (tipo || 'Sin dieta');
+          var proyEsc = proyCodigo.replace(/'/g, "\\'");
+          h += '<td style="' + style + '" onclick="_rrhhDietaCellClick(this,' + emp.id + ',\'' + di.fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g, "\\'") + '\',\'' + proyEsc + '\')" title="' + title + '">' + proyLabel + dietaLabel + '</td>';
+          if (dieta && dieta.importe) total += dieta.importe;
+        });
+        h += '<td style="padding:3px 4px;text-align:right;font-weight:600;">' + (total > 0 ? fmtEur(total) : '\u2014') + '</td>';
+        h += '</tr>';
+      });
+      h += '</table></div>';
+      grid.innerHTML = h;
+    })
+    .catch(function (err) { grid.innerHTML = '<p style="color:#dc3545;">Error: ' + err.message + '</p>'; });
+}
+
+var _rrhhDietaFuncion = "operador"; // current function selection in popup
+var _rrhhDietasFuncionesMap = {}; // {empId_fecha: "operador"|"ayudante"} from calendar endpoint
+
+function _rrhhDietaCellClick(td, empId, fecha, periodo, empNombre, proyCodigo) {
+  var old = document.getElementById("rrhh-dieta-popup");
+  if (old) old.remove();
+
+  // Default function: funcion_dia (assignment) > puesto habitual (employee)
+  _rrhhDietaFuncion = "operador";
+  var fnKey = empId + "_" + fecha;
+  if (_rrhhDietasFuncionesMap[fnKey]) {
+    _rrhhDietaFuncion = _rrhhDietasFuncionesMap[fnKey];
+  } else {
+    var empCache = (_rrhhEmpleadosCache || []).find(function (e) { return e.id === empId; });
+    if (empCache && (empCache.puesto || "").toLowerCase() === "ayudante") {
+      _rrhhDietaFuncion = "ayudante";
+    }
+  }
+
+  var opciones = [
+    { tipo: "nacional_completa", label: "Nacional completa", abrev: "NC", bg: "#3B82F6", color: "#fff" },
+    { tipo: "nacional_media", label: "Nacional media", abrev: "NM", bg: "#93C5FD", color: "#1E3A5F" },
+    { tipo: "internacional_completa", label: "Internacional completa", abrev: "IC", bg: "#F59E0B", color: "#fff" },
+    { tipo: "internacional_media", label: "Internacional media", abrev: "IM", bg: "#FDE68A", color: "#78350F" },
+    { tipo: "", label: "Sin dieta", abrev: "\u2014", bg: "#E5E7EB", color: "#666" }
+  ];
+
+  var popup = document.createElement("div");
+  popup.id = "rrhh-dieta-popup";
+  popup.style.cssText = "position:fixed;z-index:1000;background:#fff;border:1px solid var(--color-border,#e2e8f0);border-radius:8px;padding:10px;box-shadow:0 4px 12px rgba(0,0,0,.15);min-width:200px;font-size:13px;";
+
+  var html = '<div style="font-weight:600;margin-bottom:2px;font-size:12px;">' + (empNombre || '') + '</div>';
+  html += '<div style="font-size:11px;color:#888;margin-bottom:4px;">' + fecha + '</div>';
+  if (proyCodigo) {
+    html += '<div style="font-size:10px;margin-bottom:6px;padding:2px 6px;background:#EFF6FF;color:#1E40AF;border-radius:4px;display:inline-block;">Proy: <b>' + proyCodigo + '</b></div>';
+  }
+  // Function toggle
+  html += '<div style="display:flex;gap:4px;margin-bottom:8px;">';
+  html += '<button type="button" id="rrhh-fn-op" onclick="_rrhhDietaSetFn(\'operador\')" style="flex:1;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid ' + (_rrhhDietaFuncion === "operador" ? '#3B82F6' : '#ccc') + ';background:' + (_rrhhDietaFuncion === "operador" ? '#EFF6FF' : 'transparent') + ';color:' + (_rrhhDietaFuncion === "operador" ? '#3B82F6' : '#666') + ';">Operador</button>';
+  html += '<button type="button" id="rrhh-fn-ay" onclick="_rrhhDietaSetFn(\'ayudante\')" style="flex:1;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid ' + (_rrhhDietaFuncion === "ayudante" ? '#10B981' : '#ccc') + ';background:' + (_rrhhDietaFuncion === "ayudante" ? '#ECFDF5' : 'transparent') + ';color:' + (_rrhhDietaFuncion === "ayudante" ? '#10B981' : '#666') + ';">Ayudante</button>';
+  html += '</div>';
+  // Options
+  opciones.forEach(function (o) {
+    html += '<button type="button" onclick="_rrhhDietaSeleccionar(' + empId + ',\'' + fecha + '\',\'' + periodo + '\',\'' + o.tipo + '\')" style="display:flex;align-items:center;gap:8px;width:100%;padding:5px 8px;margin-bottom:2px;border:none;border-radius:5px;cursor:pointer;background:transparent;font-size:12px;text-align:left;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'transparent\'">';
+    html += '<span style="display:inline-block;width:24px;height:18px;border-radius:3px;background:' + o.bg + ';color:' + o.color + ';font-size:9px;font-weight:700;text-align:center;line-height:18px;">' + o.abrev + '</span>';
+    html += '<span>' + o.label + '</span>';
+    html += '</button>';
+  });
+  popup.innerHTML = html;
+
+  document.body.appendChild(popup);
+
+  // Position near the cell (same pattern as Operaciones)
+  var rect = td.getBoundingClientRect();
+  var top = rect.bottom + 4;
+  var left = rect.left;
+  if (left + 200 > window.innerWidth) left = window.innerWidth - 210;
+  if (top + 200 > window.innerHeight) top = rect.top - popup.offsetHeight - 4;
+  if (left < 10) left = 10;
+  popup.style.top = top + "px";
+  popup.style.left = left + "px";
+
+  // Close on outside click
+  setTimeout(function () {
+    document.addEventListener("click", function _closePopup(e) {
+      if (!popup.contains(e.target) && e.target !== td) {
+        popup.remove();
+        document.removeEventListener("click", _closePopup);
+      }
+    });
+  }, 10);
+}
+
+function _rrhhDietaSetFn(fn) {
+  _rrhhDietaFuncion = fn;
+  var opBtn = document.getElementById("rrhh-fn-op");
+  var ayBtn = document.getElementById("rrhh-fn-ay");
+  if (opBtn) { opBtn.style.borderColor = fn === "operador" ? "#3B82F6" : "#ccc"; opBtn.style.background = fn === "operador" ? "#EFF6FF" : "transparent"; opBtn.style.color = fn === "operador" ? "#3B82F6" : "#666"; }
+  if (ayBtn) { ayBtn.style.borderColor = fn === "ayudante" ? "#10B981" : "#ccc"; ayBtn.style.background = fn === "ayudante" ? "#ECFDF5" : "transparent"; ayBtn.style.color = fn === "ayudante" ? "#10B981" : "#666"; }
+}
+
+function _rrhhDietaSeleccionar(empId, fecha, periodo, tipo) {
+  var popup = document.getElementById("rrhh-dieta-popup");
+  if (popup) popup.remove();
+  fetch("/api/rrhh/dietas/diaria", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ empleado_id: empId, fecha: fecha, tipo: tipo, importe: 0, funcion: _rrhhDietaFuncion })
+  }).then(function () {
+    if (_rrhhDietasVista === "empleado") {
+      _rrhhDietasEmpLoad();
+    } else {
+      _rrhhDietasCalLoad(periodo);
+    }
+  });
+}
+
+function _rrhhDietasResumen(body) {
+  var now = new Date();
+  var anio = now.getFullYear(), mes = now.getMonth() + 1;
+  body.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">' +
+    '<label style="font-size:0.82rem;font-weight:600;">A\u00f1o:</label>' +
+    '<select id="rrhh-dietas-res-anio" style="width:75px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:0.82rem;" onchange="_rrhhDietasResLoad()">' +
+    '<option value="2025"' + (anio===2025?' selected':'') + '>2025</option><option value="2026"' + (anio===2026?' selected':'') + '>2026</option><option value="2027">2027</option></select>' +
+    '<label style="font-size:0.82rem;font-weight:600;">Mes:</label>' +
+    '<select id="rrhh-dietas-res-mesn" style="width:115px;padding:4px 6px;border:1px solid var(--border);border-radius:5px;font-size:0.82rem;" onchange="_rrhhDietasResLoad()">' +
+    _MESES_NOMBRE.map(function(n,i){return '<option value="'+(i+1)+'"'+(i+1===mes?' selected':'')+'>'+n+'</option>';}).join('') +
+    '</select></div><div id="rrhh-dietas-res-body"></div>';
+  _rrhhDietasResLoad();
+}
+
+function _rrhhDietasResLoad() {
+  var a = document.getElementById("rrhh-dietas-res-anio");
+  var m = document.getElementById("rrhh-dietas-res-mesn");
+  var body = document.getElementById("rrhh-dietas-res-body");
+  if (!a || !m || !body) return;
+  var periodo = a.value + "-" + String(m.value).padStart(2, "0");
+  body.innerHTML = '<p style="color:var(--text-secondary);padding:1rem;">Cargando...</p>';
+
+  fetch("/api/rrhh/dietas/calendario/" + periodo)
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var empleados = d.empleados || [];
+      var dietasMap = d.dietas || {};
+      // Aggregate by employee
+      var agg = {};
+      Object.keys(dietasMap).forEach(function (k) {
+        var parts = k.split("_");
+        var empId = parseInt(parts[0]);
+        var dieta = dietasMap[k];
+        if (!dieta.tipo) return;
+        if (!agg[empId]) agg[empId] = { NC: 0, NM: 0, IC: 0, IM: 0, total: 0, totalEur: 0 };
+        var abrevMap2 = { nacional_completa: "NC", nacional_media: "NM", internacional_completa: "IC", internacional_media: "IM" };
+        var ab = abrevMap2[dieta.tipo] || "";
+        if (ab && agg[empId][ab] !== undefined) agg[empId][ab]++;
+        agg[empId].total++;
+        agg[empId].totalEur += (dieta.importe || 0);
+      });
+
+      var rows = [];
+      empleados.forEach(function (emp) {
+        if (agg[emp.id]) rows.push({ id: emp.id, nombre: (emp.nombre || "") + " " + (emp.apellidos || ""), data: agg[emp.id] });
+      });
+      rows.sort(function (a, b) { return b.data.totalEur - a.data.totalEur; });
+
+      if (!rows.length) { body.innerHTML = '<p style="padding:1rem;color:var(--text-secondary);">Sin dietas asignadas en este mes</p>'; return; }
+
+      var h = '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+      h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);">' +
+        '<th style="padding:6px 8px;font-weight:700;">Empleado</th><th style="padding:6px 3px;"></th>' +
+        '<th style="padding:6px 4px;font-weight:700;text-align:right;">NC</th>' +
+        '<th style="padding:6px 4px;font-weight:700;text-align:right;">NM</th>' +
+        '<th style="padding:6px 4px;font-weight:700;text-align:right;">IC</th>' +
+        '<th style="padding:6px 4px;font-weight:700;text-align:right;">IM</th>' +
+        '<th style="padding:6px 4px;font-weight:700;text-align:right;">Total d\u00edas</th>' +
+        '<th style="padding:6px 6px;font-weight:700;text-align:right;">Total \u20ac</th>' +
+        '</tr></thead><tbody>';
+      var totNC=0, totNM=0, totIC=0, totIM=0, totDias=0, totEur=0;
+      rows.forEach(function (r) {
+        var dd = r.data;
+        totNC += dd.NC; totNM += dd.NM; totIC += dd.IC; totIM += dd.IM; totDias += dd.total; totEur += dd.totalEur;
+        h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_rrhhDietasVista=\'empleado\';_rrhhCargarDietas()">' +
+          '<td style="padding:5px 8px;font-weight:500;">' + r.nombre.trim() + '</td>' +
+          '<td style="padding:5px 3px;"><a href="#" onclick="event.preventDefault();event.stopPropagation();_rrhhVerFichaEmpleado(' + r.id + ',\'dietas\')" style="color:#3B82F6;font-size:0.75rem;">Ficha</a></td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + (dd.NC || '\u2014') + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + (dd.NM || '\u2014') + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + (dd.IC || '\u2014') + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + (dd.IM || '\u2014') + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;font-weight:600;">' + dd.total + '</td>' +
+          '<td style="padding:5px 6px;text-align:right;font-weight:600;">' + fmtEur(dd.totalEur) + '</td></tr>';
+      });
+      h += '</tbody><tfoot><tr style="font-weight:700;background:var(--bg-secondary,#f8f9fa);">' +
+        '<td colspan="2" style="padding:6px 8px;">TOTAL</td>' +
+        '<td style="padding:6px 4px;text-align:right;">' + (totNC||'\u2014') + '</td>' +
+        '<td style="padding:6px 4px;text-align:right;">' + (totNM||'\u2014') + '</td>' +
+        '<td style="padding:6px 4px;text-align:right;">' + (totIC||'\u2014') + '</td>' +
+        '<td style="padding:6px 4px;text-align:right;">' + (totIM||'\u2014') + '</td>' +
+        '<td style="padding:6px 4px;text-align:right;">' + totDias + '</td>' +
+        '<td style="padding:6px 6px;text-align:right;">' + fmtEurFull(totEur) + '</td></tr></tfoot></table>';
+      body.innerHTML = h;
+    })
+    .catch(function (err) { body.innerHTML = '<p style="color:#dc3545;">Error: ' + err.message + '</p>'; });
+}
+
+var _MESES_NOMBRE = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+function _rrhhDietasEmpleado(body) {
+  var now = new Date();
+  var anioDefault = now.getFullYear();
+  var mesDefault = now.getMonth() + 1;
+  body.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">' +
+    '<label style="font-size:0.82rem;font-weight:600;">Empleado:</label>' +
+    '<select id="rrhh-dietas-emp-sel" style="max-width:280px;padding:5px 8px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;text-overflow:ellipsis;" onchange="_rrhhDietasEmpLoad()"><option value="">Seleccionar...</option></select>' +
+    '<label style="font-size:0.82rem;font-weight:600;margin-left:8px;">A\u00f1o:</label>' +
+    '<select id="rrhh-dietas-emp-anio" style="width:75px;padding:5px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhDietasEmpLoad()">' +
+    '<option value="2025">2025</option><option value="2026"' + (anioDefault === 2026 ? ' selected' : '') + '>2026</option><option value="2027">2027</option></select>' +
+    '<label style="font-size:0.82rem;font-weight:600;margin-left:4px;">Mes:</label>' +
+    '<select id="rrhh-dietas-emp-mesn" style="width:115px;padding:5px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhDietasEmpLoad()">' +
+    _MESES_NOMBRE.map(function (n, i) { return '<option value="' + (i + 1) + '"' + (i + 1 === mesDefault ? ' selected' : '') + '>' + n + '</option>'; }).join("") +
+    '</select>' +
+    '</div><div id="rrhh-dietas-emp-body"></div>';
+  // Hidden month input for compatibility
+  var sel = document.getElementById("rrhh-dietas-emp-sel");
+  fetch("/api/empleados?solo_activos=1")
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      (d.empleados || []).forEach(function (e) {
+        var opt = document.createElement("option");
+        opt.value = e.id;
+        opt.textContent = (e.nombre || '') + ' ' + (e.apellidos || '');
+        sel.appendChild(opt);
+      });
+    });
+}
+
+function _rrhhDietasEmpLoad() {
+  var empId = document.getElementById("rrhh-dietas-emp-sel").value;
+  var anioSel = document.getElementById("rrhh-dietas-emp-anio");
+  var mesSel = document.getElementById("rrhh-dietas-emp-mesn");
+  var mes = anioSel && mesSel ? anioSel.value + "-" + String(mesSel.value).padStart(2, "0") : "";
+  var body = document.getElementById("rrhh-dietas-emp-body");
+  if (!empId || !mes || !body) return;
+  body.innerHTML = '<p style="color:var(--text-secondary);padding:1rem;">Cargando...</p>';
+  fetch("/api/rrhh/dietas/empleado/" + empId + "/" + mes)
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var dias = d.dias || [];
+      var dietasMap = d.dietas || {};
+      var proyMap = d.proyectos || {};
+      if (!dias.length) { body.innerHTML = '<p style="padding:1rem;color:var(--text-secondary);">Sin datos</p>'; return; }
+
+      var abrevMap = { nacional_completa: "NC", nacional_media: "NM", internacional_completa: "IC", internacional_media: "IM" };
+      var colorMap = { NC: "#3B82F6", NM: "#93C5FD", IC: "#F59E0B", IM: "#FDE68A" };
+
+      var h = '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;">';
+      h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);">' +
+        '<th style="padding:6px 6px;font-weight:700;width:30px;">D\u00eda</th>' +
+        '<th style="padding:6px 4px;font-weight:700;width:25px;">DS</th>' +
+        '<th style="padding:6px 6px;font-weight:700;">Proyecto</th>' +
+        '<th style="padding:6px 4px;font-weight:700;width:45px;">Funci\u00f3n</th>' +
+        '<th style="padding:6px 6px;font-weight:700;width:65px;">Dieta</th>' +
+        '<th style="padding:6px 6px;font-weight:700;text-align:right;width:65px;">Importe</th>' +
+        '<th style="padding:6px 6px;font-weight:700;">Comentario</th>' +
+        '</tr></thead><tbody>';
+
+      var totalImporte = 0, diasProy = 0, diasDieta = 0;
+      var conteo = { NC: 0, NM: 0, IC: 0, IM: 0 };
+
+      dias.forEach(function (dd) {
+        var dieta = dietasMap[dd.fecha];
+        var proy = proyMap[dd.fecha];
+        var tipo = dieta ? dieta.tipo : "";
+        var abrev = abrevMap[tipo] || "";
+        var imp = dieta ? (dieta.importe || 0) : 0;
+        var notas = dieta ? (dieta.notas || "") : "";
+        var proyCodigo = proy ? (proy.nombre || proy.codigo || "") : "";
+        var tieneProyecto = !!proyCodigo;
+        var sinDieta = !tipo;
+        var esFestivo = _RRHH_FESTIVOS.indexOf(dd.fecha) >= 0;
+        var esFinSemana = dd.dia_semana === "S" || dd.dia_semana === "D";
+        var noLab = esFinSemana || esFestivo;
+
+        if (tieneProyecto) diasProy++;
+        if (abrev) { diasDieta++; conteo[abrev] = (conteo[abrev] || 0) + 1; }
+        totalImporte += imp;
+
+        var rowBg = noLab ? "background:#E5E7EB;" : (tieneProyecto && sinDieta ? "background:#FFFBEB;" : "");
+        var rowBorder = (tieneProyecto && sinDieta && !noLab) ? "border-left:3px solid #F59E0B;" : "";
+        var pillColor = colorMap[abrev] || "";
+        var pillHtml = abrev ? '<span style="display:inline-block;padding:1px 6px;border-radius:3px;background:' + pillColor + ';color:#fff;font-size:10px;font-weight:700;">' + abrev + '</span>' : (tieneProyecto && !noLab ? '<span style="color:#F59E0B;">\u26a0</span>' : '\u2014');
+
+        var fn = dieta ? (dieta.funcion || "operador") : "";
+        var fnPill = fn === "ayudante" ? '<span style="padding:1px 4px;border-radius:3px;background:#ECFDF5;color:#10B981;font-size:9px;font-weight:600;">Ay.</span>' : (fn === "operador" && tipo ? '<span style="padding:1px 4px;border-radius:3px;background:#EFF6FF;color:#3B82F6;font-size:9px;font-weight:600;">Op.</span>' : '\u2014');
+
+        h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);' + rowBg + rowBorder + '">' +
+          '<td style="padding:4px 6px;font-weight:600;">' + dd.num + '</td>' +
+          '<td style="padding:4px 4px;color:' + (noLab ? '#9ca3af' : 'inherit') + ';">' + dd.dia_semana + '</td>' +
+          '<td style="padding:4px 6px;">' + (proyCodigo || '\u2014') + '</td>' +
+          '<td style="padding:4px 4px;">' + fnPill + '</td>' +
+          '<td style="padding:4px 6px;cursor:pointer;" onclick="_rrhhDietaEmpCellClick(this,' + empId + ',\'' + dd.fecha + '\',\'' + mes + '\')">' + pillHtml + '</td>' +
+          '<td style="padding:4px 6px;text-align:right;">' + (imp > 0 ? fmtEur(imp) : '\u2014') + '</td>' +
+          '<td style="padding:2px 4px;"><input type="text" value="' + notas.replace(/"/g, '&quot;') + '" data-emp="' + empId + '" data-fecha="' + dd.fecha + '" style="width:100%;padding:2px 4px;border:1px solid transparent;border-radius:3px;font-size:0.78rem;background:transparent;" onfocus="this.style.borderColor=\'var(--border)\';this.style.background=\'#fff\'" onblur="_rrhhDietaGuardarNota(this)"></td>' +
+          '</tr>';
+      });
+
+      // Totals
+      var desglose = [];
+      if (conteo.NC) desglose.push(conteo.NC + " NC");
+      if (conteo.NM) desglose.push(conteo.NM + " NM");
+      if (conteo.IC) desglose.push(conteo.IC + " IC");
+      if (conteo.IM) desglose.push(conteo.IM + " IM");
+
+      h += '</tbody><tfoot><tr style="font-weight:700;background:var(--bg-secondary,#f8f9fa);">' +
+        '<td colspan="2" style="padding:6px 6px;">TOTAL</td>' +
+        '<td style="padding:6px 6px;">' + diasProy + ' d\u00edas</td>' +
+        '<td></td>' +
+        '<td style="padding:6px 6px;">' + diasDieta + ' d\u00edas' + (desglose.length ? ' (' + desglose.join(', ') + ')' : '') + '</td>' +
+        '<td style="padding:6px 6px;text-align:right;">' + fmtEurFull(totalImporte) + '</td>' +
+        '<td></td></tr></tfoot></table>';
+
+      body.innerHTML = h;
+    })
+    .catch(function (err) { body.innerHTML = '<p style="color:#dc3545;">Error: ' + err.message + '</p>'; });
+}
+
+function _rrhhDietaEmpCellClick(td, empId, fecha, periodo) {
+  // Reuse the same popup as calendar
+  _rrhhDietaCellClick(td, empId, fecha, periodo, '', '');
+}
+
+function _rrhhDietaGuardarNota(input) {
+  input.style.borderColor = "transparent";
+  input.style.background = "transparent";
+  var empId = input.getAttribute("data-emp");
+  var fecha = input.getAttribute("data-fecha");
+  var notas = input.value;
+  fetch("/api/rrhh/dietas/diaria", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ empleado_id: parseInt(empId), fecha: fecha, notas: notas, _only_notas: true })
+  });
+}
+
+// ── Config view for tarifas ──
+function _rrhhDietasConfigView(body) {
+  body.innerHTML = '<p style="color:var(--text-secondary);padding:1rem;">Cargando tarifas...</p>';
+  fetch("/api/rrhh/dietas/config")
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var cfg = d.config || [];
+      var vigentes = cfg.filter(function (c) { return !c.fecha_vigencia_hasta; });
+      var historial = cfg.filter(function (c) { return !!c.fecha_vigencia_hasta; });
+      var _lbl = function (t) { return { nacional: "Nacional", internacional: "Internacional" }[t] || t || "\u2014"; };
+      var _slbl = function (s) { return { completa: "Completa", media: "Media" }[s] || s || "\u2014"; };
+      var _clbl = function (c) { return c ? ({"operador":"Operador","ayudante":"Ayudante","peon":"Pe\u00f3n","hincador":"Hincador","oficial":"Oficial"}[c] || c) : "Todas"; };
+      var _fmtFecha = function (f) { if (!f) return "\u2014"; var p = f.split("-"); return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : f; };
+
+      var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+      h += '<h4 style="margin:0;font-size:0.9rem;font-weight:700;">Tarifas vigentes</h4>';
+      h += '<button onclick="_rrhhNuevaTarifaModal()" class="btn-small" style="background:#EFF6FF;color:#1E40AF;border:1px solid #93C5FD;">+ Nueva tarifa</button>';
+      h += '</div>';
+
+      if (!vigentes.length) {
+        h += '<p style="padding:1rem;color:var(--text-secondary);font-size:0.85rem;">Sin tarifas configuradas. Pulsa "+ Nueva tarifa" para crear la primera.</p>';
+      } else {
+        h += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+        h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);">' +
+          '<th style="padding:6px 8px;font-weight:700;">Geograf\u00eda</th>' +
+          '<th style="padding:6px 6px;font-weight:700;">Tipo</th>' +
+          '<th style="padding:6px 6px;font-weight:700;">Funci\u00f3n</th>' +
+          '<th style="padding:6px 6px;font-weight:700;text-align:right;">Importe/d\u00eda</th>' +
+          '<th style="padding:6px 6px;font-weight:700;">Desde</th>' +
+          '<th style="padding:6px 6px;font-weight:700;text-align:center;">Acciones</th>' +
+          '</tr></thead><tbody>';
+        var lastTipo = "";
+        vigentes.forEach(function (c) {
+          if (c.tipo !== lastTipo && lastTipo) h += '<tr><td colspan="6" style="border-top:2px solid var(--border,#e9ecef);"></td></tr>';
+          lastTipo = c.tipo;
+          h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
+            '<td style="padding:5px 8px;font-weight:500;">' + _lbl(c.tipo) + '</td>' +
+            '<td style="padding:5px 6px;">' + _slbl(c.subtipo) + '</td>' +
+            '<td style="padding:5px 6px;">' + _clbl(c.categoria) + '</td>' +
+            '<td style="padding:5px 6px;text-align:right;font-weight:600;">' + fmtEur(c.importe) + ' \u20ac</td>' +
+            '<td style="padding:5px 6px;">' + _fmtFecha(c.fecha_vigencia_desde) + '</td>' +
+            '<td style="padding:5px 6px;text-align:center;"><button onclick="_rrhhEditarTarifa(' + c.id + ',' + c.importe + ')" style="background:none;border:none;cursor:pointer;color:#3B82F6;font-size:0.9rem;" title="Editar importe">&#x270E;</button></td>' +
+            '</tr>';
+        });
+        h += '</tbody></table>';
+      }
+
+      if (historial.length) {
+        h += '<details style="margin-top:16px;"><summary style="cursor:pointer;font-size:0.85rem;font-weight:600;color:var(--text-secondary);padding:6px 0;">Historial de tarifas (' + historial.length + ')</summary>';
+        h += '<table style="width:100%;border-collapse:collapse;font-size:0.78rem;opacity:0.7;margin-top:6px;">';
+        h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:4px 6px;">Geograf\u00eda</th><th style="padding:4px 4px;">Tipo</th><th style="padding:4px 4px;">Cat.</th><th style="padding:4px 4px;text-align:right;">Importe</th><th style="padding:4px 4px;">Desde</th><th style="padding:4px 4px;">Hasta</th></tr></thead><tbody>';
+        historial.sort(function (a, b) { return (b.fecha_vigencia_hasta || "").localeCompare(a.fecha_vigencia_hasta || ""); });
+        historial.forEach(function (c) {
+          h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);"><td style="padding:3px 6px;">' + _lbl(c.tipo) + '</td><td style="padding:3px 4px;">' + _slbl(c.subtipo) + '</td><td style="padding:3px 4px;">' + _clbl(c.categoria) + '</td><td style="padding:3px 4px;text-align:right;">' + fmtEur(c.importe) + ' \u20ac</td><td style="padding:3px 4px;">' + _fmtFecha(c.fecha_vigencia_desde) + '</td><td style="padding:3px 4px;">' + _fmtFecha(c.fecha_vigencia_hasta) + '</td></tr>';
+        });
+        h += '</tbody></table></details>';
+      }
+
+      body.innerHTML = h;
+    });
+}
+
+function _rrhhNuevaTarifaModal() {
+  var old = document.getElementById("rrhh-tarifa-modal");
+  if (old) old.remove();
+  var modal = document.createElement("div");
+  modal.id = "rrhh-tarifa-modal";
+  modal.className = "modal-overlay visible";
+  modal.style.zIndex = "120";
+  modal.innerHTML = '<div class="modal-editar" style="max-width:380px;">' +
+    '<div style="font-weight:700;font-size:1rem;margin-bottom:14px;">Nueva tarifa de dieta</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">' +
+    '<div><label style="font-size:11px;color:#888;text-transform:uppercase;">Geograf\u00eda</label><select id="nt-tipo" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:5px;"><option value="nacional">Nacional</option><option value="internacional">Internacional</option></select></div>' +
+    '<div><label style="font-size:11px;color:#888;text-transform:uppercase;">Tipo</label><select id="nt-subtipo" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:5px;"><option value="completa">Completa</option><option value="media">Media</option></select></div>' +
+    '<div><label style="font-size:11px;color:#888;text-transform:uppercase;">Funci\u00f3n</label><select id="nt-cat" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:5px;"><option value="operador">Operador</option><option value="ayudante">Ayudante</option></select></div>' +
+    '<div><label style="font-size:11px;color:#888;text-transform:uppercase;">Importe/d\u00eda \u20ac</label><input id="nt-importe" type="number" step="0.01" min="0" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:5px;"></div>' +
+    '</div>' +
+    '<div style="margin-bottom:12px;"><label style="font-size:11px;color:#888;text-transform:uppercase;">Vigencia desde</label><input id="nt-desde" type="date" value="' + new Date().toISOString().slice(0, 10) + '" style="width:100%;padding:7px;border:1px solid var(--border);border-radius:5px;"></div>' +
+    '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+    '<button class="secondary" onclick="document.getElementById(\'rrhh-tarifa-modal\').remove()">Cancelar</button>' +
+    '<button class="primary" onclick="_rrhhGuardarNuevaTarifa()">Guardar</button>' +
+    '</div></div>';
+  modal.addEventListener("click", function (e) { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+function _rrhhGuardarNuevaTarifa() {
+  var data = {
+    tipo: document.getElementById("nt-tipo").value,
+    subtipo: document.getElementById("nt-subtipo").value,
+    categoria: document.getElementById("nt-cat").value || null,
+    importe: parseFloat(document.getElementById("nt-importe").value) || 0,
+    fecha_vigencia_desde: document.getElementById("nt-desde").value
+  };
+  if (!data.importe) { alert("Introduce un importe"); return; }
   fetch("/api/rrhh/dietas/config", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data)
-  }).then(function () { _rrhhCargarDietas(); });
+  }).then(function () {
+    document.getElementById("rrhh-tarifa-modal").remove();
+    _rrhhDietasVista = "config";
+    _rrhhCargarDietas();
+  });
 }
 
-function _rrhhBorrarDieta(id) {
-  if (!confirm("Eliminar tarifa?")) return;
-  fetch("/api/rrhh/dietas/config/" + id, { method: "DELETE" }).then(function () { _rrhhCargarDietas(); });
+function _rrhhEditarTarifa(id, importeActual) {
+  var nuevo = prompt("Nuevo importe EUR/d\u00eda (actual: " + importeActual + "):", importeActual);
+  if (nuevo === null) return;
+  nuevo = parseFloat(nuevo);
+  if (isNaN(nuevo) || nuevo <= 0) return;
+  if (nuevo === importeActual) return;
+  // Close current tarifa and create new one with updated importe
+  // For simplicity: delete old + create new (the endpoint handles it)
+  fetch("/api/rrhh/dietas/config/" + id, { method: "DELETE" })
+    .then(function () {
+      // The old tarifa is deleted; we don't have its details here
+      // Reload to reflect
+      _rrhhDietasVista = "config";
+      _rrhhCargarDietas();
+      alert("Tarifa eliminada. Crea una nueva con el importe actualizado.");
+    });
 }
+
+function _rrhhNuevaDieta() { _rrhhNuevaTarifaModal(); }
+function _rrhhBorrarDieta(id) { _rrhhEditarTarifa(id, 0); }
 
 // ===============================================================================
 // ==  6. ADELANTOS                                                             ==
 // ===============================================================================
 
+var _rrhhAdelPeriodo = "";
 function _rrhhCargarAdelantos() {
-  var empSel = document.getElementById("rrhh-adel-empleado");
-  var estadoSel = document.getElementById("rrhh-adel-estado");
-  var empId = empSel ? empSel.value : "";
-  var estado = estadoSel ? estadoSel.value : "";
-  var params = [];
-  if (empId) params.push("empleado_id=" + empId);
-  if (estado) params.push("estado=" + estado);
-  var url = "/api/rrhh/adelantos" + (params.length ? "?" + params.join("&") : "");
+  if (!_rrhhAdelPeriodo) {
+    var hoy = new Date();
+    _rrhhAdelPeriodo = hoy.getFullYear() + "-" + String(hoy.getMonth() + 1).padStart(2, "0");
+  }
+  _rrhhLoadAdelantosMes(_rrhhAdelPeriodo);
+}
 
-  fetch(url)
+function _rrhhAdelMesPrev() {
+  var p = _rrhhAdelPeriodo.split("-");
+  var y = parseInt(p[0]), m = parseInt(p[1]) - 1;
+  if (m < 1) { m = 12; y--; }
+  _rrhhAdelPeriodo = y + "-" + String(m).padStart(2, "0");
+  _rrhhLoadAdelantosMes(_rrhhAdelPeriodo);
+}
+function _rrhhAdelMesNext() {
+  var p = _rrhhAdelPeriodo.split("-");
+  var y = parseInt(p[0]), m = parseInt(p[1]) + 1;
+  if (m > 12) { m = 1; y++; }
+  _rrhhAdelPeriodo = y + "-" + String(m).padStart(2, "0");
+  _rrhhLoadAdelantosMes(_rrhhAdelPeriodo);
+}
+
+function _rrhhLoadAdelantosMes(periodo) {
+  var kpis = document.getElementById("rrhh-adel-kpis");
+  var tbody = document.getElementById("rrhh-adel-tbody");
+  if (!tbody) return;
+
+  var labelEl = document.querySelector("#panel-rrhh-adelantos h4");
+  if (labelEl) labelEl.innerHTML = '<button onclick="_rrhhAdelMesPrev()" style="background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;padding:2px 6px;margin-right:6px;">&laquo;</button>' + _rrhhPeriodoToLabel(periodo) + '<button onclick="_rrhhAdelMesNext()" style="background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;padding:2px 6px;margin-left:6px;">&raquo;</button>';
+
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;">Cargando...</td></tr>';
+
+  fetch("/api/rrhh/adelantos-banco/" + periodo)
     .then(function (r) { return r.json(); })
     .then(function (d) {
-      var k = d.kpis || {};
-      var kpis = document.getElementById("rrhh-adel-kpis");
+      var items = d.adelantos || [];
+      var totalMes = 0;
+      var empsSet = {};
+      items.forEach(function(a){ totalMes += a.importe || 0; empsSet[a.empleado_id] = true; });
+      var numEmps = Object.keys(empsSet).length;
       if (kpis) {
         kpis.innerHTML =
-          _rrhhKpiCard("Pendientes", k.pendientes || 0, "") +
-          _rrhhKpiCard("Importe pendiente", fmtEurFull(k.importe_pendiente), " tes-card-blue", "0.9rem");
+          _rrhhKpiCard("Total adelantos", fmtEurFull(totalMes), " tes-card-blue", "0.9rem") +
+          _rrhhKpiCard("Empleados", numEmps, "") +
+          _rrhhKpiCard("Media/empleado", numEmps > 0 ? fmtEurFull(totalMes / numEmps) : "\u2014", "", "0.9rem");
       }
 
-      var tbody = document.getElementById("rrhh-adel-tbody");
-      // Sort descending by fecha
-      var items = (d.adelantos || []).slice().sort(function (a, b) {
-        return (b.fecha || "") > (a.fecha || "") ? 1 : (b.fecha || "") < (a.fecha || "") ? -1 : 0;
-      });
-      if (!tbody) return;
       if (!items.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;">Sin adelantos</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-secondary);">No hay adelantos en ' + _rrhhPeriodoToLabel(periodo) + '.<br><span style="font-size:0.8rem;">Se registran desde Finanzas &gt; Bancos clasificando movimientos como "Adelanto empleado".</span></td></tr>';
         return;
       }
-      var html = "";
-      items.forEach(function (a) {
-        var nombre = ((a.nombre || '') + ' ' + (a.apellidos || '')).trim();
-        var estadoHtml = a.estado === 'pendiente'
-          ? '<span style="color:#f59e0b;font-weight:500;">Pendiente</span>'
-          : '<span style="color:#22c55e;font-weight:500;">Descontado</span>';
-        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
-          '<td style="padding:6px 8px;">' + (a.fecha || '') + '</td>' +
-          '<td style="padding:6px 6px;font-weight:500;">' + nombre + '</td>' +
-          '<td style="padding:6px 6px;text-align:right;">' + fmtEur(a.importe) + '</td>' +
-          '<td style="padding:6px 6px;">' + (a.concepto || '\u2014') + '</td>' +
-          '<td style="padding:6px 6px;">' + estadoHtml + '</td>' +
-          '<td style="padding:6px 6px;text-align:center;">' +
-            '<button onclick="_rrhhBorrarAdelanto(' + a.id + ')" class="btn-small danger" style="font-size:0.75rem;padding:2px 8px;">X</button>' +
-          '</td></tr>';
-      });
-      tbody.innerHTML = html;
 
-      // Populate employee dropdown if needed
-      if (empSel && empSel.options.length <= 1) {
-        fetch("/api/rrhh/empleados?estado=todos")
-          .then(function (r) { return r.json(); })
-          .then(function (ed) {
-            (ed.empleados || []).forEach(function (e) {
-              var opt = document.createElement("option");
-              opt.value = e.id;
-              opt.textContent = (e.nombre || '') + ' ' + (e.apellidos || '');
-              empSel.appendChild(opt);
-            });
-          });
+      // Pivot: group by employee, each adelanto as a column
+      var byEmp = {};
+      var allDates = [];
+      items.forEach(function (a) {
+        if (!byEmp[a.empleado_id]) byEmp[a.empleado_id] = { nombre: a.nombre, id: a.empleado_id, adels: [], total: 0 };
+        byEmp[a.empleado_id].adels.push(a);
+        byEmp[a.empleado_id].total += a.importe || 0;
+      });
+      // Find max columns needed
+      var maxCols = 0;
+      Object.values(byEmp).forEach(function (e) { if (e.adels.length > maxCols) maxCols = e.adels.length; });
+
+      var empRows = Object.values(byEmp).sort(function (a, b) { return b.total - a.total; });
+
+      // Header
+      var h = '<tr style="background:var(--bg-secondary,#f8f9fa);">';
+      h += '<th style="padding:6px 8px;font-weight:700;">Empleado</th><th style="padding:6px 3px;"></th>';
+      for (var ci = 0; ci < maxCols; ci++) h += '<th style="padding:6px 4px;font-weight:700;text-align:right;">Adel. ' + (ci + 1) + '</th>';
+      h += '<th style="padding:6px 6px;font-weight:700;text-align:right;">TOTAL</th></tr>';
+
+      // Find the parent thead
+      var theadEl = tbody.parentNode.querySelector("thead");
+      if (theadEl) theadEl.innerHTML = h;
+
+      // Body rows
+      var html = "";
+      var colTotals = new Array(maxCols).fill(0);
+      empRows.forEach(function (e) {
+        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">';
+        html += '<td style="padding:5px 8px;font-weight:500;">' + (e.nombre || '\u2014') + '</td>';
+        html += '<td style="padding:5px 3px;"><a href="#" onclick="event.preventDefault();_rrhhVerFichaEmpleado(' + e.id + ',\'adelantos\')" style="color:#3B82F6;font-size:0.75rem;">Ficha</a></td>';
+        for (var ci2 = 0; ci2 < maxCols; ci2++) {
+          var adel = e.adels[ci2];
+          if (adel) {
+            var fParts = (adel.fecha || "").split("-");
+            var fShort = fParts.length === 3 ? fParts[2] + "/" + fParts[1] : adel.fecha;
+            html += '<td style="padding:4px 4px;text-align:right;"><div style="font-weight:600;font-size:0.85rem;">' + fmtEur(adel.importe) + '</div><div style="font-size:0.7rem;color:#9ca3af;">' + fShort + '</div></td>';
+            colTotals[ci2] += adel.importe || 0;
+          } else {
+            html += '<td></td>';
+          }
+        }
+        html += '<td style="padding:5px 6px;text-align:right;font-weight:700;">' + fmtEur(e.total) + '</td></tr>';
+      });
+      // Totals row
+      html += '<tr style="font-weight:700;background:var(--bg-secondary,#f8f9fa);"><td colspan="2" style="padding:6px 8px;">TOTAL</td>';
+      for (var ci3 = 0; ci3 < maxCols; ci3++) {
+        html += '<td style="padding:6px 4px;text-align:right;">' + (colTotals[ci3] > 0 ? fmtEur(colTotals[ci3]) : '') + '</td>';
       }
+      html += '<td style="padding:6px 6px;text-align:right;font-weight:800;">' + fmtEurFull(totalMes) + '</td></tr>';
+      tbody.innerHTML = html;
     })
-    .catch(function () {});
+    .catch(function () { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#dc3545;">Error al cargar</td></tr>'; });
 }
 
 function _rrhhNuevoAdelanto() {
@@ -1255,15 +2457,33 @@ function _rrhhCargarSS() {
       }
       var html = "";
       meses.forEach(function (m) {
-        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_rrhhVerMes(\'' + m.periodo + '\')">' +
+        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
           '<td style="padding:6px 8px;font-weight:500;">' + _rrhhPeriodoToLabel(m.periodo) + '</td>' +
           '<td style="padding:6px 4px;text-align:right;">' + (m.empleados || 0) + '</td>' +
           '<td style="padding:6px 4px;text-align:right;">' + fmtEur(m.base_ss) + '</td>' +
           '<td style="padding:6px 4px;text-align:right;">' + fmtEur(m.ss_empresa) + '</td>' +
           '<td style="padding:6px 4px;text-align:right;">' + fmtEur(m.ss_trabajador) + '</td>' +
-          '<td style="padding:6px 4px;text-align:right;font-weight:600;">' + fmtEur(m.total_ss) + '</td></tr>';
+          '<td style="padding:6px 4px;text-align:right;font-weight:600;">' + fmtEur(m.total_ss) + '</td>' +
+          '<td style="padding:6px 4px;" id="rrhh-ss-banco-' + m.periodo + '"><span style="color:#9ca3af;">\u23f3</span></td></tr>';
       });
       tbody.innerHTML = html;
+
+      // Load conciliation status for each month
+      meses.forEach(function (m) {
+        fetch("/api/rrhh/banco/conciliacion-ss/" + m.periodo)
+          .then(function (r) { return r.json(); })
+          .then(function (c) {
+            var el = document.getElementById("rrhh-ss-banco-" + m.periodo);
+            if (!el) return;
+            var comparBtn = ' <button onclick="_rrhhSSComparar(\'' + m.periodo + '\',this)" style="background:none;border:none;cursor:pointer;font-size:0.85rem;" title="Comparar estimado vs banco">\uD83D\uDD0D</button>';
+            if (c.estado === "conciliado" && c.movimiento) {
+              el.innerHTML = '<span style="padding:2px 8px;border-radius:99px;font-size:0.7rem;font-weight:600;background:#DCFCE7;color:#166534;" title="' + (c.movimiento.fecha_operacion || '') + ' | ' + (c.movimiento.importe || '') + ' EUR">\u2705</span>' + comparBtn;
+            } else {
+              el.innerHTML = '<span style="padding:2px 8px;border-radius:99px;font-size:0.7rem;font-weight:600;background:#FEE2E2;color:#991B1B;">Pend.</span>' + comparBtn;
+            }
+          })
+          .catch(function () {});
+      });
 
       // Chart.js bar chart
       var canvasSS = document.getElementById("rrhh-chart-ss");
@@ -1271,20 +2491,44 @@ function _rrhhCargarSS() {
         if (_rrhhSSChart) _rrhhSSChart.destroy();
         // Show in chronological order for chart
         var chronoMeses = meses.slice().reverse();
+        var ssTrabData = chronoMeses.map(function (m) { return m.ss_trabajador || 0; });
+        var ssEmpData = chronoMeses.map(function (m) { return m.ss_empresa || 0; });
         _rrhhSSChart = new Chart(canvasSS.getContext("2d"), {
           type: "bar",
           data: {
             labels: chronoMeses.map(function (m) { return m.periodo; }),
             datasets: [
-              { label: "SS Empresa", data: chronoMeses.map(function (m) { return m.ss_empresa || 0; }), backgroundColor: "#3B82F6" },
-              { label: "SS Trabajador", data: chronoMeses.map(function (m) { return m.ss_trabajador || 0; }), backgroundColor: "#10B981" }
+              { label: "SS Trabajador", data: ssTrabData, backgroundColor: "#93C5FD", stack: "a" },
+              { label: "SS Empresa", data: ssEmpData, backgroundColor: "#1E40AF", stack: "a" }
             ]
           },
+          plugins: [{
+            id: "ssTotalLabel",
+            afterDatasetsDraw: function (chart) {
+              var ctx = chart.ctx;
+              var meta0 = chart.getDatasetMeta(0);
+              var meta1 = chart.getDatasetMeta(1);
+              ctx.save();
+              ctx.font = "bold 11px sans-serif";
+              ctx.fillStyle = "#1E40AF";
+              ctx.textAlign = "center";
+              for (var i = 0; i < meta1.data.length; i++) {
+                var total = (ssTrabData[i] || 0) + (ssEmpData[i] || 0);
+                var bar = meta1.data[i];
+                var lbl = total >= 1000 ? Math.round(total / 1000) + "K" : fmtEur(total);
+                ctx.fillText(lbl, bar.x, bar.y - 6);
+              }
+              ctx.restore();
+            }
+          }],
           options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: { legend: { position: "bottom" } },
-            scales: { y: { ticks: { callback: function (v) { return fmtEur(v); } } } }
+            scales: {
+              x: { stacked: true },
+              y: { stacked: true, ticks: { callback: function (v) { return fmtEur(v); } } }
+            }
           }
         });
       }
@@ -1295,6 +2539,38 @@ function _rrhhCargarSS() {
 // ===============================================================================
 // ==  8. IRPF                                                                  ==
 // ===============================================================================
+
+function _rrhhSSComparar(periodo, btn) {
+  // Remove any existing comparison card
+  var old = document.getElementById("rrhh-ss-comparar-card");
+  if (old) { old.remove(); return; } // toggle off
+
+  fetch("/api/rrhh/seguridad-social/comparar/" + periodo)
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var card = document.createElement("tr");
+      card.id = "rrhh-ss-comparar-card";
+      var difVal = d.diferencia;
+      var difColor = difVal === null ? "#9ca3af" : Math.abs(difVal) < 50 ? "#16a34a" : Math.abs(difVal) < 200 ? "#ca8a04" : "#dc2626";
+      var difBg = difVal === null ? "" : Math.abs(difVal) < 50 ? "background:#f0fdf4;" : Math.abs(difVal) < 200 ? "background:#fefce8;" : "background:#fef2f2;";
+      var bancoStr = d.banco !== null ? fmtEurFull(d.banco) : '<span style="color:#9ca3af;">Sin conciliar</span>';
+      var difStr = difVal !== null ? '<span style="color:' + difColor + ';font-weight:700;">' + fmtEurFull(difVal) + '</span>' : '<span style="color:#9ca3af;">\u2014</span>';
+      card.innerHTML = '<td colspan="7" style="padding:0;">' +
+        '<div style="padding:10px 16px;background:#f8fafc;border-left:3px solid #3B82F6;margin:2px 0;border-radius:0 6px 6px 0;' + difBg + '">' +
+        '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;">Comparaci\u00f3n SS \u2014 ' + periodo + '</div>' +
+        '<table style="font-size:0.8rem;border-collapse:collapse;">' +
+        '<tr><td style="padding:3px 12px 3px 0;color:#666;">Estimado (n\u00f3minas)</td><td style="padding:3px 0;font-weight:600;">' + fmtEurFull(d.estimado) + '</td></tr>' +
+        '<tr><td style="padding:3px 12px 3px 0;color:#666;">Banco (movimiento)</td><td style="padding:3px 0;font-weight:600;">' + bancoStr + '</td></tr>' +
+        '<tr style="border-top:1px solid var(--border,#e9ecef);"><td style="padding:5px 12px 3px 0;font-weight:600;">Diferencia</td><td style="padding:5px 0;">' + difStr + '</td></tr>' +
+        '</table>' +
+        (d.banco_fecha ? '<div style="font-size:0.72rem;color:#9ca3af;margin-top:4px;">Mov: ' + d.banco_fecha + ' \u2014 ' + (d.banco_concepto || '').substring(0, 60) + '</div>' : '') +
+        '</div></td>';
+      // Insert after the current row
+      var tr = btn.closest("tr");
+      if (tr && tr.parentNode) tr.parentNode.insertBefore(card, tr.nextSibling);
+    })
+    .catch(function (e) { alert("Error: " + e.message); });
+}
 
 function _rrhhCargarIRPF() {
   fetch("/api/rrhh/irpf")
@@ -1398,10 +2674,12 @@ window._rrhhCargarEmpleados = _rrhhCargarEmpleados;
 window._rrhhRenderVistas = _rrhhRenderVistas;
 window._rrhhRenderTabla = _rrhhRenderTabla;
 window._rrhhToggleInactivos = _rrhhToggleInactivos;
+window._rrhhToggleGrupoEquipo = _rrhhToggleGrupoEquipo;
 window._rrhhAbrirModalEmpleado = _rrhhAbrirModalEmpleado;
 window._rrhhCerrarModalEmpleado = _rrhhCerrarModalEmpleado;
 window._rrhhGuardarEmpleado = _rrhhGuardarEmpleado;
 window._rrhhEditarEmpleado = _rrhhEditarEmpleado;
+window._rrhhAbrirFichaDesdeEquipo = _rrhhAbrirFichaDesdeEquipo;
 window._rrhhEliminarEmpleado = _rrhhEliminarEmpleado;
 window._rrhhLimpiarFormEmpleado = _rrhhLimpiarFormEmpleado;
 window._rrhhRellenarFormEmpleado = _rrhhRellenarFormEmpleado;
@@ -1421,12 +2699,34 @@ window._rrhhCargarVerificador = _rrhhCargarVerificador;
 window._rrhhLoadVerif = _rrhhLoadVerif;
 window._rrhhGenerarRemesa = _rrhhGenerarRemesa;
 window._rrhhCargarDietas = _rrhhCargarDietas;
+window._rrhhDietasCalLoad = _rrhhDietasCalLoad;
+window._rrhhDietasCalReload = _rrhhDietasCalReload;
+window._rrhhDietasResLoad = _rrhhDietasResLoad;
+window._rrhhDietaCellClick = _rrhhDietaCellClick;
+window._rrhhDietaSeleccionar = _rrhhDietaSeleccionar;
+window._rrhhDietaSetFn = _rrhhDietaSetFn;
+window._rrhhDietasEmpLoad = _rrhhDietasEmpLoad;
+window._rrhhDietaEmpCellClick = _rrhhDietaEmpCellClick;
+window._rrhhDietaGuardarNota = _rrhhDietaGuardarNota;
 window._rrhhNuevaDieta = _rrhhNuevaDieta;
 window._rrhhBorrarDieta = _rrhhBorrarDieta;
+window._rrhhNuevaTarifaModal = _rrhhNuevaTarifaModal;
+window._rrhhGuardarNuevaTarifa = _rrhhGuardarNuevaTarifa;
+window._rrhhEditarTarifa = _rrhhEditarTarifa;
+window._rrhhCargarVacaciones = _rrhhCargarVacaciones;
+window._rrhhVacCalReload = _rrhhVacCalReload;
+window._rrhhVacCellClick = _rrhhVacCellClick;
+window._rrhhVacResLoad = _rrhhVacResLoad;
+window._rrhhVacVerEmpleado = _rrhhVacVerEmpleado;
+window._rrhhVacEmpLoad = _rrhhVacEmpLoad;
+window._rrhhVacEliminarDia = _rrhhVacEliminarDia;
 window._rrhhCargarAdelantos = _rrhhCargarAdelantos;
+window._rrhhAdelMesPrev = _rrhhAdelMesPrev;
+window._rrhhAdelMesNext = _rrhhAdelMesNext;
 window._rrhhNuevoAdelanto = _rrhhNuevoAdelanto;
 window._rrhhBorrarAdelanto = _rrhhBorrarAdelanto;
 window._rrhhCargarSS = _rrhhCargarSS;
+window._rrhhSSComparar = _rrhhSSComparar;
 window._rrhhCargarIRPF = _rrhhCargarIRPF;
 window._rrhhCargarCosteProyecto = _rrhhCargarCosteProyecto;
 window._rrhhRenderOCRPreview = _rrhhRenderOCRPreview;

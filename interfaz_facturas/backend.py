@@ -3317,12 +3317,25 @@ def _init_movimientos_db():
       ("seguro_poliza_id", "INTEGER"),
       # Albaranes: vínculo movimiento ↔ albaranes
       ("albaran_ids", "TEXT"),
+      # RRHH: vínculo movimiento ↔ pago RRHH (adelanto/nomina/SS/IRPF)
+      ("rrhh_tipo", "TEXT"),           # adelanto / nomina / seguridad_social / irpf
+      ("rrhh_empleado_id", "INTEGER"), # FK empleados (para adelanto y nomina)
+      ("rrhh_periodo", "TEXT"),        # "2026-02" o "1T-2026"
     ]:
       if col not in columnas_existentes:
         conn.execute(f"ALTER TABLE movimientos ADD COLUMN {col} {sql_type}")
     conn.execute("CREATE INDEX IF NOT EXISTS ix_movimientos_factura_proveedor ON movimientos(factura_proveedor_id)")
     # Backfill: assign empresa_id to movimientos that don't have one
     conn.execute("UPDATE movimientos SET empresa_id = 'hincado_directo' WHERE empresa_id IS NULL OR empresa_id = ''")
+    # Cleanup: fix dual-vinculación (RRHH + factura/seguro/albaran)
+    if "rrhh_tipo" in columnas_existentes or "rrhh_tipo" in [c for c, _ in [("rrhh_tipo", "TEXT"), ("rrhh_empleado_id", "INTEGER"), ("rrhh_periodo", "TEXT")]]:
+      conn.execute(
+        "UPDATE movimientos SET factura_proveedor_id=NULL, factura_cliente_id=NULL, factura_cliente_key=NULL, "
+        "seguro_poliza_id=NULL, albaran_ids=NULL "
+        "WHERE rrhh_tipo IS NOT NULL AND rrhh_tipo != '' "
+        "AND (factura_proveedor_id IS NOT NULL OR factura_cliente_id IS NOT NULL "
+        "OR factura_cliente_key IS NOT NULL OR seguro_poliza_id IS NOT NULL OR albaran_ids IS NOT NULL)"
+      )
     conn.commit()
   finally:
     conn.close()
@@ -3839,7 +3852,9 @@ def listar_movimientos():
       SELECT id, fecha_operacion, fecha_valor, concepto, importe, divisa, saldo,
              banco, codigo, numero_documento, referencia_1, referencia_2, empresa_id, created_at,
              factura_proveedor_id, factura_cliente_id, factura_cliente_key, conciliado_at,
-             tarjeta_id, liquidacion_periodo
+             tarjeta_id, liquidacion_periodo,
+             seguro_poliza_id, albaran_ids,
+             rrhh_tipo, rrhh_empleado_id, rrhh_periodo
       FROM movimientos
       {where}
       ORDER BY fecha_operacion DESC, id DESC
@@ -3856,6 +3871,8 @@ def listar_movimientos():
       "banco", "codigo", "numero_documento", "referencia_1", "referencia_2", "empresa_id", "created_at",
       "factura_proveedor_id", "factura_cliente_id", "factura_cliente_key", "conciliado_at",
       "tarjeta_id", "liquidacion_periodo",
+      "seguro_poliza_id", "albaran_ids",
+      "rrhh_tipo", "rrhh_empleado_id", "rrhh_periodo",
     ]
     movimientos = [dict(zip(keys, r)) for r in rows]
 
@@ -4280,12 +4297,12 @@ def conciliacion_confirmar():
   try:
     if mov_empresa:
       conn_bancos.execute(
-        "UPDATE movimientos SET factura_proveedor_id = ?, conciliado_at = ? WHERE id = ?",
+        "UPDATE movimientos SET factura_proveedor_id = ?, conciliado_at = ?, rrhh_tipo=NULL, rrhh_empleado_id=NULL, rrhh_periodo=NULL WHERE id = ?",
         (factura_id, now, mov_id),
       )
     else:
       conn_bancos.execute(
-        "UPDATE movimientos SET factura_proveedor_id = ?, conciliado_at = ?, empresa_id = ? WHERE id = ?",
+        "UPDATE movimientos SET factura_proveedor_id = ?, conciliado_at = ?, empresa_id = ?, rrhh_tipo=NULL, rrhh_empleado_id=NULL, rrhh_periodo=NULL WHERE id = ?",
         (factura_id, now, empresa_id, mov_id),
       )
     conn_bancos.commit()
@@ -4445,7 +4462,7 @@ def conciliacion_confirmar_cliente():
   conn_bancos = _get_bancos_db()
   try:
     conn_bancos.execute(
-      "UPDATE movimientos SET factura_cliente_key = ?, factura_cliente_id = ?, conciliado_at = ?, empresa_id = ? WHERE id = ?",
+      "UPDATE movimientos SET factura_cliente_key = ?, factura_cliente_id = ?, conciliado_at = ?, empresa_id = ?, rrhh_tipo=NULL, rrhh_empleado_id=NULL, rrhh_periodo=NULL WHERE id = ?",
       (key, factura_cli_id, datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"), empresa_id_mov, mov_id),
     )
     conn_bancos.commit()

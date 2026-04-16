@@ -218,7 +218,47 @@ def init_proyectos_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS ix_asig_proy ON proyecto_asignaciones(proyecto_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_asig_fecha ON proyecto_asignaciones(fecha)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_asig_recurso ON proyecto_asignaciones(recurso_tipo, recurso_id)")
+        # Migration: add funcion_dia column if missing
+        _asig_cols = {r[1] for r in conn.execute("PRAGMA table_info(proyecto_asignaciones)").fetchall()}
+        if "funcion_dia" not in _asig_cols:
+            conn.execute("ALTER TABLE proyecto_asignaciones ADD COLUMN funcion_dia TEXT DEFAULT NULL")
         _backfill_codigos(conn)
+
+        # Migración: añadir estado 'perdido' si no existe en CHECK
+        row_sql = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='proyectos'").fetchone()
+        if row_sql and "'perdido'" not in (row_sql[0] or ""):
+            # SQLite no permite ALTER CHECK, hay que recrear
+            conn.execute("ALTER TABLE proyectos RENAME TO _proyectos_old")
+            old_sql = row_sql[0]
+            new_sql = old_sql.replace(
+                "'cotizado','vivo','pausado','terminado','cancelado'",
+                "'cotizado','vivo','pausado','terminado','cancelado','perdido'"
+            )
+            conn.execute(new_sql)
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(proyectos)").fetchall()]
+            col_list = ", ".join(cols)
+            conn.execute(f"INSERT INTO proyectos ({col_list}) SELECT {col_list} FROM _proyectos_old")
+            conn.execute("DROP TABLE _proyectos_old")
+
+        # Migración: campos pricing hinca/perforación
+        existing = {r[1] for r in conn.execute("PRAGMA table_info(proyectos)").fetchall()}
+        _new_cols = [
+            ("tipo_actividad", "TEXT DEFAULT 'hinca'"),
+            ("hinca_cantidad", "INTEGER DEFAULT 0"),
+            ("hinca_precio_prod_operador", "REAL DEFAULT 0"),
+            ("hinca_precio_prod_ayudante", "REAL DEFAULT 0"),
+            ("hinca_precio_admin_operador", "REAL DEFAULT 1300"),
+            ("hinca_precio_admin_ayudante", "REAL DEFAULT 1600"),
+            ("perforacion_cantidad", "INTEGER DEFAULT 0"),
+            ("perforacion_precio_prod_operador", "REAL DEFAULT 0"),
+            ("perforacion_precio_prod_ayudante", "REAL DEFAULT 0"),
+            ("perforacion_precio_admin_operador", "REAL DEFAULT 0"),
+            ("perforacion_precio_admin_ayudante", "REAL DEFAULT 0"),
+        ]
+        for col_name, col_type in _new_cols:
+            if col_name not in existing:
+                conn.execute(f"ALTER TABLE proyectos ADD COLUMN {col_name} {col_type}")
+
     _initialized = True
 
 
@@ -266,7 +306,9 @@ def _backfill_codigos(conn) -> None:
 
 _PROY_SELECT = """
     SELECT p.*,
-        COALESCE(t.nombre_canonico, ce.nombre) AS nombre_cliente,
+        COALESCE(t.nombre_canonico,
+                 (SELECT ce.nombre FROM crm_empresas ce WHERE ce.tercero_id = p.cliente_tercero_id LIMIT 1)
+        ) AS nombre_cliente,
         pres.referencia AS presupuesto_ref,
         oport.nombre AS oportunidad_nombre,
         CASE WHEN p.hincas_estimadas > 0
@@ -277,7 +319,6 @@ _PROY_SELECT = """
              ELSE 0 END AS dias_activo
     FROM proyectos p
     LEFT JOIN terceros t ON t.id = p.cliente_tercero_id
-    LEFT JOIN crm_empresas ce ON ce.tercero_id = p.cliente_tercero_id OR (t.id IS NULL AND ce.id = p.cliente_tercero_id)
     LEFT JOIN presupuestos pres ON pres.id = p.presupuesto_id
     LEFT JOIN crm_oportunidades oport ON oport.id = p.oportunidad_id
 """
@@ -374,15 +415,18 @@ def obtener_dashboard_proyecto(proyecto_id: int) -> dict | None:
     with _conectar() as conn:
         row = conn.execute("""
             SELECT p.*,
-                   COALESCE(t.nombre_canonico, ce.nombre) AS cliente_nombre,
-                   COALESCE(t.nif, ce.cif) AS cliente_nif,
+                   COALESCE(t.nombre_canonico,
+                            (SELECT ce2.nombre FROM crm_empresas ce2 WHERE ce2.tercero_id = p.cliente_tercero_id LIMIT 1)
+                   ) AS cliente_nombre,
+                   COALESCE(t.nif,
+                            (SELECT ce3.cif FROM crm_empresas ce3 WHERE ce3.tercero_id = p.cliente_tercero_id LIMIT 1)
+                   ) AS cliente_nif,
                    pres.referencia AS presupuesto_ref,
                    pres.id AS presupuesto_id_vinculado,
                    o.nombre AS oportunidad_nombre,
                    o.id AS oportunidad_id_vinculado
             FROM proyectos p
             LEFT JOIN terceros t ON t.id = p.cliente_tercero_id
-            LEFT JOIN crm_empresas ce ON ce.tercero_id = p.cliente_tercero_id OR (t.id IS NULL AND ce.id = p.cliente_tercero_id)
             LEFT JOIN presupuestos pres ON pres.id = p.presupuesto_id
             LEFT JOIN crm_oportunidades o ON o.id = p.oportunidad_id
             WHERE p.id = ?
@@ -540,8 +584,12 @@ def crear_proyecto(data: dict) -> dict:
                 ubicacion_lat, ubicacion_lon, provincia, mw_parque, hincas_estimadas,
                 precio_unitario_hinca, precio_hora_maquina, precio_hora_ayudante, precio_jornada,
                 importe_presupuestado, fecha_inicio_estimada, fecha_fin_estimada, notas,
+                tipo_actividad, hinca_cantidad, hinca_precio_prod_operador, hinca_precio_prod_ayudante,
+                hinca_precio_admin_operador, hinca_precio_admin_ayudante,
+                perforacion_cantidad, perforacion_precio_prod_operador, perforacion_precio_prod_ayudante,
+                perforacion_precio_admin_operador, perforacion_precio_admin_ayudante,
                 created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             (data.get("nombre") or "").strip(),
             codigo,
@@ -567,6 +615,17 @@ def crear_proyecto(data: dict) -> dict:
             (data.get("fecha_inicio_estimada") or "").strip() or None,
             (data.get("fecha_fin_estimada") or "").strip() or None,
             (data.get("notas") or "").strip() or None,
+            data.get("tipo_actividad") or "hinca",
+            data.get("hinca_cantidad") or 0,
+            data.get("hinca_precio_prod_operador") or 0,
+            data.get("hinca_precio_prod_ayudante") or 0,
+            data.get("hinca_precio_admin_operador") or 1300,
+            data.get("hinca_precio_admin_ayudante") or 1600,
+            data.get("perforacion_cantidad") or 0,
+            data.get("perforacion_precio_prod_operador") or 0,
+            data.get("perforacion_precio_prod_ayudante") or 0,
+            data.get("perforacion_precio_admin_operador") or 0,
+            data.get("perforacion_precio_admin_ayudante") or 0,
             ahora, ahora,
         ))
         new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -604,7 +663,12 @@ def actualizar_proyecto(proyecto_id: int, data: dict) -> dict | None:
                 ubicacion_lat=?, ubicacion_lon=?, provincia=?, mw_parque=?, hincas_estimadas=?,
                 precio_unitario_hinca=?, precio_hora_maquina=?, precio_hora_ayudante=?, precio_jornada=?,
                 importe_presupuestado=?, fecha_inicio_estimada=?, fecha_fin_estimada=?,
-                fecha_inicio_real=?, fecha_fin_real=?, notas=?, updated_at=?
+                fecha_inicio_real=?, fecha_fin_real=?, notas=?,
+                tipo_actividad=?, hinca_cantidad=?, hinca_precio_prod_operador=?, hinca_precio_prod_ayudante=?,
+                hinca_precio_admin_operador=?, hinca_precio_admin_ayudante=?,
+                perforacion_cantidad=?, perforacion_precio_prod_operador=?, perforacion_precio_prod_ayudante=?,
+                perforacion_precio_admin_operador=?, perforacion_precio_admin_ayudante=?,
+                updated_at=?
             WHERE id=?
         """, (
             (data.get("nombre") or "").strip(),
@@ -632,6 +696,17 @@ def actualizar_proyecto(proyecto_id: int, data: dict) -> dict | None:
             (data.get("fecha_inicio_real") or "").strip() or None,
             (data.get("fecha_fin_real") or "").strip() or None,
             (data.get("notas") or "").strip() or None,
+            data.get("tipo_actividad") or "hinca",
+            data.get("hinca_cantidad") or 0,
+            data.get("hinca_precio_prod_operador") or 0,
+            data.get("hinca_precio_prod_ayudante") or 0,
+            data.get("hinca_precio_admin_operador") or 1300,
+            data.get("hinca_precio_admin_ayudante") or 1600,
+            data.get("perforacion_cantidad") or 0,
+            data.get("perforacion_precio_prod_operador") or 0,
+            data.get("perforacion_precio_prod_ayudante") or 0,
+            data.get("perforacion_precio_admin_operador") or 0,
+            data.get("perforacion_precio_admin_ayudante") or 0,
             ahora, proyecto_id,
         ))
         if nuevo_estado != estado_anterior:
@@ -928,14 +1003,15 @@ def obtener_certificacion(cert_id: int) -> dict | None:
 # ── Asignaciones diarias ─────────────────────────────────────────────────
 
 def asignar_recurso(proyecto_id: int, recurso_tipo: str, recurso_id: int,
-                    recurso_nombre: str, fecha: str, notas: str = "") -> dict | None:
+                    recurso_nombre: str, fecha: str, notas: str = "",
+                    funcion_dia: str | None = None) -> dict | None:
     init_proyectos_db()
     with _conectar() as conn:
         try:
             conn.execute(
-                "INSERT INTO proyecto_asignaciones (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, notas, created_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, notas or None, _now()),
+                "INSERT INTO proyecto_asignaciones (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, notas, funcion_dia, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, notas or None, funcion_dia, _now()),
             )
             row = conn.execute(
                 "SELECT * FROM proyecto_asignaciones WHERE recurso_tipo=? AND recurso_id=? AND fecha=?",
@@ -947,7 +1023,8 @@ def asignar_recurso(proyecto_id: int, recurso_tipo: str, recurso_id: int,
 
 
 def asignar_rango(proyecto_id: int, recurso_tipo: str, recurso_id: int,
-                  recurso_nombre: str, fecha_desde: str, fecha_hasta: str) -> int:
+                  recurso_nombre: str, fecha_desde: str, fecha_hasta: str,
+                  funcion_dia: str | None = None) -> int:
     """Assign a resource for each weekday in [fecha_desde, fecha_hasta]. Returns count."""
     from datetime import datetime as _dt, timedelta as _td
     init_proyectos_db()
@@ -961,9 +1038,9 @@ def asignar_rango(proyecto_id: int, recurso_tipo: str, recurso_id: int,
                 try:
                     conn.execute(
                         "INSERT OR IGNORE INTO proyecto_asignaciones"
-                        " (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, created_at)"
-                        " VALUES (?, ?, ?, ?, ?, ?)",
-                        (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, d.isoformat(), ahora),
+                        " (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, funcion_dia, created_at)"
+                        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, d.isoformat(), funcion_dia, ahora),
                     )
                     count += 1
                 except Exception:

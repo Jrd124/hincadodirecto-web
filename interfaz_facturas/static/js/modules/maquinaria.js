@@ -41,7 +41,7 @@ function cargarMaquinaria() {
             '<div><div style="font-size:11px;color:var(--color-text-secondary);">Hor\u00f3metro</div>' +
               '<div style="font-size:16px;font-weight:600;">' + (m.horometro_actual || 0).toLocaleString("es-ES") + 'h</div></div>' +
             '<div><div style="font-size:11px;color:var(--color-text-secondary);">Proyecto</div>' +
-              '<div style="font-size:13px;font-weight:500;">' + (m.proyecto_nombre ? _esc(m.proyecto_nombre) : '\u2014') + '</div></div>' +
+              '<div style="font-size:13px;font-weight:500;">' + (m.proyecto_actual && (m.proyecto_actual.nombre || m.proyecto_actual.codigo) ? _esc(m.proyecto_actual.nombre || m.proyecto_actual.codigo) : (m.proyecto_nombre ? _esc(m.proyecto_nombre) : '\u2014')) + '</div></div>' +
           '</div></div>';
       }).join("");
 
@@ -176,7 +176,7 @@ window.maqDetalle = function (maqId) {
             '</div>' +
             '<div style="font-size:14px;color:var(--color-text-secondary);">' + _esc(m.internal_id) + ' \u00b7 ' + _esc(m.modelo) +
               (m.numero_serie ? ' \u00b7 S/N: ' + _esc(m.numero_serie) : '') +
-              (m.proyecto_nombre ? ' \u00b7 \uD83D\uDCCD ' + _esc(m.proyecto_nombre) : '') + '</div>' +
+              (m.proyecto_actual && (m.proyecto_actual.nombre || m.proyecto_actual.codigo) ? ' \u00b7 \uD83D\uDCCD ' + _esc(m.proyecto_actual.nombre || m.proyecto_actual.codigo) : (m.proyecto_nombre ? ' \u00b7 \uD83D\uDCCD ' + _esc(m.proyecto_nombre) : '')) + '</div>' +
           '</div>' +
           '<div style="display:flex;gap:8px;">' +
             '<button class="btn-primary" style="width:auto;padding:8px 16px;" onclick="maqNuevoCheck(' + m.id + ')">\uD83D\uDCCB Check semanal</button>' +

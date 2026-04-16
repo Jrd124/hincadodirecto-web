@@ -161,7 +161,7 @@ def api_conciliar_albaran_banco():
             now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
             import json as _json
             conn.execute(
-                "UPDATE movimientos SET albaran_ids = ?, conciliado_at = ? WHERE id = ?",
+                "UPDATE movimientos SET albaran_ids = ?, conciliado_at = ?, rrhh_tipo=NULL, rrhh_empleado_id=NULL, rrhh_periodo=NULL WHERE id = ?",
                 (_json.dumps(albaran_ids), now, int(movimiento_id)),
             )
             conn.commit()

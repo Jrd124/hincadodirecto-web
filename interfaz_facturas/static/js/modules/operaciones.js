@@ -283,11 +283,13 @@ function _renderFila(tipo, id, nombre, subtitulo, dias, asignaciones, proyMap, g
   if (subtitulo) html += '<div style="font-size:10px;color:var(--color-text-secondary);line-height:1.2;">' + subtitulo + '</div>';
   html += '</td>';
 
+  var vacSet = (_operData && _operData.vacaciones) || [];
   dias.forEach(function (dia, colIdx) {
     var a = asig[dia.fecha];
     var noLab = !dia.laborable;
     var esHoy = dia.es_hoy;
-    var bgCol = noLab ? '#E5E7EB' : (esHoy ? '#F0F7FF' : '');
+    var esVac = (tipo === "empleado" && vacSet.indexOf(id + "_" + dia.fecha) >= 0);
+    var bgCol = noLab ? '#E5E7EB' : (esVac && !a ? '#FEF3C7' : (esHoy ? '#F0F7FF' : ''));
     var cursor = 'pointer';
 
     html += '<td data-oper-celda data-tipo="' + tipo + '" data-rid="' + id + '" data-fecha="' + dia.fecha + '" data-col="' + colIdx + '" data-lab="' + (dia.laborable ? 1 : 0) + '" style="padding:1px;border-bottom:1px solid var(--color-border);background:' + bgCol + ';cursor:' + cursor + ';">';
@@ -299,7 +301,11 @@ function _renderFila(tipo, id, nombre, subtitulo, dias, asignaciones, proyMap, g
       var p = proyMap[a.proyecto_id];
       var c = COLORES_PROYECTO[p.color_idx] || COLORES_PROYECTO[0];
       var indicador = a.estado === "confirmado" ? '<span style="position:absolute;top:1px;right:2px;font-size:7px;">&#10003;</span>' : (a.estado === "incidencia" ? '<span style="position:absolute;top:1px;right:2px;font-size:7px;">&#9888;</span>' : '');
-      html += '<div data-celda-proy="' + p.id + '" style="position:relative;background:' + c.bg + ';color:' + c.text + ';border:1px solid ' + c.border + ';border-radius:4px;height:26px;font-size:9px;font-weight:600;display:flex;align-items:center;justify-content:center;min-width:32px;" title="' + (p.nombre || '') + '">' + p.abreviatura + indicador + '</div>';
+      var vacWarn = esVac ? '<span style="position:absolute;bottom:0;left:1px;font-size:7px;" title="Tiene vacaciones">\u26a0</span>' : '';
+      var vacBorder = esVac ? 'border:2px solid #F59E0B;' : 'border:1px solid ' + c.border + ';';
+      html += '<div data-celda-proy="' + p.id + '" style="position:relative;background:' + c.bg + ';color:' + c.text + ';' + vacBorder + 'border-radius:4px;height:26px;font-size:9px;font-weight:600;display:flex;align-items:center;justify-content:center;min-width:32px;" title="' + (p.nombre || '') + (esVac ? ' \u26a0 VACACIONES' : '') + '">' + p.abreviatura + indicador + vacWarn + '</div>';
+    } else if (esVac) {
+      html += '<div style="height:26px;border:1px dashed #F59E0B;border-radius:4px;background:#FEF3C7;display:flex;align-items:center;justify-content:center;font-size:9px;color:#92400E;font-weight:600;" title="Vacaciones">\ud83c\udfd6</div>';
     } else {
       html += '<div style="height:26px;border:1px dashed transparent;border-radius:4px;" onmouseenter="this.style.borderColor=\'#CBD5E1\'" onmouseleave="this.style.borderColor=\'transparent\'"></div>';
     }
@@ -563,6 +569,12 @@ function _getNombreRecurso(tipo, rid) {
 // ── Asignar / Desasignar ────────────────────────────────────────────────────
 
 window._asignarDesdePopup = function (tipo, rid, proyId, fecha) {
+  // Check vacation conflict
+  var vacSet = (_operData && _operData.vacaciones) || [];
+  if (tipo === "empleado" && vacSet.indexOf(rid + "_" + fecha) >= 0) {
+    var empNombre = _getNombreRecurso(tipo, rid);
+    if (!confirm("\u26a0\ufe0f " + empNombre + " tiene vacaciones aprobadas para el " + fecha + ".\n\u00bfAsignar igualmente?")) return;
+  }
   _cerrarPopup();
   fetch("/api/operaciones/asignar", {
     method: "POST",

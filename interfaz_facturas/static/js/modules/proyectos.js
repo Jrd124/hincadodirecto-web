@@ -664,8 +664,9 @@
         asigs.forEach(function (a) {
           var bg = a.recurso_tipo === 'empleado' ? '#DCFCE7' : a.recurso_tipo === 'maquina' ? '#DBEAFE' : '#FEF3C7';
           var icon = a.recurso_tipo === 'empleado' ? '\uD83D\uDC77' : a.recurso_tipo === 'maquina' ? '\uD83C\uDFD7\uFE0F' : '\uD83D\uDE97';
+          var fdTag = (a.funcion_dia && a.recurso_tipo === 'empleado') ? ' <span title="Funci\u00f3n del d\u00eda: ' + a.funcion_dia + '" style="font-size:8px;background:#F59E0B;color:#fff;border-radius:2px;padding:0 2px;">' + (a.funcion_dia === 'ayudante' ? 'Ay' : 'Op') + '</span>' : '';
           var nombreEsc = _esc(a.recurso_nombre).replace(/'/g, "\\'");
-          html += '<div onclick="desasignarDia(' + _recProyId + ',\'' + a.recurso_tipo + '\',' + a.recurso_id + ',\'' + fecha + '\',\'' + nombreEsc + '\')" style="padding:3px 6px;font-size:10px;background:' + bg + ';border-radius:4px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;" title="Click para desasignar este d\u00eda">' + icon + ' ' + _esc(a.recurso_nombre) + '</div>';
+          html += '<div onclick="desasignarDia(' + _recProyId + ',\'' + a.recurso_tipo + '\',' + a.recurso_id + ',\'' + fecha + '\',\'' + nombreEsc + '\')" style="padding:3px 6px;font-size:10px;background:' + bg + ';border-radius:4px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;" title="Click para desasignar este d\u00eda">' + icon + ' ' + _esc(a.recurso_nombre) + fdTag + '</div>';
         });
       } else {
         html += '<div style="font-size:10px;color:#CBD5E1;text-align:center;padding:8px 0;">\u2014</div>';
@@ -728,6 +729,9 @@
           '<option value="empleado">Empleado</option><option value="maquina">Máquina</option></select></div>' +
         '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Recurso</label>' +
           '<select id="ar-recurso" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"><option>Cargando...</option></select></div>' +
+        '<div id="ar-funcion-wrap" style="display:none;"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Funci\u00f3n hoy</label>' +
+          '<select id="ar-funcion" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);">' +
+          '<option value="">Usar puesto habitual</option><option value="operador">Operador</option><option value="ayudante">Ayudante</option></select></div>' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
           '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Desde</label><input type="date" id="ar-desde" value="' + hoy + '" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);box-sizing:border-box;"></div>' +
           '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Hasta</label><input type="date" id="ar-hasta" value="' + hoy + '" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);box-sizing:border-box;"></div></div>' +
@@ -756,8 +760,13 @@
           if (!sel.options.length) sel.innerHTML = '<option>No hay disponibles</option>';
         });
     }
+    function toggleFuncionWrap() {
+      var fw = document.getElementById("ar-funcion-wrap");
+      if (fw) fw.style.display = document.getElementById("ar-tipo").value === "empleado" ? "" : "none";
+    }
     cargarDisponibles();
-    document.getElementById("ar-tipo").addEventListener("change", cargarDisponibles);
+    toggleFuncionWrap();
+    document.getElementById("ar-tipo").addEventListener("change", function () { cargarDisponibles(); toggleFuncionWrap(); });
     document.getElementById("ar-desde").addEventListener("change", cargarDisponibles);
 
     document.getElementById("ar-btn-guardar").addEventListener("click", function () {
@@ -768,10 +777,13 @@
       var desde = document.getElementById("ar-desde").value;
       var hasta = document.getElementById("ar-hasta").value;
       if (!rid || !nombre || !desde) return;
+      var funcion = (document.getElementById("ar-funcion") || {}).value || null;
+      var payload = { recurso_tipo: tipo, recurso_id: rid, recurso_nombre: nombre, fecha: desde, fecha_hasta: hasta };
+      if (funcion && tipo === "empleado") payload.funcion_dia = funcion;
       fetch("/api/proyectos/" + proyectoId + "/asignaciones", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recurso_tipo: tipo, recurso_id: rid, recurso_nombre: nombre, fecha: desde, fecha_hasta: hasta }),
+        body: JSON.stringify(payload),
       }).then(function (r) { return r.json(); })
         .then(function (data) {
           if (data.error) { mostrarToast(data.error, "error"); return; }
@@ -1096,7 +1108,8 @@
             '<td>' + _esc(p.tipo_trabajo || "") + '</td>' +
             '<td class="numero">' + _fE(p.importe_presupuestado) + '</td>' +
             '<td>' + _esc((p.fecha_inicio_estimada || "").substring(0, 10)) + '</td>' +
-            '<td><button class="primary" style="font-size:0.75rem;padding:2px 10px;" onclick="_proyActivar(' + p.id + ')">Activar</button> ' +
+            '<td style="white-space:nowrap;"><button class="primary" style="font-size:0.75rem;padding:2px 10px;" onclick="_proyActivar(' + p.id + ')">Adjudicar</button> ' +
+            '<button style="font-size:0.75rem;padding:2px 10px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:4px;cursor:pointer;" onclick="_proyPerder(' + p.id + ')">Perder</button> ' +
             '<button class="secondary" style="font-size:0.75rem;padding:2px 10px;" onclick="_proyEditar(' + p.id + ')">Editar</button></td></tr>';
         });
         html += '</tbody></table>';
@@ -1107,10 +1120,17 @@
   if (panelCot) new MutationObserver(function () { if (panelCot.classList.contains("visible")) _proyCotizados(); }).observe(panelCot, { attributes: true, attributeFilter: ["class"] });
 
   window._proyActivar = function (id) {
-    if (!confirm("Activar este proyecto? Pasara a estado 'vivo'.")) return;
+    if (!confirm("Adjudicar este proyecto? Pasara a estado 'vivo'.")) return;
     fetch("/api/proyectos/" + id + "/estado", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ estado: "vivo" }) })
       .then(function (r) { return r.json(); })
-      .then(function () { mostrarToast("Proyecto activado.", "success"); _proyCotizados(); });
+      .then(function () { mostrarToast("Proyecto adjudicado.", "success"); _proyCotizados(); _proyVivos(); });
+  };
+
+  window._proyPerder = function (id) {
+    if (!confirm("Marcar como perdido? El proyecto pasara a estado 'perdido'.")) return;
+    fetch("/api/proyectos/" + id + "/estado", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ estado: "perdido" }) })
+      .then(function (r) { return r.json(); })
+      .then(function () { mostrarToast("Proyecto marcado como perdido.", "success"); _proyCotizados(); });
   };
 
   // ── Vivos ──
@@ -1272,6 +1292,20 @@
     document.getElementById("proy-fecha-inicio").value = p ? (p.fecha_inicio_estimada || "").substring(0, 10) : "";
     document.getElementById("proy-fecha-fin").value = p ? (p.fecha_fin_estimada || "").substring(0, 10) : "";
     document.getElementById("proy-notas").value = p ? p.notas || "" : "";
+    // Pricing hinca/perforación
+    document.getElementById("proy-tipo-actividad").value = p ? p.tipo_actividad || "hinca" : "hinca";
+    document.getElementById("proy-hinca-cantidad").value = p ? p.hinca_cantidad || "" : "";
+    document.getElementById("proy-hinca-prod-op").value = p ? p.hinca_precio_prod_operador || "" : "";
+    document.getElementById("proy-hinca-prod-ay").value = p ? p.hinca_precio_prod_ayudante || "" : "";
+    document.getElementById("proy-hinca-admin-op").value = p ? p.hinca_precio_admin_operador || "1300" : "1300";
+    document.getElementById("proy-hinca-admin-ay").value = p ? p.hinca_precio_admin_ayudante || "1600" : "1600";
+    document.getElementById("proy-perf-cantidad").value = p ? p.perforacion_cantidad || "" : "";
+    document.getElementById("proy-perf-prod-op").value = p ? p.perforacion_precio_prod_operador || "" : "";
+    document.getElementById("proy-perf-prod-ay").value = p ? p.perforacion_precio_prod_ayudante || "" : "";
+    document.getElementById("proy-perf-admin-op").value = p ? p.perforacion_precio_admin_operador || "" : "";
+    document.getElementById("proy-perf-admin-ay").value = p ? p.perforacion_precio_admin_ayudante || "" : "";
+    _proyToggleActividad();
+    _proyCalcResumen();
     // Load clientes
     fetch("/api/crm/empresas?activo=1&limit=200&tipo=cliente")
       .then(function (r) { return r.json(); })
@@ -1321,12 +1355,24 @@
       precio_hora_maquina: document.getElementById("proy-precio-hora-maq").value ? parseFloat(document.getElementById("proy-precio-hora-maq").value) : null,
       precio_hora_ayudante: document.getElementById("proy-precio-hora-ay").value ? parseFloat(document.getElementById("proy-precio-hora-ay").value) : null,
       importe_presupuestado: document.getElementById("proy-importe").value ? parseFloat(document.getElementById("proy-importe").value) : null,
+      tipo_actividad: document.getElementById("proy-tipo-actividad").value || "hinca",
+      hinca_cantidad: parseInt(document.getElementById("proy-hinca-cantidad").value) || 0,
+      hinca_precio_prod_operador: parseFloat(document.getElementById("proy-hinca-prod-op").value) || 0,
+      hinca_precio_prod_ayudante: parseFloat(document.getElementById("proy-hinca-prod-ay").value) || 0,
+      hinca_precio_admin_operador: parseFloat(document.getElementById("proy-hinca-admin-op").value) || 1300,
+      hinca_precio_admin_ayudante: parseFloat(document.getElementById("proy-hinca-admin-ay").value) || 1600,
+      perforacion_cantidad: parseInt(document.getElementById("proy-perf-cantidad").value) || 0,
+      perforacion_precio_prod_operador: parseFloat(document.getElementById("proy-perf-prod-op").value) || 0,
+      perforacion_precio_prod_ayudante: parseFloat(document.getElementById("proy-perf-prod-ay").value) || 0,
+      perforacion_precio_admin_operador: parseFloat(document.getElementById("proy-perf-admin-op").value) || 0,
+      perforacion_precio_admin_ayudante: parseFloat(document.getElementById("proy-perf-admin-ay").value) || 0,
       estado: document.getElementById("proy-estado").value,
       fecha_inicio_estimada: document.getElementById("proy-fecha-inicio").value || null,
       fecha_fin_estimada: document.getElementById("proy-fecha-fin").value || null,
       notas: document.getElementById("proy-notas").value,
     };
-    var url = id ? "/api/proyectos/" + id : "/api/proyectos";
+    var esCotizadoNuevo = !id && body.estado === "cotizado";
+    var url = id ? "/api/proyectos/" + id : (esCotizadoNuevo ? "/api/proyectos/cotizado" : "/api/proyectos");
     var method = id ? "PUT" : "POST";
     fetch(url, { method: method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
@@ -1966,3 +2012,43 @@
       .catch(function () { mostrarToast("Error de conexion", "error"); });
   };
 })();
+
+// ── Pricing hinca/perforación: toggle y cálculo ──
+window._proyToggleActividad = function () {
+  var tipo = document.getElementById("proy-tipo-actividad").value;
+  var hinca = document.getElementById("proy-seccion-hinca");
+  var perf = document.getElementById("proy-seccion-perforacion");
+  if (hinca) hinca.style.display = (tipo === "hinca" || tipo === "mixto") ? "" : "none";
+  if (perf) perf.style.display = (tipo === "perforacion" || tipo === "mixto") ? "" : "none";
+  _proyCalcResumen();
+};
+
+window._proyCalcResumen = function () {
+  var tipo = (document.getElementById("proy-tipo-actividad") || {}).value || "hinca";
+  var fmtN = function (n) { return n ? n.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " \u20ac" : "\u2014"; };
+  var html = "";
+  if (tipo === "hinca" || tipo === "mixto") {
+    var hCant = parseInt(document.getElementById("proy-hinca-cantidad").value) || 0;
+    var hOp = parseFloat(document.getElementById("proy-hinca-prod-op").value) || 0;
+    var hAy = parseFloat(document.getElementById("proy-hinca-prod-ay").value) || 0;
+    if (hCant > 0 && (hOp > 0 || hAy > 0)) {
+      html += '<div style="margin-bottom:6px;"><b style="color:#3B82F6;">Hinca prod.:</b> ';
+      if (hOp > 0) html += hCant + ' x ' + fmtN(hOp) + ' = <b>' + fmtN(hCant * hOp) + '</b> (m\u00e1q+oper) ';
+      if (hAy > 0) html += '| ' + hCant + ' x ' + fmtN(hAy) + ' = <b>' + fmtN(hCant * hAy) + '</b> (con ayud.)';
+      html += '</div>';
+    }
+  }
+  if (tipo === "perforacion" || tipo === "mixto") {
+    var pCant = parseInt(document.getElementById("proy-perf-cantidad").value) || 0;
+    var pOp = parseFloat(document.getElementById("proy-perf-prod-op").value) || 0;
+    var pAy = parseFloat(document.getElementById("proy-perf-prod-ay").value) || 0;
+    if (pCant > 0 && (pOp > 0 || pAy > 0)) {
+      html += '<div style="margin-bottom:6px;"><b style="color:#16A34A;">Perf. prod.:</b> ';
+      if (pOp > 0) html += pCant + ' x ' + fmtN(pOp) + ' = <b>' + fmtN(pCant * pOp) + '</b> (m\u00e1q+oper) ';
+      if (pAy > 0) html += '| ' + pCant + ' x ' + fmtN(pAy) + ' = <b>' + fmtN(pCant * pAy) + '</b> (con ayud.)';
+      html += '</div>';
+    }
+  }
+  var resEl = document.getElementById("proy-resumen-pricing");
+  if (resEl) resEl.innerHTML = html || '<span style="color:#888;">Introduce cantidades y precios para ver el resumen</span>';
+};

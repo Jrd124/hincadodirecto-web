@@ -556,11 +556,13 @@ function renderPaginacionBancos(container, actual, total) {
       var facturaRuta = (m.factura_ruta || "").trim();
       // Build unified vinculación cell
       var vincParts = [];
-      // Factura conciliation
-      if (conciliadoAt) {
+      var rrhhTipo = m.rrhh_tipo || "";
+      // Factura conciliation — only if actually linked to a factura (not just conciliado_at from RRHH)
+      var tieneFactura = m.factura_proveedor_id || m.factura_cliente_id || m.factura_cliente_key || m.multi_n_facturas;
+      if (conciliadoAt && tieneFactura && !rrhhTipo) {
         var fLine = "<span class=\"cel-flex\">";
         if (m.multi_n_facturas) {
-          fLine += "<span class=\"badge-conciliado\">Cobro → " + m.multi_n_facturas + " fact.</span>";
+          fLine += "<span class=\"badge-conciliado\">Cobro \u2192 " + m.multi_n_facturas + " fact.</span>";
           fLine += "<button type=\"button\" class=\"btn-small bancos-btn-ver-multi\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" data-empresa-id=\"" + ((m.empresa_id || "") + "").replace(/\"/g, "&quot;") + "\" title=\"Ver facturas vinculadas\">Ver</button>";
         } else {
           fLine += "<span class=\"badge-conciliado\">Factura</span>";
@@ -569,7 +571,7 @@ function renderPaginacionBancos(container, actual, total) {
             fLine += "<a href=\"/api/archivo?ruta=" + rutaEsc + "\" target=\"_blank\" class=\"btn-small\" title=\"Abrir factura\">Ver</a>";
           }
         }
-        fLine += "<button type=\"button\" class=\"btn-small bancos-btn-desvincular\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Quitar vinculación\">Desvincular</button>";
+        fLine += "<button type=\"button\" class=\"btn-small bancos-btn-desvincular\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Quitar vinculaci\u00f3n\">Desvincular</button>";
         fLine += "</span>";
         vincParts.push(fLine);
       }
@@ -582,6 +584,13 @@ function renderPaginacionBancos(container, actual, total) {
       var albaranIds = m.albaran_ids;
       if (albaranIds && conciliadoAt) {
         vincParts.push("<span class=\"cel-flex\"><span class=\"badge-conciliado\" style=\"background:#FEF3C7;color:#92400E;\">Albar\u00e1n</span><button type=\"button\" class=\"btn-small bancos-btn-desvincular-albaran\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Desvincular albar\u00e1n\">Desvincular</button></span>");
+      }
+      // RRHH conciliado
+      if (rrhhTipo && conciliadoAt) {
+        var rrhhLabels = { adelanto: "Adelanto", nomina: "N\u00f3mina", seguridad_social: "Seg. Social", irpf: "IRPF", is: "IS", iva: "IVA" };
+        var rrhhColors = { adelanto: "background:#FEF3C7;color:#92400E;", nomina: "background:#FEF3C7;color:#92400E;", seguridad_social: "background:#FDE8E8;color:#7B1F1F;", irpf: "background:#FDE8E8;color:#7B1F1F;", is: "background:#FDE8E8;color:#7B1F1F;", iva: "background:#FDE8E8;color:#7B1F1F;" };
+        var rrhhLabel = rrhhLabels[rrhhTipo] || rrhhTipo;
+        vincParts.push("<span class=\"cel-flex\"><span class=\"badge-conciliado\" style=\"" + (rrhhColors[rrhhTipo] || "") + "\">" + rrhhLabel + "</span><button type=\"button\" class=\"btn-small bancos-btn-desvincular-rrhh\" data-mov-id=\"" + (m.id != null ? m.id : "") + "\" title=\"Desvincular RRHH\">Desvincular</button></span>");
       }
       // Tarjeta agrupación
       var tarjetaId = m.tarjeta_id != null ? m.tarjeta_id : "";
@@ -635,7 +644,11 @@ function renderPaginacionBancos(container, actual, total) {
             if (impNum < 0) {
               vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-conciliar-albaran\"" + movDataAttrs + " title=\"Conciliar con albar\u00e1n\" style=\"font-size:11px;opacity:0.7;\">Albar\u00e1n</button>");
               vincParts.push("<button type=\"button\" class=\"btn-small bancos-btn-conciliar-seguro\"" + movDataAttrs + " title=\"Conciliar con p\u00f3liza de seguro\" style=\"font-size:11px;opacity:0.7;\">Seguro</button>");
+              vincParts.push("<button type=\"button\" class=\"btn-small\" onclick=\"_abrirModalRrhhBanco(this)\"" + movDataAttrs + " style=\"font-size:11px;opacity:0.7;background:#F3E8FF;color:#6B21A8;\">RRHH</button>");
             }
+          } else if (impNum < 0) {
+            // Excluded movements (RRHH keywords etc) — still offer RRHH classification
+            vincParts.push("<button type=\"button\" class=\"btn-small\" onclick=\"_abrirModalRrhhBanco(this)\"" + movDataAttrs + " style=\"background:#F3E8FF;color:#6B21A8;\">RRHH</button>");
           }
         }
       }
@@ -1389,6 +1402,26 @@ function renderPaginacionBancos(container, actual, total) {
           .finally(function () { btnDesvincularAlb.disabled = false; });
         return;
       }
+      // ── Conciliar RRHH ──
+      var btnConcRrhh = e.target && e.target.closest && e.target.closest(".bancos-btn-conciliar-rrhh");
+      if (btnConcRrhh) {
+        var rMovId = btnConcRrhh.getAttribute("data-mov-id");
+        var rConcepto = btnConcRrhh.getAttribute("data-concepto") || "";
+        var rFecha = btnConcRrhh.getAttribute("data-fecha") || "";
+        var rImporte = btnConcRrhh.getAttribute("data-importe") || "";
+        if (rMovId) _abrirModalConciliarRrhh(rMovId, rConcepto, rFecha, rImporte);
+        return;
+      }
+      // ── Desvincular RRHH ──
+      var btnDesRrhh = e.target && e.target.closest && e.target.closest(".bancos-btn-desvincular-rrhh");
+      if (btnDesRrhh) {
+        var dMovId = btnDesRrhh.getAttribute("data-mov-id");
+        if (dMovId && confirm("¿Desvincular clasificación RRHH?")) {
+          fetch("/api/rrhh/banco/desclasificar", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({movimiento_id: parseInt(dMovId)}) })
+            .then(function() { cargarMovimientosBancos(); });
+        }
+        return;
+      }
       var btnDesvincularExt = e.target && e.target.closest && e.target.closest(".bancos-btn-desvincular-extracto");
       if (btnDesvincularExt) {
         var movId = btnDesvincularExt.getAttribute("data-mov-id");
@@ -1993,8 +2026,8 @@ function renderPaginacionBancos(container, actual, total) {
       // % = cuánto del extracto está cubierto por facturas
       var pctVinculado = totalMov > 0 ? Math.min(100, Math.round((totalFact / totalMov) * 100)) : (totalFact > 0 ? 0 : (estado === "conciliado" ? 100 : 0));
       html += "<td><span class=\"badge-estado " + badgeClass + "\">" + estadoLabel + "</span>";
-      var fillClass = pctVinculado >= 100 ? "fill-100" : pctVinculado === 0 ? "fill-0" : "";
-      html += " <span class=\"barra-progreso-extracto\"><span class=\"barra-bg\"><span class=\"barra-fill " + fillClass + "\" style=\"width:" + pctVinculado + "%\"></span></span><span class=\"barra-pct\">" + pctVinculado + "%</span></span>";
+      var barColor = pctVinculado <= 33 ? "#E74C3C" : pctVinculado <= 66 ? "#E8B931" : "#1D9E75";
+      html += " <span class=\"barra-progreso-extracto\"><span class=\"barra-bg\"><span class=\"barra-fill\" style=\"width:" + pctVinculado + "%;background:" + barColor + "\"></span></span><span class=\"barra-pct\">" + pctVinculado + "%</span></span>";
       html += "</td>";
       html += "<td class=\"bancos-conciliacion-btns\">" + btnExcel + " " + btnFacturas + "</td>";
       html += "</tr>";
@@ -5887,4 +5920,100 @@ window.renderTablaClientesFacturas = renderTablaClientesFacturas;
 
   window.abrirModalDuplicadosFinanzas = abrirModalDuplicadosFinanzas;
   window._comprobarBannerDuplicados = _comprobarBannerDuplicados;
+
+  // ── Modal RRHH clasificación banco ──
+  window._abrirModalRrhhBanco = function(btn) {
+    var movId = btn.getAttribute("data-mov-id");
+    var concepto = btn.getAttribute("data-concepto") || "";
+    var fecha = btn.getAttribute("data-fecha") || "";
+    var importe = btn.getAttribute("data-importe") || "";
+    if (movId) _abrirModalConciliarRrhh(movId, concepto, fecha, importe);
+  };
+  function _abrirModalConciliarRrhh(movId, concepto, fecha, importe) {
+    var existing = document.getElementById("modal-rrhh-banco");
+    if (existing) existing.remove();
+
+    // Auto-detect suggestion from concepto
+    var conceptoLower = concepto.toLowerCase();
+    var sugerencia = "";
+    if (conceptoLower.indexOf("tgss") >= 0 || conceptoLower.indexOf("seguridad social") >= 0 || conceptoLower.indexOf("cotizacion") >= 0 || conceptoLower.indexOf("cotización") >= 0) sugerencia = "seguridad_social";
+    else if (conceptoLower.indexOf("retencion") >= 0 || conceptoLower.indexOf("retención") >= 0 || (conceptoLower.indexOf("impuesto") >= 0 && conceptoLower.indexOf("retencion") >= 0)) sugerencia = "irpf";
+    else if (conceptoLower.indexOf("aeat") >= 0 || conceptoLower.indexOf("hacienda") >= 0 || conceptoLower.indexOf("impuesto") >= 0) sugerencia = "irpf";
+
+    var mesDefault = fecha ? fecha.substring(0, 7) : "";
+
+    var modal = document.createElement("div");
+    modal.className = "modal-overlay visible";
+    modal.id = "modal-rrhh-banco";
+    modal.style.zIndex = "120";
+    modal.innerHTML = '<div class="modal-editar" role="dialog" style="max-width:420px;">' +
+      '<div class="modal-header"><h3>Clasificar como pago RRHH</h3><button class="modal-close" onclick="document.getElementById(\'modal-rrhh-banco\').remove()">&times;</button></div>' +
+      '<div class="modal-body">' +
+      '<div style="font-size:0.85rem;color:var(--color-text-secondary);margin-bottom:12px;">' + fecha + ' | ' + importe + ' EUR | ' + concepto.substring(0, 80) + '</div>' +
+      (sugerencia ? '<div style="padding:6px 10px;background:#FEF3C7;border-radius:6px;margin-bottom:12px;font-size:0.82rem;">Sugerencia: <b>' + ({seguridad_social:"Seg. Social",irpf:"IRPF",is:"Imp. Sociedades",iva:"IVA"}[sugerencia] || sugerencia) + '</b></div>' : '') +
+      '<div style="margin-bottom:12px;"><label style="font-size:12px;color:#888;">Tipo</label>' +
+      '<select id="rrhh-banco-tipo" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:6px;" onchange="var v=this.value;document.getElementById(\'rrhh-banco-emp-row\').style.display=(v===\'adelanto\'||v===\'nomina\')?\'block\':\'none\';document.getElementById(\'rrhh-banco-periodo-row\').style.display=(v===\'irpf\'||v===\'is\'||v===\'iva\')?\'none\':\'block\';document.getElementById(\'rrhh-banco-trim-row\').style.display=(v===\'irpf\'||v===\'is\'||v===\'iva\')?\'block\':\'none\';">' +
+      '<optgroup label="RRHH">' +
+      '<option value="adelanto">Adelanto empleado</option>' +
+      '<option value="nomina">Pago n\u00f3mina</option>' +
+      '</optgroup>' +
+      '<optgroup label="Impuestos">' +
+      '<option value="seguridad_social"' + (sugerencia === "seguridad_social" ? " selected" : "") + '>Seguridad Social</option>' +
+      '<option value="irpf"' + (sugerencia === "irpf" ? " selected" : "") + '>IRPF</option>' +
+      '<option value="is">Impuesto de Sociedades</option>' +
+      '<option value="iva">IVA</option>' +
+      '</optgroup>' +
+      '</select></div>' +
+      '<div id="rrhh-banco-emp-row" style="margin-bottom:12px;' + (sugerencia ? 'display:none;' : '') + '"><label style="font-size:12px;color:#888;">Empleado</label>' +
+      '<select id="rrhh-banco-empleado" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:6px;"><option value="">Cargando...</option></select></div>' +
+      '<div id="rrhh-banco-periodo-row" style="margin-bottom:12px;' + (sugerencia === "irpf" ? 'display:none;' : '') + '"><label style="font-size:12px;color:#888;">Periodo (mes)</label>' +
+      '<input type="month" id="rrhh-banco-periodo" value="' + mesDefault + '" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:6px;"></div>' +
+      '<div id="rrhh-banco-trim-row" style="margin-bottom:12px;' + (sugerencia !== "irpf" ? 'display:none;' : '') + '"><label style="font-size:12px;color:#888;">Trimestre</label>' +
+      '<select id="rrhh-banco-trimestre" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:6px;">' +
+      '<option value="1T-2025">1T 2025</option><option value="2T-2025">2T 2025</option><option value="3T-2025">3T 2025</option><option value="4T-2025">4T 2025</option>' +
+      '<option value="1T-2026">1T 2026</option><option value="2T-2026">2T 2026</option><option value="3T-2026">3T 2026</option><option value="4T-2026">4T 2026</option>' +
+      '</select></div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+      '<button class="secondary" onclick="document.getElementById(\'modal-rrhh-banco\').remove()">Cancelar</button>' +
+      '<button class="primary" id="rrhh-banco-confirmar">Guardar</button>' +
+      '</div></div></div>';
+
+    modal.addEventListener("click", function(ev) { if (ev.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+
+    // Load empleados
+    fetch("/api/rrhh/empleados?estado=todos")
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        var sel = document.getElementById("rrhh-banco-empleado");
+        if (!sel) return;
+        sel.innerHTML = '<option value="">Seleccionar empleado...</option>';
+        (d.empleados || []).forEach(function(emp) {
+          sel.innerHTML += '<option value="' + emp.id + '">' + (emp.nombre || "") + ' ' + (emp.apellidos || "") + '</option>';
+        });
+      });
+
+    // Confirm handler
+    document.getElementById("rrhh-banco-confirmar").addEventListener("click", function() {
+      var tipo = document.getElementById("rrhh-banco-tipo").value;
+      var empleadoId = document.getElementById("rrhh-banco-empleado").value;
+      var periodo = tipo === "irpf" ? document.getElementById("rrhh-banco-trimestre").value : document.getElementById("rrhh-banco-periodo").value;
+
+      if ((tipo === "adelanto" || tipo === "nomina") && !empleadoId) { alert("Selecciona un empleado"); return; }
+
+      fetch("/api/rrhh/banco/clasificar", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ movimiento_id: parseInt(movId), rrhh_tipo: tipo, empleado_id: empleadoId ? parseInt(empleadoId) : null, periodo: periodo })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.error) { alert("Error: " + d.error); return; }
+        document.getElementById("modal-rrhh-banco").remove();
+        if (typeof cargarMovimientosBancos === "function") cargarMovimientosBancos();
+        if (typeof mostrarToast === "function") mostrarToast("Movimiento clasificado como RRHH", "success");
+      })
+      .catch(function(err) { alert("Error: " + err.message); });
+    });
+  }
 })();
