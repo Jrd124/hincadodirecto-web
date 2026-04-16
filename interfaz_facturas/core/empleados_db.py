@@ -88,6 +88,8 @@ def init_empleados_db() -> None:
             conn.execute("ALTER TABLE empleados ADD COLUMN iban TEXT")
         if "direccion" not in existing:
             conn.execute("ALTER TABLE empleados ADD COLUMN direccion TEXT")
+        if "dias_vacaciones_anuales" not in existing:
+            conn.execute("ALTER TABLE empleados ADD COLUMN dias_vacaciones_anuales INTEGER DEFAULT 22")
 
         # Normalizar puesto a operador/ayudante
         conn.execute("UPDATE empleados SET puesto = 'operador' WHERE LOWER(puesto) IN ('hincador','hincador, perforador','hincador/perforador','perforador')")
@@ -196,6 +198,20 @@ def init_empleados_db() -> None:
         if "funcion" not in dd_cols:
             conn.execute("ALTER TABLE dietas_diarias ADD COLUMN funcion TEXT DEFAULT 'operador'")
 
+        # ── Tabla de vacaciones ───────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS vacaciones_dias (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                empleado_id INTEGER NOT NULL,
+                fecha TEXT NOT NULL,
+                estado TEXT DEFAULT 'aprobada',
+                notas TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (empleado_id) REFERENCES empleados(id),
+                UNIQUE(empleado_id, fecha)
+            )
+        """)
+
     _initialized = True
 
 
@@ -211,7 +227,7 @@ _CAMPOS = [
     "prl_especifico", "prl_especifico_caducidad",
     "apto_medico", "apto_medico_caducidad",
     "formacion_especifica", "foto_url", "fecha_antiguedad",
-    "neto_pactado", "iban", "direccion",
+    "neto_pactado", "iban", "direccion", "dias_vacaciones_anuales",
 ]
 
 

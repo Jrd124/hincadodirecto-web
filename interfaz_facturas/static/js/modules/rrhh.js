@@ -61,6 +61,7 @@ function _rrhhOnPanelShow(panel) {
   else if (panel === "nominas") _rrhhCargarNominas();
   else if (panel === "verificador") _rrhhCargarVerificador();
   else if (panel === "dietas") _rrhhCargarDietas();
+  else if (panel === "vacaciones") _rrhhCargarVacaciones();
   else if (panel === "adelantos") _rrhhCargarAdelantos();
   else if (panel === "ss") _rrhhCargarSS();
   else if (panel === "irpf") _rrhhCargarIRPF();
@@ -489,6 +490,8 @@ function _rrhhRellenarFormEmpleado(e) {
   if (dirEl) dirEl.value = e.direccion || "";
   var netoEl = document.getElementById("emp-neto-pactado");
   if (netoEl) netoEl.value = e.neto_pactado || "";
+  var vacEl = document.getElementById("emp-dias-vacaciones");
+  if (vacEl) vacEl.value = e.dias_vacaciones_anuales != null ? e.dias_vacaciones_anuales : 22;
 }
 
 function _rrhhRecogerFormEmpleado() {
@@ -506,6 +509,7 @@ function _rrhhRecogerFormEmpleado() {
     iban: (document.getElementById("emp-iban") || {}).value || "",
     direccion: (document.getElementById("emp-direccion") || {}).value || "",
     neto_pactado: parseFloat((document.getElementById("emp-neto-pactado") || {}).value) || 0,
+    dias_vacaciones_anuales: parseInt((document.getElementById("emp-dias-vacaciones") || {}).value) || 22,
     prl_basico: document.getElementById("emp-prl-basico").checked ? 1 : 0,
     prl_basico_horas: parseInt(document.getElementById("emp-prl-horas").value) || null,
     prl_basico_caducidad: document.getElementById("emp-prl-basico-cad").value,
@@ -1388,6 +1392,284 @@ function _rrhhLoadEstimacion() {
     .catch(function () {
       tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:2rem;color:#dc3545;">Error al cargar</td></tr>';
     });
+}
+
+// ===============================================================================
+// ==  5b. VACACIONES                                                           ==
+// ===============================================================================
+
+var _rrhhVacVista = "calendario";
+var _rrhhVacRangoStart = null; // {empId, fecha} for shift-click range
+
+function _rrhhCargarVacaciones() {
+  var container = document.getElementById("rrhh-vacaciones-contenido");
+  if (!container) return;
+  var pillsHtml = '<div style="display:flex;gap:6px;margin-bottom:12px;">';
+  [["calendario","Calendario"],["resumen","Resumen"],["empleado","Por empleado"]].forEach(function (v) {
+    var active = _rrhhVacVista === v[0];
+    pillsHtml += '<button onclick="_rrhhVacVista=\'' + v[0] + '\';_rrhhCargarVacaciones()" style="padding:5px 14px;border-radius:9999px;font-size:0.82rem;font-weight:' + (active ? '700' : '400') + ';border:1px solid ' + (active ? '#3B82F6' : 'var(--border,#ccc)') + ';background:' + (active ? '#EFF6FF' : 'transparent') + ';color:' + (active ? '#3B82F6' : 'inherit') + ';cursor:pointer;">' + v[1] + '</button>';
+  });
+  pillsHtml += '</div><div id="rrhh-vac-vista-body"></div>';
+  container.innerHTML = pillsHtml;
+  var body = document.getElementById("rrhh-vac-vista-body");
+  if (_rrhhVacVista === "calendario") _rrhhVacCalendario(body);
+  else if (_rrhhVacVista === "resumen") _rrhhVacResumen(body);
+  else _rrhhVacEmpleado(body);
+}
+
+// ── Calendario ──
+
+function _rrhhVacCalendario(body) {
+  var now = new Date();
+  var anio = now.getFullYear(), mes = now.getMonth() + 1;
+  body.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
+    '<label style="font-size:0.82rem;font-weight:600;">A\u00f1o:</label>' +
+    '<select id="rrhh-vac-cal-anio" style="width:75px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhVacCalReload()">' +
+    '<option value="2025"' + (anio===2025?' selected':'') + '>2025</option><option value="2026"' + (anio===2026?' selected':'') + '>2026</option><option value="2027">2027</option></select>' +
+    '<label style="font-size:0.82rem;font-weight:600;">Mes:</label>' +
+    '<select id="rrhh-vac-cal-mes" style="width:115px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhVacCalReload()">' +
+    _MESES_NOMBRE.map(function(n,i){return '<option value="'+(i+1)+'"'+(i+1===mes?' selected':'')+'>'+n+'</option>';}).join('') +
+    '</select></div>' +
+    '<div id="rrhh-vac-cal-grid" style="overflow-x:auto;"><p style="color:var(--text-secondary);padding:1rem;">Cargando...</p></div>';
+  _rrhhVacCalReload();
+}
+
+function _rrhhVacCalReload() {
+  var a = document.getElementById("rrhh-vac-cal-anio");
+  var m = document.getElementById("rrhh-vac-cal-mes");
+  if (!a || !m) return;
+  var periodo = a.value + "-" + String(m.value).padStart(2, "0");
+  _rrhhVacCalLoad(periodo);
+}
+
+function _rrhhVacCalLoad(periodo) {
+  var grid = document.getElementById("rrhh-vac-cal-grid");
+  if (!grid) return;
+  grid.innerHTML = '<p style="color:var(--text-secondary);padding:1rem;">Cargando...</p>';
+  fetch("/api/rrhh/vacaciones/calendario/" + periodo)
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var emps = d.empleados || [];
+      var diasArr = d.dias || [];
+      var vacMap = d.vacaciones || {};
+      if (!emps.length) { grid.innerHTML = '<p>Sin empleados activos</p>'; return; }
+
+      var h = '<table style="border-collapse:collapse;font-size:0.75rem;width:max-content;"><thead><tr>' +
+        '<th style="position:sticky;left:0;z-index:2;background:var(--bg-secondary,#f8f9fa);padding:4px 6px;min-width:140px;text-align:left;">Empleado</th>';
+      diasArr.forEach(function (f) {
+        var dt = new Date(f + "T00:00:00");
+        var ds = _DIAS_SEMANA[dt.getDay()];
+        var num = dt.getDate();
+        var noLab = dt.getDay() === 0 || dt.getDay() === 6 || _RRHH_FESTIVOS.indexOf(f) >= 0;
+        h += '<th style="padding:2px 1px;text-align:center;min-width:28px;font-size:9px;' + (noLab ? 'background:#E5E7EB;color:#9ca3af;' : '') + '"><div>' + ds + '</div><div>' + num + '</div></th>';
+      });
+      h += '<th style="padding:4px 6px;text-align:right;">Total</th></tr></thead><tbody>';
+
+      emps.forEach(function (emp) {
+        var nombre = (emp.nombre || "") + " " + (emp.apellidos || "");
+        var count = 0;
+        h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">';
+        h += '<td style="position:sticky;left:0;z-index:1;background:#fff;padding:3px 6px;font-weight:500;white-space:nowrap;">' + nombre.trim() + '</td>';
+        diasArr.forEach(function (f) {
+          var dt = new Date(f + "T00:00:00");
+          var noLab = dt.getDay() === 0 || dt.getDay() === 6 || _RRHH_FESTIVOS.indexOf(f) >= 0;
+          var key = emp.id + "_" + f;
+          var vac = vacMap[key];
+          var bg = noLab ? "#E5E7EB" : (vac ? "#DBEAFE" : "");
+          var txt = vac ? '<span style="font-weight:700;color:#2563EB;font-size:10px;">V</span>' : '';
+          if (vac && !noLab) count++;
+          var title = vac ? ("Vacaciones" + (vac.notas ? ": " + vac.notas : "")) : "";
+          var nEsc = nombre.trim().replace(/'/g, "\\'");
+          h += '<td style="padding:0px 1px;text-align:center;cursor:' + (noLab ? 'default' : 'pointer') + ';min-width:28px;background:' + bg + ';" title="' + title + '"' +
+            (noLab ? '' : ' onclick="_rrhhVacCellClick(event,' + emp.id + ',\'' + f + '\',\'' + periodo + '\',\'' + nEsc + '\',' + (vac ? 'true' : 'false') + ')"') +
+            '>' + txt + '</td>';
+        });
+        h += '<td style="padding:3px 6px;text-align:right;font-weight:600;">' + (count || '\u2014') + '</td>';
+        h += '</tr>';
+      });
+      h += '</tbody></table>';
+      grid.innerHTML = h;
+    })
+    .catch(function (err) { grid.innerHTML = '<p style="color:#dc3545;">Error: ' + err.message + '</p>'; });
+}
+
+function _rrhhVacCellClick(evt, empId, fecha, periodo, empNombre, tieneVac) {
+  // Shift+click for range
+  if (evt.shiftKey && _rrhhVacRangoStart && _rrhhVacRangoStart.empId === empId) {
+    var f1 = _rrhhVacRangoStart.fecha;
+    var f2 = fecha;
+    if (f1 > f2) { var tmp = f1; f1 = f2; f2 = tmp; }
+    if (!confirm("Marcar vacaciones para " + empNombre + " del " + f1 + " al " + f2 + "?")) return;
+    _rrhhVacRangoStart = null;
+    fetch("/api/rrhh/vacaciones/rango", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({empleado_id: empId, fecha_inicio: f1, fecha_fin: f2})
+    }).then(function () { _rrhhVacCalReload(); });
+    return;
+  }
+
+  if (tieneVac) {
+    if (confirm("Quitar vacaciones de " + empNombre + " el " + fecha + "?")) {
+      fetch("/api/rrhh/vacaciones/dia", {
+        method: "DELETE",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({empleado_id: empId, fecha: fecha})
+      }).then(function () { _rrhhVacCalReload(); });
+    }
+  } else {
+    _rrhhVacRangoStart = {empId: empId, fecha: fecha};
+    fetch("/api/rrhh/vacaciones/dia", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({empleado_id: empId, fecha: fecha, estado: "aprobada"})
+    }).then(function () { _rrhhVacCalReload(); });
+  }
+}
+
+// ── Resumen ──
+
+function _rrhhVacResumen(body) {
+  var now = new Date();
+  var anio = now.getFullYear();
+  body.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">' +
+    '<label style="font-size:0.82rem;font-weight:600;">A\u00f1o:</label>' +
+    '<select id="rrhh-vac-res-anio" style="width:75px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhVacResLoad()">' +
+    '<option value="2025"' + (anio===2025?' selected':'') + '>2025</option><option value="2026"' + (anio===2026?' selected':'') + '>2026</option><option value="2027">2027</option></select>' +
+    '</div><div id="rrhh-vac-res-body">Cargando...</div>';
+  _rrhhVacResLoad();
+}
+
+function _rrhhVacResLoad() {
+  var sel = document.getElementById("rrhh-vac-res-anio");
+  if (!sel) return;
+  var anio = sel.value;
+  var body = document.getElementById("rrhh-vac-res-body");
+  if (!body) return;
+  body.innerHTML = "Cargando...";
+  fetch("/api/rrhh/vacaciones/resumen/" + anio)
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var lineas = d.lineas || [];
+      var tot = d.totales || {};
+      var h = '<div class="card" style="overflow-x:auto;padding:0;">' +
+        '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">' +
+        '<thead><tr style="background:var(--bg-secondary,#f8f9fa);">' +
+        '<th style="padding:6px 8px;text-align:left;">Empleado</th>' +
+        '<th style="padding:6px 3px;"></th>' +
+        '<th style="padding:6px 4px;text-align:right;">D\u00edas anuales</th>' +
+        '<th style="padding:6px 4px;text-align:right;">Devengados</th>' +
+        '<th style="padding:6px 4px;text-align:right;">Disfrutados</th>' +
+        '<th style="padding:6px 4px;text-align:right;font-weight:700;">Pendientes</th>' +
+        '<th style="padding:6px 4px;">Pr\u00f3xima</th>' +
+        '</tr></thead><tbody>';
+      lineas.forEach(function (l) {
+        var pendColor = l.pendientes < 0 ? "#dc2626" : l.pendientes <= 5 ? "#ca8a04" : "#16a34a";
+        var pendBg = l.pendientes < 0 ? "#FEF2F2" : l.pendientes <= 5 ? "#FFFBEB" : "#F0FDF4";
+        h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
+          '<td style="padding:5px 8px;font-weight:500;">' + l.nombre + '</td>' +
+          '<td style="padding:5px 3px;"><a href="#" onclick="event.preventDefault();_rrhhVacVerEmpleado(' + l.empleado_id + ')" style="color:#3B82F6;font-size:0.75rem;">Ver</a></td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + l.dias_anuales + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + l.devengados.toFixed(1) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + l.disfrutados + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;font-weight:700;background:' + pendBg + ';color:' + pendColor + ';">' + l.pendientes.toFixed(1) + '</td>' +
+          '<td style="padding:5px 4px;font-size:0.78rem;">' + (l.proxima_fecha || '\u2014') + '</td>' +
+          '</tr>';
+      });
+      h += '</tbody><tfoot><tr style="font-weight:700;background:var(--bg-secondary,#f8f9fa);">' +
+        '<td colspan="2" style="padding:6px 8px;">TOTALES</td>' +
+        '<td style="padding:6px 4px;text-align:right;">' + tot.dias_anuales + '</td>' +
+        '<td style="padding:6px 4px;text-align:right;">' + tot.devengados.toFixed(1) + '</td>' +
+        '<td style="padding:6px 4px;text-align:right;">' + tot.disfrutados + '</td>' +
+        '<td style="padding:6px 4px;text-align:right;">' + tot.pendientes.toFixed(1) + '</td>' +
+        '<td></td></tr></tfoot></table></div>';
+      body.innerHTML = h;
+    });
+}
+
+function _rrhhVacVerEmpleado(empId) {
+  _rrhhVacVista = "empleado";
+  _rrhhCargarVacaciones();
+  setTimeout(function () {
+    var sel = document.getElementById("rrhh-vac-emp-sel");
+    if (sel) { sel.value = empId; _rrhhVacEmpLoad(); }
+  }, 200);
+}
+
+// ── Por empleado ──
+
+function _rrhhVacEmpleado(body) {
+  var now = new Date();
+  var anio = now.getFullYear();
+  body.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">' +
+    '<label style="font-size:0.82rem;font-weight:600;">Empleado:</label>' +
+    '<select id="rrhh-vac-emp-sel" style="max-width:250px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhVacEmpLoad()"><option value="">Selecciona...</option></select>' +
+    '<label style="font-size:0.82rem;font-weight:600;margin-left:8px;">A\u00f1o:</label>' +
+    '<select id="rrhh-vac-emp-anio" style="width:75px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhVacEmpLoad()">' +
+    '<option value="2025"' + (anio===2025?' selected':'') + '>2025</option><option value="2026"' + (anio===2026?' selected':'') + '>2026</option><option value="2027">2027</option></select>' +
+    '</div><div id="rrhh-vac-emp-body"></div>';
+  // Populate employee selector
+  var cache = _rrhhEmpleadosCache || [];
+  if (cache.length) {
+    var sel = document.getElementById("rrhh-vac-emp-sel");
+    cache.forEach(function (e) {
+      if (e.estado === "activo") sel.innerHTML += '<option value="' + e.id + '">' + e.nombre + ' ' + (e.apellidos || '') + '</option>';
+    });
+  } else {
+    fetch("/api/rrhh/empleados").then(function(r){return r.json();}).then(function(d){
+      var sel = document.getElementById("rrhh-vac-emp-sel");
+      if (!sel) return;
+      (d.empleados || []).forEach(function(e){
+        if (e.estado === "activo") sel.innerHTML += '<option value="' + e.id + '">' + e.nombre + ' ' + (e.apellidos || '') + '</option>';
+      });
+    });
+  }
+}
+
+function _rrhhVacEmpLoad() {
+  var sel = document.getElementById("rrhh-vac-emp-sel");
+  var anioSel = document.getElementById("rrhh-vac-emp-anio");
+  var body = document.getElementById("rrhh-vac-emp-body");
+  if (!sel || !anioSel || !body || !sel.value) { if (body) body.innerHTML = ''; return; }
+  body.innerHTML = 'Cargando...';
+  fetch("/api/rrhh/vacaciones/empleado/" + sel.value + "/" + anioSel.value)
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var h = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px;">';
+      h += _rrhhKpiCard("D\u00edas anuales", d.dias_anuales, "");
+      h += _rrhhKpiCard("Devengados", d.devengados.toFixed(1), " tes-card-blue");
+      h += _rrhhKpiCard("Disfrutados", d.disfrutados, "");
+      var pendClass = d.pendientes < 0 ? " tes-card-red" : " tes-card-green";
+      h += _rrhhKpiCard("Pendientes", d.pendientes.toFixed(1), pendClass);
+      h += '</div>';
+
+      h += '<div class="card" style="overflow-x:auto;padding:0;"><table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+      h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:6px 8px;">Fecha</th><th style="padding:6px 4px;">D\u00eda</th><th style="padding:6px 4px;">Estado</th><th style="padding:6px 4px;">Notas</th><th style="padding:6px 4px;text-align:center;">Acci\u00f3n</th></tr></thead><tbody>';
+      if (!d.dias || !d.dias.length) {
+        h += '<tr><td colspan="5" style="text-align:center;padding:2rem;">Sin vacaciones registradas</td></tr>';
+      } else {
+        d.dias.forEach(function (v) {
+          h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
+            '<td style="padding:5px 8px;">' + v.fecha + '</td>' +
+            '<td style="padding:5px 4px;">' + (v.dia_semana || '') + '</td>' +
+            '<td style="padding:5px 4px;"><span style="padding:1px 6px;border-radius:9999px;font-size:0.75rem;background:#DBEAFE;color:#1E40AF;">' + (v.estado || 'aprobada') + '</span></td>' +
+            '<td style="padding:5px 4px;font-size:0.78rem;">' + (v.notas || '\u2014') + '</td>' +
+            '<td style="padding:5px 4px;text-align:center;"><button onclick="_rrhhVacEliminarDia(' + d.empleado_id + ',\'' + v.fecha + '\')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:0.85rem;" title="Eliminar">\u2716</button></td>' +
+            '</tr>';
+        });
+      }
+      h += '</tbody></table></div>';
+      body.innerHTML = h;
+    });
+}
+
+function _rrhhVacEliminarDia(empId, fecha) {
+  if (!confirm("Eliminar vacaci\u00f3n del " + fecha + "?")) return;
+  fetch("/api/rrhh/vacaciones/dia", {
+    method: "DELETE",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({empleado_id: empId, fecha: fecha})
+  }).then(function () { _rrhhVacEmpLoad(); });
 }
 
 // ===============================================================================
@@ -2431,6 +2713,13 @@ window._rrhhBorrarDieta = _rrhhBorrarDieta;
 window._rrhhNuevaTarifaModal = _rrhhNuevaTarifaModal;
 window._rrhhGuardarNuevaTarifa = _rrhhGuardarNuevaTarifa;
 window._rrhhEditarTarifa = _rrhhEditarTarifa;
+window._rrhhCargarVacaciones = _rrhhCargarVacaciones;
+window._rrhhVacCalReload = _rrhhVacCalReload;
+window._rrhhVacCellClick = _rrhhVacCellClick;
+window._rrhhVacResLoad = _rrhhVacResLoad;
+window._rrhhVacVerEmpleado = _rrhhVacVerEmpleado;
+window._rrhhVacEmpLoad = _rrhhVacEmpLoad;
+window._rrhhVacEliminarDia = _rrhhVacEliminarDia;
 window._rrhhCargarAdelantos = _rrhhCargarAdelantos;
 window._rrhhAdelMesPrev = _rrhhAdelMesPrev;
 window._rrhhAdelMesNext = _rrhhAdelMesNext;

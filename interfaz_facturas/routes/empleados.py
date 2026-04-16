@@ -809,6 +809,243 @@ def api_rrhh_banco_desclasificar():
     bconn.close()
 
 
+# ── Vacaciones ────────────────────────────────────────────────────────────
+
+_FESTIVOS = {
+  '2025-01-01','2025-01-06','2025-04-17','2025-04-18','2025-05-01','2025-08-15',
+  '2025-10-12','2025-11-01','2025-12-06','2025-12-08','2025-12-25',
+  '2026-01-01','2026-01-06','2026-04-02','2026-04-03','2026-05-01','2026-08-15',
+  '2026-10-12','2026-11-02','2026-12-07','2026-12-08','2026-12-25',
+  '2027-01-01','2027-01-06','2027-03-25','2027-03-26','2027-05-01','2027-08-15',
+  '2027-10-12','2027-11-01','2027-12-06','2027-12-08','2027-12-25',
+}
+
+def _es_laborable(fecha_str):
+  from datetime import date as _d
+  d = _d.fromisoformat(fecha_str)
+  return d.weekday() < 5 and fecha_str not in _FESTIVOS
+
+def _dias_devengados(fecha_alta_str, dias_anuales, fecha_ref):
+  """Devengo proporcional de vacaciones."""
+  from datetime import date as _d
+  if not fecha_alta_str:
+    return float(dias_anuales)
+  fa = _d.fromisoformat(fecha_alta_str)
+  anio = fecha_ref.year
+  inicio = _d(anio, 1, 1)
+  if fa.year == anio and fa > inicio:
+    inicio = fa
+  elif fa.year > anio:
+    return 0.0
+  transcurridos = (fecha_ref - inicio).days + 1
+  dev = dias_anuales * transcurridos / 365
+  return round(min(dev, dias_anuales), 2)
+
+
+@empleados_bp.get("/api/rrhh/vacaciones/calendario/<periodo>")
+def api_rrhh_vacaciones_calendario(periodo):
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    from datetime import date, timedelta
+    y, m = int(periodo[:4]), int(periodo[5:7])
+    d = date(y, m, 1)
+    dias = []
+    while d.month == m:
+      dias.append(d.isoformat())
+      d += timedelta(days=1)
+
+    emps = [dict(r) for r in conn.execute(
+      "SELECT id, nombre, apellidos, fecha_alta, dias_vacaciones_anuales "
+      "FROM empleados WHERE estado='activo' ORDER BY apellidos, nombre"
+    ).fetchall()]
+
+    vac = {}
+    for r in conn.execute(
+      "SELECT empleado_id, fecha, estado, notas FROM vacaciones_dias "
+      "WHERE fecha >= ? AND fecha <= ?", (dias[0], dias[-1])
+    ).fetchall():
+      vac[f"{r['empleado_id']}_{r['fecha']}"] = {
+        "estado": r["estado"], "notas": r["notas"] or ""
+      }
+
+    return jsonify({"dias": dias, "empleados": emps, "vacaciones": vac})
+  finally:
+    conn.close()
+
+
+@empleados_bp.post("/api/rrhh/vacaciones/dia")
+def api_rrhh_vacaciones_dia():
+  empleados_db.init_empleados_db()
+  data = request.get_json(silent=True) or {}
+  conn = get_conn()
+  try:
+    conn.execute(
+      "INSERT OR REPLACE INTO vacaciones_dias (empleado_id, fecha, estado, notas) VALUES (?,?,?,?)",
+      (data["empleado_id"], data["fecha"], data.get("estado", "aprobada"), data.get("notas", "")),
+    )
+    conn.commit()
+    return jsonify({"ok": True})
+  finally:
+    conn.close()
+
+
+@empleados_bp.post("/api/rrhh/vacaciones/rango")
+def api_rrhh_vacaciones_rango():
+  empleados_db.init_empleados_db()
+  data = request.get_json(silent=True) or {}
+  conn = get_conn()
+  try:
+    from datetime import date as _d, timedelta as _td
+    emp_id = data["empleado_id"]
+    d = _d.fromisoformat(data["fecha_inicio"])
+    fin = _d.fromisoformat(data["fecha_fin"])
+    estado = data.get("estado", "aprobada")
+    notas = data.get("notas", "")
+    count = 0
+    while d <= fin:
+      f = d.isoformat()
+      if _es_laborable(f):
+        try:
+          conn.execute(
+            "INSERT OR IGNORE INTO vacaciones_dias (empleado_id, fecha, estado, notas) VALUES (?,?,?,?)",
+            (emp_id, f, estado, notas),
+          )
+          count += 1
+        except Exception:
+          pass
+      d += _td(days=1)
+    conn.commit()
+    return jsonify({"ok": True, "dias_creados": count})
+  finally:
+    conn.close()
+
+
+@empleados_bp.delete("/api/rrhh/vacaciones/dia")
+def api_rrhh_vacaciones_dia_delete():
+  empleados_db.init_empleados_db()
+  data = request.get_json(silent=True) or {}
+  conn = get_conn()
+  try:
+    conn.execute(
+      "DELETE FROM vacaciones_dias WHERE empleado_id=? AND fecha=?",
+      (data["empleado_id"], data["fecha"]),
+    )
+    conn.commit()
+    return jsonify({"ok": True})
+  finally:
+    conn.close()
+
+
+@empleados_bp.get("/api/rrhh/vacaciones/resumen/<int:anio>")
+def api_rrhh_vacaciones_resumen(anio):
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    from datetime import date
+    hoy = date.today()
+    ref = hoy if hoy.year == anio else date(anio, 12, 31)
+    emps = [dict(r) for r in conn.execute(
+      "SELECT id, nombre, apellidos, fecha_alta, dias_vacaciones_anuales "
+      "FROM empleados WHERE estado='activo' ORDER BY apellidos, nombre"
+    ).fetchall()]
+
+    # Count vacation days per employee this year (only working days)
+    vac_count = {}
+    for r in conn.execute(
+      "SELECT empleado_id, fecha FROM vacaciones_dias "
+      "WHERE fecha >= ? AND fecha <= ?",
+      (f"{anio}-01-01", f"{anio}-12-31")
+    ).fetchall():
+      if _es_laborable(r["fecha"]):
+        vac_count[r["empleado_id"]] = vac_count.get(r["empleado_id"], 0) + 1
+
+    # Next vacation date per employee
+    proxima = {}
+    for r in conn.execute(
+      "SELECT empleado_id, MIN(fecha) as prox FROM vacaciones_dias "
+      "WHERE fecha > ? GROUP BY empleado_id", (hoy.isoformat(),)
+    ).fetchall():
+      proxima[r["empleado_id"]] = r["prox"]
+
+    lineas = []
+    t_anuales = 0; t_dev = 0; t_disf = 0; t_pend = 0
+    for e in emps:
+      eid = e["id"]
+      anuales = e["dias_vacaciones_anuales"] or 22
+      dev = _dias_devengados(e["fecha_alta"], anuales, ref)
+      disf = vac_count.get(eid, 0)
+      pend = round(dev - disf, 2)
+      t_anuales += anuales; t_dev += dev; t_disf += disf; t_pend += pend
+      lineas.append({
+        "empleado_id": eid,
+        "nombre": ((e["nombre"] or "") + " " + (e["apellidos"] or "")).strip(),
+        "dias_anuales": anuales,
+        "devengados": dev,
+        "disfrutados": disf,
+        "pendientes": pend,
+        "proxima_fecha": proxima.get(eid),
+      })
+    lineas.sort(key=lambda x: x["pendientes"])
+
+    return jsonify({
+      "anio": anio,
+      "lineas": lineas,
+      "totales": {
+        "dias_anuales": t_anuales,
+        "devengados": round(t_dev, 2),
+        "disfrutados": t_disf,
+        "pendientes": round(t_pend, 2),
+      },
+    })
+  finally:
+    conn.close()
+
+
+@empleados_bp.get("/api/rrhh/vacaciones/empleado/<int:eid>/<int:anio>")
+def api_rrhh_vacaciones_empleado(eid, anio):
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    from datetime import date
+    hoy = date.today()
+    ref = hoy if hoy.year == anio else date(anio, 12, 31)
+    e = conn.execute(
+      "SELECT id, nombre, apellidos, fecha_alta, dias_vacaciones_anuales "
+      "FROM empleados WHERE id=?", (eid,)
+    ).fetchone()
+    if not e:
+      return jsonify({"error": "Empleado no encontrado"}), 404
+    anuales = e["dias_vacaciones_anuales"] or 22
+    dev = _dias_devengados(e["fecha_alta"], anuales, ref)
+
+    dias_vac = [dict(r) for r in conn.execute(
+      "SELECT fecha, estado, notas FROM vacaciones_dias "
+      "WHERE empleado_id=? AND fecha >= ? AND fecha <= ? ORDER BY fecha DESC",
+      (eid, f"{anio}-01-01", f"{anio}-12-31")
+    ).fetchall()]
+    disf = sum(1 for d in dias_vac if _es_laborable(d["fecha"]))
+
+    # Add dia_semana
+    DIAS_ES = ["L","M","X","J","V","S","D"]
+    for d in dias_vac:
+      dt = date.fromisoformat(d["fecha"])
+      d["dia_semana"] = DIAS_ES[dt.weekday()]
+
+    return jsonify({
+      "empleado_id": eid,
+      "nombre": ((e["nombre"] or "") + " " + (e["apellidos"] or "")).strip(),
+      "anio": anio,
+      "dias_anuales": anuales,
+      "devengados": dev,
+      "disfrutados": disf,
+      "pendientes": round(dev - disf, 2),
+      "dias": dias_vac,
+    })
+  finally:
+    conn.close()
+
+
 @empleados_bp.get("/api/rrhh/adelantos-banco/<periodo>")
 def api_rrhh_adelantos_banco(periodo):
   """Lee adelantos desde movimientos bancarios clasificados."""

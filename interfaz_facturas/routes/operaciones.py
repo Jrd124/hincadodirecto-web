@@ -145,6 +145,17 @@ def cuadrante():
                 "notas": r["notas"],
             }
 
+        # Vacaciones del mes
+        vacaciones = set()
+        try:
+            for r in conn.execute(
+                "SELECT empleado_id, fecha FROM vacaciones_dias "
+                "WHERE fecha >= ? AND fecha <= ?", (fecha_ini, fecha_fin)
+            ).fetchall():
+                vacaciones.add(f"{r['empleado_id']}_{r['fecha']}")
+        except Exception:
+            pass  # table may not exist yet
+
         return jsonify({
             "mes": mes_str,
             "dias": dias,
@@ -152,6 +163,7 @@ def cuadrante():
             "maquinas": maquinas,
             "proyectos": proyectos,
             "asignaciones": asignaciones,
+            "vacaciones": list(vacaciones),
         })
     finally:
         conn.close()
