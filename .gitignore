@@ -69,3 +69,8 @@ interfaz_facturas/ejemplo_*.html
 
 # Carpeta static duplicada en raíz (la canónica es interfaz_facturas/static/)
 static/
+
+# Env files (nunca al repo)
+interfaz_facturas/.env.production
+.env.production
+.env.local

@@ -5255,6 +5255,7 @@ from routes.helpers import _parse_importe_es, _sum_importes  # noqa: F401
 # Blueprints extraídos a routes/
 from routes.usuarios import usuarios_bp
 from routes.maquinaria import maquinaria_bp
+from routes.maquinaria_fase2a import fase2a_bp as maquinaria_fase2a_bp
 from routes.api_general import api_general_bp
 from routes.crm import crm_bp as crm_routes_bp
 from routes.tesoreria import tesoreria_bp as tesoreria_routes_bp
@@ -5268,6 +5269,7 @@ from routes.empleados import empleados_bp as empleados_routes_bp
 
 app.register_blueprint(usuarios_bp)
 app.register_blueprint(maquinaria_bp)
+app.register_blueprint(maquinaria_fase2a_bp)
 app.register_blueprint(api_general_bp)
 app.register_blueprint(crm_routes_bp)
 app.register_blueprint(tesoreria_routes_bp)

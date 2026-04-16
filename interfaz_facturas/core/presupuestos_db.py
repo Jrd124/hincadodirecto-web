@@ -385,6 +385,18 @@ def cambiar_estado_presupuesto(presupuesto_id: int, nuevo_estado: str) -> dict |
                        WHERE id = ? AND estado != 'ganada'""",
                     (presupuesto_id, ahora, row["oportunidad_id"]),
                 )
+                # Hook motor de seguimiento — al promover a ganada, el motor
+                # limpia next_action_date y el resto de campos de follow-up.
+                try:
+                    from core import crm_seguimiento
+                    crm_seguimiento.recalcular_seguimiento_oportunidad(
+                        row["oportunidad_id"], conn
+                    )
+                except Exception as exc:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "crm_seguimiento hook (presupuesto adjudicado) falló: %s", exc
+                    )
             # Vincular proyecto: solo asegurar que presupuesto_id está asignado
             # El proyecto se mantiene en 'cotizado' — el usuario lo pasa a 'vivo' manualmente
             if row["proyecto_id"]:

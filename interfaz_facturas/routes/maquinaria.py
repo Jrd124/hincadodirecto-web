@@ -330,7 +330,67 @@ def api_crear_incidencia():
 @maquinaria_bp.put("/api/maquinaria/incidencias/<int:iid>")
 def api_actualizar_incidencia(iid):
   data = request.get_json(silent=True) or {}
-  return jsonify(maquinaria_db.actualizar_incidencia(iid, data))
+  data["usuario_id"] = int(current_user.id) if current_user.is_authenticated and current_user.id != "0" else None
+  result = maquinaria_db.actualizar_incidencia(iid, data)
+  if result.get("error"):
+    return jsonify(result), 400
+  return jsonify(result)
+
+
+@maquinaria_bp.get("/api/maquinaria/incidencias")
+def api_listar_incidencias():
+  maquina_id = request.args.get("maquina_id", type=int)
+  estado = request.args.get("estado")
+  desde = request.args.get("desde")          # YYYY-MM-DD — Fase 1B
+  limit = request.args.get("limit", 50, type=int)
+  return jsonify({"incidencias": maquinaria_db.listar_incidencias(
+      maquina_id=maquina_id, estado=estado, desde=desde, limit=limit)})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ██  Fase 1A: Estado operativo (manual override)                             ██
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@maquinaria_bp.put("/api/maquinaria/maquinas/<int:mid>/estado-operativo")
+@login_required
+def api_estado_operativo(mid):
+  data = request.get_json(silent=True) or {}
+  estado = data.get("estado_operativo")
+  if not estado:
+    return jsonify({"error": "estado_operativo es obligatorio"}), 400
+  usuario_id = int(current_user.id) if current_user.is_authenticated and current_user.id != "0" else None
+  result = maquinaria_db.actualizar_estado_operativo_manual(mid, estado, usuario_id)
+  if result.get("error"):
+    return jsonify(result), 400
+  return jsonify(result)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ██  Fase 1A: Asignaciones máquina-obra                                     ██
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@maquinaria_bp.get("/api/maquinaria/maquinas/<int:mid>/asignaciones")
+def api_listar_asignaciones(mid):
+  return jsonify({"asignaciones": maquinaria_db.listar_asignaciones_obra(mid)})
+
+
+@maquinaria_bp.post("/api/maquinaria/maquinas/<int:mid>/asignaciones")
+@login_required
+def api_crear_asignacion(mid):
+  data = request.get_json(silent=True) or {}
+  data["maquina_id"] = mid
+  if not data.get("proyecto_id") or not data.get("fecha_inicio"):
+    return jsonify({"error": "proyecto_id y fecha_inicio son obligatorios"}), 400
+  return jsonify(maquinaria_db.crear_asignacion_obra(data)), 201
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ██  Fase 1A: KPIs de disponibilidad                                        ██
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@maquinaria_bp.get("/api/maquinaria/maquinas/<int:mid>/disponibilidad")
+def api_disponibilidad(mid):
+  return jsonify(maquinaria_db.calcular_disponibilidad(mid))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -118,8 +118,8 @@ const MODULOS = {
   },
   maquinaria: {
     linkId: "nav-maquinaria-modulo",
-    paneles: { listado: "panel-maquinaria", detalle: "panel-maquinaria-detalle" },
-    subNavLinks: { listado: "nav-maquinaria-listado", mantenimiento: "nav-maquinaria-mantenimiento" },
+    paneles: { listado: "panel-maquinaria", detalle: "panel-maquinaria-detalle", repuestos: "panel-maquinaria-repuestos" },
+    subNavLinks: { listado: "nav-maquinaria-listado", mantenimiento: "nav-maquinaria-mantenimiento", repuestos: "nav-maquinaria-repuestos" },
     defecto: "listado",
   },
   cae: {
@@ -844,6 +844,18 @@ if (navMaqMant) navMaqMant.addEventListener("click", function (e) {
   if (lst) lst.classList.add("visible");
   if (typeof cargarDashboardMantenimiento === "function") cargarDashboardMantenimiento();
 });
+var navMaqRepuestos = document.getElementById("nav-maquinaria-repuestos");
+if (navMaqRepuestos) navMaqRepuestos.addEventListener("click", function (e) {
+  e.preventDefault();
+  activarModulo("maquinaria");
+  var det = document.getElementById("panel-maquinaria-detalle");
+  if (det) det.classList.remove("visible");
+  var lst = document.getElementById("panel-maquinaria");
+  if (lst) lst.classList.remove("visible");
+  var rep = document.getElementById("panel-maquinaria-repuestos");
+  if (rep) rep.classList.add("visible");
+  if (typeof cargarMaquinariaFase2b === "function") cargarMaquinariaFase2b();
+});
 
 var navCae = document.getElementById("nav-cae-modulo");
 if (navCae) navCae.addEventListener("click", function (e) {
@@ -919,7 +931,7 @@ if (navCae) navCae.addEventListener("click", function (e) {
   }
 
   // Expand/collapse groups (accordion: collapse others at top level)
-  var topLevelGroups = ["finanzas", "proyectos", "rrhh", "presupuestos", "crm", "cae"];
+  var topLevelGroups = ["finanzas", "proyectos", "rrhh", "presupuestos", "crm", "cae", "maquinaria"];
 
   function toggleGroup(el) {
     var group = el.getAttribute("data-group");
@@ -1041,6 +1053,20 @@ if (navCae) navCae.addEventListener("click", function (e) {
       var caeLeafId = "nav-cae-" + caeSubpanel.replace("_", "-");
       var caeLeaf = document.getElementById(caeLeafId);
       if (caeLeaf) caeLeaf.classList.add("activo");
+    } else if (moduloActivo === "maquinaria") {
+      var maqm = document.getElementById("nav-maquinaria-modulo");
+      if (maqm) { maqm.classList.add("activo"); maqm.classList.add("expanded"); }
+      var maqc = document.getElementById("sidebar-children-maquinaria");
+      if (maqc) maqc.classList.add("open");
+      // Highlight active sub-link
+      var repPanel = document.getElementById("panel-maquinaria-repuestos");
+      if (repPanel && repPanel.classList.contains("visible")) {
+        var rl = document.getElementById("nav-maquinaria-repuestos");
+        if (rl) rl.classList.add("activo");
+      } else {
+        var ll = document.getElementById("nav-maquinaria-listado");
+        if (ll) ll.classList.add("activo");
+      }
     }
 
     // Close sidebar on mobile after nav
