@@ -66,25 +66,47 @@ def dashboard():
             FROM nominas WHERE tipo='NOMINA' GROUP BY periodo ORDER BY periodo
         """).fetchall()]
 
-        # Asignación de empleados a proyectos (hoy)
+        # Asignación de empleados a proyectos (hoy) con split hincadores/ayudantes
         hoy = date.today().isoformat()
-        asig_proy = [dict(r) for r in conn.execute("""
+        # Get all employee assignments today with their puesto
+        asig_rows = conn.execute("""
             SELECT pa.proyecto_id, p.nombre as proyecto_nombre,
-                   COUNT(DISTINCT pa.recurso_id) as empleados
+                   pa.recurso_id, COALESCE(e.puesto, '') as puesto
             FROM proyecto_asignaciones pa
             JOIN proyectos p ON p.id = pa.proyecto_id
-            WHERE pa.recurso_tipo IN ('hincador','ayudante','operador','empleado')
+            LEFT JOIN empleados e ON e.id = pa.recurso_id
+            WHERE pa.recurso_tipo IN ('empleado','hincador','ayudante','operador')
               AND pa.fecha = ?
-            GROUP BY pa.proyecto_id
-            ORDER BY empleados DESC
-        """, (hoy,)).fetchall()]
+        """, (hoy,)).fetchall()
+        # Group by project, counting hincadores vs ayudantes
+        proy_data = {}  # proyecto_id -> {nombre, hincadores set, ayudantes set}
         ids_asignados = set()
-        for r in conn.execute(
-            "SELECT DISTINCT recurso_id FROM proyecto_asignaciones "
-            "WHERE recurso_tipo IN ('hincador','ayudante','operador','empleado') AND fecha=?",
-            (hoy,)
-        ).fetchall():
-            ids_asignados.add(r["recurso_id"])
+        for r in asig_rows:
+            pid = r["proyecto_id"]
+            if pid not in proy_data:
+                proy_data[pid] = {"nombre": r["proyecto_nombre"], "hinc": set(), "ayud": set()}
+            puesto = (r["puesto"] or "").lower()
+            rid = r["recurso_id"]
+            ids_asignados.add(rid)
+            if "ayudante" in puesto:
+                proy_data[pid]["ayud"].add(rid)
+            else:
+                proy_data[pid]["hinc"].add(rid)
+        asig_proy = []
+        total_hinc = 0
+        total_ayud = 0
+        for pid, pd in sorted(proy_data.items(), key=lambda x: len(x[1]["hinc"]) + len(x[1]["ayud"]), reverse=True):
+            h = len(pd["hinc"])
+            a = len(pd["ayud"])
+            total_hinc += h
+            total_ayud += a
+            asig_proy.append({
+                "proyecto_id": pid,
+                "proyecto_nombre": pd["nombre"],
+                "hincadores": h,
+                "ayudantes": a,
+                "total": h + a,
+            })
         sin_asignar = conn.execute(
             "SELECT COUNT(*) FROM empleados WHERE estado='activo' AND id NOT IN ({})".format(
                 ",".join(str(i) for i in ids_asignados) if ids_asignados else "0"
@@ -93,11 +115,13 @@ def dashboard():
         baja_vac = conn.execute(
             "SELECT COUNT(*) FROM empleados WHERE estado IN ('baja','vacaciones')"
         ).fetchone()[0]
-        total_asig = sum(r["empleados"] for r in asig_proy) + sin_asignar + baja_vac
+        total_asig = total_hinc + total_ayud + sin_asignar + baja_vac
         asignacion_empleados = {
             "proyectos": asig_proy,
             "sin_asignar": sin_asignar,
             "baja_vacaciones": baja_vac,
+            "total_hincadores": total_hinc,
+            "total_ayudantes": total_ayud,
             "total": total_asig,
         }
 

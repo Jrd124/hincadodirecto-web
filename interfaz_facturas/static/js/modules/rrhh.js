@@ -154,23 +154,36 @@ function _rrhhCargarDashboard() {
       var asigDiv = document.getElementById("rrhh-dash-asignacion");
       if (asigDiv) {
         var proys = asig.proyectos || [];
+        var th = "padding:5px 6px;font-weight:700;";
         var ah = '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
-        ah += '<thead><tr style="border-bottom:2px solid var(--border,#e9ecef);"><th style="padding:5px 6px;text-align:left;font-weight:700;">Proyecto</th><th style="padding:5px 6px;text-align:right;font-weight:700;">Empleados</th></tr></thead><tbody>';
+        ah += '<thead><tr style="border-bottom:2px solid var(--border,#e9ecef);">' +
+          '<th style="' + th + 'text-align:left;">Proyecto</th>' +
+          '<th style="' + th + 'text-align:right;">Hincadores</th>' +
+          '<th style="' + th + 'text-align:right;">Ayudantes</th>' +
+          '<th style="' + th + 'text-align:right;">Total</th></tr></thead><tbody>';
         proys.forEach(function (p) {
           ah += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="if(typeof _navToProyecto===\'function\')_navToProyecto(' + p.proyecto_id + ')">' +
             '<td style="padding:5px 6px;">' + (p.proyecto_nombre || "") + '</td>' +
-            '<td style="padding:5px 6px;text-align:right;font-weight:600;">' + p.empleados + '</td></tr>';
+            '<td style="padding:5px 6px;text-align:right;font-weight:600;">' + p.hincadores + '</td>' +
+            '<td style="padding:5px 6px;text-align:right;font-weight:600;">' + p.ayudantes + '</td>' +
+            '<td style="padding:5px 6px;text-align:right;font-weight:600;">' + p.total + '</td></tr>';
         });
         ah += '<tr style="border-bottom:1px solid var(--border,#e9ecef);background:#FFFBEB;">' +
           '<td style="padding:5px 6px;color:#92400E;">Sin asignar</td>' +
+          '<td style="padding:5px 6px;text-align:right;color:#92400E;">\u2014</td>' +
+          '<td style="padding:5px 6px;text-align:right;color:#92400E;">\u2014</td>' +
           '<td style="padding:5px 6px;text-align:right;font-weight:600;color:#92400E;">' + (asig.sin_asignar || 0) + '</td></tr>';
         if (asig.baja_vacaciones) {
           ah += '<tr style="border-bottom:1px solid var(--border,#e9ecef);background:#F3F4F6;">' +
             '<td style="padding:5px 6px;color:#6B7280;">Baja / Vacaciones</td>' +
+            '<td style="padding:5px 6px;text-align:right;color:#6B7280;">\u2014</td>' +
+            '<td style="padding:5px 6px;text-align:right;color:#6B7280;">\u2014</td>' +
             '<td style="padding:5px 6px;text-align:right;font-weight:600;color:#6B7280;">' + asig.baja_vacaciones + '</td></tr>';
         }
         ah += '</tbody><tfoot><tr style="border-top:2px solid var(--border,#e9ecef);">' +
           '<td style="padding:6px 6px;font-weight:700;">TOTAL</td>' +
+          '<td style="padding:6px 6px;text-align:right;font-weight:800;">' + (asig.total_hincadores || 0) + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;font-weight:800;">' + (asig.total_ayudantes || 0) + '</td>' +
           '<td style="padding:6px 6px;text-align:right;font-weight:800;">' + (asig.total || 0) + '</td></tr></tfoot></table>';
         asigDiv.innerHTML = ah;
       }
