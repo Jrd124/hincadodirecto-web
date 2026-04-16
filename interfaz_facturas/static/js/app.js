@@ -749,7 +749,7 @@ document.getElementById("nav-proyectos-onboarding").addEventListener("click", (e
   activarSubpanel("proyectos", "onboarding");
 });
 
-["equipo","nominas","verificador","dietas","adelantos","ss","irpf","costeproyecto"].forEach(function(sp) {
+["equipo","nominas","verificador","dietas","vacaciones","adelantos","ss","irpf","costeproyecto"].forEach(function(sp) {
   var navId = "nav-rrhh-" + (sp === "costeproyecto" ? "coste-proyecto" : sp);
   var el = document.getElementById(navId);
   if (el) el.addEventListener("click", function(e) {
