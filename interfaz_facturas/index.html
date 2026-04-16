@@ -1613,34 +1613,7 @@
       </div>
       <!-- ═══ VERIFICADOR ═══ -->
       <div id="panel-rrhh-verificador" class="panel-rrhh">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
-          <div style="display:flex;align-items:center;gap:10px;">
-            <label style="font-weight:600;font-size:0.9rem;">Mes:</label>
-            <select id="rrhh-verif-periodo" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.88rem;"></select>
-          </div>
-          <button onclick="_rrhhGenerarRemesa()" class="btn-small" style="background:#DCFCE7;color:#166534;border:1px solid #86EFAC;">Generar remesa CSV</button>
-        </div>
-        <div id="rrhh-verif-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px;"></div>
-        <div class="card" style="overflow-x:auto;padding:0;">
-          <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
-            <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
-              <th style="padding:6px 6px;font-weight:700;">Nombre</th>
-              <th style="padding:6px 3px;font-weight:700;"></th>
-              <th style="padding:6px 4px;font-weight:700;">DNI</th>
-              <th style="padding:6px 4px;font-weight:700;">Cat.</th>
-              <th style="padding:6px 4px;font-weight:700;text-align:right;">D&iacute;as</th>
-              <th style="padding:6px 4px;font-weight:700;text-align:right;">Neto pactado</th>
-              <th style="padding:6px 4px;font-weight:700;text-align:right;">Dietas</th>
-              <th style="padding:6px 4px;font-weight:700;text-align:right;">Estimado</th>
-              <th style="padding:6px 4px;font-weight:700;text-align:right;border-left:2px solid var(--border,#e9ecef);">L&iacute;quido</th>
-              <th style="padding:6px 4px;font-weight:700;text-align:right;">Diferencia</th>
-              <th style="padding:6px 4px;font-weight:700;text-align:right;border-left:2px solid var(--border,#e9ecef);">Adelantos</th>
-              <th style="padding:6px 4px;font-weight:700;text-align:right;font-weight:800;">A TRANSFERIR</th>
-            </tr></thead>
-            <tbody id="rrhh-verif-tbody"><tr><td colspan="12" style="text-align:center;padding:2rem;">Selecciona un mes</td></tr></tbody>
-            <tfoot id="rrhh-verif-tfoot" style="font-weight:700;background:var(--bg-secondary,#f8f9fa);"></tfoot>
-          </table>
-        </div>
+        <div id="rrhh-verificador-contenido"></div>
       </div>
       <!-- ═══ DIETAS ═══ -->
       <div id="panel-rrhh-dietas" class="panel-rrhh">

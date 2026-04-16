@@ -404,6 +404,12 @@ def api_rrhh_verificador(periodo):
   return jsonify(verificador(periodo))
 
 
+@empleados_bp.get("/api/rrhh/verificador/estimacion/<periodo>")
+def api_rrhh_verificador_estimacion(periodo):
+  from core.rrhh_analytics import estimacion_nominas
+  return jsonify(estimacion_nominas(periodo))
+
+
 @empleados_bp.get("/api/rrhh/seguridad-social")
 def api_rrhh_ss():
   from core.rrhh_analytics import seguridad_social
