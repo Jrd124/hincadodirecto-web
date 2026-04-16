@@ -218,6 +218,10 @@ def init_proyectos_db() -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS ix_asig_proy ON proyecto_asignaciones(proyecto_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_asig_fecha ON proyecto_asignaciones(fecha)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_asig_recurso ON proyecto_asignaciones(recurso_tipo, recurso_id)")
+        # Migration: add funcion_dia column if missing
+        _asig_cols = {r[1] for r in conn.execute("PRAGMA table_info(proyecto_asignaciones)").fetchall()}
+        if "funcion_dia" not in _asig_cols:
+            conn.execute("ALTER TABLE proyecto_asignaciones ADD COLUMN funcion_dia TEXT DEFAULT NULL")
         _backfill_codigos(conn)
 
         # Migración: añadir estado 'perdido' si no existe en CHECK
@@ -999,14 +1003,15 @@ def obtener_certificacion(cert_id: int) -> dict | None:
 # ── Asignaciones diarias ─────────────────────────────────────────────────
 
 def asignar_recurso(proyecto_id: int, recurso_tipo: str, recurso_id: int,
-                    recurso_nombre: str, fecha: str, notas: str = "") -> dict | None:
+                    recurso_nombre: str, fecha: str, notas: str = "",
+                    funcion_dia: str | None = None) -> dict | None:
     init_proyectos_db()
     with _conectar() as conn:
         try:
             conn.execute(
-                "INSERT INTO proyecto_asignaciones (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, notas, created_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, notas or None, _now()),
+                "INSERT INTO proyecto_asignaciones (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, notas, funcion_dia, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, notas or None, funcion_dia, _now()),
             )
             row = conn.execute(
                 "SELECT * FROM proyecto_asignaciones WHERE recurso_tipo=? AND recurso_id=? AND fecha=?",
@@ -1018,7 +1023,8 @@ def asignar_recurso(proyecto_id: int, recurso_tipo: str, recurso_id: int,
 
 
 def asignar_rango(proyecto_id: int, recurso_tipo: str, recurso_id: int,
-                  recurso_nombre: str, fecha_desde: str, fecha_hasta: str) -> int:
+                  recurso_nombre: str, fecha_desde: str, fecha_hasta: str,
+                  funcion_dia: str | None = None) -> int:
     """Assign a resource for each weekday in [fecha_desde, fecha_hasta]. Returns count."""
     from datetime import datetime as _dt, timedelta as _td
     init_proyectos_db()
@@ -1032,9 +1038,9 @@ def asignar_rango(proyecto_id: int, recurso_tipo: str, recurso_id: int,
                 try:
                     conn.execute(
                         "INSERT OR IGNORE INTO proyecto_asignaciones"
-                        " (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, created_at)"
-                        " VALUES (?, ?, ?, ?, ?, ?)",
-                        (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, d.isoformat(), ahora),
+                        " (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, funcion_dia, created_at)"
+                        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (proyecto_id, recurso_tipo, recurso_id, recurso_nombre, d.isoformat(), funcion_dia, ahora),
                     )
                     count += 1
                 except Exception:

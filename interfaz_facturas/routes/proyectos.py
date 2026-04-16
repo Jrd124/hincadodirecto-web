@@ -560,11 +560,12 @@ def api_post_proyecto_asignaciones(proyecto_id):
   if not tipo or rid is None or not nombre:
     return jsonify({"error": "recurso_tipo, recurso_id y recurso_nombre requeridos"}), 400
 
+  funcion_dia = data.get("funcion_dia") or None
   if fecha_hasta and fecha:
-    n = proyectos_db.asignar_rango(proyecto_id, tipo, int(rid), nombre, fecha, fecha_hasta)
+    n = proyectos_db.asignar_rango(proyecto_id, tipo, int(rid), nombre, fecha, fecha_hasta, funcion_dia=funcion_dia)
     return jsonify({"ok": True, "dias_asignados": n})
   elif fecha:
-    row = proyectos_db.asignar_recurso(proyecto_id, tipo, int(rid), nombre, fecha, data.get("notas", ""))
+    row = proyectos_db.asignar_recurso(proyecto_id, tipo, int(rid), nombre, fecha, data.get("notas", ""), funcion_dia=funcion_dia)
     if not row:
       return jsonify({"error": "Recurso ya asignado en esa fecha"}), 409
     return jsonify(row), 201

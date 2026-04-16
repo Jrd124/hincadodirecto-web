@@ -158,13 +158,13 @@ function _rrhhCargarDashboard() {
         var ah = '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
         ah += '<thead><tr style="border-bottom:2px solid var(--border,#e9ecef);">' +
           '<th style="' + th + 'text-align:left;">Proyecto</th>' +
-          '<th style="' + th + 'text-align:right;">Hincadores</th>' +
+          '<th style="' + th + 'text-align:right;">Operadores</th>' +
           '<th style="' + th + 'text-align:right;">Ayudantes</th>' +
           '<th style="' + th + 'text-align:right;">Total</th></tr></thead><tbody>';
         proys.forEach(function (p) {
           ah += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="if(typeof _navToProyecto===\'function\')_navToProyecto(' + p.proyecto_id + ')">' +
             '<td style="padding:5px 6px;">' + (p.proyecto_nombre || "") + '</td>' +
-            '<td style="padding:5px 6px;text-align:right;font-weight:600;">' + p.hincadores + '</td>' +
+            '<td style="padding:5px 6px;text-align:right;font-weight:600;">' + p.operadores + '</td>' +
             '<td style="padding:5px 6px;text-align:right;font-weight:600;">' + p.ayudantes + '</td>' +
             '<td style="padding:5px 6px;text-align:right;font-weight:600;">' + p.total + '</td></tr>';
         });
@@ -182,7 +182,7 @@ function _rrhhCargarDashboard() {
         }
         ah += '</tbody><tfoot><tr style="border-top:2px solid var(--border,#e9ecef);">' +
           '<td style="padding:6px 6px;font-weight:700;">TOTAL</td>' +
-          '<td style="padding:6px 6px;text-align:right;font-weight:800;">' + (asig.total_hincadores || 0) + '</td>' +
+          '<td style="padding:6px 6px;text-align:right;font-weight:800;">' + (asig.total_operadores || 0) + '</td>' +
           '<td style="padding:6px 6px;text-align:right;font-weight:800;">' + (asig.total_ayudantes || 0) + '</td>' +
           '<td style="padding:6px 6px;text-align:right;font-weight:800;">' + (asig.total || 0) + '</td></tr></tfoot></table>';
         asigDiv.innerHTML = ah;
@@ -376,7 +376,7 @@ function _rrhhRenderTabla(tbody, lista, esActivos) {
     html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_rrhhAbrirFichaDesdeEquipo(' + e.id + ')">' +
       '<td style="padding:0.6rem 1rem;font-weight:600;white-space:nowrap;">' + nombreCompleto + '</td>' +
       '<td style="padding:0.6rem 0.75rem;">' + (e.dni || "\u2014") + '</td>' +
-      '<td style="padding:0.6rem 0.75rem;">' + (e.puesto || "\u2014") + '</td>' +
+      '<td style="padding:0.6rem 0.75rem;">' + (e.puesto ? e.puesto.charAt(0).toUpperCase() + e.puesto.slice(1) : "\u2014") + '</td>' +
       '<td style="padding:0.6rem 0.75rem;">' + (e.telefono || "\u2014") + '</td>' +
       '<td style="padding:0.6rem 0.75rem;"><span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:0.75rem;font-weight:600;background:' + estadoColor + '20;color:' + estadoColor + ';">' + estadoLabel + '</span></td>' +
       '<td style="padding:0.6rem 0.75rem;">' + prlBadge + '</td>' +
@@ -1471,6 +1471,7 @@ function _rrhhDietasCalLoad(periodo) {
       var diasArr = d.dias || [];
       var dietasMap = d.dietas || {};
       var proyMapCal = d.proyectos || {};
+      _rrhhDietasFuncionesMap = d.funciones || {};
 
       // Filter by project if selected
       if (proyFiltro) {
@@ -1561,17 +1562,20 @@ function _rrhhDietasCalLoad(periodo) {
 }
 
 var _rrhhDietaFuncion = "operador"; // current function selection in popup
+var _rrhhDietasFuncionesMap = {}; // {empId_fecha: "operador"|"ayudante"} from calendar endpoint
 
 function _rrhhDietaCellClick(td, empId, fecha, periodo, empNombre, proyCodigo) {
   var old = document.getElementById("rrhh-dieta-popup");
   if (old) old.remove();
 
-  // Default function based on employee category (from cache if available)
+  // Default function: funcion_dia (assignment) > puesto habitual (employee)
   _rrhhDietaFuncion = "operador";
-  var empCache = (_rrhhEmpleadosCache || []).find(function (e) { return e.id === empId; });
-  if (empCache) {
-    var cat = ((empCache.categoria || empCache.puesto || "").toLowerCase());
-    if (cat.indexOf("ayudante") >= 0 || cat.indexOf("peon") >= 0 || cat.indexOf("pe\u00f3n") >= 0 || cat.indexOf("peones") >= 0) {
+  var fnKey = empId + "_" + fecha;
+  if (_rrhhDietasFuncionesMap[fnKey]) {
+    _rrhhDietaFuncion = _rrhhDietasFuncionesMap[fnKey];
+  } else {
+    var empCache = (_rrhhEmpleadosCache || []).find(function (e) { return e.id === empId; });
+    if (empCache && (empCache.puesto || "").toLowerCase() === "ayudante") {
       _rrhhDietaFuncion = "ayudante";
     }
   }

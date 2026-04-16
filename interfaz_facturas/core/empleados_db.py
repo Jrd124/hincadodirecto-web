@@ -89,6 +89,11 @@ def init_empleados_db() -> None:
         if "direccion" not in existing:
             conn.execute("ALTER TABLE empleados ADD COLUMN direccion TEXT")
 
+        # Normalizar puesto a operador/ayudante
+        conn.execute("UPDATE empleados SET puesto = 'operador' WHERE LOWER(puesto) IN ('hincador','hincador, perforador','hincador/perforador','perforador')")
+        conn.execute("UPDATE empleados SET puesto = 'ayudante' WHERE LOWER(puesto) = 'ayudante'")
+        conn.execute("UPDATE empleados SET puesto = NULL WHERE puesto IN ('', 'None')")
+
         # ── Tablas de nóminas ──────────────────────────────────────────
         conn.execute("""
             CREATE TABLE IF NOT EXISTS nominas (

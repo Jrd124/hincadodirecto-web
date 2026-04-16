@@ -580,17 +580,32 @@ def api_rrhh_dietas_calendario(periodo):
         d["importe"] = _calc_imp(d["tipo"], d["fecha"], fn)
       dietas[(r["empleado_id"], r["fecha"])] = d
 
-    # Get project assignments for context
+    # Get project assignments for context (include funcion_dia)
     asignaciones = {}
+    asig_funcion = {}  # (emp_id, fecha) -> funcion_dia or None
     for r in conn.execute(
-      "SELECT recurso_id, fecha, p.codigo FROM proyecto_asignaciones pa "
+      "SELECT pa.recurso_id, pa.fecha, p.codigo, pa.funcion_dia FROM proyecto_asignaciones pa "
       "JOIN proyectos p ON p.id = pa.proyecto_id "
       "WHERE pa.recurso_tipo='empleado' AND pa.fecha >= ? AND pa.fecha <= ?",
       (dias[0], dias[-1])
     ).fetchall():
       asignaciones[(r["recurso_id"], r["fecha"])] = r["codigo"]
+      if r["funcion_dia"]:
+        asig_funcion[(r["recurso_id"], r["fecha"])] = r["funcion_dia"]
 
-    return jsonify({"dias": dias, "empleados": emps, "dietas": {f"{k[0]}_{k[1]}": v for k, v in dietas.items()}, "proyectos": {f"{k[0]}_{k[1]}": v for k, v in asignaciones.items()}})
+    # Build puesto map for employees
+    emp_puestos = {}
+    for e in conn.execute("SELECT id, puesto FROM empleados WHERE estado='activo'").fetchall():
+      emp_puestos[e["id"]] = e["puesto"] or None
+
+    # Build effective function map: funcion_dia > puesto habitual
+    funciones_efectivas = {}
+    for (eid, fecha), codigo in asignaciones.items():
+      fn = asig_funcion.get((eid, fecha)) or emp_puestos.get(eid)
+      if fn:
+        funciones_efectivas[f"{eid}_{fecha}"] = fn
+
+    return jsonify({"dias": dias, "empleados": emps, "dietas": {f"{k[0]}_{k[1]}": v for k, v in dietas.items()}, "proyectos": {f"{k[0]}_{k[1]}": v for k, v in asignaciones.items()}, "funciones": funciones_efectivas})
   finally:
     conn.close()
 

@@ -57,6 +57,11 @@ def _ensure_tables():
             c.execute("CREATE INDEX IF NOT EXISTS ix_asig_fecha ON proyecto_asignaciones(fecha)")
             c.execute("CREATE INDEX IF NOT EXISTS ix_asig_recurso ON proyecto_asignaciones(recurso_tipo, recurso_id)")
 
+        # Add funcion_dia column if missing
+        asig_cols = {r[1] for r in c.execute("PRAGMA table_info(proyecto_asignaciones)").fetchall()}
+        if "funcion_dia" not in asig_cols:
+            c.execute("ALTER TABLE proyecto_asignaciones ADD COLUMN funcion_dia TEXT DEFAULT NULL")
+
         c.commit()
         _tables_ok = True
     finally:
@@ -164,6 +169,7 @@ def asignar():
 
     estado = data.get("estado", "planificado")
     notas = data.get("notas", "")
+    funcion_dia = data.get("funcion_dia") or None
 
     if not recurso_tipo or not recurso_id:
         return jsonify({"error": "recurso_tipo y recurso_id requeridos"}), 400
@@ -203,9 +209,9 @@ def asignar():
             try:
                 conn.execute(
                     "INSERT OR REPLACE INTO proyecto_asignaciones "
-                    "(proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, estado, notas, created_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (proyecto_id, recurso_tipo, recurso_id, nombre, f, estado, notas, ahora),
+                    "(proyecto_id, recurso_tipo, recurso_id, recurso_nombre, fecha, estado, notas, funcion_dia, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (proyecto_id, recurso_tipo, recurso_id, nombre, f, estado, notas, funcion_dia, ahora),
                 )
                 insertadas += 1
             except Exception:

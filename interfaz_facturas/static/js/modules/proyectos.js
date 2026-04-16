@@ -664,8 +664,9 @@
         asigs.forEach(function (a) {
           var bg = a.recurso_tipo === 'empleado' ? '#DCFCE7' : a.recurso_tipo === 'maquina' ? '#DBEAFE' : '#FEF3C7';
           var icon = a.recurso_tipo === 'empleado' ? '\uD83D\uDC77' : a.recurso_tipo === 'maquina' ? '\uD83C\uDFD7\uFE0F' : '\uD83D\uDE97';
+          var fdTag = (a.funcion_dia && a.recurso_tipo === 'empleado') ? ' <span title="Funci\u00f3n del d\u00eda: ' + a.funcion_dia + '" style="font-size:8px;background:#F59E0B;color:#fff;border-radius:2px;padding:0 2px;">' + (a.funcion_dia === 'ayudante' ? 'Ay' : 'Op') + '</span>' : '';
           var nombreEsc = _esc(a.recurso_nombre).replace(/'/g, "\\'");
-          html += '<div onclick="desasignarDia(' + _recProyId + ',\'' + a.recurso_tipo + '\',' + a.recurso_id + ',\'' + fecha + '\',\'' + nombreEsc + '\')" style="padding:3px 6px;font-size:10px;background:' + bg + ';border-radius:4px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;" title="Click para desasignar este d\u00eda">' + icon + ' ' + _esc(a.recurso_nombre) + '</div>';
+          html += '<div onclick="desasignarDia(' + _recProyId + ',\'' + a.recurso_tipo + '\',' + a.recurso_id + ',\'' + fecha + '\',\'' + nombreEsc + '\')" style="padding:3px 6px;font-size:10px;background:' + bg + ';border-radius:4px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;" title="Click para desasignar este d\u00eda">' + icon + ' ' + _esc(a.recurso_nombre) + fdTag + '</div>';
         });
       } else {
         html += '<div style="font-size:10px;color:#CBD5E1;text-align:center;padding:8px 0;">\u2014</div>';
@@ -728,6 +729,9 @@
           '<option value="empleado">Empleado</option><option value="maquina">Máquina</option></select></div>' +
         '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Recurso</label>' +
           '<select id="ar-recurso" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"><option>Cargando...</option></select></div>' +
+        '<div id="ar-funcion-wrap" style="display:none;"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Funci\u00f3n hoy</label>' +
+          '<select id="ar-funcion" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);">' +
+          '<option value="">Usar puesto habitual</option><option value="operador">Operador</option><option value="ayudante">Ayudante</option></select></div>' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
           '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Desde</label><input type="date" id="ar-desde" value="' + hoy + '" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);box-sizing:border-box;"></div>' +
           '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Hasta</label><input type="date" id="ar-hasta" value="' + hoy + '" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);box-sizing:border-box;"></div></div>' +
@@ -756,8 +760,13 @@
           if (!sel.options.length) sel.innerHTML = '<option>No hay disponibles</option>';
         });
     }
+    function toggleFuncionWrap() {
+      var fw = document.getElementById("ar-funcion-wrap");
+      if (fw) fw.style.display = document.getElementById("ar-tipo").value === "empleado" ? "" : "none";
+    }
     cargarDisponibles();
-    document.getElementById("ar-tipo").addEventListener("change", cargarDisponibles);
+    toggleFuncionWrap();
+    document.getElementById("ar-tipo").addEventListener("change", function () { cargarDisponibles(); toggleFuncionWrap(); });
     document.getElementById("ar-desde").addEventListener("change", cargarDisponibles);
 
     document.getElementById("ar-btn-guardar").addEventListener("click", function () {
@@ -768,10 +777,13 @@
       var desde = document.getElementById("ar-desde").value;
       var hasta = document.getElementById("ar-hasta").value;
       if (!rid || !nombre || !desde) return;
+      var funcion = (document.getElementById("ar-funcion") || {}).value || null;
+      var payload = { recurso_tipo: tipo, recurso_id: rid, recurso_nombre: nombre, fecha: desde, fecha_hasta: hasta };
+      if (funcion && tipo === "empleado") payload.funcion_dia = funcion;
       fetch("/api/proyectos/" + proyectoId + "/asignaciones", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recurso_tipo: tipo, recurso_id: rid, recurso_nombre: nombre, fecha: desde, fecha_hasta: hasta }),
+        body: JSON.stringify(payload),
       }).then(function (r) { return r.json(); })
         .then(function (data) {
           if (data.error) { mostrarToast(data.error, "error"); return; }
