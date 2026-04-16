@@ -266,16 +266,29 @@ function _rrhhCargarEmpleados() {
     });
 }
 
+function _fmtTel(tel) {
+  if (!tel) return "\u2014";
+  return tel.replace(/^\+34\s?/, "").replace(/\s/g, "");
+}
+
+function _rrhhFuncionPill(puesto) {
+  if (!puesto) return "\u2014";
+  if (puesto === "ayudante") return '<span style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.7rem;font-weight:600;background:#ECFDF5;color:#10B981;">Ay.</span>';
+  return '<span style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.7rem;font-weight:600;background:#EFF6FF;color:#3B82F6;">Op.</span>';
+}
+
 function _rrhhRenderVistas(lista) {
   var grupos = [
     { key: "activo", label: "Activos", color: "#22c55e" },
-    { key: "baja", label: "Baja", color: "#f59e0b" },
     { key: "vacaciones", label: "Vacaciones", color: "#3B82F6" },
+    { key: "baja", label: "Baja", color: "#f59e0b" },
     { key: "reserva", label: "Reserva", color: "#6B7280" },
     { key: "exempleado", label: "Exempleados", color: "#ef4444" }
   ];
   var wrapper = _rrhhEquipoWrapper;
   if (!wrapper) return;
+  var thS = "padding:5px 6px;font-weight:700;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.5px;color:#555;";
+  var ESTADO_COLORS = { activo: "#22c55e", baja: "#f59e0b", vacaciones: "#3B82F6", reserva: "#6B7280", exempleado: "#ef4444" };
 
   var html = "";
   grupos.forEach(function (g) {
@@ -284,45 +297,75 @@ function _rrhhRenderVistas(lista) {
     var collapsed = _rrhhEquipoColapsados[g.key];
     var chevron = collapsed ? "\u25B6" : "\u25BC";
 
-    // Group header (clickable)
     html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border,#e9ecef);background:var(--bg-secondary,#f8f9fa);user-select:none;" onclick="_rrhhToggleGrupoEquipo(\'' + g.key + '\')">';
     html += '<span style="font-size:0.75rem;width:12px;display:inline-block;">' + chevron + '</span>';
     html += '<span style="font-weight:700;font-size:0.88rem;">' + g.label + '</span>';
     html += '<span style="display:inline-block;padding:1px 8px;border-radius:9999px;font-size:0.72rem;font-weight:600;background:' + g.color + '20;color:' + g.color + ';">' + emps.length + '</span>';
     html += '</div>';
 
-    // Table (hidden if collapsed)
-    html += '<table data-equipo-grupo="' + g.key + '" style="width:100%;border-collapse:collapse;font-size:0.82rem;' + (collapsed ? 'display:none;' : '') + '">';
-    // Header
-    html += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);">' +
-      '<th style="padding:6px 10px;text-align:left;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;">Nombre</th>' +
-      '<th style="padding:6px 6px;text-align:left;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:110px;">DNI</th>' +
-      '<th style="padding:6px 6px;text-align:left;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:130px;">Categor\u00eda</th>' +
-      '<th style="padding:6px 6px;text-align:left;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:130px;">Tel\u00e9fono</th>' +
-      '<th style="padding:6px 6px;text-align:right;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:95px;">Coste/D\u00eda</th>' +
-      '<th style="padding:6px 6px;text-align:center;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:90px;">Estado</th>' +
-      '<th style="padding:6px 6px;text-align:center;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:90px;">Acciones</th>' +
+    html += '<table data-equipo-grupo="' + g.key + '" style="width:100%;border-collapse:collapse;font-size:0.8rem;table-layout:fixed;' + (collapsed ? 'display:none;' : '') + '">';
+
+    // Column 4 varies by group
+    var col4Head = "Proyecto hoy";
+    if (g.key === "vacaciones") col4Head = "Vuelve";
+    else if (g.key === "baja") col4Head = "Desde";
+    else if (g.key === "exempleado") col4Head = "Fecha baja";
+
+    html += '<thead><tr style="background:#f1f3f5;">' +
+      '<th style="' + thS + 'text-align:left;width:22%;">Nombre</th>' +
+      '<th style="' + thS + 'text-align:left;width:11%;">DNI</th>' +
+      '<th style="' + thS + 'text-align:center;width:7%;">Funci\u00f3n</th>' +
+      '<th style="' + thS + 'text-align:left;width:14%;">' + col4Head + '</th>' +
+      '<th style="' + thS + 'text-align:left;width:11%;">Tel\u00e9fono</th>' +
+      '<th style="' + thS + 'text-align:right;width:10%;">Coste/D\u00eda</th>' +
+      '<th style="' + thS + 'text-align:center;width:9%;">Estado</th>' +
+      '<th style="' + thS + 'text-align:center;width:7%;">Acc.</th>' +
       '</tr></thead><tbody>';
 
     emps.forEach(function (e, i) {
-      var nombreCompleto = (e.nombre || "") + (e.apellidos ? " " + e.apellidos : "");
-      var estadoColor = { activo: "#22c55e", baja: "#f59e0b", vacaciones: "#3B82F6", reserva: "#6B7280", exempleado: "#ef4444" }[e.estado] || "#6B7280";
-      var estadoLabel = e.estado ? e.estado.charAt(0).toUpperCase() + e.estado.slice(1) : "\u2014";
-      var costeDia = e.coste_dia_actual || e.ultimo_coste_empresa ? (e.coste_dia_actual || 0) : null;
-      var zebra = i % 2 === 1 ? "background:rgba(0,0,0,0.015);" : "";
+      var nombre = (e.nombre || "") + (e.apellidos ? " " + e.apellidos : "");
+      var ec = ESTADO_COLORS[e.estado] || "#6B7280";
+      var eLabel = e.estado ? e.estado.charAt(0).toUpperCase() + e.estado.slice(1) : "\u2014";
+      var costeDia = (e.coste_dia_actual != null && e.coste_dia_actual > 0) ? fmtEur(e.coste_dia_actual) + "/d" : '<span style="color:#aaa;">Sin datos</span>';
+      var zebra = i % 2 === 1 ? "background:rgba(0,0,0,0.018);" : "";
 
-      html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;' + zebra + '" onclick="_rrhhAbrirFichaDesdeEquipo(' + e.id + ')" onmouseover="this.style.background=\'rgba(59,130,246,0.06)\'" onmouseout="this.style.background=\'' + (i % 2 === 1 ? 'rgba(0,0,0,0.015)' : '') + '\'">' +
-        '<td style="padding:7px 10px;font-weight:600;white-space:nowrap;">' + nombreCompleto + '</td>' +
-        '<td style="padding:7px 6px;font-family:monospace;font-size:0.8rem;">' + (e.dni || "\u2014") + '</td>' +
-        '<td style="padding:7px 6px;">' + (e.categoria || e.puesto || "\u2014") + '</td>' +
-        '<td style="padding:7px 6px;">' + (e.telefono || "\u2014") + '</td>' +
-        '<td style="padding:7px 6px;text-align:right;">' + (costeDia !== null ? fmtEur(costeDia) + ' \u20ac/d' : '\u2014') + '</td>' +
-        '<td style="padding:7px 6px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:0.7rem;font-weight:600;background:' + estadoColor + '18;color:' + estadoColor + ';">' + estadoLabel + '</span></td>' +
-        '<td style="padding:7px 6px;text-align:center;white-space:nowrap;">' +
-          '<button onclick="event.stopPropagation();_rrhhAbrirFichaDesdeEquipo(' + e.id + ')" title="Ver ficha" style="background:none;border:none;cursor:pointer;color:#3B82F6;font-size:0.85rem;">&#x1F464;</button> ' +
-          '<button onclick="event.stopPropagation();_rrhhEditarEmpleado(' + e.id + ')" title="Editar" style="background:none;border:none;cursor:pointer;color:#6B7280;font-size:0.85rem;">&#x270E;</button> ' +
-          '<button onclick="event.stopPropagation();_rrhhEliminarEmpleado(' + e.id + ',\'' + nombreCompleto.replace(/'/g, "\\'") + '\')" title="Dar de baja" style="background:none;border:none;cursor:pointer;color:#dc3545;font-size:0.85rem;">&#x2716;</button>' +
-        '</td></tr>';
+      // Column 4 content varies
+      var col4 = "\u2014";
+      if (g.key === "activo") {
+        col4 = e.proyecto_hoy ? '<span style="display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (e.proyecto_hoy || "").replace(/"/g, "&quot;") + '">' + (e.proyecto_hoy || "").substring(0, 15) + '</span>' : '\u2014';
+      } else if (g.key === "vacaciones") {
+        if (e.fecha_vuelta) {
+          var fv = e.fecha_vuelta.split("-");
+          col4 = "Vuelve " + fv[2] + "/" + fv[1];
+        } else {
+          col4 = "En vacaciones";
+        }
+      } else if (g.key === "baja") {
+        col4 = e.fecha_baja ? e.fecha_baja : "En baja";
+      } else if (g.key === "exempleado") {
+        col4 = e.fecha_baja || "\u2014";
+      }
+
+      // Actions: ficha + edit for most; only ficha for exempleados
+      var acciones = '<button onclick="event.stopPropagation();_rrhhAbrirFichaDesdeEquipo(' + e.id + ')" title="Ficha" style="background:none;border:none;cursor:pointer;color:#3B82F6;font-size:0.85rem;">&#x1F464;</button>';
+      if (g.key !== "exempleado") {
+        acciones += ' <button onclick="event.stopPropagation();_rrhhEditarEmpleado(' + e.id + ')" title="Editar" style="background:none;border:none;cursor:pointer;color:#6B7280;font-size:0.85rem;">&#x270E;</button>';
+      }
+
+      // For exempleados: grey out coste/tel
+      var telVal = (g.key === "exempleado") ? "\u2014" : _fmtTel(e.telefono);
+      var costeVal = (g.key === "exempleado") ? "\u2014" : costeDia;
+
+      html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;' + zebra + '" onclick="_rrhhAbrirFichaDesdeEquipo(' + e.id + ')" onmouseover="this.style.background=\'rgba(59,130,246,0.06)\'" onmouseout="this.style.background=\'' + (i % 2 === 1 ? 'rgba(0,0,0,0.018)' : '') + '\'">' +
+        '<td style="padding:6px 6px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;">' + nombre + '</td>' +
+        '<td style="padding:6px 6px;font-family:monospace;font-size:0.78rem;">' + (e.dni || "\u2014") + '</td>' +
+        '<td style="padding:6px 4px;text-align:center;">' + _rrhhFuncionPill(e.puesto) + '</td>' +
+        '<td style="padding:6px 6px;font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;">' + col4 + '</td>' +
+        '<td style="padding:6px 6px;font-size:0.8rem;">' + telVal + '</td>' +
+        '<td style="padding:6px 6px;text-align:right;font-size:0.8rem;">' + costeVal + '</td>' +
+        '<td style="padding:6px 4px;text-align:center;"><span style="display:inline-block;padding:1px 7px;border-radius:9999px;font-size:0.68rem;font-weight:600;background:' + ec + '18;color:' + ec + ';">' + eLabel + '</span></td>' +
+        '<td style="padding:6px 4px;text-align:center;white-space:nowrap;">' + acciones + '</td>' +
+        '</tr>';
     });
     html += '</tbody></table>';
   });
@@ -330,7 +373,6 @@ function _rrhhRenderVistas(lista) {
   if (!html) html = '<p style="text-align:center;padding:2rem;color:var(--text-secondary);">Sin empleados</p>';
   wrapper.innerHTML = html;
 
-  // Hide old inactivos wrapper
   var inacWrapper = document.getElementById("rrhh-inactivos-wrapper");
   if (inacWrapper) inacWrapper.style.display = "none";
 }
@@ -407,7 +449,7 @@ function _rrhhToggleInactivos() {
     var q = this.value.toLowerCase().trim();
     if (!q) { _rrhhRenderVistas(_rrhhEmpleadosCache); return; }
     var filtered = _rrhhEmpleadosCache.filter(function (e) {
-      var hay = (e.nombre || "").toLowerCase() + " " + (e.apellidos || "").toLowerCase() + " " + (e.dni || "").toLowerCase() + " " + (e.puesto || "").toLowerCase();
+      var hay = (e.nombre || "").toLowerCase() + " " + (e.apellidos || "").toLowerCase() + " " + (e.dni || "").toLowerCase() + " " + (e.puesto || "").toLowerCase() + " " + (e.proyecto_hoy || "").toLowerCase();
       return hay.indexOf(q) >= 0;
     });
     _rrhhRenderVistas(filtered);

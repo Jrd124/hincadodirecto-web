@@ -93,6 +93,58 @@ def api_rrhh_empleados():
         emp["coste_dia_actual"] = None
         emp["ultimo_coste_empresa"] = None
 
+    # Proyecto asignado hoy (batch query, no N+1)
+    from datetime import date as _d
+    hoy = _d.today().isoformat()
+    proy_hoy = {}
+    try:
+      for r in conn.execute(
+        "SELECT pa.recurso_id, p.nombre FROM proyecto_asignaciones pa "
+        "JOIN proyectos p ON p.id = pa.proyecto_id "
+        "WHERE pa.recurso_tipo='empleado' AND pa.fecha=? AND pa.estado != 'averia'",
+        (hoy,)
+      ).fetchall():
+        proy_hoy[r["recurso_id"]] = r["nombre"] or ""
+    except Exception:
+      pass
+    for emp in emps:
+      emp["proyecto_hoy"] = proy_hoy.get(emp["id"])
+
+    # Fecha vuelta vacaciones (para empleados en vacaciones)
+    try:
+      vac_futuras = {}
+      for r in conn.execute(
+        "SELECT empleado_id, fecha FROM vacaciones_dias "
+        "WHERE fecha >= ? ORDER BY empleado_id, fecha", (hoy,)
+      ).fetchall():
+        eid = r["empleado_id"]
+        if eid not in vac_futuras:
+          vac_futuras[eid] = []
+        vac_futuras[eid].append(r["fecha"])
+    except Exception:
+      vac_futuras = {}
+
+    from datetime import timedelta as _td
+    for emp in emps:
+      if emp["estado"] == "vacaciones" and emp["id"] in vac_futuras:
+        dias = vac_futuras[emp["id"]]
+        # Find last consecutive day from today
+        ultimo = _d.fromisoformat(dias[0])
+        for i in range(1, len(dias)):
+          sig = _d.fromisoformat(dias[i])
+          # Allow gaps for weekends (up to 3 days gap)
+          if (sig - ultimo).days <= 3:
+            ultimo = sig
+          else:
+            break
+        vuelta = ultimo + _td(days=1)
+        # Skip weekends
+        while vuelta.weekday() >= 5:
+          vuelta += _td(days=1)
+        emp["fecha_vuelta"] = vuelta.isoformat()
+      else:
+        emp["fecha_vuelta"] = None
+
     return jsonify({"empleados": emps})
   finally:
     conn.close()
