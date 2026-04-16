@@ -151,12 +151,32 @@
         var modalLabel = (k.modalidad === "administracion" ? "Administraci\u00f3n" : "Producci\u00f3n");
         var tipoLabel = k.tipo_actividad === "mixto" ? "Mixto" : (k.tipo_actividad === "perforacion" ? "Perforaci\u00f3n" : "Hincado");
 
+        // ── Action buttons by state ──
+        var accBtns = '';
+        var _bs = 'padding:5px 12px;border-radius:6px;font-size:0.78rem;font-weight:600;cursor:pointer;border:1px solid var(--border,#ccc);background:';
+        if (p.estado === "vivo" || p.estado === "en_curso") {
+          accBtns = '<button style="' + _bs + '#FFFBEB;color:#92400E;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'pausado\')">Pausar</button>' +
+            '<button style="' + _bs + '#EFF6FF;color:#1E40AF;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'terminado\')">Terminar</button>';
+        } else if (p.estado === "cotizado") {
+          accBtns = '<button style="' + _bs + '#DCFCE7;color:#166534;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'vivo\')">Adjudicar</button>' +
+            '<button style="' + _bs + '#FEF2F2;color:#991B1B;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'perdido\')">Perder</button>';
+        } else if (p.estado === "pausado") {
+          accBtns = '<button style="' + _bs + '#DCFCE7;color:#166534;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'vivo\')">Reanudar</button>' +
+            '<button style="' + _bs + '#EFF6FF;color:#1E40AF;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'terminado\')">Terminar</button>';
+        } else if (p.estado === "terminado" || p.estado === "perdido") {
+          accBtns = '<button style="' + _bs + '#DCFCE7;color:#166534;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'vivo\')">Reabrir</button>';
+        }
+        accBtns += '<button style="' + _bs + '#fff;color:#3B82F6;border-color:#3B82F6;" onclick="_proyEditar(' + p.id + ')">&#x270E; Editar datos</button>';
+
         // ── HEADER (always visible) ──
         var hdr = '<div style="margin-bottom:16px;">' +
-          '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">' +
-            '<button onclick="proyectoDashboardVolver()" style="background:none;border:none;cursor:pointer;font-size:1.2rem;padding:4px;">&#x2190;</button>' +
-            '<div><span style="font-size:0.75rem;color:#888;">' + (p.codigo || "") + '</span>' +
-              ' <span style="padding:2px 8px;border-radius:9999px;font-size:0.7rem;font-weight:600;background:' + estadoColor + '18;color:' + estadoColor + ';">' + estadoLabel + '</span></div>' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">' +
+            '<div style="display:flex;align-items:center;gap:12px;">' +
+              '<button onclick="proyectoDashboardVolver()" style="background:none;border:none;cursor:pointer;font-size:1.2rem;padding:4px;">&#x2190;</button>' +
+              '<div><span style="font-size:0.75rem;color:#888;">' + (p.codigo || "") + '</span>' +
+                ' <span style="padding:2px 8px;border-radius:9999px;font-size:0.7rem;font-weight:600;background:' + estadoColor + '18;color:' + estadoColor + ';">' + estadoLabel + '</span></div>' +
+            '</div>' +
+            '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + accBtns + '</div>' +
           '</div>' +
           '<h2 style="margin:4px 0 2px;font-size:1.3rem;">' + (p.nombre || "") + '</h2>' +
           '<div style="font-size:0.85rem;color:#666;">' + [cliente, ubicacion, tipoLabel + " por " + modalLabel].filter(Boolean).join(" \u00b7 ") + '</div>' +
