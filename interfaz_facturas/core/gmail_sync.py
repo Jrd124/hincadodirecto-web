@@ -454,6 +454,118 @@ def sync_global_batch(
     return stats
 
 
+# ── Preview (dry-run) ─────────────────────────────────────────────────────────
+
+def preview_global_batch(
+    batch_size: int = CRM_GMAIL_BATCH_SIZE,
+    dias_atras: int | None = None,
+) -> list[dict[str, Any]]:
+    """Busca hilos Gmail que SE IMPORTARÍAN pero NO escribe nada en la BD.
+
+    Devuelve lista de dicts con:
+        gmail_thread_id, empresa_id, empresa_nombre,
+        asunto, fecha, snippet, from_addr, ya_existe (bool)
+    """
+    from core.db import conectar
+    from core.crm_db import init_crm_db, listar_contactos
+    init_crm_db()
+
+    service = _build_service()
+
+    with conectar() as conn:
+        empresas = conn.execute("""
+            SELECT DISTINCT e.*
+            FROM crm_empresas e
+            WHERE e.activo = 1
+              AND EXISTS (
+                SELECT 1 FROM crm_contactos c
+                WHERE c.empresa_vinculada_id = e.id
+                  AND c.email IS NOT NULL AND c.email != ''
+                  AND c.activo = 1
+              )
+            ORDER BY e.nombre
+            LIMIT ?
+        """, (batch_size,)).fetchall()
+
+    resultados = []
+    for emp_row in empresas:
+        emp = dict(emp_row)
+        empresa_id = emp["id"]
+        empresa_nombre = emp.get("nombre", "")
+        try:
+            contactos_data = listar_contactos(empresa_id=empresa_id)
+            contactos = contactos_data.get("contactos", [])
+            hilos = sync_empresa(emp, contactos, service=service, dias_atras=dias_atras)
+            for h in hilos:
+                # Comprobar si ya existe en BD (sin escribir)
+                from core.db import conectar as _con
+                with _con() as conn2:
+                    ya = conn2.execute(
+                        "SELECT id FROM crm_interacciones WHERE gmail_thread_id = ? AND empresa_id = ?",
+                        (h["gmail_thread_id"], empresa_id)
+                    ).fetchone()
+                resultados.append({
+                    "gmail_thread_id": h["gmail_thread_id"],
+                    "empresa_id":      empresa_id,
+                    "empresa_nombre":  empresa_nombre,
+                    "asunto":          h.get("subject", "(sin asunto)"),
+                    "fecha":           h.get("date", ""),
+                    "snippet":         h.get("snippet", ""),
+                    "from_addr":       h.get("from_addr", ""),
+                    "ya_existe":       ya is not None,
+                })
+        except Exception as exc:
+            logger.error("Error preview empresa %s: %s", empresa_id, exc)
+
+    return resultados
+
+
+def import_selective(
+    threads: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Importa solo los hilos indicados (por gmail_thread_id + empresa_id).
+
+    Args:
+        threads: lista de {gmail_thread_id, empresa_id, asunto, fecha,
+                           snippet, from_addr, empresa_nombre}
+
+    Returns: resumen {importados, ya_existian, errores}
+    """
+    from core.db import conectar
+    from core.crm_db import init_crm_db
+    init_crm_db()
+
+    stats = {"importados": 0, "ya_existian": 0, "errores": []}
+
+    for t in threads:
+        thread_id   = t.get("gmail_thread_id")
+        empresa_id  = t.get("empresa_id")
+        if not thread_id or not empresa_id:
+            continue
+        hilo = {
+            "gmail_thread_id": thread_id,
+            "subject":         t.get("asunto", "(sin asunto)"),
+            "date":            t.get("fecha", ""),
+            "snippet":         t.get("snippet", ""),
+            "from_addr":       t.get("from_addr", ""),
+        }
+        try:
+            result = guardar_hilo_como_interaccion(
+                hilo, empresa_id,
+                generar_resumen=False,          # sin LLM en import selectivo
+                empresa_nombre=t.get("empresa_nombre", ""),
+            )
+            if result is None:
+                stats["ya_existian"] += 1
+            else:
+                stats["importados"] += 1
+        except Exception as exc:
+            logger.error("Error importando hilo %s: %s", thread_id, exc)
+            stats["errores"].append(str(exc))
+
+    return stats
+
+
 # ── Check de disponibilidad ────────────────────────────────────────────────────
 
 def gmail_disponible() -> dict[str, Any]:

@@ -94,9 +94,10 @@
             <span class="sidebar-label">Maquinaria</span>
             <svg class="sidebar-chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4"/></svg>
           </a>
-          <div class="sidebar-children" data-parent="maquinaria">
+          <div class="sidebar-children" id="sidebar-children-maquinaria" data-parent="maquinaria">
             <a href="#" class="sidebar-item sidebar-child" id="nav-maquinaria-listado">Listado</a>
             <a href="#" class="sidebar-item sidebar-child" id="nav-maquinaria-mantenimiento">Mantenimiento</a>
+            <a href="#" class="sidebar-item sidebar-child" id="nav-maquinaria-repuestos">Repuestos</a>
           </div>
         </div>
         <!-- CAE -->
@@ -746,6 +747,9 @@
       </div>
       <div id="panel-maquinaria-detalle" class="panel-maquinaria">
         <div id="maquinaria-detalle-content" style="max-width:1200px;margin:0 auto;padding:24px 20px;"></div>
+      </div>
+      <div id="panel-maquinaria-repuestos" class="panel-maquinaria">
+        <div id="maquinaria-fase2b-content" style="max-width:1200px;margin:0 auto;padding:24px 20px;"></div>
       </div>
 
       <!-- ===== DASHBOARD FINANZAS ===== -->
@@ -1984,13 +1988,31 @@
                   style="width:58px;padding:5px 6px;border:1px solid #cbd5e1;border-radius:6px;font-size:0.82rem;text-align:center;">
                 <label style="font-size:0.78rem;color:#64748b;white-space:nowrap;">días</label>
               </div>
+              <button type="button" id="btn-crm-gmail-preview" disabled
+                style="font-size:0.82rem;padding:6px 14px;background:#fff;color:var(--color-primary,#4F46E5);border:1px solid var(--color-primary,#4F46E5);border-radius:6px;cursor:pointer;opacity:0.5;">
+                Vista previa
+              </button>
               <button type="button" id="btn-crm-gmail-sync" disabled
                 style="font-size:0.82rem;padding:6px 14px;background:var(--color-primary,#4F46E5);color:#fff;border:none;border-radius:6px;cursor:pointer;opacity:0.5;">
-                Sincronizar ahora
+                Importar todo
               </button>
             </div>
             <div id="crm-gmail-resumen" style="margin-top:10px;display:none;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:0.82rem;color:#166534;"></div>
             <div id="crm-gmail-error" style="margin-top:10px;display:none;padding:10px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:0.82rem;color:#991b1b;"></div>
+            <!-- Preview list -->
+            <div id="crm-gmail-preview-wrap" style="display:none;margin-top:12px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span id="crm-gmail-preview-count" style="font-size:0.82rem;font-weight:600;color:#374151;"></span>
+                <div style="display:flex;gap:8px;">
+                  <button type="button" id="btn-crm-gmail-sel-all" style="font-size:0.75rem;padding:3px 10px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;">Seleccionar todo</button>
+                  <button type="button" id="btn-crm-gmail-sel-none" style="font-size:0.75rem;padding:3px 10px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;cursor:pointer;">Ninguno</button>
+                  <button type="button" id="btn-crm-gmail-import-sel" style="font-size:0.82rem;padding:4px 14px;background:#16a34a;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;">
+                    Importar seleccionados (<span id="crm-gmail-sel-count">0</span>)
+                  </button>
+                </div>
+              </div>
+              <div id="crm-gmail-preview-lista" style="max-height:380px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;"></div>
+            </div>
           </div>
 
         </div>
@@ -4038,8 +4060,9 @@
     <script src="/static/js/modules/finanzas.js?v=27"></script>
     <script src="/static/js/modules/proyectos.js?v=27"></script>
     <script src="/static/js/modules/presupuestos.js?v=27"></script>
-    <script src="/static/js/modules/crm.js?v=35"></script>
+    <script src="/static/js/modules/crm.js?v=36"></script>
     <script src="/static/js/modules/maquinaria.js?v=32"></script>
+    <script src="/static/js/modules/maquinaria_fase2b.js?v=1"></script>
     <script src="/static/js/modules/certificaciones.js?v=27"></script>
     <script src="/static/js/modules/usuarios.js?v=27"></script>
     <script src="/static/js/modules/transporte.js?v=27"></script>

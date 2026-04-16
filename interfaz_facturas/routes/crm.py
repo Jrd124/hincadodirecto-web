@@ -469,3 +469,50 @@ def crm_gmail_sync():
   except Exception as exc:
     logger.error("gmail sync error: %s", exc, exc_info=True)
     return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@crm_bp.post("/api/crm/gmail/preview")
+def crm_gmail_preview():
+  """Dry-run: devuelve los hilos que SE IMPORTARÍAN sin escribir en BD.
+
+  Body JSON:
+    dias_atras (int, opcional): limitar búsqueda a últimos N días.
+    batch_size (int, opcional).
+  """
+  try:
+    from core import gmail_sync
+    estado = gmail_sync.gmail_disponible()
+    if not estado.get("disponible"):
+      return jsonify({"ok": False, "error": estado.get("motivo")}), 400
+    data = request.get_json(silent=True) or {}
+    dias_atras  = int(data["dias_atras"]) if data.get("dias_atras") else None
+    batch_size  = int(data.get("batch_size") or 20)
+    hilos = gmail_sync.preview_global_batch(batch_size=batch_size, dias_atras=dias_atras)
+    return jsonify({"ok": True, "hilos": hilos, "total": len(hilos)})
+  except Exception as exc:
+    logger.error("gmail preview error: %s", exc, exc_info=True)
+    return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@crm_bp.post("/api/crm/gmail/sync/selective")
+def crm_gmail_sync_selective():
+  """Importa solo los hilos seleccionados por el usuario.
+
+  Body JSON:
+    threads: [{gmail_thread_id, empresa_id, asunto, fecha,
+               snippet, from_addr, empresa_nombre}]
+  """
+  try:
+    from core import gmail_sync
+    estado = gmail_sync.gmail_disponible()
+    if not estado.get("disponible"):
+      return jsonify({"ok": False, "error": estado.get("motivo")}), 400
+    data = request.get_json(silent=True) or {}
+    threads = data.get("threads", [])
+    if not threads:
+      return jsonify({"ok": False, "error": "No se han enviado hilos para importar"}), 400
+    resumen = gmail_sync.import_selective(threads)
+    return jsonify({"ok": True, "resumen": resumen})
+  except Exception as exc:
+    logger.error("gmail selective sync error: %s", exc, exc_info=True)
+    return jsonify({"ok": False, "error": str(exc)}), 500

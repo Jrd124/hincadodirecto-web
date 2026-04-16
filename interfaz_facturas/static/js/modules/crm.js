@@ -2264,10 +2264,12 @@
       .then(function (r) { return r.json(); })
       .then(function (d) {
         _gmailDisponible = !!d.disponible;
+        var btnPrev = document.getElementById("btn-crm-gmail-preview");
         if (d.disponible) {
           estadoEl.innerHTML = '✅ Conectado como <strong>' + _esc(d.cuenta || "") + '</strong>';
           btnSync.disabled = false;
           btnSync.style.opacity = "1";
+          if (btnPrev) { btnPrev.disabled = false; btnPrev.style.opacity = "1"; }
         } else {
           estadoEl.innerHTML = '⚠️ No configurado — <span style="color:#94a3b8;">' + _esc(d.motivo || "Sin credenciales Gmail") + '</span>';
           btnSync.disabled = true;
@@ -2345,5 +2347,167 @@
 
   var _btnGmailSync = document.getElementById("btn-crm-gmail-sync");
   if (_btnGmailSync) _btnGmailSync.addEventListener("click", _crmGmailSync);
+
+  // ── Vista previa selectiva ────────────────────────────────────────────────
+  var _gmailPreviewData = [];   // hilos devueltos por /preview
+
+  function _crmGmailPreview() {
+    if (!_gmailDisponible) return;
+    var diasEl    = document.getElementById("crm-gmail-dias");
+    var diasAtras = diasEl ? (parseInt(diasEl.value) || 30) : 30;
+    var btnPrev   = document.getElementById("btn-crm-gmail-preview");
+    var wrapEl    = document.getElementById("crm-gmail-preview-wrap");
+    var listaEl   = document.getElementById("crm-gmail-preview-lista");
+    var countEl   = document.getElementById("crm-gmail-preview-count");
+    var errorEl   = document.getElementById("crm-gmail-error");
+    var resumenEl = document.getElementById("crm-gmail-resumen");
+
+    if (resumenEl) resumenEl.style.display = "none";
+    if (errorEl)   errorEl.style.display   = "none";
+    if (wrapEl)    wrapEl.style.display    = "none";
+    if (btnPrev) { btnPrev.disabled = true; btnPrev.textContent = "Buscando…"; }
+
+    fetch("/api/crm/gmail/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dias_atras: diasAtras }),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (btnPrev) { btnPrev.disabled = false; btnPrev.textContent = "Vista previa"; }
+        if (!res.ok || !res.data.ok) {
+          if (errorEl) { errorEl.textContent = "❌ " + (res.data.error || "Error en la vista previa"); errorEl.style.display = ""; }
+          return;
+        }
+        _gmailPreviewData = res.data.hilos || [];
+        if (!_gmailPreviewData.length) {
+          if (countEl) countEl.textContent = "No se encontraron emails nuevos en los últimos " + diasAtras + " días.";
+          if (wrapEl) { wrapEl.style.display = ""; }
+          if (listaEl) listaEl.innerHTML = "";
+          return;
+        }
+        _crmGmailRenderPreview();
+        if (wrapEl) wrapEl.style.display = "";
+      })
+      .catch(function (err) {
+        if (btnPrev) { btnPrev.disabled = false; btnPrev.textContent = "Vista previa"; }
+        if (errorEl) { errorEl.textContent = "❌ Error de red: " + err.message; errorEl.style.display = ""; }
+      });
+  }
+
+  function _crmGmailRenderPreview() {
+    var listaEl  = document.getElementById("crm-gmail-preview-lista");
+    var countEl  = document.getElementById("crm-gmail-preview-count");
+    var selCount = document.getElementById("crm-gmail-sel-count");
+    if (!listaEl) return;
+
+    var nuevos   = _gmailPreviewData.filter(function (h) { return !h.ya_existe; }).length;
+    var total    = _gmailPreviewData.length;
+    if (countEl) countEl.textContent = total + " email(s) encontrado(s) · " + nuevos + " nuevo(s) · " + (total - nuevos) + " ya importado(s)";
+
+    listaEl.innerHTML = _gmailPreviewData.map(function (h, idx) {
+      var yaBg   = h.ya_existe ? "background:#f8fafc;opacity:0.6;" : "background:#fff;";
+      var yaLabel = h.ya_existe ? '<span style="font-size:0.7rem;color:#94a3b8;margin-left:6px;">ya importado</span>' : '';
+      var fecha  = (h.fecha || "").substring(0, 10);
+      return '<label style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:1px solid #f1f5f9;cursor:pointer;' + yaBg + '">'
+        + '<input type="checkbox" data-idx="' + idx + '" ' + (h.ya_existe ? '' : 'checked') + ' ' + (h.ya_existe ? 'disabled' : '') + ' style="margin-top:3px;flex-shrink:0;">'
+        + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-size:0.83rem;font-weight:600;color:#1e293b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _esc(h.asunto || "(sin asunto)") + yaLabel + '</div>'
+        + '<div style="font-size:0.75rem;color:#64748b;margin-top:2px;">'
+        + '<span style="font-weight:600;">' + _esc(h.empresa_nombre) + '</span>'
+        + (h.from_addr ? ' &middot; ' + _esc(h.from_addr) : '')
+        + (fecha ? ' &middot; ' + fecha : '')
+        + '</div>'
+        + (h.snippet ? '<div style="font-size:0.75rem;color:#94a3b8;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _esc(h.snippet.substring(0, 120)) + '</div>' : '')
+        + '</div>'
+        + '</label>';
+    }).join("");
+
+    // Actualizar contador seleccionados
+    function _actualizarContador() {
+      var n = listaEl.querySelectorAll("input[type=checkbox]:checked:not(:disabled)").length;
+      if (selCount) selCount.textContent = n;
+    }
+    listaEl.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
+      cb.addEventListener("change", _actualizarContador);
+    });
+    _actualizarContador();
+  }
+
+  function _crmGmailImportarSeleccionados() {
+    var listaEl  = document.getElementById("crm-gmail-preview-lista");
+    var errorEl  = document.getElementById("crm-gmail-error");
+    var resumenEl = document.getElementById("crm-gmail-resumen");
+    var btnImp   = document.getElementById("btn-crm-gmail-import-sel");
+    if (!listaEl) return;
+
+    var seleccionados = [];
+    listaEl.querySelectorAll("input[type=checkbox]:checked:not(:disabled)").forEach(function (cb) {
+      var idx = parseInt(cb.getAttribute("data-idx"));
+      if (_gmailPreviewData[idx]) seleccionados.push(_gmailPreviewData[idx]);
+    });
+
+    if (!seleccionados.length) {
+      mostrarToast("Selecciona al menos un email para importar.", "error");
+      return;
+    }
+
+    if (btnImp) { btnImp.disabled = true; btnImp.textContent = "Importando…"; }
+    if (errorEl) errorEl.style.display = "none";
+
+    fetch("/api/crm/gmail/sync/selective", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ threads: seleccionados }),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (btnImp) { btnImp.disabled = false; btnImp.innerHTML = 'Importar seleccionados (<span id="crm-gmail-sel-count">0</span>)'; }
+        if (!res.ok || !res.data.ok) {
+          if (errorEl) { errorEl.textContent = "❌ " + (res.data.error || "Error al importar"); errorEl.style.display = ""; }
+          return;
+        }
+        var r = res.data.resumen || {};
+        if (resumenEl) {
+          resumenEl.innerHTML = "✅ Importados: <strong>" + (r.importados || 0) + "</strong>"
+            + " · Ya existían: <strong>" + (r.ya_existian || 0) + "</strong>"
+            + (r.errores && r.errores.length ? " · Errores: <strong>" + r.errores.length + "</strong>" : "");
+          resumenEl.style.display = "";
+        }
+        // Marcar como "ya importados" en la preview
+        _gmailPreviewData.forEach(function (h) {
+          if (seleccionados.find(function (s) { return s.gmail_thread_id === h.gmail_thread_id && s.empresa_id === h.empresa_id; })) {
+            h.ya_existe = true;
+          }
+        });
+        _crmGmailRenderPreview();
+        // Refrescar interacciones si el panel está visible
+        if (typeof window._crmCargarInteracciones === "function") {
+          var panelInt = document.getElementById("panel-crm-interacciones");
+          if (panelInt && panelInt.classList.contains("visible")) _crmCargarInteracciones();
+        }
+      })
+      .catch(function (err) {
+        if (btnImp) { btnImp.disabled = false; btnImp.innerHTML = 'Importar seleccionados (<span id="crm-gmail-sel-count">0</span>)'; }
+        if (errorEl) { errorEl.textContent = "❌ Error de red: " + err.message; errorEl.style.display = ""; }
+      });
+  }
+
+  // Seleccionar todo / Ninguno
+  var _btnSelAll  = document.getElementById("btn-crm-gmail-sel-all");
+  var _btnSelNone = document.getElementById("btn-crm-gmail-sel-none");
+  var _btnImportSel = document.getElementById("btn-crm-gmail-import-sel");
+  var _btnGmailPreview = document.getElementById("btn-crm-gmail-preview");
+
+  if (_btnSelAll) _btnSelAll.addEventListener("click", function () {
+    var listaEl = document.getElementById("crm-gmail-preview-lista");
+    if (listaEl) listaEl.querySelectorAll("input[type=checkbox]:not(:disabled)").forEach(function (cb) { cb.checked = true; cb.dispatchEvent(new Event("change")); });
+  });
+  if (_btnSelNone) _btnSelNone.addEventListener("click", function () {
+    var listaEl = document.getElementById("crm-gmail-preview-lista");
+    if (listaEl) listaEl.querySelectorAll("input[type=checkbox]:not(:disabled)").forEach(function (cb) { cb.checked = false; cb.dispatchEvent(new Event("change")); });
+  });
+  if (_btnImportSel)   _btnImportSel.addEventListener("click", _crmGmailImportarSeleccionados);
+  if (_btnGmailPreview) _btnGmailPreview.addEventListener("click", _crmGmailPreview);
 
 })();
