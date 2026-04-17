@@ -1611,9 +1611,9 @@ function _rrhhHECalLoad(periodo) {
           var pNombre = sk.proy ? (sk.proy.nombre||"") : "";
           var rangeLabel = sk.cells[0].di.num + (sk.cells.length > 1 ? " - " + sk.cells[sk.cells.length-1].di.num : "");
           var ttip = pNombre + " \u00b7 " + rangeLabel + " \u00b7 " + skHoras + "h = " + skTotal + " \u20ac";
-          h += '<div style="grid-column:'+gcStart+'/'+gcEnd+';grid-row:1;display:flex;flex-direction:column;align-items:stretch;justify-content:center;background:'+c.bg+';border-left:3px solid '+c.border+';border-radius:4px;margin:2px 1px;padding:1px 2px;z-index:1;'+opacity+'" title="'+ttip.replace(/"/g,'&quot;')+'">' +
-            '<div style="font-size:10px;font-weight:500;color:'+c.text+';text-align:center;line-height:1.2;">'+sc+'</div>' +
-            '<div style="display:flex;align-items:center;flex:1;">'+icons+'</div></div>';
+          h += '<div style="grid-column:'+gcStart+'/'+gcEnd+';grid-row:1;display:flex;flex-direction:column;background:'+c.bg+';border-left:3px solid '+c.border+';border-radius:4px;margin:2px 1px;padding:1px 0;z-index:1;overflow:hidden;'+opacity+'" title="'+ttip.replace(/"/g,'&quot;')+'">' +
+            '<div style="font-size:10px;font-weight:500;color:'+c.text+';text-align:center;line-height:1.2;white-space:nowrap;">'+sc+'</div>' +
+            '<div style="display:flex;align-items:center;flex:1;width:100%;">'+icons+'</div></div>';
         });
 
         h += '</div>'; // end sub-grid
