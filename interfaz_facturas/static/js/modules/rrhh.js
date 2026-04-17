@@ -1600,13 +1600,16 @@ function _rrhhHECalLoad(periodo) {
             var horas = sc2.he ? sc2.he.horas : 0;
             var imp = sc2.he ? (sc2.he.importe || 0) : 0;
             total += imp; skTotal += imp; skHoras += horas;
-            var icon = "";
+            var iconStyle = "";
+            var iconText = "";
             if (horas > 0) {
-              icon = '<span style="font-size:11px;font-weight:500;color:#2C2C2A;">' + horas + 'h</span>';
+              iconStyle = "font-size:11px;font-weight:500;color:#2C2C2A;";
+              iconText = horas + "h";
             } else {
-              icon = '<span style="font-size:12px;font-weight:500;color:#B4B2A9;">\u2013</span>';
+              iconStyle = "font-size:12px;font-weight:500;color:#B4B2A9;";
+              iconText = "\u2013";
             }
-            icons += '<span style="flex:1;text-align:center;cursor:pointer;min-height:16px;display:flex;align-items:center;justify-content:center;" onclick="event.stopPropagation();_rrhhHECellClick('+emp.id+',\''+sc2.di.fecha+'\',\''+periodo+'\',\''+nombre.replace(/'/g,"\\'")+'\')">' + icon + '</span>';
+            icons += '<span style="flex:1 1 0%;min-width:0;text-align:center;cursor:pointer;min-height:16px;display:inline-flex;align-items:center;justify-content:center;' + iconStyle + '" onclick="event.stopPropagation();_rrhhHECellClick('+emp.id+',\''+sc2.di.fecha+'\',\''+periodo+'\',\''+nombre.replace(/'/g,"\\'")+'\')">' + iconText + '</span>';
           });
           var pNombre = sk.proy ? (sk.proy.nombre||"") : "";
           var rangeLabel = sk.cells[0].di.num + (sk.cells.length > 1 ? " - " + sk.cells[sk.cells.length-1].di.num : "");
