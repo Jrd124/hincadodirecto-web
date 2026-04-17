@@ -1604,7 +1604,7 @@ function _rrhhHECalLoad(periodo) {
             if (horas > 0) {
               icon = '<span style="font-size:11px;font-weight:500;color:#2C2C2A;">' + horas + 'h</span>';
             } else {
-              icon = '<span style="font-size:10px;color:#ccc;">\u2715</span>';
+              icon = '<span style="font-size:12px;font-weight:500;color:#B4B2A9;">\u2013</span>';
             }
             icons += '<span style="flex:1;text-align:center;cursor:pointer;min-height:16px;display:flex;align-items:center;justify-content:center;" onclick="event.stopPropagation();_rrhhHECellClick('+emp.id+',\''+sc2.di.fecha+'\',\''+periodo+'\',\''+nombre.replace(/'/g,"\\'")+'\')">' + icon + '</span>';
           });
