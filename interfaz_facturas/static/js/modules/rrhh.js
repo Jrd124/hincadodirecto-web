@@ -1770,13 +1770,13 @@ var _DIAS_SEMANA = ["D","L","M","X","J","V","S"];
 // ── Dietas calendar project colors & short codes ──
 
 var _PROY_COLORES = [
-  {bg:'#E6F1FB',text:'#042C53',border:'#85B7EB'},
-  {bg:'#E1F5EE',text:'#04342C',border:'#5DCAA5'},
-  {bg:'#EEEDFE',text:'#26215C',border:'#AFA9EC'},
-  {bg:'#FAECE7',text:'#4A1B0C',border:'#F0997B'},
-  {bg:'#FBEAF0',text:'#4B1528',border:'#ED93B1'},
-  {bg:'#FAEEDA',text:'#412402',border:'#EF9F27'},
-  {bg:'#F1EFE8',text:'#2C2C2A',border:'#B4B2A9'},
+  {bg:'#F0F5FB',text:'#042C53',border:'#85B7EB'},
+  {bg:'#EDF5F0',text:'#04342C',border:'#5DCAA5'},
+  {bg:'#F1F0F8',text:'#26215C',border:'#AFA9EC'},
+  {bg:'#F8F1EE',text:'#4A1B0C',border:'#F0997B'},
+  {bg:'#F8EFF3',text:'#4B1528',border:'#ED93B1'},
+  {bg:'#F8F3EA',text:'#412402',border:'#EF9F27'},
+  {bg:'#F3F2EF',text:'#2C2C2A',border:'#B4B2A9'},
 ];
 var _proyColorMap = {}; // pid -> color index
 var _proyShortMap = {}; // pid -> 3-letter code
@@ -1959,9 +1959,13 @@ function _rrhhDietasCalLoad(periodo) {
             if (sc2.pid) proySet[sc2.pid] = true;
 
             var icon = "";
-            if (tipo && tipo.indexOf("completa") >= 0) icon = '<span style="font-size:14px;font-weight:600;color:#0F6E56;">\u20ac</span>';
-            else if (tipo && tipo.indexOf("media") >= 0) icon = '<span style="font-size:14px;font-weight:600;color:#BA7517;">\u00bd</span>';
-            else { skSinDieta++; icon = '<span style="font-size:14px;font-weight:700;color:#A32D2D;">!</span>'; }
+            if (tipo === "sin_dieta") {
+              icon = '<span style="font-size:10px;color:#aaa;">\u2715</span>';
+            } else if (tipo && tipo.indexOf("completa") >= 0) {
+              icon = '<span style="font-size:11px;font-weight:500;color:#2C2C2A;">' + Math.round(imp) + '</span>';
+            } else if (tipo && tipo.indexOf("media") >= 0) {
+              icon = '<span style="font-size:11px;font-weight:500;color:#2C2C2A;">' + Math.round(imp) + '</span>';
+            } else { skSinDieta++; }
             icons += '<span style="flex:1;text-align:center;cursor:pointer;" onclick="event.stopPropagation();_rrhhDietaCellClick(this,' + emp.id + ',\'' + sc2.di.fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g,"\\'") + '\',\'' + (sc2.proy ? (sc2.proy.codigo||"").replace(/'/g,"\\'") : "") + '\')">' + icon + '</span>';
           });
 
@@ -1991,6 +1995,35 @@ function _rrhhDietasCalLoad(periodo) {
         var totalTitle = completas + " completas + " + medias + " medias \u00b7 " + Object.keys(proySet).length + " proyecto(s)";
         h += '<div style="padding:3px 6px;text-align:right;font-weight:600;font-size:0.75rem;display:flex;align-items:center;justify-content:end;border-bottom:1px solid #f1f1f1;" title="' + totalTitle + '">' + (total > 0 ? fmtEur(total) : '\u2014') + '</div>';
       });
+
+      // ── Pendientes row ──
+      var pendientes = {};
+      for (var pi = 0; pi < nDias; pi++) {
+        var dii = dayInfos[pi];
+        if (dii.noLab) continue;
+        var cnt = 0;
+        var pendNames = [];
+        empleados.forEach(function(emp) {
+          var kk = emp.id + "_" + dii.fecha;
+          var pr = proyMap[kk];
+          var dt = dietasMap[kk];
+          if (pr && pr.id && (!dt || !dt.tipo)) {
+            cnt++;
+            pendNames.push(((emp.nombre||"") + " " + (emp.apellidos||"")).trim());
+          }
+        });
+        if (cnt > 0) pendientes[pi] = { count: cnt, names: pendNames };
+      }
+
+      h += '<div style="position:sticky;left:0;z-index:2;background:#fff;padding:3px 6px;font-weight:600;font-size:0.72rem;display:flex;align-items:center;border-top:2px solid #E5E5E5;color:#A32D2D;">\u26a0 Pendientes</div>';
+      for (var pj = 0; pj < nDias; pj++) {
+        var pdi = dayInfos[pj];
+        var pend = pendientes[pj];
+        var pendBg = pend ? "background:#FCEBEB;" : "";
+        var pendContent = pend ? '<span style="font-size:13px;font-weight:500;color:#A32D2D;cursor:pointer;" title="' + pend.names.join(', ').replace(/"/g,'&quot;') + '" onclick="alert(\'' + (pend.names.join('\\n').replace(/'/g,"\\'")) + '\')">' + pend.count + '</span>' : '';
+        h += '<div style="text-align:center;height:28px;display:flex;align-items:center;justify-content:center;border-top:2px solid #E5E5E5;' + pendBg + (pdi.noLab ? 'background:#EEECEA;' : '') + '">' + pendContent + '</div>';
+      }
+      h += '<div style="border-top:2px solid #E5E5E5;"></div>';
 
       h += '</div></div>';
       grid.innerHTML = h;
@@ -2022,8 +2055,10 @@ function _rrhhDietaCellClick(td, empId, fecha, periodo, empNombre, proyCodigo) {
     { tipo: "nacional_media", label: "Nacional media", abrev: "NM", bg: "#93C5FD", color: "#1E3A5F" },
     { tipo: "internacional_completa", label: "Internacional completa", abrev: "IC", bg: "#F59E0B", color: "#fff" },
     { tipo: "internacional_media", label: "Internacional media", abrev: "IM", bg: "#FDE68A", color: "#78350F" },
-    { tipo: "", label: "Sin dieta", abrev: "\u2014", bg: "#E5E7EB", color: "#666" }
+    { tipo: "", label: "Quitar dieta", abrev: "\u2014", bg: "#E5E7EB", color: "#666" }
   ];
+
+  var sinDietaMotivos = ["Vacaciones", "Enfermedad", "Baja", "Formaci\u00f3n", "Otro"];
 
   var popup = document.createElement("div");
   popup.id = "rrhh-dieta-popup";
@@ -2046,11 +2081,19 @@ function _rrhhDietaCellClick(td, empId, fecha, periodo, empNombre, proyCodigo) {
     html += '<span>' + o.label + '</span>';
     html += '</button>';
   });
+  // Sin dieta submenu
+  html += '<div style="border-top:1px solid #e5e7eb;margin-top:4px;padding-top:4px;">';
+  html += '<div style="font-size:10px;color:#888;font-weight:600;margin-bottom:2px;">SIN DIETA (con motivo):</div>';
+  sinDietaMotivos.forEach(function(motivo) {
+    html += '<button type="button" onclick="_rrhhDietaSinDieta(' + empId + ',\'' + fecha + '\',\'' + periodo + '\',\'' + motivo + '\')" style="display:flex;align-items:center;gap:6px;width:100%;padding:4px 8px;margin-bottom:1px;border:none;border-radius:4px;cursor:pointer;background:transparent;font-size:11px;text-align:left;color:#666;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'transparent\'">' +
+      '<span style="font-size:10px;color:#aaa;">\u2715</span> ' + motivo + '</button>';
+  });
+  html += '</div>';
   popup.innerHTML = html;
 
   document.body.appendChild(popup);
 
-  // Position near the cell (same pattern as Operaciones)
+  // Position near the cell
   var rect = td.getBoundingClientRect();
   var top = rect.bottom + 4;
   var left = rect.left;
@@ -2093,6 +2136,16 @@ function _rrhhDietaSeleccionar(empId, fecha, periodo, tipo) {
       _rrhhDietasCalLoad(periodo);
     }
   });
+}
+
+function _rrhhDietaSinDieta(empId, fecha, periodo, motivo) {
+  var popup = document.getElementById("rrhh-dieta-popup");
+  if (popup) popup.remove();
+  fetch("/api/rrhh/dietas/diaria", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ empleado_id: empId, fecha: fecha, tipo: "sin_dieta", importe: 0, notas: motivo, funcion: _rrhhDietaFuncion })
+  }).then(function () { _rrhhDietasCalLoad(periodo); });
 }
 
 function _rrhhDietasResumen(body) {
@@ -2859,6 +2912,7 @@ window._rrhhDietasCalReload = _rrhhDietasCalReload;
 window._rrhhDietasResLoad = _rrhhDietasResLoad;
 window._rrhhDietaCellClick = _rrhhDietaCellClick;
 window._rrhhDietaSeleccionar = _rrhhDietaSeleccionar;
+window._rrhhDietaSinDieta = _rrhhDietaSinDieta;
 window._rrhhDietaSetFn = _rrhhDietaSetFn;
 window._rrhhDietasEmpLoad = _rrhhDietasEmpLoad;
 window._rrhhDietaEmpCellClick = _rrhhDietaEmpCellClick;
