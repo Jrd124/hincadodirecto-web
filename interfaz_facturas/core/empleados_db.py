@@ -90,6 +90,8 @@ def init_empleados_db() -> None:
             conn.execute("ALTER TABLE empleados ADD COLUMN direccion TEXT")
         if "dias_vacaciones_anuales" not in existing:
             conn.execute("ALTER TABLE empleados ADD COLUMN dias_vacaciones_anuales INTEGER DEFAULT 22")
+        if "fecha_nacimiento" not in existing:
+            conn.execute("ALTER TABLE empleados ADD COLUMN fecha_nacimiento TEXT")
 
         # Normalizar puesto a operador/ayudante
         conn.execute("UPDATE empleados SET puesto = 'operador' WHERE LOWER(puesto) IN ('hincador','hincador, perforador','hincador/perforador','perforador')")
@@ -241,6 +243,18 @@ def init_empleados_db() -> None:
         if conn.execute("SELECT COUNT(*) FROM horas_extras_config").fetchone()[0] == 0:
             conn.execute("INSERT INTO horas_extras_config (precio_hora, fecha_vigencia_desde, notas) VALUES (15.0, '2026-01-01', 'Tarifa inicial')")
 
+        # ── Tabla de cumpleaños enviados (bot) ────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS bot_cumpleanos_enviados (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                empleado_id INTEGER NOT NULL,
+                fecha_cumple TEXT NOT NULL,
+                hito TEXT NOT NULL,
+                fecha_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(empleado_id, fecha_cumple, hito)
+            )
+        """)
+
     _initialized = True
 
 
@@ -257,6 +271,7 @@ _CAMPOS = [
     "apto_medico", "apto_medico_caducidad",
     "formacion_especifica", "foto_url", "fecha_antiguedad",
     "neto_pactado", "iban", "direccion", "dias_vacaciones_anuales",
+    "fecha_nacimiento",
 ]
 
 

@@ -1094,6 +1094,70 @@ def consultar_operaciones(consulta_tipo, proyecto_nombre=None, empleado_nombre=N
 
 # ── Mejora 7: SQL genérica ────────────────────────────────────────────────
 
+# ── Mejora: Consultar cumpleaños ──────────────────────────────────────────
+
+def consultar_cumpleanos(tipo="proximos_15d", nombre_empleado=None):
+    _init_all()
+    conn = get_conn()
+    try:
+        from datetime import date
+        hoy = date.today()
+        emps = conn.execute(
+            "SELECT id, nombre, apellidos, fecha_nacimiento FROM empleados "
+            "WHERE estado IN ('activo','reserva','vacaciones') AND fecha_nacimiento IS NOT NULL"
+        ).fetchall()
+        resultado = []
+        for e in emps:
+            try:
+                fn = date.fromisoformat(e["fecha_nacimiento"])
+            except Exception:
+                continue
+            cumple = fn.replace(year=hoy.year)
+            if cumple < hoy:
+                cumple = fn.replace(year=hoy.year + 1)
+            dias = (cumple - hoy).days
+            edad = cumple.year - fn.year
+            nm = f"{e['nombre']} {e.get('apellidos') or ''}".strip()
+            resultado.append({"nombre": nm, "fecha": cumple.strftime("%d/%m"), "dias": dias, "edad": edad, "mes": cumple.month})
+
+        if tipo == "empleado" and nombre_empleado:
+            t = _normalize(nombre_empleado)
+            resultado = [r for r in resultado if t in _normalize(r["nombre"])]
+            if not resultado:
+                return f"No se encontró empleado '{nombre_empleado}' con fecha de nacimiento."
+            r = resultado[0]
+            if r["dias"] == 0:
+                return f"🎂 ¡Hoy es el cumpleaños de *{r['nombre']}*! Cumple {r['edad']} años."
+            return f"🎂 *{r['nombre']}* cumple {r['edad']} años el {r['fecha']} (en {r['dias']} días)."
+
+        if tipo == "mes_actual":
+            mes = hoy.month
+            resultado = [r for r in resultado if r["mes"] == mes]
+            resultado.sort(key=lambda x: x["dias"])
+            if not resultado:
+                return "No hay cumpleaños este mes."
+            lines = [f"🎂 *Cumpleaños de {hoy.strftime('%B')}:*\n"]
+            for r in resultado:
+                prefix = "🎈 Hoy" if r["dias"] == 0 else r["fecha"]
+                lines.append(f"  {prefix} — {r['nombre']} ({r['edad']} años)")
+            return "\n".join(lines)
+
+        # proximos_15d
+        resultado = [r for r in resultado if r["dias"] <= 15]
+        resultado.sort(key=lambda x: x["dias"])
+        if not resultado:
+            return "No hay cumpleaños en los próximos 15 días."
+        lines = ["🎂 *Próximos cumpleaños:*\n"]
+        for r in resultado:
+            if r["dias"] == 0:
+                lines.append(f"  🎈 *Hoy* — {r['nombre']} (cumple {r['edad']})")
+            else:
+                lines.append(f"  {r['fecha']} ({r['dias']}d) — {r['nombre']} ({r['edad']})")
+        return "\n".join(lines)
+    finally:
+        conn.close()
+
+
 import re as _re
 
 def ejecutar_sql_erp(sql, bd="gestion"):
@@ -1336,6 +1400,18 @@ _GPT_FUNCTIONS = [
             "required": ["sql"],
         },
     },
+    {
+        "name": "consultar_cumpleanos",
+        "description": "Consulta cumpleaños de empleados: próximos 15 días, del mes actual, o de un empleado específico.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "tipo": {"type": "string", "enum": ["proximos_15d", "mes_actual", "empleado"], "description": "proximos_15d, mes_actual, o empleado"},
+                "nombre_empleado": {"type": "string", "description": "Nombre del empleado (solo si tipo=empleado)"},
+            },
+            "required": ["tipo"],
+        },
+    },
 ]
 
 _FN_MAP = {
@@ -1354,6 +1430,7 @@ _FN_MAP = {
     "modificar_empleado": modificar_empleado,
     "consultar_operaciones": consultar_operaciones,
     "ejecutar_sql_erp": ejecutar_sql_erp,
+    "consultar_cumpleanos": consultar_cumpleanos,
 }
 
 
@@ -2831,6 +2908,68 @@ async def cmd_mispartes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 #  SCHEDULED ALERTS (JobQueue)
 # ═══════════════════════════════════════════════════════════════════════════
 
+async def check_cumpleanos(context: ContextTypes.DEFAULT_TYPE):
+    """09:00 daily: check birthdays and send notifications to superadmins."""
+    from datetime import date
+    hoy = date.today()
+    conn = get_conn()
+    try:
+        emps = conn.execute(
+            "SELECT id, nombre, apellidos, fecha_nacimiento FROM empleados "
+            "WHERE estado IN ('activo','reserva','vacaciones') AND fecha_nacimiento IS NOT NULL"
+        ).fetchall()
+        for emp in emps:
+            try:
+                fn = date.fromisoformat(emp["fecha_nacimiento"])
+            except Exception:
+                continue
+            cumple = fn.replace(year=hoy.year)
+            if cumple < hoy:
+                cumple = fn.replace(year=hoy.year + 1)
+            dias = (cumple - hoy).days
+            edad = cumple.year - fn.year
+            nombre = f"{emp['nombre']} {emp.get('apellidos') or ''}".strip()
+
+            hito = None
+            if dias == 0: hito = "0d"
+            elif dias == 1: hito = "1d"
+            elif dias == 7: hito = "7d"
+            elif dias == 15: hito = "15d"
+
+            if hito:
+                ya = conn.execute(
+                    "SELECT 1 FROM bot_cumpleanos_enviados WHERE empleado_id=? AND fecha_cumple=? AND hito=?",
+                    (emp["id"], cumple.isoformat(), hito)
+                ).fetchone()
+                if ya:
+                    continue
+                if hito == "0d":
+                    msg = f"🎉🎂 ¡Hoy es el cumpleaños de *{nombre}*! Cumple {edad} años."
+                elif hito == "1d":
+                    msg = f"🎂 Mañana cumple años *{nombre}* ({edad} años)."
+                elif hito == "7d":
+                    msg = f"🎂 En 1 semana cumple años *{nombre}* ({edad}) — el {cumple.strftime('%d/%m')}."
+                else:
+                    msg = f"🎂 En 15 días cumple años *{nombre}* ({edad}) — el {cumple.strftime('%d/%m')}."
+                for admin_id in listar_superadmins():
+                    try:
+                        await context.bot.send_message(chat_id=admin_id, text=msg, parse_mode=ParseMode.MARKDOWN)
+                    except Exception:
+                        pass
+                try:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO bot_cumpleanos_enviados (empleado_id, fecha_cumple, hito) VALUES (?,?,?)",
+                        (emp["id"], cumple.isoformat(), hito)
+                    )
+                except Exception:
+                    pass
+        conn.commit()
+    except Exception as e:
+        logger.warning("Error check_cumpleanos: %s", e)
+    finally:
+        conn.close()
+
+
 async def recordatorio_partes(context: ContextTypes.DEFAULT_TYPE):
     """18:00 L-V: recordar a operarios que no han enviado parte."""
     hoy = datetime.now().strftime("%Y-%m-%d")
@@ -3421,6 +3560,7 @@ def main():
     # Scheduled jobs
     jq = app.job_queue
     # Recordatorio partes: 18:00 L-V (Mon=0..Fri=4)
+    jq.run_daily(check_cumpleanos, time=time(9, 0), days=(0, 1, 2, 3, 4, 5, 6))
     jq.run_daily(recordatorio_partes, time=time(18, 0), days=(0, 1, 2, 3, 4))
     # Alerta viernes firmas: 14:00 viernes (Fri=4)
     jq.run_daily(alerta_viernes_firmas, time=time(14, 0), days=(4,))

@@ -298,6 +298,28 @@ function cargarDashboardDirector() {
       }
     })
     .catch(function (err) { console.error("Error cargando dashboard director:", err); });
+
+  // Cumpleaños widget
+  fetch("/api/dashboard/cumpleanos-proximos")
+    .then(function (r) { return r.json(); })
+    .then(function (lista) {
+      var el = document.getElementById("dir-cumpleanos-list");
+      if (!el) return;
+      if (!lista || !lista.length) { el.innerHTML = '<p style="color:#888;font-size:0.82rem;">Ninguno en los pr\u00f3ximos 15 d\u00edas</p>'; return; }
+      var h = '';
+      lista.forEach(function (c) {
+        if (c.dias_restantes === 0) {
+          h += '<div style="padding:5px 0;border-bottom:1px solid #f1f1f1;">\uD83C\uDF88 <span style="color:#16a34a;font-weight:600;">Hoy</span> \u00b7 ' + c.nombre + ' \u00b7 cumple ' + c.edad_cumplira + '</div>';
+        } else {
+          var fp = c.fecha_cumple.split("-");
+          var meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+          var label = parseInt(fp[2]) + " " + meses[parseInt(fp[1])-1];
+          h += '<div style="padding:5px 0;border-bottom:1px solid #f1f1f1;"><span style="color:#888;">' + label + ' (' + c.dias_restantes + 'd)</span> \u00b7 ' + c.nombre + ' \u00b7 ' + c.edad_cumplira + '</div>';
+        }
+      });
+      el.innerHTML = h;
+    })
+    .catch(function () {});
 }
 
 // Helpers del dashboard director

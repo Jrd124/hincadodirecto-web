@@ -869,6 +869,44 @@ def api_rrhh_banco_desclasificar():
     bconn.close()
 
 
+# ── Cumpleaños ────────────────────────────────────────────────────────────
+
+@empleados_bp.get("/api/dashboard/cumpleanos-proximos")
+def api_cumpleanos_proximos():
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    from datetime import date, timedelta
+    hoy = date.today()
+    emps = conn.execute(
+      "SELECT id, nombre, apellidos, fecha_nacimiento FROM empleados "
+      "WHERE estado IN ('activo','reserva','vacaciones') AND fecha_nacimiento IS NOT NULL"
+    ).fetchall()
+    resultado = []
+    for e in emps:
+      try:
+        fn = date.fromisoformat(e["fecha_nacimiento"])
+      except Exception:
+        continue
+      cumple = fn.replace(year=hoy.year)
+      if cumple < hoy:
+        cumple = fn.replace(year=hoy.year + 1)
+      dias = (cumple - hoy).days
+      if dias <= 15:
+        resultado.append({
+          "empleado_id": e["id"],
+          "nombre": ((e["nombre"] or "") + " " + (e["apellidos"] or "")).strip(),
+          "fecha_nacimiento": e["fecha_nacimiento"],
+          "fecha_cumple": cumple.isoformat(),
+          "dias_restantes": dias,
+          "edad_cumplira": cumple.year - fn.year,
+        })
+    resultado.sort(key=lambda x: x["dias_restantes"])
+    return jsonify(resultado)
+  finally:
+    conn.close()
+
+
 # ── Horas Extras ──────────────────────────────────────────────────────────
 
 def _precio_hora_vigente(conn, fecha):
