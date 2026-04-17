@@ -106,7 +106,7 @@ def cuadrante():
     try:
         # Empleados activos
         empleados = [dict(r) for r in conn.execute(
-            "SELECT id, nombre, apellidos, puesto, estado FROM empleados WHERE estado = 'activo' ORDER BY nombre"
+            "SELECT id, nombre, apellidos, puesto, estado, fecha_baja_inicio, fecha_baja_fin FROM empleados WHERE estado IN ('activo','baja','vacaciones') ORDER BY estado, nombre"
         ).fetchall()]
 
         # Máquinas activas
@@ -116,7 +116,7 @@ def cuadrante():
 
         # Proyectos activos (para paleta de colores y asignación)
         proyectos = [dict(r) for r in conn.execute(
-            "SELECT id, nombre, codigo, estado FROM proyectos WHERE estado IN ('vivo','en_curso') ORDER BY nombre"
+            "SELECT id, nombre, codigo, estado FROM proyectos WHERE estado IN ('vivo','en_curso','adjudicado') ORDER BY nombre"
         ).fetchall()]
         # Generar abreviatura y color_idx
         for i, p in enumerate(proyectos):
@@ -377,16 +377,20 @@ def resumen():
         ).fetchone()[0]
 
         proy_activos = conn.execute(
-            "SELECT COUNT(*) FROM proyectos WHERE estado IN ('vivo','en_curso')"
+            "SELECT COUNT(*) FROM proyectos WHERE estado IN ('vivo','en_curso','adjudicado')"
         ).fetchone()[0]
 
-        # Ocupación: días-recurso asignados / (total_recursos * días_laborables)
-        asig_mes = conn.execute(
-            "SELECT COUNT(*) FROM proyecto_asignaciones WHERE fecha >= ? AND fecha <= ?",
-            (fecha_ini, fecha_fin),
+        # Ocupación máquinas: excluir averías del numerador y denominador
+        asig_maq_mes = conn.execute(
+            "SELECT COUNT(*) FROM proyecto_asignaciones WHERE recurso_tipo='maquina' "
+            "AND fecha >= ? AND fecha <= ? AND estado != 'averia'", (fecha_ini, fecha_fin),
         ).fetchone()[0]
-        capacidad = (total_emp + total_maq) * dias_lab
-        ocupacion = round(asig_mes / capacidad * 100) if capacidad > 0 else 0
+        averia_dias = conn.execute(
+            "SELECT COUNT(*) FROM proyecto_asignaciones WHERE recurso_tipo='maquina' "
+            "AND fecha >= ? AND fecha <= ? AND estado = 'averia'", (fecha_ini, fecha_fin),
+        ).fetchone()[0]
+        capacidad_maq = total_maq * dias_lab - averia_dias
+        ocupacion = round(asig_maq_mes / capacidad_maq * 100) if capacidad_maq > 0 else 0
 
         return jsonify({
             "emp_hoy": emp_hoy, "emp_total": total_emp,

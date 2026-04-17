@@ -1974,7 +1974,7 @@ async def _enviar_selector_proyecto_parte(tid, context, datos):
     """Show active projects as inline buttons for parte assignment."""
     conn = get_conn()
     try:
-        rows = conn.execute("SELECT id, nombre FROM proyectos WHERE estado IN ('vivo','en_curso') ORDER BY nombre").fetchall()
+        rows = conn.execute("SELECT id, nombre FROM proyectos WHERE estado IN ('vivo','en_curso','adjudicado') ORDER BY nombre").fetchall()
     finally:
         conn.close()
     if not rows:
@@ -2609,7 +2609,7 @@ async def callback_firma(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = get_conn()
         try:
             obra = datos.get("obra", "")
-            all_proys = [dict(r) for r in conn.execute("SELECT id, nombre FROM proyectos WHERE estado IN ('vivo','en_curso')").fetchall()]
+            all_proys = [dict(r) for r in conn.execute("SELECT id, nombre FROM proyectos WHERE estado IN ('vivo','en_curso','adjudicado')").fetchall()]
             matches = _like_norm(all_proys, "nombre", obra)
             row = matches[0] if matches else None
             if not row:
@@ -2713,7 +2713,7 @@ async def cmd_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     conn = get_conn()
     try:
-        rows = conn.execute("SELECT id, nombre FROM proyectos WHERE estado IN ('vivo','en_curso') ORDER BY nombre").fetchall()
+        rows = conn.execute("SELECT id, nombre FROM proyectos WHERE estado IN ('vivo','en_curso','adjudicado') ORDER BY nombre").fetchall()
     finally:
         conn.close()
 

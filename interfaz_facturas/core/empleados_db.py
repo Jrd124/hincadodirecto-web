@@ -92,6 +92,10 @@ def init_empleados_db() -> None:
             conn.execute("ALTER TABLE empleados ADD COLUMN dias_vacaciones_anuales INTEGER DEFAULT 22")
         if "fecha_nacimiento" not in existing:
             conn.execute("ALTER TABLE empleados ADD COLUMN fecha_nacimiento TEXT")
+        if "fecha_baja_inicio" not in existing:
+            conn.execute("ALTER TABLE empleados ADD COLUMN fecha_baja_inicio TEXT")
+        if "fecha_baja_fin" not in existing:
+            conn.execute("ALTER TABLE empleados ADD COLUMN fecha_baja_fin TEXT")
 
         # Normalizar puesto a operador/ayudante
         conn.execute("UPDATE empleados SET puesto = 'operador' WHERE LOWER(puesto) IN ('hincador','hincador, perforador','hincador/perforador','perforador')")
@@ -284,7 +288,7 @@ _CAMPOS = [
     "apto_medico", "apto_medico_caducidad",
     "formacion_especifica", "foto_url", "fecha_antiguedad",
     "neto_pactado", "iban", "direccion", "dias_vacaciones_anuales",
-    "fecha_nacimiento",
+    "fecha_nacimiento", "fecha_baja_inicio", "fecha_baja_fin",
 ]
 
 

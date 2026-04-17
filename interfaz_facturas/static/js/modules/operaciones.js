@@ -279,20 +279,44 @@ function _renderFila(tipo, id, nombre, subtitulo, dias, asignaciones, proyMap, g
   var est = GRUPO_ESTILOS[grupo] || GRUPO_ESTILOS.otros;
   var html = '<tr class="oper-fila-' + grupo + '" data-grupo-fila="' + grupo + '" data-recurso-key="' + key + '"' + (collapsed ? ' style="display:none;"' : '') + '>';
   html += '<td style="position:sticky;left:0;z-index:1;border-left:4px solid ' + est.border + ';background:' + est.bg + ';padding:6px 8px 6px 12px;font-size:13px;border-bottom:1px solid var(--color-border);white-space:nowrap;">';
-  html += '<div style="font-weight:500;line-height:1.3;">' + nombre + '</div>';
+  var _empEstado = "";
+  if (tipo === "empleado" && _operData && _operData.empleados) {
+    for (var _ei = 0; _ei < _operData.empleados.length; _ei++) {
+      if (_operData.empleados[_ei].id === id) { _empEstado = _operData.empleados[_ei].estado || ""; break; }
+    }
+  }
+  var _estadoPill = "";
+  if (_empEstado === "baja") _estadoPill = ' <span style="padding:1px 5px;border-radius:9999px;font-size:9px;font-weight:600;background:#FCEBEB;color:#A32D2D;">Baja</span>';
+  else if (_empEstado === "vacaciones") _estadoPill = ' <span style="padding:1px 5px;border-radius:9999px;font-size:9px;font-weight:600;background:#E6F1FB;color:#1E40AF;">Vac.</span>';
+  var _nameStyle = _empEstado === "baja" ? "color:#999;" : "";
+  html += '<div style="font-weight:500;line-height:1.3;' + _nameStyle + '">' + nombre + _estadoPill + '</div>';
   if (subtitulo) html += '<div style="font-size:10px;color:var(--color-text-secondary);line-height:1.2;">' + subtitulo + '</div>';
   html += '</td>';
 
   var vacSet = (_operData && _operData.vacaciones) || [];
+  // Check if employee is on baja
+  var bajaInicio = null, bajaFin = null;
+  if (tipo === "empleado" && _operData && _operData.empleados) {
+    for (var _bi = 0; _bi < _operData.empleados.length; _bi++) {
+      if (_operData.empleados[_bi].id === id) {
+        bajaInicio = _operData.empleados[_bi].fecha_baja_inicio || null;
+        bajaFin = _operData.empleados[_bi].fecha_baja_fin || null;
+        break;
+      }
+    }
+  }
   dias.forEach(function (dia, colIdx) {
     var a = asig[dia.fecha];
     var noLab = !dia.laborable;
     var esHoy = dia.es_hoy;
     var esVac = (tipo === "empleado" && vacSet.indexOf(id + "_" + dia.fecha) >= 0);
-    var bgCol = noLab ? '#E5E7EB' : (esVac && !a ? '#FEF3C7' : (esHoy ? '#F0F7FF' : ''));
+    var esBaja = (bajaInicio && dia.fecha >= bajaInicio && (!bajaFin || dia.fecha <= bajaFin));
+    var bgCol = noLab ? '#E5E7EB' : (esBaja ? '' : (esVac && !a ? '#FEF3C7' : (esHoy ? '#F0F7FF' : '')));
+    var bgPattern = esBaja ? 'background:repeating-linear-gradient(45deg,#FCEBEB,#FCEBEB 4px,#fff 4px,#fff 8px);' : '';
     var cursor = 'pointer';
 
-    html += '<td data-oper-celda data-tipo="' + tipo + '" data-rid="' + id + '" data-fecha="' + dia.fecha + '" data-col="' + colIdx + '" data-lab="' + (dia.laborable ? 1 : 0) + '" style="padding:1px;border-bottom:1px solid var(--color-border);background:' + bgCol + ';cursor:' + cursor + ';">';
+    var cellTitle = esBaja ? 'title="Baja laboral' + (bajaInicio ? ': ' + bajaInicio + (bajaFin ? ' a ' + bajaFin : '') : '') + '"' : '';
+    html += '<td data-oper-celda data-tipo="' + tipo + '" data-rid="' + id + '" data-fecha="' + dia.fecha + '" data-col="' + colIdx + '" data-lab="' + (dia.laborable ? 1 : 0) + '" ' + cellTitle + ' style="padding:1px;border-bottom:1px solid var(--color-border);' + (bgPattern || 'background:' + bgCol + ';') + 'cursor:' + cursor + ';">';
 
     if (a && a.estado === "averia") {
       var tooltipAvr = 'Avería' + (a.notas ? ': ' + a.notas.replace(/"/g, '&quot;') : '');

@@ -509,6 +509,8 @@ function _rrhhRellenarFormEmpleado(e) {
   document.getElementById("emp-dni").value = e.dni || "";
   document.getElementById("emp-nss").value = e.nss || "";
   document.getElementById("emp-fecha-nacimiento").value = e.fecha_nacimiento || "";
+  (document.getElementById("emp-fecha-baja-inicio") || {}).value = e.fecha_baja_inicio || "";
+  (document.getElementById("emp-fecha-baja-fin") || {}).value = e.fecha_baja_fin || "";
   document.getElementById("emp-telefono").value = e.telefono || "";
   document.getElementById("emp-email").value = e.email || "";
   document.getElementById("emp-puesto").value = e.puesto || "";
@@ -545,6 +547,8 @@ function _rrhhRecogerFormEmpleado() {
     dni: document.getElementById("emp-dni").value.trim(),
     nss: document.getElementById("emp-nss").value.trim(),
     fecha_nacimiento: document.getElementById("emp-fecha-nacimiento").value || null,
+    fecha_baja_inicio: (document.getElementById("emp-fecha-baja-inicio") || {}).value || null,
+    fecha_baja_fin: (document.getElementById("emp-fecha-baja-fin") || {}).value || null,
     telefono: document.getElementById("emp-telefono").value.trim(),
     email: document.getElementById("emp-email").value.trim(),
     puesto: document.getElementById("emp-puesto").value.trim(),

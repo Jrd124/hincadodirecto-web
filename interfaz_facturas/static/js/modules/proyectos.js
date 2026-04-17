@@ -1263,24 +1263,28 @@
     modal.className = "modal-overlay visible";
     modal.id = "modal-asignar-recurso";
     modal.style.zIndex = "110";
-    modal.innerHTML = '<div class="modal-editar" role="dialog" style="max-width:450px;">' +
-      '<h2 style="margin:0 0 16px;">Asignar recurso</h2>' +
-      '<div style="display:grid;gap:12px;">' +
-        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Tipo</label>' +
-          '<select id="ar-tipo" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);">' +
-          '<option value="empleado">Empleado</option><option value="maquina">Máquina</option></select></div>' +
-        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Recurso</label>' +
-          '<select id="ar-recurso" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);"><option>Cargando...</option></select></div>' +
-        '<div id="ar-funcion-wrap" style="display:none;"><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Funci\u00f3n hoy</label>' +
-          '<select id="ar-funcion" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);">' +
-          '<option value="">Usar puesto habitual</option><option value="operador">Operador</option><option value="ayudante">Ayudante</option></select></div>' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
-          '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Desde</label><input type="date" id="ar-desde" value="' + hoy + '" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);box-sizing:border-box;"></div>' +
-          '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Hasta</label><input type="date" id="ar-hasta" value="' + hoy + '" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);box-sizing:border-box;"></div></div>' +
+    modal.innerHTML = '<div class="modal-editar" role="dialog" style="max-width:480px;border-radius:12px;padding:20px;">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">' +
+        '<span style="font-size:20px;">\uD83D\uDC77</span>' +
+        '<div><h2 style="margin:0;font-size:1.1rem;">Asignar recurso</h2><div style="font-size:11px;color:#888;">Proyecto #' + proyectoId + '</div></div></div>' +
+      '<div style="display:grid;gap:14px;">' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+          '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.3px;color:#666;">Tipo</label>' +
+            '<select id="ar-tipo" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;font-size:13px;">' +
+            '<option value="empleado">\uD83D\uDC77 Empleado</option><option value="maquina">\uD83C\uDFD7\uFE0F M\u00e1quina</option></select></div>' +
+          '<div id="ar-funcion-wrap" style="display:none;"><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.3px;color:#666;">Funci\u00f3n</label>' +
+            '<select id="ar-funcion" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;font-size:13px;">' +
+            '<option value="">Puesto habitual</option><option value="operador">Operador</option><option value="ayudante">Ayudante</option></select></div>' +
+        '</div>' +
+        '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.3px;color:#666;">Recurso</label>' +
+          '<select id="ar-recurso" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;font-size:13px;"><option>Cargando...</option></select></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+          '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.3px;color:#666;">Desde</label><input type="date" id="ar-desde" value="' + hoy + '" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;box-sizing:border-box;font-size:13px;"></div>' +
+          '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.3px;color:#666;">Hasta</label><input type="date" id="ar-hasta" value="' + hoy + '" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;box-sizing:border-box;font-size:13px;"></div></div>' +
       '</div>' +
-      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">' +
-        '<button class="secondary" onclick="document.getElementById(\'modal-asignar-recurso\').remove()">Cancelar</button>' +
-        '<button class="primary" style="width:auto;" id="ar-btn-guardar">Asignar</button>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;padding-top:14px;border-top:1px solid #f1f1f1;">' +
+        '<button class="secondary" style="border-radius:8px;" onclick="document.getElementById(\'modal-asignar-recurso\').remove()">Cancelar</button>' +
+        '<button class="primary" style="width:auto;border-radius:8px;" id="ar-btn-guardar">Asignar</button>' +
       '</div></div>';
     modal.addEventListener("click", function (e) { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
@@ -1725,7 +1729,7 @@
   }
 
   window._proyVivos = function () {
-    fetch("/api/proyectos?estado=vivo,pausado")
+    fetch("/api/proyectos?estado=vivo,adjudicado,pausado")
       .then(function (r) { return r.json(); })
       .then(function (d) {
         _proyVivosCache = d.proyectos || [];
