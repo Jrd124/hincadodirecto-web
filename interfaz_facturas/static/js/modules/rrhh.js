@@ -1960,10 +1960,10 @@ function _rrhhDietasCalLoad(periodo) {
             var icon = "";
             if (tipo === "sin_dieta") {
               icon = '<span style="font-size:10px;color:#aaa;">\u2715</span>';
-            } else if (tipo && tipo.indexOf("completa") >= 0) {
-              icon = '<span style="font-size:11px;font-weight:500;color:#2C2C2A;">' + Math.round(imp) + '</span>';
-            } else if (tipo && tipo.indexOf("media") >= 0) {
-              icon = '<span style="font-size:11px;font-weight:500;color:#2C2C2A;">' + Math.round(imp) + '</span>';
+            } else if (tipo && (tipo.indexOf("completa") >= 0 || tipo.indexOf("media") >= 0)) {
+              icon = imp > 0
+                ? '<span style="font-size:11px;font-weight:500;color:#2C2C2A;">' + Math.round(imp) + '</span>'
+                : '<span style="font-size:11px;color:#0F6E56;">\u2713</span>';
             } else { skSinDieta++; }
             icons += '<span style="flex:1;text-align:center;cursor:pointer;min-height:16px;display:flex;align-items:center;justify-content:center;" onclick="event.stopPropagation();_rrhhDietaCellClick(this,' + emp.id + ',\'' + sc2.di.fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g,"\\'") + '\',\'' + (sc2.proy ? (sc2.proy.codigo||"").replace(/'/g,"\\'") : "") + '\')">' + icon + '</span>';
           });
@@ -2128,13 +2128,16 @@ function _rrhhDietaSeleccionar(empId, fecha, periodo, tipo) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ empleado_id: empId, fecha: fecha, tipo: tipo, importe: 0, funcion: _rrhhDietaFuncion })
+  }).then(function (r) {
+    if (!r.ok) { console.error("Error guardando dieta:", r.status); return; }
+    return r.json();
   }).then(function () {
     if (_rrhhDietasVista === "empleado") {
       _rrhhDietasEmpLoad();
     } else {
       _rrhhDietasCalLoad(periodo);
     }
-  });
+  }).catch(function (err) { console.error("Error dieta:", err); });
 }
 
 function _rrhhDietaSinDieta(empId, fecha, periodo, motivo) {
@@ -2144,7 +2147,10 @@ function _rrhhDietaSinDieta(empId, fecha, periodo, motivo) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ empleado_id: empId, fecha: fecha, tipo: "sin_dieta", importe: 0, notas: motivo, funcion: _rrhhDietaFuncion })
-  }).then(function () { _rrhhDietasCalLoad(periodo); });
+  }).then(function (r) {
+    if (!r.ok) { console.error("Error guardando sin_dieta:", r.status); return; }
+    _rrhhDietasCalLoad(periodo);
+  }).catch(function (err) { console.error("Error sin_dieta:", err); });
 }
 
 function _rrhhDietasResumen(body) {
