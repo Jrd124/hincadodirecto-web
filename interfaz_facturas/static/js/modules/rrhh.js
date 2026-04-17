@@ -1949,7 +1949,7 @@ function _rrhhDietasCalLoad(periodo) {
 
           // Build diet icons row
           var icons = '';
-          var skTotal = 0; var skComp = 0; var skMedia = 0;
+          var skTotal = 0; var skComp = 0; var skMedia = 0; var skSinDieta = 0;
           sk.cells.forEach(function(sc2) {
             var tipo = sc2.dieta ? sc2.dieta.tipo : "";
             var imp = sc2.dieta ? (sc2.dieta.importe || 0) : 0;
@@ -1959,9 +1959,9 @@ function _rrhhDietasCalLoad(periodo) {
             if (sc2.pid) proySet[sc2.pid] = true;
 
             var icon = "";
-            if (tipo && tipo.indexOf("completa") >= 0) icon = '<span style="font-size:11px;color:' + c.border + ';">\u25cf</span>';
-            else if (tipo && tipo.indexOf("media") >= 0) icon = '<span style="font-size:11px;color:' + c.border + ';">\u25d0</span>';
-            else icon = '<span style="font-size:7px;color:#F59E0B;">\u26a0</span>';
+            if (tipo && tipo.indexOf("completa") >= 0) icon = '<span style="font-size:14px;font-weight:600;color:#0F6E56;">\u20ac</span>';
+            else if (tipo && tipo.indexOf("media") >= 0) icon = '<span style="font-size:14px;font-weight:600;color:#BA7517;">\u00bd</span>';
+            else { skSinDieta++; icon = '<span style="font-size:14px;font-weight:700;color:#A32D2D;">!</span>'; }
             icons += '<span style="flex:1;text-align:center;cursor:pointer;" onclick="event.stopPropagation();_rrhhDietaCellClick(this,' + emp.id + ',\'' + sc2.di.fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g,"\\'") + '\',\'' + (sc2.proy ? (sc2.proy.codigo||"").replace(/'/g,"\\'") : "") + '\')">' + icon + '</span>';
           });
 
@@ -1969,7 +1969,10 @@ function _rrhhDietasCalLoad(periodo) {
           var fn = sk.cells[0].dieta ? (sk.cells[0].dieta.funcion || "") : (_rrhhDietasFuncionesMap[emp.id + "_" + sk.cells[0].di.fecha] || "");
           var pNombre = sk.proy ? (sk.proy.nombre || "") : "";
           var rangeLabel = sk.cells[0].di.num + (sk.cells.length > 1 ? " - " + sk.cells[sk.cells.length-1].di.num : "");
-          var ttip = pNombre + " \u00b7 " + rangeLabel + " \u00b7 " + skComp + " completas + " + skMedia + " medias = " + skTotal + " \u20ac" + (fn ? " \u00b7 " + fn : "");
+          var ttip = pNombre + " \u00b7 " + rangeLabel;
+          if (skSinDieta > 0) ttip += " \u00b7 \u26a0 " + skSinDieta + " d\u00eda(s) SIN dieta registrada";
+          if (skComp > 0 || skMedia > 0) ttip += " \u00b7 " + skComp + " completas + " + skMedia + " medias = " + skTotal + " \u20ac";
+          if (fn) ttip += " \u00b7 " + fn;
 
           h += '<div style="grid-column:' + gcStart + '/' + gcEnd + ';grid-row:1;display:flex;flex-direction:column;align-items:stretch;justify-content:center;background:' + c.bg + ';border-left:3px solid ' + c.border + ';border-radius:4px;margin:2px 1px;padding:1px 2px;z-index:1;' + opacity + '" title="' + ttip.replace(/"/g,'&quot;') + '">' +
             '<div style="font-size:10px;font-weight:500;color:' + c.text + ';text-align:center;line-height:1.2;">' + sc + '</div>' +
