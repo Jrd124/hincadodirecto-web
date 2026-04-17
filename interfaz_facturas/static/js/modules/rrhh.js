@@ -2256,9 +2256,25 @@ function _rrhhDietasCalLoad(periodo) {
           }
           var proyCodigo = cells[di_i].proy ? (cells[di_i].proy.codigo || "") : "";
           var proyEsc = proyCodigo.replace(/'/g, "\\'");
-          h += '<div style="grid-column:' + (di_i+1) + ';grid-row:1;height:40px;' + (bgc ? 'background:'+bgc+';' : '') + hoyBg + (hasStreak ? '' : 'cursor:pointer;') + '" ' +
-            (!hasStreak ? 'onclick="_rrhhDietaCellClick(this,' + emp.id + ',\'' + dayInfos[di_i].fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g,"\\'") + '\',\'' + proyEsc + '\')"' : '') +
-            '></div>';
+          // Show standalone dieta (no project) in the background cell
+          var standaloneDieta = "";
+          if (!hasStreak && cells[di_i].dieta && cells[di_i].dieta.tipo) {
+            var sdTipo = cells[di_i].dieta.tipo;
+            var sdImp = cells[di_i].dieta.importe || 0;
+            if (sdTipo === "sin_dieta") {
+              standaloneDieta = '<span style="font-size:10px;color:#aaa;">\u2715</span>';
+            } else if (sdImp > 0) {
+              standaloneDieta = '<span style="font-size:11px;font-weight:500;color:#2C2C2A;">' + Math.round(sdImp) + '</span>';
+            } else {
+              standaloneDieta = '<span style="font-size:11px;color:#0F6E56;">\u2713</span>';
+            }
+            total += sdImp;
+            if (sdTipo.indexOf("completa") >= 0) completas++;
+            if (sdTipo.indexOf("media") >= 0) medias++;
+          }
+          h += '<div style="grid-column:' + (di_i+1) + ';grid-row:1;height:40px;display:flex;align-items:center;justify-content:center;' + (bgc ? 'background:'+bgc+';' : '') + hoyBg + 'cursor:pointer;" ' +
+            'onclick="_rrhhDietaCellClick(this,' + emp.id + ',\'' + dayInfos[di_i].fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g,"\\'") + '\',\'' + proyEsc + '\')"' +
+            '>' + standaloneDieta + '</div>';
         }
 
         // Streak blocks layer (on top)
