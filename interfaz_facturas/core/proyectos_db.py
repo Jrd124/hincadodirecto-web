@@ -958,7 +958,7 @@ def dashboard_landing() -> dict:
         margenes = []
         proy_vivos = [dict(r) for r in conn.execute("""
             SELECT p.id, p.nombre, p.codigo, p.estado, p.tipo_actividad, p.modalidad_facturacion,
-                   p.hincas_estimadas, p.hincas_realizadas, p.perforacion_cantidad,
+                   COALESCE(p.hinca_cantidad, p.hincas_estimadas) as hincas_estimadas, p.hincas_realizadas, p.perforacion_cantidad,
                    p.importe_presupuestado, p.importe_facturado, p.importe_costes,
                    p.fecha_inicio_estimada, p.fecha_fin_estimada, p.fecha_inicio_real, p.fecha_fin_real,
                    p.ubicacion_lat, p.ubicacion_lon, p.provincia,
@@ -1452,7 +1452,7 @@ def calcular_dashboard_v2(proyecto_id: int) -> dict | None:
     partes_sin_firmar = sum(1 for p in partes if (p.get("estado_firma") or "borrador") != "firmado")
     partes_con_incidencia = sum(1 for p in partes if p.get("incidencias"))
 
-    obj_hinca = data.get("hinca_cantidad") or 0
+    obj_hinca = data.get("hinca_cantidad") or data.get("hincas_estimadas") or 0
     obj_perforacion = data.get("perforacion_cantidad") or 0
 
     # Determine primary unit and objective
@@ -1588,6 +1588,48 @@ def calcular_dashboard_v2(proyecto_id: int) -> dict | None:
         elif cat not in ("gasoil", "hoteles", "transporte", "personal"):
             cat = "otros"
         desglose[cat] = desglose.get(cat, 0) + _safe_float(c.get("total_a_pagar") or c.get("total"))
+
+    # Add personal costs (dietas + HE of assigned employees)
+    conn2 = _get_conn()
+    try:
+        # Dietas of employees assigned to this project
+        dietas_proy = conn2.execute("""
+            SELECT COALESCE(SUM(dd.importe), 0) as total
+            FROM dietas_diarias dd
+            JOIN proyecto_asignaciones pa ON pa.recurso_id = dd.empleado_id
+                AND pa.fecha = dd.fecha AND pa.recurso_tipo = 'empleado'
+            WHERE pa.proyecto_id = ?
+        """, (proyecto_id,)).fetchone()["total"]
+        # HE of employees assigned to this project
+        try:
+            he_proy = conn2.execute("""
+                SELECT COALESCE(SUM(he.importe), 0) as total
+                FROM horas_extras_dias he
+                JOIN proyecto_asignaciones pa ON pa.recurso_id = he.empleado_id
+                    AND pa.fecha = he.fecha AND pa.recurso_tipo = 'empleado'
+                WHERE pa.proyecto_id = ?
+            """, (proyecto_id,)).fetchone()["total"]
+        except Exception:
+            he_proy = 0
+        # Prorrata nómina: average coste_dia × days assigned
+        prorrata = 0
+        try:
+            for r in conn2.execute("""
+                SELECT pa.recurso_id, COUNT(DISTINCT pa.fecha) as dias,
+                       COALESCE(AVG(n.coste_dia), 0) as coste_dia_medio
+                FROM proyecto_asignaciones pa
+                LEFT JOIN nominas n ON n.empleado_id = pa.recurso_id AND n.tipo = 'NOMINA'
+                WHERE pa.proyecto_id = ? AND pa.recurso_tipo = 'empleado'
+                GROUP BY pa.recurso_id
+            """, (proyecto_id,)).fetchall():
+                prorrata += r["dias"] * r["coste_dia_medio"]
+        except Exception:
+            pass
+        desglose["personal"] = round(dietas_proy + he_proy + prorrata, 2)
+    except Exception:
+        pass
+    finally:
+        conn2.close()
     data["desglose_costes"] = {k: round(v, 2) for k, v in desglose.items()}
 
     # ── Alerts ──

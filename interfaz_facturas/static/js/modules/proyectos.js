@@ -489,7 +489,8 @@
         tabOper += '<th style="padding:5px 4px;text-align:right;">Horas m\u00e1q.</th>' +
           '<th style="padding:5px 4px;text-align:right;">H. admin</th>' +
           '<th style="padding:5px 4px;">Incidencia</th>' +
-          '<th style="padding:5px 4px;text-align:center;">Estado</th></tr></thead><tbody>';
+          '<th style="padding:5px 4px;text-align:center;">Estado</th>' +
+          '<th style="padding:5px 4px;text-align:center;">Acc.</th></tr></thead><tbody>';
         (p.partes || []).forEach(function(pt) {
           var ef = (pt.estado_firma || "borrador");
           var rowBg = ef === "borrador" ? "background:#FEF2F2;" : (pt.incidencias ? "background:#FFFBEB;" : "");
@@ -502,9 +503,10 @@
           tabOper += '<td style="padding:4px 4px;text-align:right;">' + (pt.horas_maquina || 0) + '</td>' +
             '<td style="padding:4px 4px;text-align:right;">' + (pt.horas_admin || 0) + '</td>' +
             '<td style="padding:4px 4px;font-size:0.75rem;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (pt.incidencias || "\u2014") + '</td>' +
-            '<td style="padding:4px 4px;text-align:center;">' + estPill + '</td></tr>';
+            '<td style="padding:4px 4px;text-align:center;">' + estPill + '</td>' +
+            '<td style="padding:4px 4px;text-align:center;"><button onclick="parteEditar(' + pt.id + ',' + p.id + ')" title="Editar" style="background:none;border:none;cursor:pointer;color:#3B82F6;font-size:0.8rem;">&#x270E;</button></td></tr>';
         });
-        if (!(p.partes || []).length) tabOper += '<tr><td colspan="7" style="text-align:center;padding:2rem;color:#888;">Sin partes</td></tr>';
+        if (!(p.partes || []).length) tabOper += '<tr><td colspan="8" style="text-align:center;padding:2rem;color:#888;">Sin partes</td></tr>';
         tabOper += '</tbody></table></div></div>';
 
         // Calendar placeholder

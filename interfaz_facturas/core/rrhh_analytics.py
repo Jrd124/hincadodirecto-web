@@ -279,65 +279,107 @@ def verificador(periodo):
 
 
 def estimacion_nominas(periodo):
-    """Proyección de coste nóminas del mes usando gross-up desde neto pactado."""
+    """Proyección de coste nóminas — SS fija 6.35%, IRPF última nómina, días=30 si activo."""
     import calendar
     conn = get_conn()
     try:
         y, m = int(periodo[:4]), int(periodo[5:7])
-        dias_mes = calendar.monthrange(y, m)[1]
+        dias_mes = 30  # Standard month for nómina calculation
         fecha_ini = f"{periodo}-01"
         m2 = m + 1; y2 = y
         if m2 > 12: m2 = 1; y2 += 1
         fecha_fin = f"{y2}-{m2:02d}-01"
 
         # -- 1. Empleados activos --
-        emps = conn.execute(
-            "SELECT id, nombre, apellidos, categoria, dni, neto_pactado "
-            "FROM empleados WHERE estado='activo' ORDER BY apellidos, nombre"
-        ).fetchall()
+        emps = [dict(r) for r in conn.execute(
+            "SELECT id, nombre, apellidos, categoria, dni, neto_pactado, fecha_alta, fecha_baja, estado "
+            "FROM empleados WHERE estado IN ('activo','vacaciones') ORDER BY apellidos, nombre"
+        ).fetchall()]
 
-        # -- 2. Ratios históricos de las últimas 3 nóminas por empleado --
+        # -- 2. IRPF from last nómina, SS fija 6.35%, SS empresa histórica --
+        # Build map of all employees with their última nómina
+        ultima_nomina = {}  # eid -> {irpf_pct, ratio_ss_emp}
+        for e in emps:
+            eid = e["id"]
+            n = conn.execute(
+                "SELECT total_devengado, irpf_euros, ss_empresa "
+                "FROM nominas WHERE empleado_id=? AND tipo='NOMINA' "
+                "AND total_devengado > 0 ORDER BY periodo DESC LIMIT 1", (eid,)
+            ).fetchone()
+            if n and n["total_devengado"] > 0:
+                td = n["total_devengado"]
+                ultima_nomina[eid] = {
+                    "irpf_pct": round((n["irpf_euros"] or 0) / td * 100, 2),
+                    "ratio_ss_emp": (n["ss_empresa"] or 0) / td,
+                }
+
         ratios = {}
         for e in emps:
             eid = e["id"]
-            noms = conn.execute(
-                "SELECT total_devengado, irpf_euros, "
-                "       cot_cc, cot_mei, cot_fp, cot_desempleo, "
-                "       ss_empresa, liquido, coste_empresa "
-                "FROM nominas WHERE empleado_id=? AND tipo='NOMINA' "
-                "AND total_devengado > 0 "
-                "ORDER BY periodo DESC LIMIT 3", (eid,)
-            ).fetchall()
-            if noms:
-                pct_irpf_list = []
-                pct_ss_list = []
-                ratio_ss_emp_list = []
-                for n in noms:
-                    td = n["total_devengado"]
-                    if td <= 0:
-                        continue
-                    irpf_e = n["irpf_euros"] or 0
-                    ss_trab = (n["cot_cc"] or 0) + (n["cot_mei"] or 0) + (n["cot_fp"] or 0) + (n["cot_desempleo"] or 0)
-                    ss_emp = n["ss_empresa"] or 0
-                    pct_irpf_list.append(irpf_e / td * 100)
-                    pct_ss_list.append(ss_trab / td * 100)
-                    ratio_ss_emp_list.append(ss_emp / td)
-                if pct_irpf_list:
-                    ratios[eid] = {
-                        "pct_irpf": sum(pct_irpf_list) / len(pct_irpf_list),
-                        "pct_ss": sum(pct_ss_list) / len(pct_ss_list),
-                        "ratio_ss_emp": sum(ratio_ss_emp_list) / len(ratio_ss_emp_list),
-                        "fallback": False,
-                    }
-            if eid not in ratios:
+            if eid in ultima_nomina:
                 ratios[eid] = {
-                    "pct_irpf": 15.0,
+                    "pct_irpf": ultima_nomina[eid]["irpf_pct"],
                     "pct_ss": 6.35,
-                    "ratio_ss_emp": 0.32,
+                    "ratio_ss_emp": ultima_nomina[eid]["ratio_ss_emp"],
+                    "fallback": False,
+                    "fallback_source": None,
+                }
+            else:
+                # Fallback: find employee with similar neto_pactado
+                neto = e["neto_pactado"] or 0
+                fallback_src = None
+                fallback_irpf = 15.0
+                fallback_ss_emp = 0.32
+                if neto > 0:
+                    candidates = []
+                    for e2 in emps:
+                        if e2["id"] in ultima_nomina and e2["neto_pactado"]:
+                            if abs(e2["neto_pactado"] - neto) <= neto * 0.10:
+                                candidates.append(e2)
+                    if candidates:
+                        closest = min(candidates, key=lambda x: abs(x["neto_pactado"] - neto))
+                        un = ultima_nomina[closest["id"]]
+                        fallback_irpf = un["irpf_pct"]
+                        fallback_ss_emp = un["ratio_ss_emp"]
+                        fallback_src = ((closest["nombre"] or "") + " " + (closest["apellidos"] or "")).strip()
+                ratios[eid] = {
+                    "pct_irpf": fallback_irpf,
+                    "pct_ss": 6.35,
+                    "ratio_ss_emp": fallback_ss_emp,
                     "fallback": True,
+                    "fallback_source": fallback_src,
                 }
 
-        # -- 3. Días planificados por empleado (asignaciones + dietas) --
+        # -- 3. Días nómina por empleado (30 si activo todo el mes, proporcional si alta/baja mid-month) --
+        dias_nomina = {}
+        from datetime import date as _d
+        inicio_mes = _d(y, m, 1)
+        fin_mes = _d(y2, m2, 1) - timedelta(days=1)
+        for e in emps:
+            fa = e.get("fecha_alta") or ""
+            fb = e.get("fecha_baja") or ""
+            estado = e.get("estado") or "activo"
+            if estado in ("reserva", "baja", "exempleado"):
+                dias_nomina[e["id"]] = 0
+                continue
+            try:
+                d_alta = _d.fromisoformat(fa) if fa else _d(2000, 1, 1)
+            except Exception:
+                d_alta = _d(2000, 1, 1)
+            try:
+                d_baja = _d.fromisoformat(fb) if fb else None
+            except Exception:
+                d_baja = None
+            d_ini = max(d_alta, inicio_mes)
+            d_fin = min(d_baja, fin_mes) if d_baja and d_baja <= fin_mes else fin_mes
+            if d_ini > fin_mes:
+                dias_nomina[e["id"]] = 0
+            elif d_ini <= inicio_mes and d_fin >= fin_mes:
+                dias_nomina[e["id"]] = 30
+            else:
+                dias_nomina[e["id"]] = (d_fin - d_ini).days + 1
+
+        # -- OLD: Días planificados (keep for reference but not used for nómina) --
         dias_plan = {}
         for r in conn.execute(
             "SELECT recurso_id, COUNT(DISTINCT fecha) as cnt "
@@ -444,67 +486,71 @@ def estimacion_nominas(periodo):
         except Exception:
             pass
 
+        # -- 5b. Embargos del mes --
+        embargos_mes = {}
+        try:
+            for r in conn.execute(
+                "SELECT empleado_id, importe FROM embargos_mensuales WHERE periodo=?", (periodo,)
+            ).fetchall():
+                embargos_mes[r["empleado_id"]] = r["importe"] or 0
+        except Exception:
+            pass
+
         # -- 6. Build result per employee --
         lineas = []
-        t_neto = 0; t_devengado = 0; t_coste = 0; t_dietas = 0; t_he = 0; t_adelantos = 0; t_liquido_pend = 0
+        t_neto = 0; t_devengado = 0; t_coste = 0; t_dietas = 0; t_he = 0; t_adelantos = 0; t_embargos = 0; t_liquido_pend = 0
 
         for e in emps:
             eid = e["id"]
             nombre = ((e["nombre"] or "") + " " + (e["apellidos"] or "")).strip()
             neto_pactado = e["neto_pactado"] or 0
             r = ratios[eid]
-            dp = dias_plan.get(eid, 0)
+            dn = dias_nomina.get(eid, 30)
             dietas = round(dietas_emp.get(eid, 0), 2)
             he_data = horas_extras_emp.get(eid, {"importe": 0, "horas": 0})
             horas_extras = round(he_data["importe"], 2)
             horas_extras_h = round(he_data["horas"], 1)
             adel = round(adelantos_banco.get(eid, 0), 2)
+            embargo = round(embargos_mes.get(eid, 0), 2)
 
-            # Proporción del mes
-            proporcion = dp / dias_mes if dp > 0 and dias_mes > 0 else 1.0
+            # Neto proporcional a días nómina
+            proporcion = dn / 30 if dn > 0 else 0
             neto_proporcional = round(neto_pactado * proporcion, 2)
 
-            # Gross-up
-            divisor = 1 - r["pct_irpf"] / 100 - r["pct_ss"] / 100
-            if divisor <= 0:
-                divisor = 0.7865  # safe fallback
-            total_devengado = round(neto_proporcional / divisor, 2)
-            ss_empresa = round(total_devengado * r["ratio_ss_emp"], 2)
-            coste_empresa = round(total_devengado + ss_empresa, 2)
-            coste_total = round(coste_empresa + dietas + horas_extras, 2)
+            # Coste empresa = neto × (1 + ratio_ss_empresa)
+            ratio_ss = r["ratio_ss_emp"] if r["ratio_ss_emp"] > 0 else 0.32
+            coste_empresa = round(neto_proporcional * (1 + ratio_ss), 2)
 
-            liquido_total = round(neto_proporcional + dietas + horas_extras, 2)
-            liquido_pendiente = round(liquido_total - adel, 2)
+            # Total a cobrar = neto + dietas + HE
+            total_a_cobrar = round(neto_proporcional + dietas + horas_extras, 2)
+            liquido_pendiente = round(total_a_cobrar - adel - embargo, 2)
 
             lineas.append({
                 "empleado_id": eid,
                 "nombre": nombre,
-                "categoria": e["categoria"] or "",
                 "dni": e["dni"] or "",
-                "dias_planif": dp,
-                "neto_pactado": neto_pactado,
+                "dias_nomina": dn,
+                "coste_empresa": coste_empresa,
                 "pct_irpf": round(r["pct_irpf"], 2),
                 "pct_ss": round(r["pct_ss"], 2),
-                "ratio_ss_emp": round(r["ratio_ss_emp"] * 100, 2),
-                "fallback": r["fallback"],
-                "neto_proporcional": neto_proporcional,
-                "total_devengado": total_devengado,
-                "coste_empresa": coste_empresa,
-                "coste_total": coste_total,
+                "neto_pactado": neto_pactado,
                 "dietas": dietas,
                 "horas_extras": horas_extras,
                 "horas_extras_horas": horas_extras_h,
+                "total_a_cobrar": total_a_cobrar,
                 "adelantos": adel,
-                "liquido_total": liquido_total,
+                "embargo": embargo,
                 "liquido_pendiente": liquido_pendiente,
+                "fallback": r["fallback"],
+                "fallback_source": r.get("fallback_source"),
             })
 
             t_neto += neto_proporcional
-            t_devengado += total_devengado
-            t_coste += coste_total
+            t_coste += coste_empresa
             t_dietas += dietas
             t_he += horas_extras
             t_adelantos += adel
+            t_embargos += embargo
             t_liquido_pend += liquido_pendiente
 
         return {
@@ -514,11 +560,11 @@ def estimacion_nominas(periodo):
             "totales": {
                 "empleados": len(lineas),
                 "neto_proporcional": round(t_neto, 2),
-                "total_devengado": round(t_devengado, 2),
-                "coste_total": round(t_coste, 2),
+                "coste_empresa": round(t_coste, 2),
                 "dietas": round(t_dietas, 2),
                 "horas_extras": round(t_he, 2),
                 "adelantos": round(t_adelantos, 2),
+                "embargos": round(t_embargos, 2),
                 "liquido_pendiente": round(t_liquido_pend, 2),
             },
         }

@@ -1333,20 +1333,20 @@ function _rrhhVerifEstimacionView(body) {
     '<div class="card" style="overflow-x:auto;padding:0;">' +
       '<table style="width:100%;border-collapse:collapse;font-size:0.78rem;">' +
         '<thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">' +
-          '<th style="padding:6px 6px;font-weight:700;">Empleado</th>' +
+          '<th style="padding:6px 6px;font-weight:700;">Nombre</th>' +
           '<th style="padding:6px 3px;font-weight:700;"></th>' +
-          '<th style="padding:6px 4px;font-weight:700;">Cat.</th>' +
-          '<th style="padding:6px 4px;font-weight:700;text-align:right;">D\u00edas planif.</th>' +
+          '<th style="padding:6px 4px;font-weight:700;">DNI</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">D\u00edas n\u00f3m.</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">Coste emp.</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">% IRPF</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">% SS</th>' +
           '<th style="padding:6px 4px;font-weight:700;text-align:right;">Neto pactado</th>' +
-          '<th style="padding:6px 4px;font-weight:700;text-align:right;">% IRPF hist.</th>' +
-          '<th style="padding:6px 4px;font-weight:700;text-align:right;">% SS hist.</th>' +
-          '<th style="padding:6px 4px;font-weight:700;text-align:right;font-weight:800;">Coste empresa</th>' +
-          '<th style="padding:6px 4px;font-weight:700;text-align:right;">Dietas estim.</th>' +
-          '<th style="padding:6px 4px;font-weight:700;text-align:right;">HE h</th>' +
-          '<th style="padding:6px 4px;font-weight:700;text-align:right;">HE \u20ac</th>' +
-          '<th style="padding:6px 4px;font-weight:700;text-align:right;">Total devengado</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">Dietas</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">HE</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">Total a cobrar</th>' +
           '<th style="padding:6px 4px;font-weight:700;text-align:right;">Adelantos</th>' +
-          '<th style="padding:6px 4px;font-weight:700;text-align:right;font-weight:800;background:#F0FDF4;">L\u00edquido pendiente</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">Embargos</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;font-weight:800;background:#F0FDF4;">L\u00edquido pend.</th>' +
         '</tr></thead>' +
         '<tbody id="rrhh-estim-tbody"><tr><td colspan="14" style="text-align:center;padding:2rem;">Cargando...</td></tr></tbody>' +
         '<tfoot id="rrhh-estim-tfoot" style="font-weight:700;background:var(--bg-secondary,#f8f9fa);"></tfoot>' +
@@ -1403,39 +1403,43 @@ function _rrhhLoadEstimacion() {
         return;
       }
       var html = "";
+      var _per = periodo;
       lineas.forEach(function (l) {
-        var warn = l.fallback ? ' title="Ratios estimados por defecto (sin hist\u00f3rico)" style="color:#ca8a04;"' : '';
+        var fbTitle = l.fallback ? (l.fallback_source ? 'IRPF estimado seg\u00fan ' + l.fallback_source : 'IRPF por defecto 15%') : '';
+        var warn = l.fallback ? ' title="' + fbTitle + '" style="color:#ca8a04;"' : '';
         var rowBg = l.fallback ? "background:#FFFBEB;" : "";
         html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);' + rowBg + '">' +
           '<td style="padding:5px 6px;font-weight:500;">' + (l.fallback ? '\u26a0\ufe0f ' : '') + (l.nombre || "") + '</td>' +
           '<td style="padding:5px 3px;"><a href="#" onclick="event.preventDefault();event.stopPropagation();_rrhhVerFichaEmpleado(' + l.empleado_id + ',\'verificador\')" style="color:#3B82F6;font-size:0.75rem;">Ficha</a></td>' +
-          '<td style="padding:5px 4px;font-size:0.75rem;">' + (l.categoria || "") + '</td>' +
-          '<td style="padding:5px 4px;text-align:right;">' + (l.dias_planif || 0) + '</td>' +
-          '<td style="padding:5px 4px;text-align:right;">' + fmtEur(l.neto_pactado) + '</td>' +
+          '<td style="padding:5px 4px;font-family:monospace;font-size:0.75rem;">' + (l.dni || "") + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + (l.dias_nomina || 0) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;font-weight:600;">' + fmtEur(l.coste_empresa) + '</td>' +
           '<td style="padding:5px 4px;text-align:right;"' + warn + '>' + (l.pct_irpf != null ? l.pct_irpf.toFixed(2) + '%' : '\u2014') + '</td>' +
-          '<td style="padding:5px 4px;text-align:right;"' + warn + '>' + (l.pct_ss != null ? l.pct_ss.toFixed(2) + '%' : '\u2014') + '</td>' +
-          '<td style="padding:5px 4px;text-align:right;font-weight:700;">' + fmtEur(l.coste_total) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">6.35%</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + fmtEur(l.neto_pactado) + '</td>' +
           '<td style="padding:5px 4px;text-align:right;">' + fmtEur(l.dietas) + '</td>' +
-          '<td style="padding:5px 4px;text-align:right;">' + (l.horas_extras_horas > 0 ? l.horas_extras_horas + 'h' : '\u2014') + '</td>' +
-          '<td style="padding:5px 4px;text-align:right;" title="' + (l.horas_extras_horas||0) + 'h \u00d7 15\u20ac = ' + (l.horas_extras||0) + '\u20ac">' + fmtEur(l.horas_extras) + '</td>' +
-          '<td style="padding:5px 4px;text-align:right;">' + fmtEur(l.total_devengado) + '</td>' +
-          '<td style="padding:5px 4px;text-align:right;">' + (l.adelantos > 0 ? '<span style="color:#dc2626;">(' + fmtEur(l.adelantos) + ')</span>' : '\u2014') + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;" title="' + (l.horas_extras_horas||0) + 'h">' + fmtEur(l.horas_extras) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;font-weight:600;">' + fmtEur(l.total_a_cobrar) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + (l.adelantos > 0 ? '<span style="color:#dc2626;">' + fmtEur(l.adelantos) + '</span>' : '\u2014') + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;cursor:pointer;" onclick="_rrhhEditarEmbargo(' + l.empleado_id + ',\'' + _per + '\',' + (l.embargo||0) + ')" title="Click para editar">' + (l.embargo > 0 ? '<span style="color:#dc2626;">' + fmtEur(l.embargo) + '</span>' : '\u2014') + '</td>' +
           '<td style="padding:5px 4px;text-align:right;font-weight:700;background:#F0FDF4;">' + fmtEur(l.liquido_pendiente) + '</td>' +
           '</tr>';
       });
       tbody.innerHTML = html;
 
       if (tfoot) {
+        var tac = (d.lineas||[]).reduce(function(s,l){return s+(l.total_a_cobrar||0);},0);
         tfoot.innerHTML = '<tr style="font-weight:700;background:var(--bg-secondary,#f8f9fa);">' +
-          '<td colspan="4" style="padding:6px;">TOTALES</td>' +
-          '<td style="padding:6px;text-align:right;">' + fmtEur(tot.neto_proporcional) + '</td>' +
+          '<td colspan="3" style="padding:6px;">TOTALES</td>' +
+          '<td></td>' +
+          '<td style="padding:6px;text-align:right;">' + fmtEur(tot.coste_empresa) + '</td>' +
           '<td colspan="2"></td>' +
-          '<td style="padding:6px;text-align:right;font-weight:800;">' + fmtEur(tot.coste_total) + '</td>' +
+          '<td style="padding:6px;text-align:right;">' + fmtEur(tot.neto_proporcional) + '</td>' +
           '<td style="padding:6px;text-align:right;">' + fmtEur(tot.dietas) + '</td>' +
-          '<td style="padding:6px;text-align:right;">' + (function(){ var th=0; (d.lineas||[]).forEach(function(l){th+=(l.horas_extras_horas||0);}); return th > 0 ? th+'h' : '\u2014'; })() + '</td>' +
           '<td style="padding:6px;text-align:right;">' + fmtEur(tot.horas_extras) + '</td>' +
-          '<td style="padding:6px;text-align:right;">' + fmtEur(tot.total_devengado) + '</td>' +
+          '<td style="padding:6px;text-align:right;font-weight:800;">' + fmtEur(tac) + '</td>' +
           '<td style="padding:6px;text-align:right;">' + fmtEur(tot.adelantos) + '</td>' +
+          '<td style="padding:6px;text-align:right;">' + fmtEur(tot.embargos) + '</td>' +
           '<td style="padding:6px;text-align:right;font-weight:800;background:#F0FDF4;">' + fmtEur(tot.liquido_pendiente) + '</td>' +
           '</tr>';
       }
@@ -1443,6 +1447,15 @@ function _rrhhLoadEstimacion() {
     .catch(function () {
       tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:2rem;color:#dc3545;">Error al cargar</td></tr>';
     });
+}
+
+function _rrhhEditarEmbargo(empId, periodo, currentVal) {
+  var val = prompt("Importe embargo para este mes (\u20ac):", currentVal || "0");
+  if (val === null) return;
+  fetch("/api/rrhh/verificador/embargo", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ empleado_id: empId, periodo: periodo, importe: parseFloat(val) || 0 })
+  }).then(function() { _rrhhLoadEstimacion(); });
 }
 
 // ===============================================================================
@@ -3343,6 +3356,7 @@ window._rrhhBorrarDieta = _rrhhBorrarDieta;
 window._rrhhNuevaTarifaModal = _rrhhNuevaTarifaModal;
 window._rrhhGuardarNuevaTarifa = _rrhhGuardarNuevaTarifa;
 window._rrhhEditarTarifa = _rrhhEditarTarifa;
+window._rrhhEditarEmbargo = _rrhhEditarEmbargo;
 window._rrhhCargarHorasExtras = _rrhhCargarHorasExtras;
 window._rrhhHECalReload = _rrhhHECalReload;
 window._rrhhHECellClick = _rrhhHECellClick;

@@ -913,6 +913,24 @@ def api_cumpleanos_proximos():
     conn.close()
 
 
+# ── Embargos ──────────────────────────────────────────────────────────────
+
+@empleados_bp.post("/api/rrhh/verificador/embargo")
+def api_rrhh_verificador_embargo():
+  empleados_db.init_empleados_db()
+  data = request.get_json(silent=True) or {}
+  conn = get_conn()
+  try:
+    conn.execute(
+      "INSERT OR REPLACE INTO embargos_mensuales (empleado_id, periodo, importe, notas) VALUES (?,?,?,?)",
+      (data["empleado_id"], data["periodo"], float(data.get("importe", 0)), data.get("notas", "")),
+    )
+    conn.commit()
+    return jsonify({"ok": True})
+  finally:
+    conn.close()
+
+
 # ── Horas Extras ──────────────────────────────────────────────────────────
 
 def _precio_hora_vigente(conn, fecha):

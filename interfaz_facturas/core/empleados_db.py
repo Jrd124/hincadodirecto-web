@@ -255,6 +255,19 @@ def init_empleados_db() -> None:
             )
         """)
 
+        # ── Tabla de embargos mensuales ────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS embargos_mensuales (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                empleado_id INTEGER NOT NULL,
+                periodo TEXT NOT NULL,
+                importe REAL NOT NULL,
+                notas TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(empleado_id, periodo)
+            )
+        """)
+
     _initialized = True
 
 
