@@ -217,6 +217,12 @@ def api_proyectos_dashboard():
   return jsonify(proyectos_db.dashboard())
 
 
+@proyectos_bp.get("/api/proyectos/dashboard-landing")
+def api_proyectos_dashboard_landing():
+  proyectos_db.init_proyectos_db()
+  return jsonify(proyectos_db.dashboard_landing())
+
+
 @proyectos_bp.post("/api/proyectos/<int:proyecto_id>/recursos")
 def api_post_proyecto_recursos(proyecto_id: int):
   data = request.get_json(silent=True) or {}

@@ -6,16 +6,217 @@
 
   function _fE(n) { return n ? Number(n).toLocaleString("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 0, maximumFractionDigits: 0 }) : ""; }
 
+  // ── Landing dashboard helpers ──
+
+  var _SPAIN_PATH = "M175,12 L195,8 215,15 235,10 258,18 280,12 300,20 325,15 345,22 365,18 380,25 395,30 410,28 425,38 435,50 440,68 445,85 442,100 448,118 455,130 460,145 455,160 448,175 440,185 430,195 418,205 405,215 395,225 382,230 368,238 355,242 340,248 325,255 310,260 295,258 280,265 265,270 248,275 232,278 218,282 200,288 185,292 170,298 155,302 138,305 120,300 105,295 90,288 78,278 65,268 55,258 48,245 42,232 38,218 35,205 38,192 42,178 48,165 52,150 58,138 62,125 68,112 75,100 82,88 90,78 100,68 110,58 120,48 132,38 145,28 158,20 175,12Z";
+
+  function _mapX(lon) { return (lon + 10) / 14 * 500; }
+  function _mapY(lat) { return (44 - lat) / 8 * 340; }
+
+  function _saludPill(salud) {
+    var c = {saludable: {bg:"#E1F5EE",col:"#0F6E56"}, atencion: {bg:"#FAEEDA",col:"#854F0B"}, riesgo: {bg:"#FCEBEB",col:"#A32D2D"}};
+    var s = c[salud] || c.atencion;
+    var label = salud === "saludable" ? "Saludable" : (salud === "riesgo" ? "Riesgo" : "Atenci\u00f3n");
+    return '<span style="padding:2px 8px;border-radius:9999px;font-size:0.68rem;font-weight:600;background:' + s.bg + ';color:' + s.col + ';">' + label + '</span>';
+  }
+
+  function _landingKpi(label, value, sub, color) {
+    return '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;text-align:center;">' +
+      '<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#888;margin-bottom:4px;">' + label + '</div>' +
+      '<div style="font-size:22px;font-weight:500;color:' + (color || '#1a1a1a') + ';">' + value + '</div>' +
+      (sub ? '<div style="font-size:11px;color:#888;margin-top:2px;">' + sub + '</div>' : '') +
+    '</div>';
+  }
+
   function _cargarDashProy() {
-    fetch("/api/proyectos/dashboard")
+    var container = document.getElementById("proy-landing-content");
+    if (!container) return;
+    fetch("/api/proyectos/dashboard-landing")
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        var el = function (id) { return document.getElementById(id); };
-        el("proy-met-vivos").textContent = (d.por_estado && d.por_estado.vivo) || 0;
-        el("proy-met-hincas").textContent = d.hincas_mes || 0;
-        el("proy-met-horas").textContent = d.horas_maquina_mes || 0;
-        el("proy-met-fact").textContent = _fE(d.importe_facturado);
-      }).catch(function () {});
+        var k = d.kpis_globales || {};
+        var pip = d.pipeline || {};
+        var proys = d.proyectos_activos || [];
+        var alertas = d.alertas || [];
+        var prod = d.produccion_mes || {};
+        var topCli = d.top_clientes_ytd || [];
+
+        var h = '';
+
+        // Header
+        h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">' +
+          '<div><h1 style="margin:0;font-size:1.4rem;">Panel de Control</h1><p style="margin:4px 0 0;font-size:13px;color:#64748B;">Proyectos y operaciones</p></div>' +
+          '<button onclick="if(typeof _proyNuevo===\'function\')_proyNuevo();else activarSubpanel(\'proyectos\',\'cotizados\')" style="padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">+ Nuevo proyecto</button>' +
+        '</div>';
+
+        // 6 KPIs
+        var margenCol = k.margen_medio_pct > 25 ? "#22c55e" : (k.margen_medio_pct > 15 ? "#eab308" : "#dc2626");
+        var hincasVar = k.hincas_prev > 0 ? Math.round((k.hincas_mes - k.hincas_prev) / k.hincas_prev * 100) : 0;
+        h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;">';
+        h += _landingKpi("Proyectos vivos", k.vivos || 0, k.cotizados + " cotizados", "#2563eb");
+        h += _landingKpi("Facturado YTD", _dashFmtEurCompact(k.facturado_ytd), (k.facturado_ytd_var > 0 ? "+" : "") + k.facturado_ytd_var + "% vs anterior", "#22c55e");
+        h += _landingKpi("Margen medio", k.margen_medio_pct + "%", k.margen_status, margenCol);
+        h += _landingKpi("Hincas mes", k.hincas_mes || 0, (hincasVar > 0 ? "+" : "") + hincasVar + "% vs anterior", "#8B5CF6");
+        h += _landingKpi("Horas m\u00e1q.", k.horas_maq_mes + "h", k.maquinas_activas + " m\u00e1quinas activas", "#f59e0b");
+        h += _landingKpi("En riesgo", k.en_riesgo || 0, k.en_riesgo > 0 ? "requieren atenci\u00f3n" : "todos saludables", k.en_riesgo > 0 ? "#dc2626" : "#22c55e");
+        h += '</div>';
+
+        // Pipeline
+        h += '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;margin-bottom:16px;">';
+        h += '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#555;margin-bottom:10px;">Pipeline comercial</div>';
+        h += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">';
+        var phases = [
+          {k:"cotizados",label:"Cotizados",bg:"#FAEEDA",col:"#854F0B"},
+          {k:"adjudicados_ytd",label:"Adjudicados",bg:"#E6F1FB",col:"#1E40AF"},
+          {k:"vivos",label:"Vivos",bg:"#E1F5EE",col:"#0F6E56"},
+          {k:"terminados_ytd",label:"Terminados YTD",bg:"#F1EFE8",col:"#57534E"},
+        ];
+        phases.forEach(function(ph, i) {
+          var pd = pip[ph.k] || {};
+          h += '<div style="flex:1;min-width:100px;background:' + ph.bg + ';border-radius:6px;padding:10px 12px;text-align:center;">' +
+            '<div style="font-size:20px;font-weight:600;color:' + ph.col + ';">' + (pd.count || 0) + '</div>' +
+            '<div style="font-size:11px;color:' + ph.col + ';">' + ph.label + '</div>' +
+            '<div style="font-size:10px;color:#888;margin-top:2px;">' + _dashFmtEurCompact(pd.importe || 0) + '</div></div>';
+          if (i < 3) h += '<span style="font-size:16px;color:#ccc;">\u2192</span>';
+        });
+        h += '</div>';
+        h += '<div style="display:flex;gap:20px;margin-top:10px;font-size:11px;color:#666;">' +
+          '<span>Tasa conversi\u00f3n: <b>' + (pip.tasa_conversion || 0) + '%</b></span>' +
+          '<span>Pipeline: <b>' + _dashFmtEurCompact(pip.pipeline_total || 0) + '</b></span>' +
+          '<span>Ticket medio: <b>' + _dashFmtEurCompact(pip.ticket_medio || 0) + '</b></span></div>';
+        h += '</div>';
+
+        // Map + Alerts row
+        h += '<div style="display:grid;grid-template-columns:1.3fr 1fr;gap:10px;margin-bottom:16px;">';
+
+        // Map
+        var mapProys = proys.filter(function(p) { return p.ubicacion_lat && p.ubicacion_lon; });
+        var sinUbic = proys.length - mapProys.length;
+        h += '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;">';
+        h += '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#555;margin-bottom:8px;">Mapa de proyectos activos</div>';
+        h += '<div style="display:flex;gap:12px;margin-bottom:6px;font-size:10px;">' +
+          '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#1D9E75;"></span> Saludable</span>' +
+          '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#EF9F27;"></span> Atenci\u00f3n</span>' +
+          '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#E24B4A;"></span> Riesgo</span></div>';
+        h += '<svg viewBox="0 0 500 340" style="width:100%;max-height:260px;">';
+        h += '<path d="' + _SPAIN_PATH + '" fill="#F1F5F9" stroke="#CBD5E1" stroke-width="1.5"/>';
+        var pinColors = {saludable:"#1D9E75",atencion:"#EF9F27",riesgo:"#E24B4A"};
+        mapProys.forEach(function(p) {
+          var cx = _mapX(p.ubicacion_lon);
+          var cy = _mapY(p.ubicacion_lat);
+          var r = Math.max(6, Math.min(14, Math.sqrt((p.importe_presupuestado || 50000) / 5000)));
+          var col = pinColors[p.salud] || "#EF9F27";
+          h += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + r.toFixed(1) + '" fill="' + col + '" stroke="#fff" stroke-width="1.5" style="cursor:pointer;" onclick="proyectoDashboard(' + p.id + ')"><title>' + (p.nombre||"") + ' \u2014 ' + _dashFmtEurCompact(p.importe_presupuestado) + ' \u2014 ' + p.avance_pct + '%</title></circle>';
+        });
+        h += '</svg>';
+        if (sinUbic > 0) h += '<div style="font-size:10px;color:#aaa;margin-top:4px;">' + sinUbic + ' proyecto(s) sin ubicaci\u00f3n</div>';
+        h += '</div>';
+
+        // Alerts
+        h += '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;max-height:340px;overflow-y:auto;">';
+        h += '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#555;margin-bottom:8px;">Alertas del portfolio</div>';
+        if (!alertas.length) h += '<div style="color:#aaa;font-size:12px;padding:20px 0;text-align:center;">Sin alertas</div>';
+        alertas.forEach(function(a) {
+          var bg = a.nivel === "RIESGO" ? "#FCEBEB" : (a.nivel === "ATENCION" ? "#FAEEDA" : "#E6F1FB");
+          var col = a.nivel === "RIESGO" ? "#A32D2D" : (a.nivel === "ATENCION" ? "#854F0B" : "#1E40AF");
+          h += '<div style="padding:8px 10px;margin-bottom:6px;border-radius:6px;background:' + bg + ';">' +
+            '<div style="font-size:10px;font-weight:700;color:' + col + ';text-transform:uppercase;">' + a.nivel + ' \u00b7 ' + (a.contexto || "") + '</div>' +
+            '<div style="font-size:12px;color:' + col + ';margin-top:2px;">' + (a.descripcion || "") + '</div></div>';
+        });
+        h += '</div></div>';
+
+        // Active projects table
+        var totalPresup = proys.reduce(function(s,p){return s + (p.importe_presupuestado||0);}, 0);
+        h += '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;margin-bottom:16px;">';
+        h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+          '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#555;">Proyectos activos</div>' +
+          '<div style="font-size:11px;color:#888;">' + proys.length + ' proyectos \u00b7 ' + _dashFmtEurCompact(totalPresup) + ' en juego</div></div>';
+        h += '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;">';
+        h += '<thead><tr style="border-bottom:2px solid #E5E5E5;">' +
+          '<th style="padding:6px 8px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Proyecto</th>' +
+          '<th style="padding:6px 4px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Cliente</th>' +
+          '<th style="padding:6px 4px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;width:120px;">Avance</th>' +
+          '<th style="padding:6px 4px;text-align:right;font-size:10px;text-transform:uppercase;color:#888;">Fact / Presup</th>' +
+          '<th style="padding:6px 4px;text-align:right;font-size:10px;text-transform:uppercase;color:#888;">Margen</th>' +
+          '<th style="padding:6px 4px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Salud</th>' +
+          '</tr></thead><tbody>';
+        proys.forEach(function(p, i) {
+          var margenCol2 = p.margen_pct > 25 ? "#22c55e" : (p.margen_pct > 15 ? "#eab308" : "#dc2626");
+          var barCol = p.salud === "saludable" ? "#22c55e" : (p.salud === "riesgo" ? "#dc2626" : "#eab308");
+          h += '<tr style="border-bottom:1px solid #f1f1f1;cursor:pointer;' + (i%2 ? 'background:#fafafa;' : '') + '" onclick="proyectoDashboard(' + p.id + ')" onmouseover="this.style.background=\'#f0f7ff\'" onmouseout="this.style.background=\'' + (i%2 ? '#fafafa' : '') + '\'">' +
+            '<td style="padding:6px 8px;font-weight:500;">' + (p.nombre || "") + '</td>' +
+            '<td style="padding:6px 4px;color:#666;font-size:0.75rem;">' + (p.cliente || "\u2014") + '</td>' +
+            '<td style="padding:6px 4px;"><div style="display:flex;align-items:center;gap:6px;"><div style="flex:1;height:5px;background:#E5E7EB;border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + Math.min(p.avance_pct, 100) + '%;background:' + barCol + ';border-radius:3px;"></div></div><span style="font-size:10px;font-weight:600;min-width:30px;">' + p.avance_pct + '%</span></div></td>' +
+            '<td style="padding:6px 4px;text-align:right;font-size:0.75rem;">' + _dashFmtEurCompact(p.importe_facturado) + ' / ' + _dashFmtEurCompact(p.importe_presupuestado) + '</td>' +
+            '<td style="padding:6px 4px;text-align:right;font-weight:500;color:' + margenCol2 + ';">' + p.margen_pct + '%</td>' +
+            '<td style="padding:6px 4px;text-align:center;">' + _saludPill(p.salud) + '</td></tr>';
+        });
+        if (!proys.length) h += '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#aaa;">Sin proyectos activos</td></tr>';
+        h += '</tbody></table></div>';
+
+        // Production chart + Top clients row
+        h += '<div style="display:grid;grid-template-columns:1.5fr 1fr;gap:10px;margin-bottom:16px;">';
+
+        // Production chart
+        h += '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;">';
+        h += '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#555;margin-bottom:8px;">Producci\u00f3n global del mes</div>';
+        h += '<div style="position:relative;height:220px;"><canvas id="chart-produccion-global"></canvas></div>';
+        h += '<div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:#666;">' +
+          '<span>Total: <b>' + (prod.total_mes || 0) + '</b></span>' +
+          '<span>Media/d\u00eda: <b>' + (prod.media_dia || 0) + '</b></span>' +
+          '<span>Mejor d\u00eda: <b>' + (prod.mejor_dia || 0) + '</b></span>' +
+          '<span>vs anterior: <b style="color:' + ((prod.vs_anterior_pct || 0) >= 0 ? '#22c55e' : '#dc2626') + ';">' + ((prod.vs_anterior_pct || 0) > 0 ? '+' : '') + (prod.vs_anterior_pct || 0) + '%</b></span></div>';
+        h += '</div>';
+
+        // Top clients
+        h += '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;">';
+        h += '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#555;margin-bottom:10px;">Top clientes YTD</div>';
+        var maxCli = topCli.length ? Math.max.apply(null, topCli.map(function(c){ return _safe_float_js(c.total) || 1; })) : 1;
+        topCli.forEach(function(c, i) {
+          var val = _safe_float_js(c.total);
+          var pct = Math.round(val / maxCli * 100);
+          h += '<div style="margin-bottom:8px;">' +
+            '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px;"><span style="font-weight:500;">' + (i+1) + '. ' + (c.nombre || "?") + '</span><span style="font-weight:600;">' + _dashFmtEurCompact(val) + '</span></div>' +
+            '<div style="height:5px;background:#E5E7EB;border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:#534AB7;border-radius:3px;"></div></div></div>';
+        });
+        if (!topCli.length) h += '<div style="color:#aaa;font-size:12px;padding:20px 0;text-align:center;">Sin datos</div>';
+        h += '</div></div>';
+
+        container.innerHTML = h;
+
+        // Init production chart
+        var canvas = document.getElementById("chart-produccion-global");
+        if (canvas && (prod.dias || []).length) {
+          var labels = prod.dias.map(function(d) { return d; });
+          if (window._chartProdGlobal) { try { window._chartProdGlobal.destroy(); } catch(e){} }
+          window._chartProdGlobal = new Chart(canvas.getContext("2d"), {
+            type: "bar",
+            data: {
+              labels: labels,
+              datasets: [
+                { label: "Mes actual", data: prod.mes_actual || [], backgroundColor: "#534AB780", borderColor: "#534AB7", borderWidth: 1, order: 2 },
+                { label: "Mes anterior", data: prod.mes_anterior || [], backgroundColor: "#D1D5DB60", borderColor: "#D1D5DB", borderWidth: 1, order: 3 },
+                { label: "Objetivo", data: labels.map(function() { return prod.objetivo_diario || 0; }), type: "line", borderColor: "#9CA3AF", borderDash: [4,4], pointRadius: 0, borderWidth: 1.5, order: 1, fill: false },
+              ]
+            },
+            options: {
+              responsive: true, maintainAspectRatio: false,
+              plugins: { legend: { position: "top", labels: { font: { size: 10 } } } },
+              scales: { y: { beginAtZero: true, title: { display: true, text: "Hincas", font: { size: 10 } } } }
+            }
+          });
+        }
+      })
+      .catch(function (err) { if (container) container.innerHTML = '<p style="color:#dc3545;padding:40px;text-align:center;">Error: ' + err.message + '</p>'; });
+  }
+
+  function _safe_float_js(v) {
+    if (!v) return 0;
+    if (typeof v === "number") return v;
+    var s = String(v).replace(/\s/g, "");
+    if (s.indexOf(",") >= 0) s = s.replace(/\./g, "").replace(",", ".");
+    var n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
   }
 
   // Observe dashboard visibility
