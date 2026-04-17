@@ -148,6 +148,12 @@ def init_proyectos_db() -> None:
                 conn.execute("ALTER TABLE proyecto_partes ADD COLUMN horas_admin REAL DEFAULT 0")
         except Exception:
             pass
+        # Migration: add perforaciones_realizadas to proyecto_partes if missing
+        try:
+            if "perforaciones_realizadas" not in pp_cols:
+                conn.execute("ALTER TABLE proyecto_partes ADD COLUMN perforaciones_realizadas INTEGER DEFAULT 0")
+        except Exception:
+            pass
         # Migration: add imagen_archivo to proyecto_partes if missing
         try:
             if "imagen_archivo" not in pp_cols:
@@ -911,6 +917,215 @@ def dashboard() -> dict:
     }
 
 
+def dashboard_landing() -> dict:
+    """Complete landing page dashboard with KPIs, pipeline, health table, production, top clients."""
+    init_proyectos_db()
+    from datetime import date, timedelta
+    import calendar
+
+    hoy = date.today()
+    anio = hoy.year
+    mes_actual = hoy.strftime("%Y-%m")
+    m_prev = hoy.month - 1
+    y_prev = hoy.year
+    if m_prev < 1:
+        m_prev = 12; y_prev -= 1
+    mes_anterior = f"{y_prev}-{m_prev:02d}"
+    dias_en_mes = calendar.monthrange(hoy.year, hoy.month)[1]
+
+    with _conectar() as conn:
+        # ── KPIs globales ──
+        vivos = conn.execute("SELECT COUNT(*) FROM proyectos WHERE estado IN ('vivo','en_curso')").fetchone()[0]
+        cotizados = conn.execute("SELECT COUNT(*) FROM proyectos WHERE estado='cotizado'").fetchone()[0]
+
+        # Facturado YTD from facturas_cliente
+        fact_ytd = 0
+        fact_ytd_prev = 0
+        try:
+            for r in conn.execute("SELECT total_a_pagar, fecha_factura FROM facturas_cliente").fetchall():
+                val = _safe_float(r["total_a_pagar"])
+                f = r["fecha_factura"] or ""
+                if f[:4] == str(anio):
+                    # Only count up to current month/day for fair comparison
+                    fact_ytd += val
+                elif f[:4] == str(anio - 1) and f[5:10] <= hoy.strftime("%m-%d"):
+                    fact_ytd_prev += val
+        except Exception:
+            pass
+        fact_ytd_var = round((fact_ytd - fact_ytd_prev) / fact_ytd_prev * 100, 1) if fact_ytd_prev > 0 else 0
+
+        # Margen medio proyectos vivos
+        margenes = []
+        proy_vivos = [dict(r) for r in conn.execute("""
+            SELECT p.id, p.nombre, p.codigo, p.estado, p.tipo_actividad, p.modalidad_facturacion,
+                   p.hincas_estimadas, p.hincas_realizadas, p.perforacion_cantidad,
+                   p.importe_presupuestado, p.importe_facturado, p.importe_costes,
+                   p.fecha_inicio_estimada, p.fecha_fin_estimada, p.fecha_inicio_real, p.fecha_fin_real,
+                   p.ubicacion_lat, p.ubicacion_lon, p.provincia,
+                   COALESCE(t.nombre_canonico, '') as cliente
+            FROM proyectos p
+            LEFT JOIN terceros t ON t.id = p.cliente_tercero_id
+            WHERE p.estado IN ('vivo','en_curso')
+            ORDER BY COALESCE(p.importe_presupuestado, 0) DESC
+        """).fetchall()]
+        for pv in proy_vivos:
+            fac = _safe_float(pv.get("importe_facturado"))
+            cos = _safe_float(pv.get("importe_costes"))
+            if fac > 0:
+                margenes.append(round((fac - cos) / fac * 100, 1))
+        margen_medio = round(sum(margenes) / len(margenes), 1) if margenes else 0
+        margen_status = "saludable" if margen_medio > 25 else ("atencion" if margen_medio > 15 else "riesgo")
+
+        # Hincas mes actual vs anterior
+        hincas_mes = conn.execute("SELECT COALESCE(SUM(hincas_realizadas),0) FROM proyecto_partes WHERE fecha LIKE ?", (mes_actual + "%",)).fetchone()[0]
+        hincas_prev = conn.execute("SELECT COALESCE(SUM(hincas_realizadas),0) FROM proyecto_partes WHERE fecha LIKE ?", (mes_anterior + "%",)).fetchone()[0]
+
+        # Horas maq mes + maquinas activas
+        horas_mes = conn.execute("SELECT COALESCE(SUM(horas_maquina),0) FROM proyecto_partes WHERE fecha LIKE ?", (mes_actual + "%",)).fetchone()[0]
+        try:
+            maq_activas = conn.execute(
+                "SELECT COUNT(DISTINCT recurso_id) FROM proyecto_asignaciones WHERE recurso_tipo='maquina' AND fecha LIKE ?",
+                (mes_actual + "%",)
+            ).fetchone()[0]
+        except Exception:
+            maq_activas = 0
+
+        # En riesgo count
+        en_riesgo = 0
+        for pv in proy_vivos:
+            fac = _safe_float(pv.get("importe_facturado"))
+            cos = _safe_float(pv.get("importe_costes"))
+            m_pct = round((fac - cos) / fac * 100, 1) if fac > 0 else 0
+            hincas_est = pv.get("hincas_estimadas") or 0
+            hincas_real = pv.get("hincas_realizadas") or 0
+            avance = round(hincas_real / hincas_est * 100, 1) if hincas_est > 0 else 0
+            if m_pct < 15 or (avance < 50 and hincas_est > 0):
+                en_riesgo += 1
+
+        kpis = {
+            "vivos": vivos, "cotizados": cotizados,
+            "facturado_ytd": round(fact_ytd, 2), "facturado_ytd_var": fact_ytd_var,
+            "margen_medio_pct": margen_medio, "margen_status": margen_status,
+            "hincas_mes": hincas_mes, "hincas_prev": hincas_prev,
+            "horas_maq_mes": round(horas_mes, 1), "maquinas_activas": maq_activas,
+            "en_riesgo": en_riesgo,
+        }
+
+        # ── Pipeline ──
+        pip_cotizados = conn.execute("SELECT COUNT(*) as c, COALESCE(SUM(importe_presupuestado),0) as s FROM proyectos WHERE estado='cotizado'").fetchone()
+        pip_vivos = conn.execute("SELECT COUNT(*) as c, COALESCE(SUM(importe_presupuestado),0) as s FROM proyectos WHERE estado IN ('vivo','en_curso')").fetchone()
+        pip_terminados = conn.execute("SELECT COUNT(*) as c, COALESCE(SUM(importe_facturado),0) as s FROM proyectos WHERE estado='terminado' AND SUBSTR(COALESCE(fecha_fin_real, created_at),1,4)=?", (str(anio),)).fetchone()
+        pip_adjudicados = conn.execute("SELECT COUNT(*) as c, COALESCE(SUM(importe_presupuestado),0) as s FROM proyectos WHERE estado NOT IN ('cotizado','perdido') AND SUBSTR(created_at,1,4)=?", (str(anio),)).fetchone()
+        total_pipeline = _safe_float(pip_cotizados["s"]) + _safe_float(pip_vivos["s"])
+        total_count = pip_cotizados["c"] + pip_vivos["c"] + pip_terminados["c"]
+
+        pipeline = {
+            "cotizados": {"count": pip_cotizados["c"], "importe": round(_safe_float(pip_cotizados["s"]), 0)},
+            "adjudicados_ytd": {"count": pip_adjudicados["c"], "importe": round(_safe_float(pip_adjudicados["s"]), 0)},
+            "vivos": {"count": pip_vivos["c"], "importe": round(_safe_float(pip_vivos["s"]), 0)},
+            "terminados_ytd": {"count": pip_terminados["c"], "importe": round(_safe_float(pip_terminados["s"]), 0)},
+            "tasa_conversion": round(pip_adjudicados["c"] / max(pip_adjudicados["c"] + pip_cotizados["c"], 1) * 100, 0),
+            "pipeline_total": round(total_pipeline, 0),
+            "ticket_medio": round(total_pipeline / max(total_count, 1), 0),
+        }
+
+        # ── Proyectos activos con salud ──
+        proyectos_activos = []
+        for pv in proy_vivos:
+            fac = _safe_float(pv.get("importe_facturado"))
+            cos = _safe_float(pv.get("importe_costes"))
+            pres = _safe_float(pv.get("importe_presupuestado"))
+            m_pct = round((fac - cos) / fac * 100, 1) if fac > 0 else 0
+            hincas_est = pv.get("hincas_estimadas") or 0
+            hincas_real = pv.get("hincas_realizadas") or 0
+            avance = round(hincas_real / hincas_est * 100, 1) if hincas_est > 0 else 0
+
+            # Health
+            if m_pct < 15 or (avance < 50 and hincas_est > 0):
+                salud = "riesgo"
+            elif m_pct < 25 or (avance < 75 and hincas_est > 0):
+                salud = "atencion"
+            else:
+                salud = "saludable"
+
+            proyectos_activos.append({
+                "id": pv["id"], "codigo": pv.get("codigo") or "", "nombre": pv["nombre"],
+                "cliente": pv.get("cliente") or "", "provincia": pv.get("provincia") or "",
+                "ubicacion_lat": pv.get("ubicacion_lat"), "ubicacion_lon": pv.get("ubicacion_lon"),
+                "avance_pct": avance, "importe_facturado": round(fac, 0), "importe_presupuestado": round(pres, 0),
+                "margen_pct": m_pct, "salud": salud,
+            })
+        salud_order = {"riesgo": 0, "atencion": 1, "saludable": 2}
+        proyectos_activos.sort(key=lambda x: (salud_order.get(x["salud"], 9), -x["importe_presupuestado"]))
+
+        # ── Alertas ──
+        alertas = []
+        riesgo_proys = [p["nombre"] for p in proyectos_activos if p["salud"] == "riesgo"]
+        if riesgo_proys:
+            alertas.append({"nivel": "RIESGO", "contexto": f"{len(riesgo_proys)} proyecto(s)", "descripcion": "Margen bajo o avance insuficiente: " + ", ".join(riesgo_proys[:3])})
+        try:
+            sin_firmar = conn.execute("SELECT COUNT(*) FROM proyecto_partes WHERE COALESCE(estado_firma,'borrador') != 'firmado' AND fecha < ?", ((hoy - timedelta(days=3)).isoformat(),)).fetchone()[0]
+            if sin_firmar:
+                alertas.append({"nivel": "ATENCION", "contexto": "Partes", "descripcion": f"{sin_firmar} parte(s) sin firmar hace +3 d\u00edas"})
+        except Exception:
+            pass
+        try:
+            certs_pend = conn.execute("SELECT COUNT(*) FROM certificaciones WHERE estado IN ('borrador','enviada')").fetchone()[0]
+            if certs_pend:
+                alertas.append({"nivel": "ATENCION", "contexto": "Certificaciones", "descripcion": f"{certs_pend} certificaci\u00f3n(es) pendiente(s)"})
+        except Exception:
+            pass
+        near_complete = [p["nombre"] for p in proyectos_activos if p["avance_pct"] >= 80]
+        if near_complete:
+            alertas.append({"nivel": "INFO", "contexto": "Pr\u00f3ximos a terminar", "descripcion": ", ".join(near_complete[:3]) + (" y m\u00e1s" if len(near_complete) > 3 else "")})
+
+        # ── Produccion mes ──
+        prod_actual = {}
+        for r in conn.execute("SELECT SUBSTR(fecha,9,2) as dia, SUM(hincas_realizadas) as h FROM proyecto_partes WHERE fecha LIKE ? GROUP BY dia ORDER BY dia", (mes_actual + "%",)).fetchall():
+            prod_actual[int(r["dia"])] = r["h"] or 0
+        prod_anterior = {}
+        for r in conn.execute("SELECT SUBSTR(fecha,9,2) as dia, SUM(hincas_realizadas) as h FROM proyecto_partes WHERE fecha LIKE ? GROUP BY dia ORDER BY dia", (mes_anterior + "%",)).fetchall():
+            prod_anterior[int(r["dia"])] = r["h"] or 0
+
+        dias_arr = list(range(1, dias_en_mes + 1))
+        actual_arr = [prod_actual.get(d, 0) for d in dias_arr]
+        anterior_arr = [prod_anterior.get(d, 0) for d in dias_arr]
+        total_actual = sum(actual_arr)
+        total_anterior = sum(prod_anterior.values())
+        dias_con_datos = sum(1 for v in actual_arr if v > 0)
+        media_dia = round(total_actual / max(dias_con_datos, 1), 1)
+        mejor_dia = max(actual_arr) if actual_arr else 0
+
+        # Objetivo diario: total hincas estimadas de vivos / meses restantes estimados / dias laborables
+        total_obj = sum(pv.get("hincas_estimadas") or 0 for pv in proy_vivos)
+        obj_diario = round(total_obj / max(dias_en_mes * 6, 1), 1)  # rough: 6 months avg
+
+        produccion_mes = {
+            "dias": dias_arr, "mes_actual": actual_arr, "mes_anterior": anterior_arr,
+            "objetivo_diario": obj_diario,
+            "total_mes": total_actual, "media_dia": media_dia, "mejor_dia": mejor_dia,
+            "vs_anterior_pct": round((total_actual - total_anterior) / max(total_anterior, 1) * 100, 1),
+        }
+
+        # ── Top clientes YTD ──
+        top_clientes = [dict(r) for r in conn.execute("""
+            SELECT t.nombre_canonico as nombre, SUM(p.importe_facturado) as total
+            FROM proyectos p
+            JOIN terceros t ON t.id = p.cliente_tercero_id
+            WHERE p.importe_facturado > 0
+            GROUP BY p.cliente_tercero_id ORDER BY total DESC LIMIT 7
+        """).fetchall()]
+
+    return {
+        "kpis_globales": kpis,
+        "pipeline": pipeline,
+        "proyectos_activos": proyectos_activos,
+        "alertas": alertas[:8],
+        "produccion_mes": produccion_mes,
+        "top_clientes_ytd": top_clientes,
+    }
+
+
 # ── Certificaciones ──────────────────────────────────────────────────────────
 
 
@@ -1199,3 +1414,227 @@ def recursos_disponibles(fecha: str, recurso_tipo: str = "") -> list[dict]:
 def _get_conn():
     from core.db import get_conn
     return get_conn()
+
+
+# ── Dashboard V2: enrichment with adaptive KPIs ──────────────────────────
+
+def _safe_float(val):
+    """Convert possibly Spanish-formatted money string to float."""
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    s = str(val).strip()
+    if not s:
+        return 0.0
+    try:
+        return float(s)
+    except ValueError:
+        return float(s.replace(".", "").replace(",", "."))
+
+
+def calcular_dashboard_v2(proyecto_id: int) -> dict | None:
+    """Enrich project dashboard with adaptive KPIs, cost breakdown, curve S, financials."""
+    data = obtener_dashboard_proyecto(proyecto_id)
+    if not data:
+        return None
+
+    tipo = data.get("tipo_actividad") or "hinca"
+    modalidad = data.get("modalidad_facturacion") or "produccion"
+    partes = data.get("partes") or []
+
+    # ── Adaptive production metrics ──
+    total_hincas = sum(p.get("hincas_realizadas") or 0 for p in partes)
+    total_perforaciones = sum(p.get("perforaciones_realizadas") or 0 for p in partes)
+    total_horas_maquina = sum(p.get("horas_maquina") or 0 for p in partes)
+    total_horas_admin = sum(p.get("horas_admin") or 0 for p in partes)
+    total_partes = len(partes)
+    partes_sin_firmar = sum(1 for p in partes if (p.get("estado_firma") or "borrador") != "firmado")
+    partes_con_incidencia = sum(1 for p in partes if p.get("incidencias"))
+
+    obj_hinca = data.get("hinca_cantidad") or 0
+    obj_perforacion = data.get("perforacion_cantidad") or 0
+
+    # Determine primary unit and objective
+    if tipo == "hinca":
+        unidad_principal = "hincas"
+        ejecutadas = total_hincas
+        objetivo = obj_hinca
+    elif tipo == "perforacion":
+        unidad_principal = "perforaciones"
+        ejecutadas = total_perforaciones
+        objetivo = obj_perforacion
+    else:  # mixto
+        unidad_principal = "hincas+perforaciones"
+        ejecutadas = total_hincas + total_perforaciones
+        objetivo = obj_hinca + obj_perforacion
+
+    avance_pct = round(ejecutadas / objetivo * 100, 1) if objetivo > 0 else 0
+
+    # Days with actual work
+    fechas_partes = sorted(set(p.get("fecha") for p in partes if p.get("fecha")))
+    dias_con_partes = len(fechas_partes)
+
+    # Ritmo and prediction
+    ritmo_diario = round(ejecutadas / dias_con_partes, 2) if dias_con_partes > 0 else 0
+    restantes = max(objetivo - ejecutadas, 0)
+    dias_restantes = round(restantes / ritmo_diario) if ritmo_diario > 0 else None
+
+    from datetime import date, timedelta
+    hoy = date.today()
+    fecha_fin_estimada = (hoy + timedelta(days=dias_restantes)).isoformat() if dias_restantes else None
+    fecha_fin_plan = data.get("fecha_fin_estimada") or data.get("fecha_fin")
+
+    desviacion_dias = None
+    if fecha_fin_estimada and fecha_fin_plan:
+        try:
+            d_est = date.fromisoformat(fecha_fin_estimada)
+            d_plan = date.fromisoformat(fecha_fin_plan)
+            desviacion_dias = (d_est - d_plan).days
+        except Exception:
+            pass
+
+    data["kpis"] = {
+        "tipo_actividad": tipo,
+        "modalidad": modalidad,
+        "unidad_principal": unidad_principal,
+        "ejecutadas": ejecutadas,
+        "objetivo": objetivo,
+        "avance_pct": avance_pct,
+        "total_hincas": total_hincas,
+        "total_perforaciones": total_perforaciones,
+        "total_horas_maquina": round(total_horas_maquina, 1),
+        "total_horas_admin": round(total_horas_admin, 1),
+        "total_partes": total_partes,
+        "partes_sin_firmar": partes_sin_firmar,
+        "partes_con_incidencia": partes_con_incidencia,
+        "dias_con_partes": dias_con_partes,
+        "ritmo_diario": ritmo_diario,
+        "dias_restantes": dias_restantes,
+        "fecha_fin_estimada": fecha_fin_estimada,
+        "fecha_fin_plan": fecha_fin_plan,
+        "desviacion_dias": desviacion_dias,
+    }
+
+    # ── Curve S series ──
+    serie = []
+    acum = 0
+    for fecha in fechas_partes:
+        dia_hincas = sum(p.get("hincas_realizadas") or 0 for p in partes if p.get("fecha") == fecha)
+        dia_perf = sum(p.get("perforaciones_realizadas") or 0 for p in partes if p.get("fecha") == fecha)
+        dia_total = dia_hincas + dia_perf if tipo == "mixto" else (dia_hincas if tipo == "hinca" else dia_perf)
+        acum += dia_total
+        obj_lineal = round(objetivo * (len(serie) + 1) / max(dias_con_partes + (dias_restantes or 0), 1), 1) if objetivo > 0 else 0
+        serie.append({
+            "fecha": fecha,
+            "produccion": dia_total,
+            "hincas": dia_hincas,
+            "perforaciones": dia_perf,
+            "acumulado": acum,
+            "objetivo_lineal": obj_lineal,
+        })
+    data["serie_curva_s"] = serie
+
+    # ── Rendimiento por día semana ──
+    dias_semana = {i: {"total": 0, "count": 0} for i in range(7)}
+    for fecha in fechas_partes:
+        try:
+            d = date.fromisoformat(fecha)
+            dia_prod = sum((p.get("hincas_realizadas") or 0) + (p.get("perforaciones_realizadas") or 0)
+                           for p in partes if p.get("fecha") == fecha)
+            dias_semana[d.weekday()]["total"] += dia_prod
+            dias_semana[d.weekday()]["count"] += 1
+        except Exception:
+            pass
+    data["rendimiento_dia_semana"] = [
+        round(dias_semana[i]["total"] / dias_semana[i]["count"], 1) if dias_semana[i]["count"] > 0 else 0
+        for i in range(7)
+    ]
+
+    # ── Financial metrics ──
+    facturas_cli = data.get("facturas_cliente") or []
+    total_facturado = sum(_safe_float(f.get("total_a_pagar") or f.get("total")) for f in facturas_cli)
+    total_cobrado = sum(_safe_float(f.get("total_a_pagar") or f.get("total"))
+                        for f in facturas_cli if (f.get("estado_cobro") or "") == "cobrada")
+
+    costes_list = data.get("costes") or []
+    total_costes = sum(_safe_float(c.get("total_a_pagar") or c.get("total")) for c in costes_list)
+
+    presupuesto = _safe_float(data.get("importe_presupuestado"))
+    margen = total_facturado - total_costes
+    margen_pct = round(margen / total_facturado * 100, 1) if total_facturado > 0 else 0
+
+    data["financiero"] = {
+        "presupuesto": round(presupuesto, 2),
+        "facturado": round(total_facturado, 2),
+        "cobrado": round(total_cobrado, 2),
+        "pendiente_cobro": round(total_facturado - total_cobrado, 2),
+        "costes": round(total_costes, 2),
+        "margen": round(margen, 2),
+        "margen_pct": margen_pct,
+    }
+
+    # ── Cost breakdown by category ──
+    desglose = {}
+    for c in costes_list:
+        cat = (c.get("categoria") or "otros").lower()
+        concepto = (c.get("resumen_concepto") or "").lower()
+        if "gasoil" in concepto or "combustible" in concepto or "carburante" in concepto:
+            cat = "gasoil"
+        elif "hotel" in concepto or "alojamiento" in concepto:
+            cat = "hoteles"
+        elif "transporte" in concepto or "grua" in concepto:
+            cat = "transporte"
+        elif cat not in ("gasoil", "hoteles", "transporte", "personal"):
+            cat = "otros"
+        desglose[cat] = desglose.get(cat, 0) + _safe_float(c.get("total_a_pagar") or c.get("total"))
+    data["desglose_costes"] = {k: round(v, 2) for k, v in desglose.items()}
+
+    # ── Alerts ──
+    alertas = []
+    if partes_sin_firmar > 0:
+        alertas.append({"nivel": "alta", "texto": f"{partes_sin_firmar} parte(s) sin firmar"})
+    facturas_pend = [f for f in facturas_cli if (f.get("estado_cobro") or "") in ("pendiente", "parcial")]
+    if facturas_pend:
+        alertas.append({"nivel": "media", "texto": f"{len(facturas_pend)} factura(s) pendiente(s) de cobro"})
+    certs = data.get("certificaciones") or []
+    certs_pendientes = [c for c in certs if (c.get("estado") or "") in ("borrador", "enviada")]
+    if certs_pendientes:
+        alertas.append({"nivel": "info", "texto": f"{len(certs_pendientes)} certificación(es) sin facturar"})
+    # Suggest certification
+    ultima_cert_fecha = None
+    for c in certs:
+        if c.get("fecha_hasta") and (not ultima_cert_fecha or c["fecha_hasta"] > ultima_cert_fecha):
+            ultima_cert_fecha = c["fecha_hasta"]
+    partes_sin_cert = [p for p in partes if not ultima_cert_fecha or (p.get("fecha") or "") > ultima_cert_fecha]
+    unidades_sin_cert = sum((p.get("hincas_realizadas") or 0) + (p.get("perforaciones_realizadas") or 0) for p in partes_sin_cert)
+    if unidades_sin_cert > 0:
+        alertas.append({"nivel": "info", "texto": f"{unidades_sin_cert} unidades desde última certificación"})
+    data["alertas"] = alertas
+
+    # ── Certificaciones resumen ──
+    cert_resumen = {"borrador": 0, "enviada": 0, "aprobada": 0, "total_importe": 0}
+    for c in certs:
+        est = c.get("estado") or "borrador"
+        cert_resumen[est] = cert_resumen.get(est, 0) + 1
+        cert_resumen["total_importe"] += _safe_float(c.get("importe_total"))
+    data["certificaciones_resumen"] = cert_resumen
+
+    # ── Equipo asignado hoy ──
+    conn = _get_conn()
+    try:
+        equipo_hoy = [dict(r) for r in conn.execute("""
+            SELECT pa.recurso_nombre, pa.recurso_tipo,
+                   COALESCE(pa.funcion_dia, e.puesto) as funcion
+            FROM proyecto_asignaciones pa
+            LEFT JOIN empleados e ON pa.recurso_id = e.id AND pa.recurso_tipo = 'empleado'
+            WHERE pa.proyecto_id = ? AND pa.fecha = ?
+            ORDER BY pa.recurso_tipo, pa.recurso_nombre
+        """, (proyecto_id, hoy.isoformat())).fetchall()]
+    except Exception:
+        equipo_hoy = []
+    finally:
+        conn.close()
+    data["equipo_hoy"] = equipo_hoy
+
+    return data

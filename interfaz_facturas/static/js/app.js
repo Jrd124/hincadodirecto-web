@@ -66,8 +66,8 @@ const MODULOS = {
   rrhh: {
     linkId: "nav-rrhh-modulo",
     submenuId: "submenu-rrhh",
-    paneles: { inicio: "panel-rrhh-inicio", equipo: "panel-rrhh-equipo", nominas: "panel-rrhh-nominas", verificador: "panel-rrhh-verificador", dietas: "panel-rrhh-dietas", vacaciones: "panel-rrhh-vacaciones", adelantos: "panel-rrhh-adelantos", ss: "panel-rrhh-ss", irpf: "panel-rrhh-irpf", costeproyecto: "panel-rrhh-coste-proyecto" },
-    subNavLinks: { equipo: "nav-rrhh-equipo", nominas: "nav-rrhh-nominas", verificador: "nav-rrhh-verificador", dietas: "nav-rrhh-dietas", vacaciones: "nav-rrhh-vacaciones", adelantos: "nav-rrhh-adelantos", ss: "nav-rrhh-ss", irpf: "nav-rrhh-irpf", costeproyecto: "nav-rrhh-coste-proyecto" },
+    paneles: { inicio: "panel-rrhh-inicio", equipo: "panel-rrhh-equipo", nominas: "panel-rrhh-nominas", verificador: "panel-rrhh-verificador", dietas: "panel-rrhh-dietas", horasextras: "panel-rrhh-horasextras", vacaciones: "panel-rrhh-vacaciones", adelantos: "panel-rrhh-adelantos", ss: "panel-rrhh-ss", irpf: "panel-rrhh-irpf", costeproyecto: "panel-rrhh-coste-proyecto" },
+    subNavLinks: { equipo: "nav-rrhh-equipo", nominas: "nav-rrhh-nominas", verificador: "nav-rrhh-verificador", dietas: "nav-rrhh-dietas", horasextras: "nav-rrhh-horasextras", vacaciones: "nav-rrhh-vacaciones", adelantos: "nav-rrhh-adelantos", ss: "nav-rrhh-ss", irpf: "nav-rrhh-irpf", costeproyecto: "nav-rrhh-coste-proyecto" },
     defecto: "inicio",
   },
   onboarding: {
@@ -749,7 +749,7 @@ document.getElementById("nav-proyectos-onboarding").addEventListener("click", (e
   activarSubpanel("proyectos", "onboarding");
 });
 
-["equipo","nominas","verificador","dietas","adelantos","ss","irpf","costeproyecto"].forEach(function(sp) {
+["equipo","nominas","verificador","dietas","horasextras","vacaciones","adelantos","ss","irpf","costeproyecto"].forEach(function(sp) {
   var navId = "nav-rrhh-" + (sp === "costeproyecto" ? "coste-proyecto" : sp);
   var el = document.getElementById(navId);
   if (el) el.addEventListener("click", function(e) {

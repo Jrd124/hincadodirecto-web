@@ -93,6 +93,58 @@ def api_rrhh_empleados():
         emp["coste_dia_actual"] = None
         emp["ultimo_coste_empresa"] = None
 
+    # Proyecto asignado hoy (batch query, no N+1)
+    from datetime import date as _d
+    hoy = _d.today().isoformat()
+    proy_hoy = {}
+    try:
+      for r in conn.execute(
+        "SELECT pa.recurso_id, p.nombre FROM proyecto_asignaciones pa "
+        "JOIN proyectos p ON p.id = pa.proyecto_id "
+        "WHERE pa.recurso_tipo='empleado' AND pa.fecha=? AND pa.estado != 'averia'",
+        (hoy,)
+      ).fetchall():
+        proy_hoy[r["recurso_id"]] = r["nombre"] or ""
+    except Exception:
+      pass
+    for emp in emps:
+      emp["proyecto_hoy"] = proy_hoy.get(emp["id"])
+
+    # Fecha vuelta vacaciones (para empleados en vacaciones)
+    try:
+      vac_futuras = {}
+      for r in conn.execute(
+        "SELECT empleado_id, fecha FROM vacaciones_dias "
+        "WHERE fecha >= ? ORDER BY empleado_id, fecha", (hoy,)
+      ).fetchall():
+        eid = r["empleado_id"]
+        if eid not in vac_futuras:
+          vac_futuras[eid] = []
+        vac_futuras[eid].append(r["fecha"])
+    except Exception:
+      vac_futuras = {}
+
+    from datetime import timedelta as _td
+    for emp in emps:
+      if emp["estado"] == "vacaciones" and emp["id"] in vac_futuras:
+        dias = vac_futuras[emp["id"]]
+        # Find last consecutive day from today
+        ultimo = _d.fromisoformat(dias[0])
+        for i in range(1, len(dias)):
+          sig = _d.fromisoformat(dias[i])
+          # Allow gaps for weekends (up to 3 days gap)
+          if (sig - ultimo).days <= 3:
+            ultimo = sig
+          else:
+            break
+        vuelta = ultimo + _td(days=1)
+        # Skip weekends
+        while vuelta.weekday() >= 5:
+          vuelta += _td(days=1)
+        emp["fecha_vuelta"] = vuelta.isoformat()
+      else:
+        emp["fecha_vuelta"] = None
+
     return jsonify({"empleados": emps})
   finally:
     conn.close()
@@ -580,16 +632,19 @@ def api_rrhh_dietas_calendario(periodo):
         d["importe"] = _calc_imp(d["tipo"], d["fecha"], fn)
       dietas[(r["empleado_id"], r["fecha"])] = d
 
-    # Get project assignments for context (include funcion_dia)
+    # Get project assignments for context (include funcion_dia, id, nombre)
     asignaciones = {}
     asig_funcion = {}  # (emp_id, fecha) -> funcion_dia or None
     for r in conn.execute(
-      "SELECT pa.recurso_id, pa.fecha, p.codigo, pa.funcion_dia FROM proyecto_asignaciones pa "
+      "SELECT pa.recurso_id, pa.fecha, p.id as pid, p.codigo, p.nombre, pa.funcion_dia "
+      "FROM proyecto_asignaciones pa "
       "JOIN proyectos p ON p.id = pa.proyecto_id "
       "WHERE pa.recurso_tipo='empleado' AND pa.fecha >= ? AND pa.fecha <= ?",
       (dias[0], dias[-1])
     ).fetchall():
-      asignaciones[(r["recurso_id"], r["fecha"])] = r["codigo"]
+      asignaciones[(r["recurso_id"], r["fecha"])] = {
+        "id": r["pid"], "codigo": r["codigo"] or "", "nombre": r["nombre"] or ""
+      }
       if r["funcion_dia"]:
         asig_funcion[(r["recurso_id"], r["fecha"])] = r["funcion_dia"]
 
@@ -605,7 +660,12 @@ def api_rrhh_dietas_calendario(periodo):
       if fn:
         funciones_efectivas[f"{eid}_{fecha}"] = fn
 
-    return jsonify({"dias": dias, "empleados": emps, "dietas": {f"{k[0]}_{k[1]}": v for k, v in dietas.items()}, "proyectos": {f"{k[0]}_{k[1]}": v for k, v in asignaciones.items()}, "funciones": funciones_efectivas})
+    return jsonify({
+      "dias": dias, "empleados": emps,
+      "dietas": {f"{k[0]}_{k[1]}": v for k, v in dietas.items()},
+      "proyectos": {f"{k[0]}_{k[1]}": v for k, v in asignaciones.items()},
+      "funciones": funciones_efectivas,
+    })
   finally:
     conn.close()
 
@@ -807,6 +867,203 @@ def api_rrhh_banco_desclasificar():
     return jsonify({"ok": True})
   finally:
     bconn.close()
+
+
+# ── Horas Extras ──────────────────────────────────────────────────────────
+
+def _precio_hora_vigente(conn, fecha):
+  """Get the active price per overtime hour for a date."""
+  r = conn.execute(
+    "SELECT precio_hora FROM horas_extras_config "
+    "WHERE (fecha_vigencia_desde IS NULL OR fecha_vigencia_desde <= ?) "
+    "AND (fecha_vigencia_hasta IS NULL OR fecha_vigencia_hasta >= ?) "
+    "ORDER BY fecha_vigencia_desde DESC LIMIT 1", (fecha, fecha)
+  ).fetchone()
+  return r["precio_hora"] if r else 15.0
+
+
+@empleados_bp.get("/api/rrhh/horas-extras/calendario/<periodo>")
+def api_rrhh_horas_extras_calendario(periodo):
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    from datetime import date, timedelta
+    y, m = int(periodo[:4]), int(periodo[5:7])
+    d = date(y, m, 1)
+    dias = []
+    while d.month == m:
+      dias.append(d.isoformat())
+      d += timedelta(days=1)
+
+    emps = [dict(r) for r in conn.execute(
+      "SELECT id, nombre, apellidos FROM empleados WHERE estado='activo' ORDER BY apellidos, nombre"
+    ).fetchall()]
+
+    # Horas extras
+    he = {}
+    for r in conn.execute(
+      "SELECT empleado_id, fecha, horas, importe, notas FROM horas_extras_dias "
+      "WHERE fecha >= ? AND fecha <= ?", (dias[0], dias[-1])
+    ).fetchall():
+      he[f"{r['empleado_id']}_{r['fecha']}"] = dict(r)
+
+    # Project assignments (reuse pattern from dietas)
+    asignaciones = {}
+    for r in conn.execute(
+      "SELECT pa.recurso_id, pa.fecha, p.id as pid, p.codigo, p.nombre "
+      "FROM proyecto_asignaciones pa JOIN proyectos p ON p.id = pa.proyecto_id "
+      "WHERE pa.recurso_tipo='empleado' AND pa.fecha >= ? AND pa.fecha <= ?",
+      (dias[0], dias[-1])
+    ).fetchall():
+      asignaciones[f"{r['recurso_id']}_{r['fecha']}"] = {"id": r["pid"], "codigo": r["codigo"] or "", "nombre": r["nombre"] or ""}
+
+    precio = _precio_hora_vigente(conn, dias[0])
+    return jsonify({"dias": dias, "empleados": emps, "horas_extras": he, "proyectos": asignaciones, "precio_hora": precio})
+  finally:
+    conn.close()
+
+
+@empleados_bp.post("/api/rrhh/horas-extras/dia")
+def api_rrhh_horas_extras_dia():
+  empleados_db.init_empleados_db()
+  data = request.get_json(silent=True) or {}
+  conn = get_conn()
+  try:
+    emp_id = data["empleado_id"]
+    fecha = data["fecha"]
+    horas = float(data.get("horas", 0))
+    precio = _precio_hora_vigente(conn, fecha)
+    importe = round(horas * precio, 2)
+    notas = data.get("notas", "")
+    conn.execute(
+      "INSERT OR REPLACE INTO horas_extras_dias (empleado_id, fecha, horas, precio_hora, importe, notas) VALUES (?,?,?,?,?,?)",
+      (emp_id, fecha, horas, precio, importe, notas),
+    )
+    conn.commit()
+    return jsonify({"ok": True, "importe": importe, "precio_hora": precio})
+  finally:
+    conn.close()
+
+
+@empleados_bp.delete("/api/rrhh/horas-extras/dia")
+def api_rrhh_horas_extras_dia_delete():
+  empleados_db.init_empleados_db()
+  data = request.get_json(silent=True) or {}
+  conn = get_conn()
+  try:
+    conn.execute("DELETE FROM horas_extras_dias WHERE empleado_id=? AND fecha=?", (data["empleado_id"], data["fecha"]))
+    conn.commit()
+    return jsonify({"ok": True})
+  finally:
+    conn.close()
+
+
+@empleados_bp.get("/api/rrhh/horas-extras/resumen/<int:anio>/<int:mes>")
+def api_rrhh_horas_extras_resumen(anio, mes):
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    periodo = f"{anio}-{mes:02d}"
+    emps = [dict(r) for r in conn.execute(
+      "SELECT id, nombre, apellidos FROM empleados WHERE estado='activo' ORDER BY apellidos, nombre"
+    ).fetchall()]
+    lineas = []
+    t_horas = 0; t_importe = 0; t_acum = 0; t_dias = 0
+    for e in emps:
+      eid = e["id"]
+      r = conn.execute(
+        "SELECT COALESCE(SUM(horas),0) as h, COALESCE(SUM(importe),0) as imp, COUNT(*) as d "
+        "FROM horas_extras_dias WHERE empleado_id=? AND fecha LIKE ?", (eid, periodo + "%")
+      ).fetchone()
+      acum = conn.execute(
+        "SELECT COALESCE(SUM(importe),0) FROM horas_extras_dias WHERE empleado_id=? AND fecha LIKE ?", (eid, f"{anio}%")
+      ).fetchone()[0]
+      horas_mes = r["h"]; imp_mes = r["imp"]; dias_he = r["d"]
+      if horas_mes > 0 or dias_he > 0:
+        t_horas += horas_mes; t_importe += imp_mes; t_acum += acum; t_dias += dias_he
+        lineas.append({
+          "empleado_id": eid,
+          "nombre": ((e["nombre"] or "") + " " + (e["apellidos"] or "")).strip(),
+          "horas_mes": round(horas_mes, 1), "importe_mes": round(imp_mes, 2),
+          "acumulado_anio": round(acum, 2), "dias_con_he": dias_he,
+        })
+    lineas.sort(key=lambda x: -x["horas_mes"])
+    return jsonify({
+      "periodo": periodo, "lineas": lineas,
+      "totales": {"horas": round(t_horas, 1), "importe": round(t_importe, 2), "acumulado": round(t_acum, 2), "dias": t_dias},
+    })
+  finally:
+    conn.close()
+
+
+@empleados_bp.get("/api/rrhh/horas-extras/empleado/<int:eid>/<int:anio>")
+def api_rrhh_horas_extras_empleado(eid, anio):
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    e = conn.execute("SELECT nombre, apellidos FROM empleados WHERE id=?", (eid,)).fetchone()
+    if not e:
+      return jsonify({"error": "Empleado no encontrado"}), 404
+    dias = [dict(r) for r in conn.execute(
+      "SELECT fecha, horas, importe, notas FROM horas_extras_dias WHERE empleado_id=? AND fecha LIKE ? ORDER BY fecha DESC",
+      (eid, f"{anio}%")
+    ).fetchall()]
+    DIAS_ES = ["L","M","X","J","V","S","D"]
+    for d in dias:
+      from datetime import date as _d
+      dt = _d.fromisoformat(d["fecha"])
+      d["dia_semana"] = DIAS_ES[dt.weekday()]
+    total_horas = sum(d["horas"] for d in dias)
+    total_importe = sum(d["importe"] for d in dias)
+    # Monthly breakdown
+    mensual = {}
+    for d in dias:
+      m = d["fecha"][:7]
+      mensual[m] = mensual.get(m, 0) + d["horas"]
+    meses = [f"{anio}-{i:02d}" for i in range(1, 13)]
+    horas_por_mes = [round(mensual.get(m, 0), 1) for m in meses]
+    mejor_mes = max(range(12), key=lambda i: horas_por_mes[i]) if any(horas_por_mes) else 0
+    return jsonify({
+      "empleado_id": eid, "nombre": ((e["nombre"] or "") + " " + (e["apellidos"] or "")).strip(),
+      "anio": anio, "total_horas": round(total_horas, 1), "total_importe": round(total_importe, 2),
+      "media_mes": round(total_horas / 12, 1),
+      "mejor_mes": meses[mejor_mes] if any(horas_por_mes) else None,
+      "horas_por_mes": horas_por_mes, "dias": dias,
+    })
+  finally:
+    conn.close()
+
+
+@empleados_bp.get("/api/rrhh/horas-extras/tarifas")
+def api_rrhh_horas_extras_tarifas():
+  empleados_db.init_empleados_db()
+  conn = get_conn()
+  try:
+    return jsonify({"tarifas": [dict(r) for r in conn.execute("SELECT * FROM horas_extras_config ORDER BY fecha_vigencia_desde DESC").fetchall()]})
+  finally:
+    conn.close()
+
+
+@empleados_bp.post("/api/rrhh/horas-extras/tarifas")
+def api_rrhh_horas_extras_tarifas_create():
+  empleados_db.init_empleados_db()
+  data = request.get_json(silent=True) or {}
+  conn = get_conn()
+  try:
+    desde = data.get("fecha_vigencia_desde")
+    # Close previous tariff
+    if desde:
+      from datetime import date as _d, timedelta as _td
+      prev_hasta = (_d.fromisoformat(desde) - _td(days=1)).isoformat()
+      conn.execute("UPDATE horas_extras_config SET fecha_vigencia_hasta=? WHERE fecha_vigencia_hasta IS NULL", (prev_hasta,))
+    conn.execute(
+      "INSERT INTO horas_extras_config (precio_hora, fecha_vigencia_desde, notas) VALUES (?,?,?)",
+      (float(data["precio_hora"]), desde, data.get("notas", "")),
+    )
+    conn.commit()
+    return jsonify({"ok": True})
+  finally:
+    conn.close()
 
 
 # ── Vacaciones ────────────────────────────────────────────────────────────

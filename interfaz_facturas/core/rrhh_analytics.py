@@ -412,6 +412,18 @@ def estimacion_nominas(periodo):
             eid = r["empleado_id"]
             dietas_emp[eid] = dietas_emp.get(eid, 0) + imp
 
+        # -- 4b. Horas extras del mes --
+        horas_extras_emp = {}
+        try:
+            for r in conn.execute(
+                "SELECT empleado_id, COALESCE(SUM(importe),0) as total "
+                "FROM horas_extras_dias WHERE fecha >= ? AND fecha < ? "
+                "GROUP BY empleado_id", (fecha_ini, fecha_fin)
+            ).fetchall():
+                horas_extras_emp[r["empleado_id"]] = r["total"]
+        except Exception:
+            pass
+
         # -- 5. Adelantos del mes (from movimientos.db) --
         adelantos_banco = {}
         try:
@@ -434,7 +446,7 @@ def estimacion_nominas(periodo):
 
         # -- 6. Build result per employee --
         lineas = []
-        t_neto = 0; t_devengado = 0; t_coste = 0; t_dietas = 0; t_adelantos = 0; t_liquido_pend = 0
+        t_neto = 0; t_devengado = 0; t_coste = 0; t_dietas = 0; t_he = 0; t_adelantos = 0; t_liquido_pend = 0
 
         for e in emps:
             eid = e["id"]
@@ -443,6 +455,7 @@ def estimacion_nominas(periodo):
             r = ratios[eid]
             dp = dias_plan.get(eid, 0)
             dietas = round(dietas_emp.get(eid, 0), 2)
+            horas_extras = round(horas_extras_emp.get(eid, 0), 2)
             adel = round(adelantos_banco.get(eid, 0), 2)
 
             # Proporción del mes
@@ -456,9 +469,9 @@ def estimacion_nominas(periodo):
             total_devengado = round(neto_proporcional / divisor, 2)
             ss_empresa = round(total_devengado * r["ratio_ss_emp"], 2)
             coste_empresa = round(total_devengado + ss_empresa, 2)
-            coste_total = round(coste_empresa + dietas, 2)
+            coste_total = round(coste_empresa + dietas + horas_extras, 2)
 
-            liquido_total = round(neto_proporcional + dietas, 2)
+            liquido_total = round(neto_proporcional + dietas + horas_extras, 2)
             liquido_pendiente = round(liquido_total - adel, 2)
 
             lineas.append({
@@ -477,6 +490,7 @@ def estimacion_nominas(periodo):
                 "coste_empresa": coste_empresa,
                 "coste_total": coste_total,
                 "dietas": dietas,
+                "horas_extras": horas_extras,
                 "adelantos": adel,
                 "liquido_total": liquido_total,
                 "liquido_pendiente": liquido_pendiente,
@@ -486,6 +500,7 @@ def estimacion_nominas(periodo):
             t_devengado += total_devengado
             t_coste += coste_total
             t_dietas += dietas
+            t_he += horas_extras
             t_adelantos += adel
             t_liquido_pend += liquido_pendiente
 
@@ -499,6 +514,7 @@ def estimacion_nominas(periodo):
                 "total_devengado": round(t_devengado, 2),
                 "coste_total": round(t_coste, 2),
                 "dietas": round(t_dietas, 2),
+                "horas_extras": round(t_he, 2),
                 "adelantos": round(t_adelantos, 2),
                 "liquido_pendiente": round(t_liquido_pend, 2),
             },

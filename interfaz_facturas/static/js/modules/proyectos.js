@@ -6,16 +6,217 @@
 
   function _fE(n) { return n ? Number(n).toLocaleString("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 0, maximumFractionDigits: 0 }) : ""; }
 
+  // ── Landing dashboard helpers ──
+
+  var _SPAIN_PATH = "M175,12 L195,8 215,15 235,10 258,18 280,12 300,20 325,15 345,22 365,18 380,25 395,30 410,28 425,38 435,50 440,68 445,85 442,100 448,118 455,130 460,145 455,160 448,175 440,185 430,195 418,205 405,215 395,225 382,230 368,238 355,242 340,248 325,255 310,260 295,258 280,265 265,270 248,275 232,278 218,282 200,288 185,292 170,298 155,302 138,305 120,300 105,295 90,288 78,278 65,268 55,258 48,245 42,232 38,218 35,205 38,192 42,178 48,165 52,150 58,138 62,125 68,112 75,100 82,88 90,78 100,68 110,58 120,48 132,38 145,28 158,20 175,12Z";
+
+  function _mapX(lon) { return (lon + 10) / 14 * 500; }
+  function _mapY(lat) { return (44 - lat) / 8 * 340; }
+
+  function _saludPill(salud) {
+    var c = {saludable: {bg:"#E1F5EE",col:"#0F6E56"}, atencion: {bg:"#FAEEDA",col:"#854F0B"}, riesgo: {bg:"#FCEBEB",col:"#A32D2D"}};
+    var s = c[salud] || c.atencion;
+    var label = salud === "saludable" ? "Saludable" : (salud === "riesgo" ? "Riesgo" : "Atenci\u00f3n");
+    return '<span style="padding:2px 8px;border-radius:9999px;font-size:0.68rem;font-weight:600;background:' + s.bg + ';color:' + s.col + ';">' + label + '</span>';
+  }
+
+  function _landingKpi(label, value, sub, color) {
+    return '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;text-align:center;">' +
+      '<div style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#888;margin-bottom:4px;">' + label + '</div>' +
+      '<div style="font-size:22px;font-weight:500;color:' + (color || '#1a1a1a') + ';">' + value + '</div>' +
+      (sub ? '<div style="font-size:11px;color:#888;margin-top:2px;">' + sub + '</div>' : '') +
+    '</div>';
+  }
+
   function _cargarDashProy() {
-    fetch("/api/proyectos/dashboard")
+    var container = document.getElementById("proy-landing-content");
+    if (!container) return;
+    fetch("/api/proyectos/dashboard-landing")
       .then(function (r) { return r.json(); })
       .then(function (d) {
-        var el = function (id) { return document.getElementById(id); };
-        el("proy-met-vivos").textContent = (d.por_estado && d.por_estado.vivo) || 0;
-        el("proy-met-hincas").textContent = d.hincas_mes || 0;
-        el("proy-met-horas").textContent = d.horas_maquina_mes || 0;
-        el("proy-met-fact").textContent = _fE(d.importe_facturado);
-      }).catch(function () {});
+        var k = d.kpis_globales || {};
+        var pip = d.pipeline || {};
+        var proys = d.proyectos_activos || [];
+        var alertas = d.alertas || [];
+        var prod = d.produccion_mes || {};
+        var topCli = d.top_clientes_ytd || [];
+
+        var h = '';
+
+        // Header
+        h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">' +
+          '<div><h1 style="margin:0;font-size:1.4rem;">Panel de Control</h1><p style="margin:4px 0 0;font-size:13px;color:#64748B;">Proyectos y operaciones</p></div>' +
+          '<button onclick="if(typeof _proyNuevo===\'function\')_proyNuevo();else activarSubpanel(\'proyectos\',\'cotizados\')" style="padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">+ Nuevo proyecto</button>' +
+        '</div>';
+
+        // 6 KPIs
+        var margenCol = k.margen_medio_pct > 25 ? "#22c55e" : (k.margen_medio_pct > 15 ? "#eab308" : "#dc2626");
+        var hincasVar = k.hincas_prev > 0 ? Math.round((k.hincas_mes - k.hincas_prev) / k.hincas_prev * 100) : 0;
+        h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;">';
+        h += _landingKpi("Proyectos vivos", k.vivos || 0, k.cotizados + " cotizados", "#2563eb");
+        h += _landingKpi("Facturado YTD", _dashFmtEurCompact(k.facturado_ytd), (k.facturado_ytd_var > 0 ? "+" : "") + k.facturado_ytd_var + "% vs anterior", "#22c55e");
+        h += _landingKpi("Margen medio", k.margen_medio_pct + "%", k.margen_status, margenCol);
+        h += _landingKpi("Hincas mes", k.hincas_mes || 0, (hincasVar > 0 ? "+" : "") + hincasVar + "% vs anterior", "#8B5CF6");
+        h += _landingKpi("Horas m\u00e1q.", k.horas_maq_mes + "h", k.maquinas_activas + " m\u00e1quinas activas", "#f59e0b");
+        h += _landingKpi("En riesgo", k.en_riesgo || 0, k.en_riesgo > 0 ? "requieren atenci\u00f3n" : "todos saludables", k.en_riesgo > 0 ? "#dc2626" : "#22c55e");
+        h += '</div>';
+
+        // Pipeline
+        h += '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;margin-bottom:16px;">';
+        h += '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#555;margin-bottom:10px;">Pipeline comercial</div>';
+        h += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">';
+        var phases = [
+          {k:"cotizados",label:"Cotizados",bg:"#FAEEDA",col:"#854F0B"},
+          {k:"adjudicados_ytd",label:"Adjudicados",bg:"#E6F1FB",col:"#1E40AF"},
+          {k:"vivos",label:"Vivos",bg:"#E1F5EE",col:"#0F6E56"},
+          {k:"terminados_ytd",label:"Terminados YTD",bg:"#F1EFE8",col:"#57534E"},
+        ];
+        phases.forEach(function(ph, i) {
+          var pd = pip[ph.k] || {};
+          h += '<div style="flex:1;min-width:100px;background:' + ph.bg + ';border-radius:6px;padding:10px 12px;text-align:center;">' +
+            '<div style="font-size:20px;font-weight:600;color:' + ph.col + ';">' + (pd.count || 0) + '</div>' +
+            '<div style="font-size:11px;color:' + ph.col + ';">' + ph.label + '</div>' +
+            '<div style="font-size:10px;color:#888;margin-top:2px;">' + _dashFmtEurCompact(pd.importe || 0) + '</div></div>';
+          if (i < 3) h += '<span style="font-size:16px;color:#ccc;">\u2192</span>';
+        });
+        h += '</div>';
+        h += '<div style="display:flex;gap:20px;margin-top:10px;font-size:11px;color:#666;">' +
+          '<span>Tasa conversi\u00f3n: <b>' + (pip.tasa_conversion || 0) + '%</b></span>' +
+          '<span>Pipeline: <b>' + _dashFmtEurCompact(pip.pipeline_total || 0) + '</b></span>' +
+          '<span>Ticket medio: <b>' + _dashFmtEurCompact(pip.ticket_medio || 0) + '</b></span></div>';
+        h += '</div>';
+
+        // Map + Alerts row
+        h += '<div style="display:grid;grid-template-columns:1.3fr 1fr;gap:10px;margin-bottom:16px;">';
+
+        // Map
+        var mapProys = proys.filter(function(p) { return p.ubicacion_lat && p.ubicacion_lon; });
+        var sinUbic = proys.length - mapProys.length;
+        h += '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;">';
+        h += '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#555;margin-bottom:8px;">Mapa de proyectos activos</div>';
+        h += '<div style="display:flex;gap:12px;margin-bottom:6px;font-size:10px;">' +
+          '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#1D9E75;"></span> Saludable</span>' +
+          '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#EF9F27;"></span> Atenci\u00f3n</span>' +
+          '<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#E24B4A;"></span> Riesgo</span></div>';
+        h += '<svg viewBox="0 0 500 340" style="width:100%;max-height:260px;">';
+        h += '<path d="' + _SPAIN_PATH + '" fill="#F1F5F9" stroke="#CBD5E1" stroke-width="1.5"/>';
+        var pinColors = {saludable:"#1D9E75",atencion:"#EF9F27",riesgo:"#E24B4A"};
+        mapProys.forEach(function(p) {
+          var cx = _mapX(p.ubicacion_lon);
+          var cy = _mapY(p.ubicacion_lat);
+          var r = Math.max(6, Math.min(14, Math.sqrt((p.importe_presupuestado || 50000) / 5000)));
+          var col = pinColors[p.salud] || "#EF9F27";
+          h += '<circle cx="' + cx.toFixed(1) + '" cy="' + cy.toFixed(1) + '" r="' + r.toFixed(1) + '" fill="' + col + '" stroke="#fff" stroke-width="1.5" style="cursor:pointer;" onclick="proyectoDashboard(' + p.id + ')"><title>' + (p.nombre||"") + ' \u2014 ' + _dashFmtEurCompact(p.importe_presupuestado) + ' \u2014 ' + p.avance_pct + '%</title></circle>';
+        });
+        h += '</svg>';
+        if (sinUbic > 0) h += '<div style="font-size:10px;color:#aaa;margin-top:4px;">' + sinUbic + ' proyecto(s) sin ubicaci\u00f3n</div>';
+        h += '</div>';
+
+        // Alerts
+        h += '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;max-height:340px;overflow-y:auto;">';
+        h += '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#555;margin-bottom:8px;">Alertas del portfolio</div>';
+        if (!alertas.length) h += '<div style="color:#aaa;font-size:12px;padding:20px 0;text-align:center;">Sin alertas</div>';
+        alertas.forEach(function(a) {
+          var bg = a.nivel === "RIESGO" ? "#FCEBEB" : (a.nivel === "ATENCION" ? "#FAEEDA" : "#E6F1FB");
+          var col = a.nivel === "RIESGO" ? "#A32D2D" : (a.nivel === "ATENCION" ? "#854F0B" : "#1E40AF");
+          h += '<div style="padding:8px 10px;margin-bottom:6px;border-radius:6px;background:' + bg + ';">' +
+            '<div style="font-size:10px;font-weight:700;color:' + col + ';text-transform:uppercase;">' + a.nivel + ' \u00b7 ' + (a.contexto || "") + '</div>' +
+            '<div style="font-size:12px;color:' + col + ';margin-top:2px;">' + (a.descripcion || "") + '</div></div>';
+        });
+        h += '</div></div>';
+
+        // Active projects table
+        var totalPresup = proys.reduce(function(s,p){return s + (p.importe_presupuestado||0);}, 0);
+        h += '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;margin-bottom:16px;">';
+        h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+          '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#555;">Proyectos activos</div>' +
+          '<div style="font-size:11px;color:#888;">' + proys.length + ' proyectos \u00b7 ' + _dashFmtEurCompact(totalPresup) + ' en juego</div></div>';
+        h += '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;">';
+        h += '<thead><tr style="border-bottom:2px solid #E5E5E5;">' +
+          '<th style="padding:6px 8px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Proyecto</th>' +
+          '<th style="padding:6px 4px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;">Cliente</th>' +
+          '<th style="padding:6px 4px;text-align:left;font-size:10px;text-transform:uppercase;color:#888;width:120px;">Avance</th>' +
+          '<th style="padding:6px 4px;text-align:right;font-size:10px;text-transform:uppercase;color:#888;">Fact / Presup</th>' +
+          '<th style="padding:6px 4px;text-align:right;font-size:10px;text-transform:uppercase;color:#888;">Margen</th>' +
+          '<th style="padding:6px 4px;text-align:center;font-size:10px;text-transform:uppercase;color:#888;">Salud</th>' +
+          '</tr></thead><tbody>';
+        proys.forEach(function(p, i) {
+          var margenCol2 = p.margen_pct > 25 ? "#22c55e" : (p.margen_pct > 15 ? "#eab308" : "#dc2626");
+          var barCol = p.salud === "saludable" ? "#22c55e" : (p.salud === "riesgo" ? "#dc2626" : "#eab308");
+          h += '<tr style="border-bottom:1px solid #f1f1f1;cursor:pointer;' + (i%2 ? 'background:#fafafa;' : '') + '" onclick="proyectoDashboard(' + p.id + ')" onmouseover="this.style.background=\'#f0f7ff\'" onmouseout="this.style.background=\'' + (i%2 ? '#fafafa' : '') + '\'">' +
+            '<td style="padding:6px 8px;font-weight:500;">' + (p.nombre || "") + '</td>' +
+            '<td style="padding:6px 4px;color:#666;font-size:0.75rem;">' + (p.cliente || "\u2014") + '</td>' +
+            '<td style="padding:6px 4px;"><div style="display:flex;align-items:center;gap:6px;"><div style="flex:1;height:5px;background:#E5E7EB;border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + Math.min(p.avance_pct, 100) + '%;background:' + barCol + ';border-radius:3px;"></div></div><span style="font-size:10px;font-weight:600;min-width:30px;">' + p.avance_pct + '%</span></div></td>' +
+            '<td style="padding:6px 4px;text-align:right;font-size:0.75rem;">' + _dashFmtEurCompact(p.importe_facturado) + ' / ' + _dashFmtEurCompact(p.importe_presupuestado) + '</td>' +
+            '<td style="padding:6px 4px;text-align:right;font-weight:500;color:' + margenCol2 + ';">' + p.margen_pct + '%</td>' +
+            '<td style="padding:6px 4px;text-align:center;">' + _saludPill(p.salud) + '</td></tr>';
+        });
+        if (!proys.length) h += '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#aaa;">Sin proyectos activos</td></tr>';
+        h += '</tbody></table></div>';
+
+        // Production chart + Top clients row
+        h += '<div style="display:grid;grid-template-columns:1.5fr 1fr;gap:10px;margin-bottom:16px;">';
+
+        // Production chart
+        h += '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;">';
+        h += '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#555;margin-bottom:8px;">Producci\u00f3n global del mes</div>';
+        h += '<div style="position:relative;height:220px;"><canvas id="chart-produccion-global"></canvas></div>';
+        h += '<div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:#666;">' +
+          '<span>Total: <b>' + (prod.total_mes || 0) + '</b></span>' +
+          '<span>Media/d\u00eda: <b>' + (prod.media_dia || 0) + '</b></span>' +
+          '<span>Mejor d\u00eda: <b>' + (prod.mejor_dia || 0) + '</b></span>' +
+          '<span>vs anterior: <b style="color:' + ((prod.vs_anterior_pct || 0) >= 0 ? '#22c55e' : '#dc2626') + ';">' + ((prod.vs_anterior_pct || 0) > 0 ? '+' : '') + (prod.vs_anterior_pct || 0) + '%</b></span></div>';
+        h += '</div>';
+
+        // Top clients
+        h += '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;">';
+        h += '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#555;margin-bottom:10px;">Top clientes YTD</div>';
+        var maxCli = topCli.length ? Math.max.apply(null, topCli.map(function(c){ return _safe_float_js(c.total) || 1; })) : 1;
+        topCli.forEach(function(c, i) {
+          var val = _safe_float_js(c.total);
+          var pct = Math.round(val / maxCli * 100);
+          h += '<div style="margin-bottom:8px;">' +
+            '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px;"><span style="font-weight:500;">' + (i+1) + '. ' + (c.nombre || "?") + '</span><span style="font-weight:600;">' + _dashFmtEurCompact(val) + '</span></div>' +
+            '<div style="height:5px;background:#E5E7EB;border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:#534AB7;border-radius:3px;"></div></div></div>';
+        });
+        if (!topCli.length) h += '<div style="color:#aaa;font-size:12px;padding:20px 0;text-align:center;">Sin datos</div>';
+        h += '</div></div>';
+
+        container.innerHTML = h;
+
+        // Init production chart
+        var canvas = document.getElementById("chart-produccion-global");
+        if (canvas && (prod.dias || []).length) {
+          var labels = prod.dias.map(function(d) { return d; });
+          if (window._chartProdGlobal) { try { window._chartProdGlobal.destroy(); } catch(e){} }
+          window._chartProdGlobal = new Chart(canvas.getContext("2d"), {
+            type: "bar",
+            data: {
+              labels: labels,
+              datasets: [
+                { label: "Mes actual", data: prod.mes_actual || [], backgroundColor: "#534AB780", borderColor: "#534AB7", borderWidth: 1, order: 2 },
+                { label: "Mes anterior", data: prod.mes_anterior || [], backgroundColor: "#D1D5DB60", borderColor: "#D1D5DB", borderWidth: 1, order: 3 },
+                { label: "Objetivo", data: labels.map(function() { return prod.objetivo_diario || 0; }), type: "line", borderColor: "#9CA3AF", borderDash: [4,4], pointRadius: 0, borderWidth: 1.5, order: 1, fill: false },
+              ]
+            },
+            options: {
+              responsive: true, maintainAspectRatio: false,
+              plugins: { legend: { position: "top", labels: { font: { size: 10 } } } },
+              scales: { y: { beginAtZero: true, title: { display: true, text: "Hincas", font: { size: 10 } } } }
+            }
+          });
+        }
+      })
+      .catch(function (err) { if (container) container.innerHTML = '<p style="color:#dc3545;padding:40px;text-align:center;">Error: ' + err.message + '</p>'; });
+  }
+
+  function _safe_float_js(v) {
+    if (!v) return 0;
+    if (typeof v === "number") return v;
+    var s = String(v).replace(/\s/g, "");
+    if (s.indexOf(",") >= 0) s = s.replace(/\./g, "").replace(",", ".");
+    var n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
   }
 
   // Observe dashboard visibility
@@ -67,25 +268,341 @@
 
   var _dashLastSubpanel = "inicio";
 
+  function _kpiCard(label, value, sub, color) {
+    return '<div class="card" style="padding:12px 14px;text-align:center;">' +
+      '<div style="font-size:0.72rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">' + label + '</div>' +
+      '<div style="font-size:1.2rem;font-weight:700;color:' + (color || '#1a1a1a') + ';">' + value + '</div>' +
+      (sub ? '<div style="font-size:0.72rem;color:#888;">' + sub + '</div>' : '') +
+    '</div>';
+  }
+
+  function _dashParseNum(val) {
+    if (!val) return 0;
+    if (typeof val === "number") return val;
+    var s = String(val).replace(/\s/g, "");
+    if (s.indexOf(",") !== -1) s = s.replace(/\./g, "").replace(",", ".");
+    var n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
+  }
+
+  function _renderCurvaS(p) {
+    var canvas = document.getElementById("chart-curva-s");
+    if (!canvas) return;
+    var serie = p.serie_curva_s || [];
+    if (!serie.length) return;
+    var labels = serie.map(function(s) { return (s.fecha || "").substring(5); });
+    var prodData = serie.map(function(s) { return s.produccion || 0; });
+    var acumData = serie.map(function(s) { return s.acumulado || 0; });
+    var objData = serie.map(function(s) { return s.objetivo_lineal || 0; });
+    if (window._chartCurvaS) { try { window._chartCurvaS.destroy(); } catch(e){} }
+    window._chartCurvaS = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: labels,
+        datasets: [
+          { label: "Producci\u00f3n/d\u00eda", data: prodData, backgroundColor: "#3B82F640", borderColor: "#3B82F6", borderWidth: 1, yAxisID: "y", order: 3 },
+          { label: "Acumulado real", data: acumData, type: "line", borderColor: "#8B5CF6", backgroundColor: "#8B5CF620", fill: true, tension: 0.3, pointRadius: 1, borderWidth: 2, yAxisID: "y1", order: 1 },
+          { label: "Objetivo lineal", data: objData, type: "line", borderColor: "#9CA3AF", borderDash: [5,5], pointRadius: 0, borderWidth: 1.5, yAxisID: "y1", order: 2 },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: { legend: { position: "top", labels: { font: { size: 10 } } } },
+        scales: {
+          y: { position: "left", title: { display: true, text: "Producci\u00f3n/d\u00eda", font: { size: 10 } }, beginAtZero: true },
+          y1: { position: "right", title: { display: true, text: "Acumulado", font: { size: 10 } }, beginAtZero: true, grid: { drawOnChartArea: false } }
+        }
+      }
+    });
+  }
+
+  function _renderChartDiaSemana(p) {
+    var canvas = document.getElementById("chart-dia-semana");
+    if (!canvas) return;
+    var rds = p.rendimiento_dia_semana || [0,0,0,0,0,0,0];
+    var labels = ["L","M","X","J","V","S","D"];
+    var colors = rds.map(function(_,i) { return i >= 5 ? "#D1D5DB" : "#3B82F6"; });
+    if (window._chartDiaSemana) { try { window._chartDiaSemana.destroy(); } catch(e){} }
+    window._chartDiaSemana = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: { labels: labels, datasets: [{ data: rds, backgroundColor: colors, borderRadius: 4 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, title: { display: true, text: "Media/d\u00eda", font: { size: 10 } } } }
+      }
+    });
+  }
+
   window.proyectoDashboard = function (proyectoId) {
-    fetch("/api/proyectos/" + proyectoId + "/dashboard")
+    fetch("/api/proyectos/" + proyectoId + "/dashboard-v2")
       .then(function (r) { return r.json(); })
       .then(function (p) {
         if (p.error) { mostrarToast(p.error, "error"); return; }
         var container = document.getElementById("proyecto-dashboard-content");
+        var k = p.kpis || {};
+        var fin = p.financiero || {};
+        // ── State colors ──
+        var _EC = {cotizado:"#eab308",vivo:"#22c55e",en_curso:"#22c55e",terminado:"#3B82F6",perdido:"#ef4444"};
+        var estadoColor = _EC[p.estado] || "#6B7280";
+        var estadoLabel = (p.estado || "?").charAt(0).toUpperCase() + (p.estado || "").slice(1);
+        var cliente = p.cliente_nombre || "";
+        var ubicacion = p.ubicacion_texto || p.provincia || "";
+        var modalLabel = (k.modalidad === "administracion" ? "Administraci\u00f3n" : "Producci\u00f3n");
+        var tipoLabel = k.tipo_actividad === "mixto" ? "Mixto" : (k.tipo_actividad === "perforacion" ? "Perforaci\u00f3n" : "Hincado");
 
-        var diasActivo = _dashDiasActivo(p);
-        var rp = p.resumen_partes || {};
-        var hincasPct = p.hincas_estimadas ? ((rp.total_hincas || 0) / p.hincas_estimadas * 100).toFixed(1) : "\u2014";
-        var totalCostes = (p.resumen_costes || {}).total_costes || 0;
-        // Calcular facturado desde facturas_cliente
-        var totalFacturado = 0;
-        (p.facturas_cliente || []).forEach(function (f) {
-          var s = String(f.total_a_pagar || "").replace(/\s/g, "");
-          if (s.indexOf(",") !== -1) s = s.replace(/\./g, "").replace(",", ".");
-          var n = parseFloat(s); if (!isNaN(n)) totalFacturado += n;
+        // ── Action buttons by state ──
+        var accBtns = '';
+        var _bs = 'padding:5px 12px;border-radius:6px;font-size:0.78rem;font-weight:600;cursor:pointer;border:1px solid var(--border,#ccc);background:';
+        if (p.estado === "vivo" || p.estado === "en_curso") {
+          accBtns = '<button style="' + _bs + '#FFFBEB;color:#92400E;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'pausado\')">Pausar</button>' +
+            '<button style="' + _bs + '#EFF6FF;color:#1E40AF;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'terminado\')">Terminar</button>';
+        } else if (p.estado === "cotizado") {
+          accBtns = '<button style="' + _bs + '#DCFCE7;color:#166534;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'vivo\')">Adjudicar</button>' +
+            '<button style="' + _bs + '#FEF2F2;color:#991B1B;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'perdido\')">Perder</button>';
+        } else if (p.estado === "pausado") {
+          accBtns = '<button style="' + _bs + '#DCFCE7;color:#166534;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'vivo\')">Reanudar</button>' +
+            '<button style="' + _bs + '#EFF6FF;color:#1E40AF;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'terminado\')">Terminar</button>';
+        } else if (p.estado === "terminado" || p.estado === "perdido") {
+          accBtns = '<button style="' + _bs + '#DCFCE7;color:#166534;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'vivo\')">Reabrir</button>';
+        }
+        accBtns += '<button style="' + _bs + '#fff;color:#3B82F6;border-color:#3B82F6;" onclick="_proyEditar(' + p.id + ')">&#x270E; Editar datos</button>';
+
+        // ── HEADER (always visible) ──
+        var hdr = '<div style="margin-bottom:16px;">' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">' +
+            '<div style="display:flex;align-items:center;gap:12px;">' +
+              '<button onclick="proyectoDashboardVolver()" style="background:none;border:none;cursor:pointer;font-size:1.2rem;padding:4px;">&#x2190;</button>' +
+              '<div><span style="font-size:0.75rem;color:#888;">' + (p.codigo || "") + '</span>' +
+                ' <span style="padding:2px 8px;border-radius:9999px;font-size:0.7rem;font-weight:600;background:' + estadoColor + '18;color:' + estadoColor + ';">' + estadoLabel + '</span></div>' +
+            '</div>' +
+            '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + accBtns + '</div>' +
+          '</div>' +
+          '<h2 style="margin:4px 0 2px;font-size:1.3rem;">' + (p.nombre || "") + '</h2>' +
+          '<div style="font-size:0.85rem;color:#666;">' + [cliente, ubicacion, tipoLabel + " por " + modalLabel].filter(Boolean).join(" \u00b7 ") + '</div>' +
+        '</div>';
+
+        // ���─ Progress bar ──
+        hdr += '<div class="card" style="padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">' +
+          '<div style="flex:1;min-width:200px;"><div style="font-size:0.78rem;color:#888;margin-bottom:4px;">' + k.ejecutadas + ' de ' + k.objetivo + ' ' + k.unidad_principal + '</div>' +
+          '<div style="height:8px;background:#E5E7EB;border-radius:4px;overflow:hidden;"><div style="height:100%;width:' + Math.min(k.avance_pct, 100) + '%;background:' + (k.avance_pct >= 100 ? '#22c55e' : '#3B82F6') + ';border-radius:4px;"></div></div></div>';
+        if (k.dias_restantes != null) {
+          var devColor = k.desviacion_dias != null ? (k.desviacion_dias > 0 ? "#dc2626" : "#22c55e") : "#666";
+          var devText = k.desviacion_dias != null ? (k.desviacion_dias > 0 ? "+" + k.desviacion_dias + "d" : k.desviacion_dias + "d") : "";
+          hdr += '<div style="text-align:right;"><div style="font-size:0.78rem;color:#888;">Fin estimado</div><div style="font-size:1rem;font-weight:700;">' + (k.fecha_fin_estimada || "\u2014") + '</div>' +
+            (devText ? '<div style="font-size:0.75rem;color:' + devColor + ';">' + devText + ' vs plan</div>' : '') + '</div>';
+        }
+        hdr += '</div>';
+
+        // ── TAB BUTTONS ──
+        var tabs = [["resumen","Resumen"],["produccion","Producci\u00f3n"],["operativo","Operativo"],["financiero","Financiero"],["certificaciones","Certificaciones"]];
+        var tabBar = '<div style="display:flex;border-bottom:2px solid var(--border,#e9ecef);margin-bottom:16px;">';
+        tabs.forEach(function(t) {
+          tabBar += '<button class="proy-dash-tab" data-tab="' + t[0] + '" onclick="proyDashCambiarTab(\'' + t[0] + '\')" style="padding:8px 16px;border:none;background:none;cursor:pointer;font-size:0.85rem;font-weight:600;border-bottom:2px solid ' + (t[0]==="resumen" ? 'var(--color-primary)' : 'transparent') + ';color:' + (t[0]==="resumen" ? 'var(--color-primary)' : 'var(--color-text-secondary)') + ';margin-bottom:-2px;">' + t[1] + '</button>';
         });
-        var margen = totalFacturado - totalCostes;
+        tabBar += '</div>';
+
+        // ── TAB: RESUMEN ──
+        var margenColor = fin.margen_pct > 30 ? "#22c55e" : fin.margen_pct > 15 ? "#eab308" : "#dc2626";
+        var tabResumen = '<div id="proy-dash-tab-resumen" class="proy-dash-tab-content">' +
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px;">' +
+            _kpiCard("Facturado", _dashFmtEurCompact(fin.facturado), fin.presupuesto > 0 ? Math.round(fin.facturado/fin.presupuesto*100) + "% ppto" : "", "#3B82F6") +
+            _kpiCard("Costes reales", _dashFmtEurCompact(fin.costes), "", "#f59e0b") +
+            _kpiCard("Margen bruto", _dashFmtEurCompact(fin.margen), fin.margen_pct + "%", margenColor) +
+            _kpiCard("Ritmo", k.ritmo_diario + " " + k.unidad_principal.split("+")[0] + "/d\u00eda", k.dias_restantes != null ? k.dias_restantes + " d\u00edas restantes" : "", "#8B5CF6") +
+          '</div>';
+
+        // Desglose costes + Equipo hoy
+        tabResumen += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">';
+        // Left: cost breakdown
+        var dc = p.desglose_costes || {};
+        var dcTotal = Object.values(dc).reduce(function(a,b){return a+b;}, 0) || 1;
+        tabResumen += '<div class="card" style="padding:14px;"><h4 style="margin:0 0 10px;font-size:0.88rem;font-weight:700;">Desglose de costes</h4>';
+        ["personal","gasoil","transporte","hoteles","otros"].forEach(function(cat) {
+          var val = dc[cat] || 0;
+          var pct = Math.round(val / dcTotal * 100);
+          var colors = {personal:"#3B82F6",gasoil:"#f59e0b",transporte:"#10B981",hoteles:"#8B5CF6",otros:"#6B7280"};
+          tabResumen += '<div style="margin-bottom:6px;"><div style="display:flex;justify-content:space-between;font-size:0.78rem;"><span>' + cat.charAt(0).toUpperCase() + cat.slice(1) + '</span><span style="font-weight:600;">' + _dashFmtEur(val) + ' (' + pct + '%)</span></div>' +
+            '<div style="height:6px;background:#E5E7EB;border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + (colors[cat]||"#888") + ';border-radius:3px;"></div></div></div>';
+        });
+        tabResumen += '</div>';
+
+        // Right: equipo hoy
+        var eq = p.equipo_hoy || [];
+        tabResumen += '<div class="card" style="padding:14px;"><h4 style="margin:0 0 10px;font-size:0.88rem;font-weight:700;">Equipo asignado hoy (' + eq.length + ')</h4>';
+        if (eq.length) {
+          eq.forEach(function(e) {
+            var icon = e.recurso_tipo === "empleado" ? "\uD83D\uDC77" : "\uD83C\uDFD7\uFE0F";
+            tabResumen += '<div style="padding:3px 0;font-size:0.82rem;">' + icon + ' ' + e.recurso_nombre + (e.funcion ? ' <span style="color:#888;">(' + e.funcion + ')</span>' : '') + '</div>';
+          });
+        } else {
+          tabResumen += '<div style="color:#888;font-size:0.82rem;">Sin asignaciones hoy</div>';
+        }
+        tabResumen += '</div></div>';
+
+        // Alerts
+        var alertas = p.alertas || [];
+        if (alertas.length) {
+          tabResumen += '<div class="card" style="padding:14px;margin-bottom:16px;"><h4 style="margin:0 0 8px;font-size:0.88rem;font-weight:700;">Alertas</h4>';
+          alertas.forEach(function(a) {
+            var bg = a.nivel === "alta" ? "#FEF2F2" : a.nivel === "media" ? "#FFFBEB" : "#EFF6FF";
+            var col = a.nivel === "alta" ? "#dc2626" : a.nivel === "media" ? "#ca8a04" : "#1E40AF";
+            tabResumen += '<div style="padding:6px 10px;margin-bottom:4px;border-radius:6px;background:' + bg + ';color:' + col + ';font-size:0.82rem;font-weight:500;">' + a.texto + '</div>';
+          });
+          tabResumen += '</div>';
+        }
+        tabResumen += '</div>';
+
+        // ── TAB: PRODUCCION ──
+        var tabProd = '<div id="proy-dash-tab-produccion" class="proy-dash-tab-content" style="display:none;">';
+        // KPIs
+        tabProd += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">' +
+          _kpiCard("Partes", k.total_partes, "", "#3B82F6") +
+          _kpiCard(k.unidad_principal.split("+")[0] + "/d\u00eda", k.ritmo_diario + "", "", "#22c55e");
+        if (k.tipo_actividad === "mixto") {
+          tabProd += _kpiCard("Hincas", k.total_hincas, "", "#8B5CF6") + _kpiCard("Perfor.", k.total_perforaciones, "", "#f59e0b");
+        } else {
+          tabProd += _kpiCard("Horas m\u00e1q.", k.total_horas_maquina + "h", "", "#f59e0b");
+        }
+        tabProd += _kpiCard("Sin firmar", k.partes_sin_firmar, "", k.partes_sin_firmar > 0 ? "#dc2626" : "#22c55e") + '</div>';
+
+        // Curva S
+        tabProd += '<div class="card" style="padding:14px;margin-bottom:16px;"><h4 style="margin:0 0 8px;font-size:0.88rem;font-weight:700;">Curva S</h4>' +
+          '<div style="position:relative;height:280px;"><canvas id="chart-curva-s"></canvas></div></div>';
+
+        // Rendimiento por día semana
+        tabProd += '<div class="card" style="padding:14px;margin-bottom:16px;"><h4 style="margin:0 0 8px;font-size:0.88rem;font-weight:700;">Rendimiento por d\u00eda de la semana</h4>' +
+          '<div style="position:relative;height:180px;"><canvas id="chart-dia-semana"></canvas></div></div>';
+        tabProd += '</div>';
+
+        // ── TAB: OPERATIVO ──
+        var tabOper = '<div id="proy-dash-tab-operativo" class="proy-dash-tab-content" style="display:none;">';
+        // Partes table
+        tabOper += '<div class="card" style="padding:14px;margin-bottom:16px;"><h4 style="margin:0 0 8px;font-size:0.88rem;font-weight:700;">Partes de trabajo</h4>';
+        tabOper += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.8rem;">';
+        // Adaptive headers
+        tabOper += '<thead><tr style="background:#f1f3f5;">' +
+          '<th style="padding:5px 6px;text-align:left;">Fecha</th>';
+        if (k.tipo_actividad !== "perforacion") tabOper += '<th style="padding:5px 4px;text-align:right;">Hincas</th>';
+        if (k.tipo_actividad !== "hinca") tabOper += '<th style="padding:5px 4px;text-align:right;">Perf.</th>';
+        tabOper += '<th style="padding:5px 4px;text-align:right;">Horas m\u00e1q.</th>' +
+          '<th style="padding:5px 4px;text-align:right;">H. admin</th>' +
+          '<th style="padding:5px 4px;">Incidencia</th>' +
+          '<th style="padding:5px 4px;text-align:center;">Estado</th></tr></thead><tbody>';
+        (p.partes || []).forEach(function(pt) {
+          var ef = (pt.estado_firma || "borrador");
+          var rowBg = ef === "borrador" ? "background:#FEF2F2;" : (pt.incidencias ? "background:#FFFBEB;" : "");
+          var estPill = ef === "firmado" ? '<span style="padding:1px 6px;border-radius:9999px;font-size:0.68rem;font-weight:600;background:#DCFCE7;color:#166534;">Firmado</span>' :
+            '<span style="padding:1px 6px;border-radius:9999px;font-size:0.68rem;font-weight:600;background:#FEF2F2;color:#dc2626;">Borrador</span>';
+          tabOper += '<tr style="border-bottom:1px solid var(--border,#e9ecef);' + rowBg + '">' +
+            '<td style="padding:4px 6px;">' + (pt.fecha || "") + '</td>';
+          if (k.tipo_actividad !== "perforacion") tabOper += '<td style="padding:4px 4px;text-align:right;">' + (pt.hincas_realizadas || 0) + '</td>';
+          if (k.tipo_actividad !== "hinca") tabOper += '<td style="padding:4px 4px;text-align:right;">' + (pt.perforaciones_realizadas || 0) + '</td>';
+          tabOper += '<td style="padding:4px 4px;text-align:right;">' + (pt.horas_maquina || 0) + '</td>' +
+            '<td style="padding:4px 4px;text-align:right;">' + (pt.horas_admin || 0) + '</td>' +
+            '<td style="padding:4px 4px;font-size:0.75rem;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (pt.incidencias || "\u2014") + '</td>' +
+            '<td style="padding:4px 4px;text-align:center;">' + estPill + '</td></tr>';
+        });
+        if (!(p.partes || []).length) tabOper += '<tr><td colspan="7" style="text-align:center;padding:2rem;color:#888;">Sin partes</td></tr>';
+        tabOper += '</tbody></table></div></div>';
+
+        // Calendar placeholder
+        tabOper += '<div class="card" style="padding:14px;margin-bottom:16px;"><h4 style="margin:0 0 8px;font-size:0.88rem;font-weight:700;">Calendario de asignaciones</h4>' +
+          '<div id="proy-dash-calendario"></div></div>';
+        tabOper += '</div>';
+
+        // ── TAB: FINANCIERO ──
+        var tabFin = '<div id="proy-dash-tab-financiero" class="proy-dash-tab-content" style="display:none;">';
+        tabFin += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px;">' +
+          _kpiCard("Presupuestado", _dashFmtEurCompact(fin.presupuesto), "", "#6B7280") +
+          _kpiCard("Facturado", _dashFmtEurCompact(fin.facturado), fin.presupuesto > 0 ? Math.round(fin.facturado/fin.presupuesto*100) + "% ppto" : "", "#3B82F6") +
+          _kpiCard("Cobrado", _dashFmtEurCompact(fin.cobrado), fin.facturado > 0 ? Math.round(fin.cobrado/fin.facturado*100) + "% fact." : "", "#22c55e") +
+          _kpiCard("Margen bruto", _dashFmtEurCompact(fin.margen), fin.margen_pct + "%", margenColor) +
+        '</div>';
+
+        // Facturas cliente
+        tabFin += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">';
+        tabFin += '<div class="card" style="padding:14px;"><h4 style="margin:0 0 8px;font-size:0.88rem;font-weight:700;">Facturaci\u00f3n cliente</h4>';
+        tabFin += '<table style="width:100%;border-collapse:collapse;font-size:0.78rem;">';
+        (p.facturas_cliente || []).forEach(function(f) {
+          var ec = (f.estado_cobro || "pendiente");
+          var ecCol = ec === "cobrada" ? "#22c55e" : ec === "vencida" ? "#dc2626" : "#eab308";
+          tabFin += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
+            '<td style="padding:4px 4px;">' + (f.numero_factura || "?") + '</td>' +
+            '<td style="padding:4px 4px;">' + (f.fecha_factura || "") + '</td>' +
+            '<td style="padding:4px 4px;text-align:right;font-weight:600;">' + _dashFmtEur(_dashParseNum(f.total_a_pagar)) + '</td>' +
+            '<td style="padding:4px 4px;text-align:center;"><span style="padding:1px 6px;border-radius:9999px;font-size:0.65rem;font-weight:600;background:' + ecCol + '18;color:' + ecCol + ';">' + ec + '</span></td></tr>';
+        });
+        if (!(p.facturas_cliente || []).length) tabFin += '<tr><td colspan="4" style="text-align:center;padding:1rem;color:#888;">Sin facturas</td></tr>';
+        tabFin += '</table></div>';
+
+        // Costes proveedor top
+        tabFin += '<div class="card" style="padding:14px;"><h4 style="margin:0 0 8px;font-size:0.88rem;font-weight:700;">Costes por proveedor</h4>';
+        var byProv = {};
+        (p.costes || []).forEach(function(c) {
+          var nm = c.proveedor || "?";
+          if (!byProv[nm]) byProv[nm] = {count: 0, total: 0};
+          byProv[nm].count++;
+          byProv[nm].total += _dashParseNum(c.total_a_pagar || c.total);
+        });
+        var provList = Object.keys(byProv).map(function(nm) { return {nombre: nm, count: byProv[nm].count, total: byProv[nm].total}; }).sort(function(a,b){return b.total-a.total;}).slice(0,10);
+        provList.forEach(function(pv) {
+          tabFin += '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:0.78rem;border-bottom:1px solid var(--border,#e9ecef);"><span>' + pv.nombre + ' <span style="color:#888;">(' + pv.count + ')</span></span><span style="font-weight:600;">' + _dashFmtEur(pv.total) + '</span></div>';
+        });
+        if (!provList.length) tabFin += '<div style="color:#888;font-size:0.82rem;">Sin costes</div>';
+        tabFin += '</div></div>';
+        tabFin += '</div>';
+
+        // ── TAB: CERTIFICACIONES ──
+        var tabCert = '<div id="proy-dash-tab-certificaciones" class="proy-dash-tab-content" style="display:none;">';
+        var cr = p.certificaciones_resumen || {};
+        tabCert += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">' +
+          _kpiCard("Total importe", _dashFmtEurCompact(cr.total_importe || 0), "", "#3B82F6") +
+          _kpiCard("Borradores", cr.borrador || 0, "", "#6B7280") +
+          _kpiCard("Enviadas", cr.enviada || 0, "", "#eab308") +
+          _kpiCard("Aprobadas", cr.aprobada || 0, "", "#22c55e") +
+        '</div>';
+
+        tabCert += '<div class="card" style="padding:14px;"><table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+        tabCert += '<thead><tr style="background:#f1f3f5;"><th style="padding:5px 6px;">#</th><th style="padding:5px 4px;">Periodo</th><th style="padding:5px 4px;">Tipo</th><th style="padding:5px 4px;text-align:right;">Hincas</th><th style="padding:5px 4px;text-align:right;">H. Admin</th><th style="padding:5px 4px;text-align:right;">Importe</th><th style="padding:5px 4px;text-align:center;">Estado</th><th style="padding:5px 4px;">Factura</th></tr></thead><tbody>';
+        (p.certificaciones || []).forEach(function(c) {
+          var estCol = c.estado === "aprobada" ? "#22c55e" : c.estado === "enviada" ? "#eab308" : "#6B7280";
+          tabCert += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
+            '<td style="padding:4px 6px;">' + (c.numero || "") + '</td>' +
+            '<td style="padding:4px 4px;">' + (c.fecha_desde || "") + ' \u2192 ' + (c.fecha_hasta || "") + '</td>' +
+            '<td style="padding:4px 4px;">' + (c.tipo || "") + '</td>' +
+            '<td style="padding:4px 4px;text-align:right;">' + (c.total_hincas || 0) + '</td>' +
+            '<td style="padding:4px 4px;text-align:right;">' + (c.total_horas_admin || 0) + '</td>' +
+            '<td style="padding:4px 4px;text-align:right;font-weight:600;">' + _dashFmtEur(c.importe_total || 0) + '</td>' +
+            '<td style="padding:4px 4px;text-align:center;"><span style="padding:1px 6px;border-radius:9999px;font-size:0.65rem;font-weight:600;background:' + estCol + '18;color:' + estCol + ';">' + (c.estado || "borrador") + '</span></td>' +
+            '<td style="padding:4px 4px;">' + (c.factura_ref || "\u2014") + '</td></tr>';
+        });
+        if (!(p.certificaciones || []).length) tabCert += '<tr><td colspan="8" style="text-align:center;padding:2rem;color:#888;">Sin certificaciones</td></tr>';
+        tabCert += '</tbody></table></div>';
+        tabCert += '</div>';
+
+        // ── Assemble ──
+        container.innerHTML = hdr + tabBar + tabResumen + tabProd + tabOper + tabFin + tabCert;
+
+        // Render charts after DOM insert
+        _renderCurvaS(p);
+        _renderChartDiaSemana(p);
+        // Render calendar in operativo tab
+        if (typeof _renderRecursosCalendario === "function") {
+          _recProyId = p.id;
+          _renderRecursosCalendario(p.id);
+        }
+
+        // Mostrar panel
+        activarSubpanel("proyectos", "dashboard");
+
+      })
+      .catch(function (err) { mostrarToast("Error al cargar dashboard: " + err.message, "error"); });
+  };
+
+  // ── Old dashboard code removed ──
+  if (false) { var margen = 0;
         var margenPct = totalFacturado ? ((margen / totalFacturado) * 100).toFixed(1) : "\u2014";
 
         // Badges de navegación cruzada
@@ -489,11 +1006,7 @@
             '<div class="presup-section-header"><div class="presup-section-number" style="background:#64748B;">\uD83D\uDCCB</div><div class="presup-section-title">Historial de estados</div></div>' +
             '<div class="presup-section-body" style="border-left-color:#64748B;">' + histHtml + '</div></div>';
 
-        // Mostrar panel
-        activarSubpanel("proyectos", "dashboard");
-      })
-      .catch(function (err) { mostrarToast("Error al cargar dashboard: " + err.message, "error"); });
-  };
+  } // end if(false) — dead old code above
 
   window._proyCambiarEstadoDash = function (id, estado) {
     var labelEstado = estado === "vivo" ? "reactivar (volver a vivo)" : estado;
@@ -520,6 +1033,10 @@
         btn.style.color = "var(--color-text-secondary)";
       }
     });
+    if (tab === "produccion") {
+      if (window._chartCurvaS) try { window._chartCurvaS.resize(); } catch (e) {}
+      if (window._chartDiaSemana) try { window._chartDiaSemana.resize(); } catch (e) {}
+    }
     if (tab === "operativo" && window._chartAvanceProyecto) {
       try { window._chartAvanceProyecto.resize(); } catch (e) {}
     }

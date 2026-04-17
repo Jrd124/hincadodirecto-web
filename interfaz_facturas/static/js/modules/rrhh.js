@@ -61,6 +61,7 @@ function _rrhhOnPanelShow(panel) {
   else if (panel === "nominas") _rrhhCargarNominas();
   else if (panel === "verificador") _rrhhCargarVerificador();
   else if (panel === "dietas") _rrhhCargarDietas();
+  else if (panel === "horasextras") _rrhhCargarHorasExtras();
   else if (panel === "vacaciones") _rrhhCargarVacaciones();
   else if (panel === "adelantos") _rrhhCargarAdelantos();
   else if (panel === "ss") _rrhhCargarSS();
@@ -266,16 +267,29 @@ function _rrhhCargarEmpleados() {
     });
 }
 
+function _fmtTel(tel) {
+  if (!tel) return "\u2014";
+  return tel.replace(/^\+34\s?/, "").replace(/\s/g, "");
+}
+
+function _rrhhFuncionPill(puesto) {
+  if (!puesto) return "\u2014";
+  if (puesto === "ayudante") return '<span style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.7rem;font-weight:600;background:#ECFDF5;color:#10B981;">Ay.</span>';
+  return '<span style="display:inline-block;padding:1px 6px;border-radius:9999px;font-size:0.7rem;font-weight:600;background:#EFF6FF;color:#3B82F6;">Op.</span>';
+}
+
 function _rrhhRenderVistas(lista) {
   var grupos = [
     { key: "activo", label: "Activos", color: "#22c55e" },
-    { key: "baja", label: "Baja", color: "#f59e0b" },
     { key: "vacaciones", label: "Vacaciones", color: "#3B82F6" },
+    { key: "baja", label: "Baja", color: "#f59e0b" },
     { key: "reserva", label: "Reserva", color: "#6B7280" },
     { key: "exempleado", label: "Exempleados", color: "#ef4444" }
   ];
   var wrapper = _rrhhEquipoWrapper;
   if (!wrapper) return;
+  var thS = "padding:5px 6px;font-weight:700;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.5px;color:#555;";
+  var ESTADO_COLORS = { activo: "#22c55e", baja: "#f59e0b", vacaciones: "#3B82F6", reserva: "#6B7280", exempleado: "#ef4444" };
 
   var html = "";
   grupos.forEach(function (g) {
@@ -284,45 +298,75 @@ function _rrhhRenderVistas(lista) {
     var collapsed = _rrhhEquipoColapsados[g.key];
     var chevron = collapsed ? "\u25B6" : "\u25BC";
 
-    // Group header (clickable)
     html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border,#e9ecef);background:var(--bg-secondary,#f8f9fa);user-select:none;" onclick="_rrhhToggleGrupoEquipo(\'' + g.key + '\')">';
     html += '<span style="font-size:0.75rem;width:12px;display:inline-block;">' + chevron + '</span>';
     html += '<span style="font-weight:700;font-size:0.88rem;">' + g.label + '</span>';
     html += '<span style="display:inline-block;padding:1px 8px;border-radius:9999px;font-size:0.72rem;font-weight:600;background:' + g.color + '20;color:' + g.color + ';">' + emps.length + '</span>';
     html += '</div>';
 
-    // Table (hidden if collapsed)
-    html += '<table data-equipo-grupo="' + g.key + '" style="width:100%;border-collapse:collapse;font-size:0.82rem;' + (collapsed ? 'display:none;' : '') + '">';
-    // Header
-    html += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);">' +
-      '<th style="padding:6px 10px;text-align:left;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;">Nombre</th>' +
-      '<th style="padding:6px 6px;text-align:left;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:110px;">DNI</th>' +
-      '<th style="padding:6px 6px;text-align:left;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:130px;">Categor\u00eda</th>' +
-      '<th style="padding:6px 6px;text-align:left;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:130px;">Tel\u00e9fono</th>' +
-      '<th style="padding:6px 6px;text-align:right;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:95px;">Coste/D\u00eda</th>' +
-      '<th style="padding:6px 6px;text-align:center;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:90px;">Estado</th>' +
-      '<th style="padding:6px 6px;text-align:center;font-weight:700;font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;color:#666;width:90px;">Acciones</th>' +
+    html += '<table data-equipo-grupo="' + g.key + '" style="width:100%;border-collapse:collapse;font-size:0.8rem;table-layout:fixed;' + (collapsed ? 'display:none;' : '') + '">';
+
+    // Column 4 varies by group
+    var col4Head = "Proyecto hoy";
+    if (g.key === "vacaciones") col4Head = "Vuelve";
+    else if (g.key === "baja") col4Head = "Desde";
+    else if (g.key === "exempleado") col4Head = "Fecha baja";
+
+    html += '<thead><tr style="background:#f1f3f5;">' +
+      '<th style="' + thS + 'text-align:left;width:22%;">Nombre</th>' +
+      '<th style="' + thS + 'text-align:left;width:11%;">DNI</th>' +
+      '<th style="' + thS + 'text-align:center;width:7%;">Funci\u00f3n</th>' +
+      '<th style="' + thS + 'text-align:left;width:14%;">' + col4Head + '</th>' +
+      '<th style="' + thS + 'text-align:left;width:11%;">Tel\u00e9fono</th>' +
+      '<th style="' + thS + 'text-align:right;width:10%;">Coste/D\u00eda</th>' +
+      '<th style="' + thS + 'text-align:center;width:9%;">Estado</th>' +
+      '<th style="' + thS + 'text-align:center;width:7%;">Acc.</th>' +
       '</tr></thead><tbody>';
 
     emps.forEach(function (e, i) {
-      var nombreCompleto = (e.nombre || "") + (e.apellidos ? " " + e.apellidos : "");
-      var estadoColor = { activo: "#22c55e", baja: "#f59e0b", vacaciones: "#3B82F6", reserva: "#6B7280", exempleado: "#ef4444" }[e.estado] || "#6B7280";
-      var estadoLabel = e.estado ? e.estado.charAt(0).toUpperCase() + e.estado.slice(1) : "\u2014";
-      var costeDia = e.coste_dia_actual || e.ultimo_coste_empresa ? (e.coste_dia_actual || 0) : null;
-      var zebra = i % 2 === 1 ? "background:rgba(0,0,0,0.015);" : "";
+      var nombre = (e.nombre || "") + (e.apellidos ? " " + e.apellidos : "");
+      var ec = ESTADO_COLORS[e.estado] || "#6B7280";
+      var eLabel = e.estado ? e.estado.charAt(0).toUpperCase() + e.estado.slice(1) : "\u2014";
+      var costeDia = (e.coste_dia_actual != null && e.coste_dia_actual > 0) ? fmtEur(e.coste_dia_actual) + "/d" : '<span style="color:#aaa;">Sin datos</span>';
+      var zebra = i % 2 === 1 ? "background:rgba(0,0,0,0.018);" : "";
 
-      html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;' + zebra + '" onclick="_rrhhAbrirFichaDesdeEquipo(' + e.id + ')" onmouseover="this.style.background=\'rgba(59,130,246,0.06)\'" onmouseout="this.style.background=\'' + (i % 2 === 1 ? 'rgba(0,0,0,0.015)' : '') + '\'">' +
-        '<td style="padding:7px 10px;font-weight:600;white-space:nowrap;">' + nombreCompleto + '</td>' +
-        '<td style="padding:7px 6px;font-family:monospace;font-size:0.8rem;">' + (e.dni || "\u2014") + '</td>' +
-        '<td style="padding:7px 6px;">' + (e.categoria || e.puesto || "\u2014") + '</td>' +
-        '<td style="padding:7px 6px;">' + (e.telefono || "\u2014") + '</td>' +
-        '<td style="padding:7px 6px;text-align:right;">' + (costeDia !== null ? fmtEur(costeDia) + ' \u20ac/d' : '\u2014') + '</td>' +
-        '<td style="padding:7px 6px;text-align:center;"><span style="display:inline-block;padding:2px 8px;border-radius:9999px;font-size:0.7rem;font-weight:600;background:' + estadoColor + '18;color:' + estadoColor + ';">' + estadoLabel + '</span></td>' +
-        '<td style="padding:7px 6px;text-align:center;white-space:nowrap;">' +
-          '<button onclick="event.stopPropagation();_rrhhAbrirFichaDesdeEquipo(' + e.id + ')" title="Ver ficha" style="background:none;border:none;cursor:pointer;color:#3B82F6;font-size:0.85rem;">&#x1F464;</button> ' +
-          '<button onclick="event.stopPropagation();_rrhhEditarEmpleado(' + e.id + ')" title="Editar" style="background:none;border:none;cursor:pointer;color:#6B7280;font-size:0.85rem;">&#x270E;</button> ' +
-          '<button onclick="event.stopPropagation();_rrhhEliminarEmpleado(' + e.id + ',\'' + nombreCompleto.replace(/'/g, "\\'") + '\')" title="Dar de baja" style="background:none;border:none;cursor:pointer;color:#dc3545;font-size:0.85rem;">&#x2716;</button>' +
-        '</td></tr>';
+      // Column 4 content varies
+      var col4 = "\u2014";
+      if (g.key === "activo") {
+        col4 = e.proyecto_hoy ? '<span style="display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (e.proyecto_hoy || "").replace(/"/g, "&quot;") + '">' + (e.proyecto_hoy || "").substring(0, 15) + '</span>' : '\u2014';
+      } else if (g.key === "vacaciones") {
+        if (e.fecha_vuelta) {
+          var fv = e.fecha_vuelta.split("-");
+          col4 = "Vuelve " + fv[2] + "/" + fv[1];
+        } else {
+          col4 = "En vacaciones";
+        }
+      } else if (g.key === "baja") {
+        col4 = e.fecha_baja ? e.fecha_baja : "En baja";
+      } else if (g.key === "exempleado") {
+        col4 = e.fecha_baja || "\u2014";
+      }
+
+      // Actions: ficha + edit for most; only ficha for exempleados
+      var acciones = '<button onclick="event.stopPropagation();_rrhhAbrirFichaDesdeEquipo(' + e.id + ')" title="Ficha" style="background:none;border:none;cursor:pointer;color:#3B82F6;font-size:0.85rem;">&#x1F464;</button>';
+      if (g.key !== "exempleado") {
+        acciones += ' <button onclick="event.stopPropagation();_rrhhEditarEmpleado(' + e.id + ')" title="Editar" style="background:none;border:none;cursor:pointer;color:#6B7280;font-size:0.85rem;">&#x270E;</button>';
+      }
+
+      // For exempleados: grey out coste/tel
+      var telVal = (g.key === "exempleado") ? "\u2014" : _fmtTel(e.telefono);
+      var costeVal = (g.key === "exempleado") ? "\u2014" : costeDia;
+
+      html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;' + zebra + '" onclick="_rrhhAbrirFichaDesdeEquipo(' + e.id + ')" onmouseover="this.style.background=\'rgba(59,130,246,0.06)\'" onmouseout="this.style.background=\'' + (i % 2 === 1 ? 'rgba(0,0,0,0.018)' : '') + '\'">' +
+        '<td style="padding:6px 6px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;">' + nombre + '</td>' +
+        '<td style="padding:6px 6px;font-family:monospace;font-size:0.78rem;">' + (e.dni || "\u2014") + '</td>' +
+        '<td style="padding:6px 4px;text-align:center;">' + _rrhhFuncionPill(e.puesto) + '</td>' +
+        '<td style="padding:6px 6px;font-size:0.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:0;">' + col4 + '</td>' +
+        '<td style="padding:6px 6px;font-size:0.8rem;">' + telVal + '</td>' +
+        '<td style="padding:6px 6px;text-align:right;font-size:0.8rem;">' + costeVal + '</td>' +
+        '<td style="padding:6px 4px;text-align:center;"><span style="display:inline-block;padding:1px 7px;border-radius:9999px;font-size:0.68rem;font-weight:600;background:' + ec + '18;color:' + ec + ';">' + eLabel + '</span></td>' +
+        '<td style="padding:6px 4px;text-align:center;white-space:nowrap;">' + acciones + '</td>' +
+        '</tr>';
     });
     html += '</tbody></table>';
   });
@@ -330,7 +374,6 @@ function _rrhhRenderVistas(lista) {
   if (!html) html = '<p style="text-align:center;padding:2rem;color:var(--text-secondary);">Sin empleados</p>';
   wrapper.innerHTML = html;
 
-  // Hide old inactivos wrapper
   var inacWrapper = document.getElementById("rrhh-inactivos-wrapper");
   if (inacWrapper) inacWrapper.style.display = "none";
 }
@@ -407,7 +450,7 @@ function _rrhhToggleInactivos() {
     var q = this.value.toLowerCase().trim();
     if (!q) { _rrhhRenderVistas(_rrhhEmpleadosCache); return; }
     var filtered = _rrhhEmpleadosCache.filter(function (e) {
-      var hay = (e.nombre || "").toLowerCase() + " " + (e.apellidos || "").toLowerCase() + " " + (e.dni || "").toLowerCase() + " " + (e.puesto || "").toLowerCase();
+      var hay = (e.nombre || "").toLowerCase() + " " + (e.apellidos || "").toLowerCase() + " " + (e.dni || "").toLowerCase() + " " + (e.puesto || "").toLowerCase() + " " + (e.proyecto_hoy || "").toLowerCase();
       return hay.indexOf(q) >= 0;
     });
     _rrhhRenderVistas(filtered);
@@ -1395,6 +1438,397 @@ function _rrhhLoadEstimacion() {
 }
 
 // ===============================================================================
+// ==  5c. HORAS EXTRAS                                                         ==
+// ===============================================================================
+
+var _rrhhHEVista = "calendario";
+
+function _rrhhCargarHorasExtras() {
+  var container = document.getElementById("rrhh-horasextras-contenido");
+  if (!container) return;
+  var pillsHtml = '<div style="display:flex;gap:6px;margin-bottom:12px;">';
+  [["calendario","Calendario"],["resumen","Resumen"],["empleado","Por empleado"],["tarifas","Tarifas"]].forEach(function(v) {
+    var active = _rrhhHEVista === v[0];
+    pillsHtml += '<button onclick="_rrhhHEVista=\'' + v[0] + '\';_rrhhCargarHorasExtras()" style="padding:5px 14px;border-radius:9999px;font-size:0.82rem;font-weight:' + (active ? '700' : '400') + ';border:1px solid ' + (active ? '#3B82F6' : 'var(--border,#ccc)') + ';background:' + (active ? '#EFF6FF' : 'transparent') + ';color:' + (active ? '#3B82F6' : 'inherit') + ';cursor:pointer;">' + v[1] + '</button>';
+  });
+  pillsHtml += '</div><div id="rrhh-he-vista-body"></div>';
+  container.innerHTML = pillsHtml;
+  var body = document.getElementById("rrhh-he-vista-body");
+  if (_rrhhHEVista === "calendario") _rrhhHECalendario(body);
+  else if (_rrhhHEVista === "resumen") _rrhhHEResumen(body);
+  else if (_rrhhHEVista === "empleado") _rrhhHEEmpleado(body);
+  else _rrhhHETarifas(body);
+}
+
+// ── HE Calendario ──
+
+function _rrhhHECalendario(body) {
+  var now = new Date(); var anio = now.getFullYear(), mes = now.getMonth() + 1;
+  body.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">' +
+    '<label style="font-size:0.82rem;font-weight:600;">A\u00f1o:</label>' +
+    '<select id="rrhh-he-cal-anio" style="width:75px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhHECalReload()">' +
+    '<option value="2025"' + (anio===2025?' selected':'') + '>2025</option><option value="2026"' + (anio===2026?' selected':'') + '>2026</option><option value="2027">2027</option></select>' +
+    '<label style="font-size:0.82rem;font-weight:600;">Mes:</label>' +
+    '<select id="rrhh-he-cal-mes" style="width:115px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhHECalReload()">' +
+    _MESES_NOMBRE.map(function(n,i){return '<option value="'+(i+1)+'"'+(i+1===mes?' selected':'')+'>'+n+'</option>';}).join('') +
+    '</select></div>' +
+    '<div id="rrhh-he-cal-legend" style="margin-bottom:8px;"></div>' +
+    '<div id="rrhh-he-cal-grid" style="overflow-x:auto;"><p style="color:var(--text-secondary);padding:1rem;">Cargando...</p></div>';
+  _rrhhHECalReload();
+}
+
+function _rrhhHECalReload() {
+  var a = document.getElementById("rrhh-he-cal-anio");
+  var m = document.getElementById("rrhh-he-cal-mes");
+  if (!a || !m) return;
+  var periodo = a.value + "-" + String(m.value).padStart(2, "0");
+  _rrhhHECalLoad(periodo);
+}
+
+var _heCalFiltro = "";
+
+function _rrhhHECalLoad(periodo) {
+  var grid = document.getElementById("rrhh-he-cal-grid");
+  var legend = document.getElementById("rrhh-he-cal-legend");
+  if (!grid) return;
+  grid.innerHTML = '<p style="color:var(--text-secondary);padding:1rem;">Cargando...</p>';
+  fetch("/api/rrhh/horas-extras/calendario/" + periodo)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var emps = d.empleados || [];
+      var diasArr = d.dias || [];
+      var heMap = d.horas_extras || {};
+      var proyMap = d.proyectos || {};
+      var precioHora = d.precio_hora || 15;
+      var nDias = diasArr.length;
+      var hoyStr = new Date().toISOString().slice(0, 10);
+
+      // Collect projects for legend
+      var proyUnicos = {};
+      Object.keys(proyMap).forEach(function(k) {
+        var p = proyMap[k];
+        if (p && p.id && !proyUnicos[p.id]) {
+          proyUnicos[p.id] = p;
+          if (!_proyShortMap[p.id]) _proyShortMap[p.id] = _proyShortCode(p.nombre);
+          _proyColor(p.id);
+        }
+      });
+      if (legend) {
+        var lg = '<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">';
+        lg += '<button onclick="_heCalFiltro=\'\';_rrhhHECalReload()" style="padding:3px 10px;border-radius:9999px;font-size:0.75rem;font-weight:' + (!_heCalFiltro ? '700' : '400') + ';border:1px solid ' + (!_heCalFiltro ? '#555' : '#ccc') + ';background:' + (!_heCalFiltro ? '#f1f1f1' : 'transparent') + ';cursor:pointer;">Todos</button>';
+        Object.keys(proyUnicos).forEach(function(pid) {
+          var p = proyUnicos[pid]; var c = _proyColor(parseInt(pid)); var sc = _proyShortMap[pid] || "???";
+          var active = _heCalFiltro == pid;
+          lg += '<button onclick="_heCalFiltro=\'' + pid + '\';_rrhhHECalReload()" style="padding:3px 10px;border-radius:9999px;font-size:0.75rem;font-weight:500;background:' + c.bg + ';color:' + c.text + ';border:' + (active ? '2px solid ' + c.border : '1px solid ' + c.border + '40') + ';cursor:pointer;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + c.border + ';margin-right:4px;vertical-align:middle;"></span>' + sc + ' ' + (p.nombre||"").substring(0,18) + '</button>';
+        });
+        lg += '</div>'; legend.innerHTML = lg;
+      }
+
+      if (_heCalFiltro) {
+        emps = emps.filter(function(emp) {
+          for (var i = 0; i < nDias; i++) { var p = proyMap[emp.id+"_"+diasArr[i]]; if (p && String(p.id)===String(_heCalFiltro)) return true; } return false;
+        });
+      }
+      if (!emps.length) { grid.innerHTML = '<p style="padding:1rem;color:var(--text-secondary);">Sin empleados</p>'; return; }
+
+      var dayInfos = diasArr.map(function(fecha) {
+        var dt = new Date(fecha+"T12:00:00"); var dow = dt.getDay();
+        var fest = _RRHH_FESTIVOS.indexOf(fecha) >= 0;
+        return { fecha: fecha, num: dt.getDate(), dowLabel: _DIAS_SEMANA[dow], noLab: dow===0||dow===6||fest, fest: fest, hoy: fecha===hoyStr };
+      });
+
+      var gridCols = "180px repeat(" + nDias + ", minmax(26px, 1fr)) 80px";
+      var h = '<div style="display:grid;grid-template-columns:' + gridCols + ';min-width:' + (180+nDias*26+80) + 'px;font-size:0.72rem;">';
+
+      // Header
+      h += '<div style="position:sticky;left:0;z-index:3;background:#fff;padding:2px 6px;font-weight:700;font-size:0.72rem;display:flex;align-items:end;">Empleado</div>';
+      dayInfos.forEach(function(di) {
+        var bg = di.noLab ? "#EEECEA" : (di.hoy ? "#F0F7FF" : "#fff");
+        var hoyB = di.hoy ? "border-left:2px solid #378ADD;border-right:2px solid #378ADD;border-top:2px solid #378ADD;" : "";
+        var festDot = di.fest ? '<span style="display:block;width:5px;height:5px;border-radius:50%;background:#E24B4A;margin:0 auto 1px;"></span>' : '';
+        var numCol = di.hoy ? "color:#378ADD;font-weight:600;" : "";
+        h += '<div style="text-align:center;background:'+bg+';padding:1px 0;'+hoyB+'">'+festDot+'<div style="font-size:12px;font-weight:600;'+numCol+'">'+di.num+'</div><div style="font-size:9px;color:#aaa;">'+di.dowLabel+'</div></div>';
+      });
+      h += '<div style="padding:2px 6px;text-align:right;font-weight:700;font-size:0.72rem;display:flex;align-items:end;justify-content:end;">Total \u20ac</div>';
+
+      // Employee rows with streak blocks
+      emps.forEach(function(emp) {
+        var nombre = ((emp.nombre||"") + " " + (emp.apellidos||"")).trim();
+        // Build cells
+        var cells = [];
+        for (var i = 0; i < nDias; i++) {
+          var di = dayInfos[i]; var key = emp.id+"_"+di.fecha;
+          var proy = proyMap[key] || null; var he = heMap[key] || null;
+          cells.push({ idx: i, di: di, pid: proy ? proy.id : null, proy: proy, he: he });
+        }
+        // Streaks
+        var streaks = []; var si = 0;
+        while (si < nDias) {
+          var c = cells[si];
+          if (!c.pid) { si++; continue; }
+          var streak = { start: si, end: si, pid: c.pid, proy: c.proy, cells: [c] };
+          var sj = si + 1;
+          while (sj < nDias) { var nc = cells[sj]; if (!nc.pid || nc.pid !== streak.pid) break; streak.end = sj; streak.cells.push(nc); sj++; }
+          streaks.push(streak); si = sj;
+        }
+
+        h += '<div style="position:sticky;left:0;z-index:2;background:#fff;padding:3px 6px;font-weight:500;white-space:nowrap;font-size:0.72rem;display:flex;align-items:center;border-bottom:1px solid #f1f1f1;">'+nombre+'</div>';
+        h += '<div style="grid-column:2/'+(nDias+2)+';display:grid;grid-template-columns:repeat('+nDias+',minmax(26px,1fr));position:relative;border-bottom:1px solid #f1f1f1;">';
+
+        // Background cells
+        var total = 0;
+        for (var di_i = 0; di_i < nDias; di_i++) {
+          var di2 = dayInfos[di_i]; var bgc = di2.noLab ? "#EEECEA" : "";
+          var hoyBg = di2.hoy ? "border-left:2px solid #378ADD;border-right:2px solid #378ADD;" : "";
+          var standalone = "";
+          var hasStreak = false;
+          for (var sk = 0; sk < streaks.length; sk++) { if (di_i >= streaks[sk].start && di_i <= streaks[sk].end) { hasStreak = true; break; } }
+          if (!hasStreak && cells[di_i].he && cells[di_i].he.horas > 0) {
+            standalone = '<span style="font-size:11px;font-weight:500;color:#2C2C2A;">' + cells[di_i].he.horas + 'h</span>';
+            total += cells[di_i].he.importe || 0;
+          }
+          h += '<div style="grid-column:'+(di_i+1)+';grid-row:1;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;'+(bgc?'background:'+bgc+';':'')+hoyBg+'" onclick="_rrhhHECellClick('+emp.id+',\''+di2.fecha+'\',\''+periodo+'\',\''+nombre.replace(/'/g,"\\'")+'\')">'+standalone+'</div>';
+        }
+
+        // Streak blocks
+        streaks.forEach(function(sk) {
+          var c = _proyColor(sk.pid); var sc = _proyShortMap[sk.pid] || "???";
+          var opacity = _heCalFiltro && String(sk.pid) !== String(_heCalFiltro) ? "opacity:0.2;" : "";
+          var gcStart = sk.start + 1; var gcEnd = sk.end + 2;
+          var icons = ''; var skTotal = 0; var skHoras = 0;
+          sk.cells.forEach(function(sc2) {
+            var horas = sc2.he ? sc2.he.horas : 0;
+            var imp = sc2.he ? (sc2.he.importe || 0) : 0;
+            total += imp; skTotal += imp; skHoras += horas;
+            var icon = "";
+            if (horas > 0) {
+              icon = '<span style="font-size:11px;font-weight:500;color:#2C2C2A;">' + horas + 'h</span>';
+            } else {
+              icon = '<span style="font-size:11px;color:#B4B2A9;">\u2013</span>';
+            }
+            icons += '<span style="flex:1;text-align:center;cursor:pointer;min-height:16px;display:flex;align-items:center;justify-content:center;" onclick="event.stopPropagation();_rrhhHECellClick('+emp.id+',\''+sc2.di.fecha+'\',\''+periodo+'\',\''+nombre.replace(/'/g,"\\'")+'\')">' + icon + '</span>';
+          });
+          var pNombre = sk.proy ? (sk.proy.nombre||"") : "";
+          var rangeLabel = sk.cells[0].di.num + (sk.cells.length > 1 ? " - " + sk.cells[sk.cells.length-1].di.num : "");
+          var ttip = pNombre + " \u00b7 " + rangeLabel + " \u00b7 " + skHoras + "h = " + skTotal + " \u20ac";
+          h += '<div style="grid-column:'+gcStart+'/'+gcEnd+';grid-row:1;display:flex;flex-direction:column;background:'+c.bg+';border-left:3px solid '+c.border+';border-radius:4px;margin:2px 1px;padding:1px 0;z-index:1;overflow:hidden;'+opacity+'" title="'+ttip.replace(/"/g,'&quot;')+'">' +
+            '<div style="font-size:10px;font-weight:500;color:'+c.text+';text-align:center;line-height:1.2;white-space:nowrap;">'+sc+'</div>' +
+            '<div style="display:flex;align-items:center;flex:1;width:100%;">'+icons+'</div></div>';
+        });
+
+        h += '</div>'; // end sub-grid
+        h += '<div style="padding:3px 6px;text-align:right;font-weight:600;font-size:0.75rem;display:flex;align-items:center;justify-content:end;border-bottom:1px solid #f1f1f1;">'+(total > 0 ? fmtEur(total) : '\u2014')+'</div>';
+      });
+
+      // Totals row
+      h += '<div style="position:sticky;left:0;z-index:2;background:#fff;padding:3px 6px;font-weight:700;font-size:0.72rem;display:flex;align-items:center;border-top:2px solid #E5E5E5;">Total horas</div>';
+      var grandTotal = 0;
+      for (var pj = 0; pj < nDias; pj++) {
+        var pdi = dayInfos[pj]; var dayH = 0;
+        emps.forEach(function(emp) { var he = heMap[emp.id+"_"+pdi.fecha]; if (he && he.horas > 0) dayH += he.horas; });
+        grandTotal += dayH * precioHora;
+        h += '<div style="text-align:center;font-weight:600;font-size:0.75rem;display:flex;align-items:center;justify-content:center;border-top:2px solid #E5E5E5;'+(pdi.noLab?'background:#EEECEA;':'')+'">'+(dayH > 0 ? dayH+'h' : '')+'</div>';
+      }
+      h += '<div style="padding:3px 6px;text-align:right;font-weight:700;font-size:0.75rem;display:flex;align-items:center;justify-content:end;border-top:2px solid #E5E5E5;">'+fmtEur(grandTotal)+'</div>';
+
+      h += '</div>';
+      grid.innerHTML = h;
+    })
+    .catch(function(err) { grid.innerHTML = '<p style="color:#dc3545;">Error: '+err.message+'</p>'; });
+}
+
+function _rrhhHECellClick(empId, fecha, periodo, empNombre) {
+  var old = document.getElementById("rrhh-he-popup");
+  if (old) old.remove();
+  var popup = document.createElement("div");
+  popup.id = "rrhh-he-popup";
+  popup.style.cssText = "position:fixed;z-index:1000;background:#fff;border:1px solid var(--color-border,#e2e8f0);border-radius:8px;padding:12px;box-shadow:0 4px 12px rgba(0,0,0,.15);min-width:240px;font-size:13px;top:50%;left:50%;transform:translate(-50%,-50%);";
+  var html = '<div style="font-weight:600;margin-bottom:2px;font-size:12px;">\u23f1 Horas extras</div>' +
+    '<div style="font-size:11px;color:#888;margin-bottom:8px;">' + empNombre + ' \u00b7 ' + fecha + '</div>' +
+    '<div style="margin-bottom:6px;"><label style="font-size:11px;font-weight:600;">N\u00famero de horas:</label><br>' +
+    '<input type="number" id="rrhh-he-input" step="0.5" min="0" max="24" style="width:100%;padding:6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:14px;margin-top:4px;" autofocus></div>' +
+    '<div id="rrhh-he-calc" style="font-size:11px;color:#666;margin-bottom:6px;"></div>' +
+    '<div style="margin-bottom:6px;"><label style="font-size:11px;font-weight:600;">Notas:</label><br>' +
+    '<input type="text" id="rrhh-he-notas" placeholder="Opcional" style="width:100%;padding:4px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:12px;margin-top:2px;"></div>' +
+    '<div style="display:flex;gap:6px;margin-top:8px;">' +
+    '<button onclick="_rrhhHEGuardar('+empId+',\''+fecha+'\',\''+periodo+'\')" style="flex:1;padding:6px;background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;font-size:12px;">Guardar</button>' +
+    '<button onclick="_rrhhHEEliminar('+empId+',\''+fecha+'\',\''+periodo+'\')" style="padding:6px 10px;background:#FEF2F2;color:#dc2626;border:1px solid #FCA5A5;border-radius:5px;cursor:pointer;font-size:12px;">Eliminar</button>' +
+    '<button onclick="document.getElementById(\'rrhh-he-popup\').remove()" style="padding:6px 10px;background:#f1f1f1;border:none;border-radius:5px;cursor:pointer;font-size:12px;">Cancelar</button></div>' +
+    '<div style="border-top:1px solid #e5e7eb;margin-top:8px;padding-top:6px;"><div style="font-size:10px;color:#888;font-weight:600;margin-bottom:2px;">SIN HORAS EXTRAS (con motivo):</div>';
+  ["Vacaciones","Enfermedad","Baja","D\u00eda normal","Otro"].forEach(function(motivo) {
+    html += '<button onclick="_rrhhHESinHE('+empId+',\''+fecha+'\',\''+periodo+'\',\''+motivo+'\')" style="display:flex;align-items:center;gap:6px;width:100%;padding:3px 8px;margin-bottom:1px;border:none;border-radius:4px;cursor:pointer;background:transparent;font-size:11px;text-align:left;color:#666;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'transparent\'"><span style="font-size:10px;color:#aaa;">\u2715</span> '+motivo+'</button>';
+  });
+  html += '</div>';
+  popup.innerHTML = html;
+  document.body.appendChild(popup);
+  var inp = document.getElementById("rrhh-he-input");
+  var calc = document.getElementById("rrhh-he-calc");
+  function updateCalc() { var h = parseFloat(inp.value)||0; calc.textContent = h > 0 ? h+"h \u00d7 15\u20ac = "+(h*15).toFixed(0)+"\u20ac" : ""; }
+  inp.addEventListener("input", updateCalc);
+  inp.focus();
+  setTimeout(function() { document.addEventListener("click", function _cl(e) { if (!popup.contains(e.target)) { popup.remove(); document.removeEventListener("click", _cl); } }); }, 10);
+}
+
+function _rrhhHEGuardar(empId, fecha, periodo) {
+  var horas = parseFloat((document.getElementById("rrhh-he-input")||{}).value)||0;
+  var notas = (document.getElementById("rrhh-he-notas")||{}).value||"";
+  var popup = document.getElementById("rrhh-he-popup"); if (popup) popup.remove();
+  if (horas <= 0) return;
+  fetch("/api/rrhh/horas-extras/dia", { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({empleado_id:empId, fecha:fecha, horas:horas, notas:notas})
+  }).then(function(r) { if (!r.ok) console.error("Error HE:",r.status); _rrhhHECalLoad(periodo); }).catch(function(err) { console.error("Error HE:",err); });
+}
+
+function _rrhhHEEliminar(empId, fecha, periodo) {
+  var popup = document.getElementById("rrhh-he-popup"); if (popup) popup.remove();
+  fetch("/api/rrhh/horas-extras/dia", { method:"DELETE", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({empleado_id:empId, fecha:fecha})
+  }).then(function() { _rrhhHECalLoad(periodo); });
+}
+
+function _rrhhHESinHE(empId, fecha, periodo, motivo) {
+  var popup = document.getElementById("rrhh-he-popup"); if (popup) popup.remove();
+  fetch("/api/rrhh/horas-extras/dia", { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({empleado_id:empId, fecha:fecha, horas:0, notas:"Sin HE: "+motivo})
+  }).then(function() { _rrhhHECalLoad(periodo); });
+}
+
+// ── HE Resumen ──
+
+function _rrhhHEResumen(body) {
+  var now = new Date(); var anio = now.getFullYear(), mes = now.getMonth() + 1;
+  body.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">' +
+    '<label style="font-size:0.82rem;font-weight:600;">A\u00f1o:</label>' +
+    '<select id="rrhh-he-res-anio" style="width:75px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhHEResLoad()">' +
+    '<option value="2025"' + (anio===2025?' selected':'') + '>2025</option><option value="2026"' + (anio===2026?' selected':'') + '>2026</option><option value="2027">2027</option></select>' +
+    '<label style="font-size:0.82rem;font-weight:600;">Mes:</label>' +
+    '<select id="rrhh-he-res-mes" style="width:115px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhHEResLoad()">' +
+    _MESES_NOMBRE.map(function(n,i){return '<option value="'+(i+1)+'"'+(i+1===mes?' selected':'')+'>'+n+'</option>';}).join('') +
+    '</select></div><div id="rrhh-he-res-body">Cargando...</div>';
+  _rrhhHEResLoad();
+}
+
+function _rrhhHEResLoad() {
+  var selA = document.getElementById("rrhh-he-res-anio");
+  var selM = document.getElementById("rrhh-he-res-mes");
+  if (!selA || !selM) return;
+  var body = document.getElementById("rrhh-he-res-body");
+  body.innerHTML = "Cargando...";
+  fetch("/api/rrhh/horas-extras/resumen/" + selA.value + "/" + selM.value)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var lin = d.lineas || []; var tot = d.totales || {};
+      var h = '<div class="card" style="overflow-x:auto;padding:0;"><table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+      h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:6px 8px;text-align:left;">Empleado</th><th style="padding:6px 4px;text-align:right;">Horas mes</th><th style="padding:6px 4px;text-align:right;">Importe mes</th><th style="padding:6px 4px;text-align:right;">Acumulado a\u00f1o</th><th style="padding:6px 4px;text-align:right;">D\u00edas con HE</th></tr></thead><tbody>';
+      lin.forEach(function(l) {
+        h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);"><td style="padding:5px 8px;font-weight:500;">' + l.nombre + '</td><td style="padding:5px 4px;text-align:right;">' + l.horas_mes + 'h</td><td style="padding:5px 4px;text-align:right;">' + fmtEur(l.importe_mes) + '</td><td style="padding:5px 4px;text-align:right;">' + fmtEur(l.acumulado_anio) + '</td><td style="padding:5px 4px;text-align:right;">' + l.dias_con_he + '</td></tr>';
+      });
+      if (!lin.length) h += '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#888;">Sin horas extras este mes</td></tr>';
+      h += '</tbody><tfoot><tr style="font-weight:700;background:var(--bg-secondary,#f8f9fa);"><td style="padding:6px 8px;">TOTALES</td><td style="padding:6px 4px;text-align:right;">' + (tot.horas||0) + 'h</td><td style="padding:6px 4px;text-align:right;">' + fmtEur(tot.importe||0) + '</td><td style="padding:6px 4px;text-align:right;">' + fmtEur(tot.acumulado||0) + '</td><td style="padding:6px 4px;text-align:right;">' + (tot.dias||0) + '</td></tr></tfoot></table></div>';
+      body.innerHTML = h;
+    });
+}
+
+// ── HE Por empleado ──
+
+function _rrhhHEEmpleado(body) {
+  var now = new Date(); var anio = now.getFullYear();
+  body.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">' +
+    '<label style="font-size:0.82rem;font-weight:600;">Empleado:</label>' +
+    '<select id="rrhh-he-emp-sel" style="max-width:250px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhHEEmpLoad()"><option value="">Selecciona...</option></select>' +
+    '<label style="font-size:0.82rem;font-weight:600;margin-left:8px;">A\u00f1o:</label>' +
+    '<select id="rrhh-he-emp-anio" style="width:75px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhHEEmpLoad()">' +
+    '<option value="2025"' + (anio===2025?' selected':'') + '>2025</option><option value="2026"' + (anio===2026?' selected':'') + '>2026</option><option value="2027">2027</option></select>' +
+    '</div><div id="rrhh-he-emp-body"></div>';
+  var cache = _rrhhEmpleadosCache || [];
+  if (cache.length) {
+    var sel = document.getElementById("rrhh-he-emp-sel");
+    cache.forEach(function(e) { if (e.estado === "activo") sel.innerHTML += '<option value="' + e.id + '">' + e.nombre + ' ' + (e.apellidos||'') + '</option>'; });
+  } else {
+    fetch("/api/rrhh/empleados").then(function(r){return r.json();}).then(function(d){
+      var sel = document.getElementById("rrhh-he-emp-sel"); if (!sel) return;
+      (d.empleados||[]).forEach(function(e){ if (e.estado==="activo") sel.innerHTML += '<option value="'+e.id+'">'+e.nombre+' '+(e.apellidos||'')+'</option>'; });
+    });
+  }
+}
+
+function _rrhhHEEmpLoad() {
+  var sel = document.getElementById("rrhh-he-emp-sel");
+  var anioSel = document.getElementById("rrhh-he-emp-anio");
+  var body = document.getElementById("rrhh-he-emp-body");
+  if (!sel || !anioSel || !body || !sel.value) { if (body) body.innerHTML = ''; return; }
+  body.innerHTML = 'Cargando...';
+  fetch("/api/rrhh/horas-extras/empleado/" + sel.value + "/" + anioSel.value)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var h = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px;">';
+      h += _rrhhKpiCard("Horas totales", d.total_horas + "h", " tes-card-blue");
+      h += _rrhhKpiCard("Importe total", fmtEurFull(d.total_importe), " tes-card-green");
+      h += _rrhhKpiCard("Media/mes", d.media_mes + "h", "");
+      h += _rrhhKpiCard("Mejor mes", d.mejor_mes || "\u2014", "");
+      h += '</div>';
+      // Monthly chart
+      h += '<div class="card" style="padding:14px;margin-bottom:14px;"><h4 style="margin:0 0 8px;font-size:0.88rem;font-weight:700;">Horas extras por mes</h4><div style="position:relative;height:200px;"><canvas id="rrhh-he-chart-mensual"></canvas></div></div>';
+      // Detail table
+      h += '<div class="card" style="overflow-x:auto;padding:0;"><table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+      h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:6px 8px;">Fecha</th><th style="padding:6px 4px;">D\u00eda</th><th style="padding:6px 4px;text-align:right;">Horas</th><th style="padding:6px 4px;text-align:right;">Importe</th><th style="padding:6px 4px;">Notas</th><th style="padding:6px 4px;text-align:center;">Acc.</th></tr></thead><tbody>';
+      (d.dias || []).forEach(function(v) {
+        h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);"><td style="padding:5px 8px;">' + v.fecha + '</td><td style="padding:5px 4px;">' + (v.dia_semana||'') + '</td><td style="padding:5px 4px;text-align:right;font-weight:500;">' + v.horas + 'h</td><td style="padding:5px 4px;text-align:right;">' + fmtEur(v.importe) + '</td><td style="padding:5px 4px;font-size:0.78rem;">' + (v.notas||'\u2014') + '</td><td style="padding:5px 4px;text-align:center;"><button onclick="_rrhhHEEliminar(' + d.empleado_id + ',\'' + v.fecha + '\',\'' + d.anio + '-01\');_rrhhHEEmpLoad()" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:0.85rem;">\u2716</button></td></tr>';
+      });
+      if (!(d.dias||[]).length) h += '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#888;">Sin horas extras</td></tr>';
+      h += '</tbody></table></div>';
+      body.innerHTML = h;
+      // Render chart
+      var canvas = document.getElementById("rrhh-he-chart-mensual");
+      if (canvas && d.horas_por_mes) {
+        var mLabels = _MESES_NOMBRE.map(function(n){return n.substring(0,3);});
+        if (window._rrhhHEChart) { try { window._rrhhHEChart.destroy(); } catch(e){} }
+        window._rrhhHEChart = new Chart(canvas.getContext("2d"), {
+          type: "bar",
+          data: { labels: mLabels, datasets: [{ label: "Horas", data: d.horas_por_mes, backgroundColor: "#3B82F680", borderColor: "#3B82F6", borderWidth: 1, borderRadius: 4 }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, title: { display: true, text: "Horas", font: { size: 10 } } } } }
+        });
+      }
+    });
+}
+
+// ── HE Tarifas ──
+
+function _rrhhHETarifas(body) {
+  body.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h4 style="margin:0;font-size:0.95rem;">Tarifas de horas extras</h4><button onclick="_rrhhHENuevaTarifa()" class="btn-small" style="background:#2563eb;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:0.82rem;cursor:pointer;">+ Nueva tarifa</button></div><div id="rrhh-he-tarifas-body">Cargando...</div>';
+  _rrhhHETarifasLoad();
+}
+
+function _rrhhHETarifasLoad() {
+  var body = document.getElementById("rrhh-he-tarifas-body");
+  if (!body) return;
+  fetch("/api/rrhh/horas-extras/tarifas").then(function(r){return r.json();}).then(function(d) {
+    var tarifas = d.tarifas || [];
+    var h = '<div class="card" style="overflow-x:auto;padding:0;"><table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+    h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:6px 8px;">Precio/hora</th><th style="padding:6px 4px;">Desde</th><th style="padding:6px 4px;">Hasta</th><th style="padding:6px 4px;">Notas</th></tr></thead><tbody>';
+    tarifas.forEach(function(t) {
+      var activa = !t.fecha_vigencia_hasta;
+      h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);' + (activa ? 'background:#F0FDF4;' : '') + '"><td style="padding:5px 8px;font-weight:600;">' + t.precio_hora + ' \u20ac/h' + (activa ? ' <span style="color:#16a34a;font-size:0.75rem;">(vigente)</span>' : '') + '</td><td style="padding:5px 4px;">' + (t.fecha_vigencia_desde||'\u2014') + '</td><td style="padding:5px 4px;">' + (t.fecha_vigencia_hasta||'\u2014') + '</td><td style="padding:5px 4px;font-size:0.78rem;">' + (t.notas||'') + '</td></tr>';
+    });
+    if (!tarifas.length) h += '<tr><td colspan="4" style="text-align:center;padding:2rem;color:#888;">Sin tarifas</td></tr>';
+    h += '</tbody></table></div>';
+    body.innerHTML = h;
+  });
+}
+
+function _rrhhHENuevaTarifa() {
+  var precio = prompt("Nuevo precio por hora extra (\u20ac):", "15");
+  if (!precio) return;
+  var desde = prompt("Vigente desde (YYYY-MM-DD):", new Date().toISOString().slice(0,10));
+  if (!desde) return;
+  var notas = prompt("Notas (opcional):", "") || "";
+  fetch("/api/rrhh/horas-extras/tarifas", {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ precio_hora: parseFloat(precio), fecha_vigencia_desde: desde, notas: notas })
+  }).then(function() { _rrhhHETarifasLoad(); });
+}
+
+// ===============================================================================
 // ==  5b. VACACIONES                                                           ==
 // ===============================================================================
 
@@ -1711,17 +2145,9 @@ function _rrhhDietasCalendario(body) {
     '<label style="font-size:0.82rem;font-weight:600;">Mes:</label>' +
     '<select id="rrhh-dietas-cal-mesn" style="width:115px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhDietasCalReload()">' +
     _MESES_NOMBRE.map(function(n,i){return '<option value="'+(i+1)+'"'+(i+1===mes?' selected':'')+'>'+n+'</option>';}).join('') +
-    '</select>' +
-    '<label style="font-size:0.82rem;font-weight:600;margin-left:8px;">Proyecto:</label>' +
-    '<select id="rrhh-dietas-cal-proy" style="max-width:200px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhDietasCalReload()">' +
-    '<option value="">Todos</option></select>' +
-    '</div><div id="rrhh-dietas-cal-grid" style="overflow-x:auto;"><p style="color:var(--text-secondary);padding:1rem;">Cargando...</p></div>';
-  // Load projects
-  fetch("/api/proyectos?estado=vivo").then(function(r){return r.json();}).then(function(d){
-    var sel = document.getElementById("rrhh-dietas-cal-proy");
-    if (!sel) return;
-    (d.proyectos || []).forEach(function(p){ sel.innerHTML += '<option value="'+p.id+'">'+((p.nombre||p.codigo||'').substring(0,30))+'</option>'; });
-  }).catch(function(){});
+    '</select></div>' +
+    '<div id="rrhh-dietas-cal-legend" style="margin-bottom:8px;"></div>' +
+    '<div id="rrhh-dietas-cal-grid" style="overflow-x:auto;"><p style="color:var(--text-secondary);padding:1rem;">Cargando...</p></div>';
   _rrhhDietasCalReload();
 }
 
@@ -1733,6 +2159,38 @@ var _RRHH_FESTIVOS = [
 ];
 var _DIAS_SEMANA = ["D","L","M","X","J","V","S"];
 
+// ── Dietas calendar project colors & short codes ──
+
+var _PROY_COLORES = [
+  {bg:'#F0F5FB',text:'#042C53',border:'#85B7EB'},
+  {bg:'#EDF5F0',text:'#04342C',border:'#5DCAA5'},
+  {bg:'#F1F0F8',text:'#26215C',border:'#AFA9EC'},
+  {bg:'#F8F1EE',text:'#4A1B0C',border:'#F0997B'},
+  {bg:'#F8EFF3',text:'#4B1528',border:'#ED93B1'},
+  {bg:'#F8F3EA',text:'#412402',border:'#EF9F27'},
+  {bg:'#F3F2EF',text:'#2C2C2A',border:'#B4B2A9'},
+];
+var _proyColorMap = {}; // pid -> color index
+var _proyShortMap = {}; // pid -> 3-letter code
+
+function _proyShortCode(nombre) {
+  if (!nombre) return "???";
+  var skip = ["pv","parque","planta","la","el","los","las","de","del","y","i","ii","iii","iv","v","solar","fotovoltaica","fotovoltaico"];
+  var words = nombre.replace(/['"()]/g, "").split(/[\s\-_]+/).filter(function(w) { return w.length > 0 && skip.indexOf(w.toLowerCase()) < 0; });
+  var best = words.length ? words[words.length > 1 ? 1 : 0] : nombre;
+  return best.substring(0, 3).toUpperCase();
+}
+
+function _proyColor(pid) {
+  if (_proyColorMap[pid] == null) {
+    var idx = Object.keys(_proyColorMap).length % _PROY_COLORES.length;
+    _proyColorMap[pid] = idx;
+  }
+  return _PROY_COLORES[_proyColorMap[pid]];
+}
+
+var _dietasCalFiltro = ""; // proyecto_id or "" for all
+
 function _rrhhDietasCalReload() {
   var a = document.getElementById("rrhh-dietas-cal-anio");
   var m = document.getElementById("rrhh-dietas-cal-mesn");
@@ -1743,8 +2201,8 @@ function _rrhhDietasCalReload() {
 
 function _rrhhDietasCalLoad(periodo) {
   var grid = document.getElementById("rrhh-dietas-cal-grid");
+  var legend = document.getElementById("rrhh-dietas-cal-legend");
   if (!grid) return;
-  var proyFiltro = (document.getElementById("rrhh-dietas-cal-proy") || {}).value || "";
   grid.innerHTML = '<p style="color:var(--text-secondary);padding:1rem;">Cargando...</p>';
   fetch("/api/rrhh/dietas/calendario/" + periodo)
     .then(function (r) { return r.json(); })
@@ -1752,92 +2210,229 @@ function _rrhhDietasCalLoad(periodo) {
       var empleados = d.empleados || [];
       var diasArr = d.dias || [];
       var dietasMap = d.dietas || {};
-      var proyMapCal = d.proyectos || {};
+      var proyMap = d.proyectos || {};
       _rrhhDietasFuncionesMap = d.funciones || {};
+      var hoyStr = new Date().toISOString().slice(0, 10);
+      var nDias = diasArr.length;
 
-      // Filter by project if selected
-      if (proyFiltro) {
-        var empIdsConProy = {};
-        Object.keys(proyMapCal).forEach(function(k) {
-          // k = "empId_fecha", value = "CODIGO"
-          // Need to check if this project matches. But proyectos dict has codigo as value.
-          // We filter by checking if ANY day for the employee has this project assigned
-          // For now, filter by checking proyecto_asignaciones (the proyMapCal has empId_fecha -> codigo)
+      // Collect unique projects
+      var proyUnicos = {};
+      Object.keys(proyMap).forEach(function(k) {
+        var p = proyMap[k];
+        if (p && p.id && !proyUnicos[p.id]) {
+          proyUnicos[p.id] = p;
+          if (!_proyShortMap[p.id]) _proyShortMap[p.id] = _proyShortCode(p.nombre);
+          _proyColor(p.id);
+        }
+      });
+
+      // Legend pills
+      if (legend) {
+        var lg = '<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">';
+        lg += '<button onclick="_dietasCalFiltro=\'\';_rrhhDietasCalReload()" style="padding:3px 10px;border-radius:9999px;font-size:0.75rem;font-weight:' + (!_dietasCalFiltro ? '700' : '400') + ';border:1px solid ' + (!_dietasCalFiltro ? '#555' : '#ccc') + ';background:' + (!_dietasCalFiltro ? '#f1f1f1' : 'transparent') + ';cursor:pointer;">Todos</button>';
+        Object.keys(proyUnicos).forEach(function(pid) {
+          var p = proyUnicos[pid]; var c = _proyColor(parseInt(pid)); var sc = _proyShortMap[pid] || "???";
+          var active = _dietasCalFiltro == pid;
+          lg += '<button onclick="_dietasCalFiltro=\'' + pid + '\';_rrhhDietasCalReload()" style="padding:3px 10px;border-radius:9999px;font-size:0.75rem;font-weight:500;background:' + c.bg + ';color:' + c.text + ';border:' + (active ? '2px solid ' + c.border : '1px solid ' + c.border + '40') + ';cursor:pointer;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + c.border + ';margin-right:4px;vertical-align:middle;"></span>' + sc + ' ' + (p.nombre || "").substring(0, 18) + '</button>';
         });
-        // Simpler: only show employees that have at least one assignment to this project
-        empleados = empleados.filter(function(emp) {
-          for (var i = 0; i < diasArr.length; i++) {
-            var k = emp.id + "_" + diasArr[i];
-            if (proyMapCal[k]) return true;
-          }
-          return false;
-        });
+        lg += '</div>'; legend.innerHTML = lg;
       }
 
-      if (!empleados.length) { grid.innerHTML = '<p style="padding:1rem;color:var(--text-secondary);">Sin empleados' + (proyFiltro ? ' asignados a este proyecto' : ' activos') + '</p>'; return; }
+      // Filter
+      if (_dietasCalFiltro) {
+        empleados = empleados.filter(function(emp) {
+          for (var i = 0; i < nDias; i++) {
+            var p = proyMap[emp.id + "_" + diasArr[i]];
+            if (p && String(p.id) === String(_dietasCalFiltro)) return true;
+          } return false;
+        });
+      }
+      if (!empleados.length) { grid.innerHTML = '<p style="padding:1rem;color:var(--text-secondary);">Sin empleados' + (_dietasCalFiltro ? ' en este proyecto' : ' activos') + '</p>'; return; }
 
-      // Build day info
-      var dayInfos = diasArr.map(function (fecha) {
-        var dt = new Date(fecha + "T12:00:00");
-        var dow = dt.getDay(); // 0=Sun
-        var esFestivo = _RRHH_FESTIVOS.indexOf(fecha) >= 0;
-        var esFinSemana = dow === 0 || dow === 6;
-        return { fecha: fecha, num: dt.getDate(), dowLabel: _DIAS_SEMANA[dow], noLab: esFinSemana || esFestivo };
+      // Day info
+      var dayInfos = diasArr.map(function(fecha) {
+        var dt = new Date(fecha + "T12:00:00"); var dow = dt.getDay();
+        var fest = _RRHH_FESTIVOS.indexOf(fecha) >= 0;
+        return { fecha: fecha, num: dt.getDate(), dow: dow, dowLabel: _DIAS_SEMANA[dow], noLab: dow===0||dow===6||fest, fest: fest, hoy: fecha===hoyStr };
       });
 
-      var colorMap = { nacional_completa: "#3B82F6", nacional_media: "#93C5FD", internacional_completa: "#F59E0B", internacional_media: "#FDE68A", NC: "#3B82F6", NM: "#93C5FD", IC: "#F59E0B", IM: "#FDE68A" };
-      var abrevMap = { nacional_completa: "NC", nacional_media: "NM", internacional_completa: "IC", internacional_media: "IM", NC: "NC", NM: "NM", IC: "IC", IM: "IM" };
+      var dietaLabels = {nacional_completa:"Completa",nacional_media:"Media",internacional_completa:"Int. compl.",internacional_media:"Int. media"};
+      var gridCols = "180px repeat(" + nDias + ", minmax(26px, 1fr)) 80px";
 
-      var h = '<div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:0.72rem;">';
-      // Header row 1: day of week
-      h += '<tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:2px 6px;min-width:120px;position:sticky;left:0;background:var(--bg-secondary,#f8f9fa);z-index:2;"></th>';
-      dayInfos.forEach(function (di) {
-        var bg = di.noLab ? "background:#E5E7EB;" : "";
-        h += '<th style="padding:2px 1px;text-align:center;min-width:26px;font-weight:400;font-size:0.65rem;color:#888;' + bg + '">' + di.dowLabel + '</th>';
+      var h = '<div style="overflow-x:auto;"><div style="display:grid;grid-template-columns:' + gridCols + ';min-width:' + (180 + nDias * 26 + 80) + 'px;font-size:0.72rem;">';
+
+      // Header row 1: day numbers
+      h += '<div style="position:sticky;left:0;z-index:3;background:#fff;padding:2px 6px;font-weight:700;font-size:0.72rem;display:flex;align-items:end;">Empleado</div>';
+      dayInfos.forEach(function(di) {
+        var bg = di.noLab ? "#EEECEA" : (di.hoy ? "#F0F7FF" : "#fff");
+        var hoyB = di.hoy ? "border-left:2px solid #378ADD;border-right:2px solid #378ADD;border-top:2px solid #378ADD;" : "";
+        var festDot = di.fest ? '<span style="display:block;width:5px;height:5px;border-radius:50%;background:#E24B4A;margin:0 auto 1px;"></span>' : '';
+        var numCol = di.hoy ? "color:#378ADD;font-weight:600;" : "";
+        h += '<div style="text-align:center;background:' + bg + ';padding:1px 0;' + hoyB + '">' + festDot + '<div style="font-size:12px;font-weight:600;' + numCol + '">' + di.num + '</div><div style="font-size:9px;color:#aaa;">' + di.dowLabel + '</div></div>';
       });
-      h += '<th style="padding:2px 4px;"></th></tr>';
-      // Header row 2: day number
-      h += '<tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:2px 6px;font-weight:700;position:sticky;left:0;background:var(--bg-secondary,#f8f9fa);z-index:2;">Empleado</th>';
-      dayInfos.forEach(function (di) {
-        var bg = di.noLab ? "background:#E5E7EB;" : "";
-        h += '<th style="padding:2px 1px;text-align:center;font-weight:600;' + bg + '">' + di.num + '</th>';
-      });
-      h += '<th style="padding:2px 4px;text-align:right;font-weight:700;">Total</th></tr>';
+      h += '<div style="padding:2px 6px;text-align:right;font-weight:700;font-size:0.72rem;display:flex;align-items:end;justify-content:end;">Total \u20ac</div>';
 
       // Employee rows
-      var proyMap = d.proyectos || {}; // "empId_fecha" -> "CODIGO" or object
-      empleados.forEach(function (emp) {
-        var nombre = (emp.nombre || "") + " " + (emp.apellidos || "");
-        h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">';
-        h += '<td style="padding:3px 6px;font-weight:500;white-space:nowrap;position:sticky;left:0;background:#fff;z-index:1;font-size:0.72rem;">' + nombre.trim() + '</td>';
-        var total = 0;
-        dayInfos.forEach(function (di) {
+      empleados.forEach(function(emp) {
+        var nombre = ((emp.nombre || "") + " " + (emp.apellidos || "")).trim();
+
+        // Build streak data for this employee
+        var cells = []; // array of {pid, proy, dieta, di, idx}
+        for (var i = 0; i < nDias; i++) {
+          var di = dayInfos[i];
           var key = emp.id + "_" + di.fecha;
-          var dieta = dietasMap[key];
-          var proy = proyMap[key]; // string (codigo) or null
-          var proyCodigo = typeof proy === "string" ? proy : (proy && proy.codigo ? proy.codigo : "");
-          var tipo = dieta ? dieta.tipo : "";
-          var abrev = abrevMap[tipo] || "";
-          var bg = colorMap[tipo] || "";
-          var noLabBg = di.noLab ? "#E5E7EB" : "";
-          var tieneProyecto = !!proyCodigo;
-          var sinDieta = !tipo;
-          // Alert: proyecto asignado pero sin dieta
-          var alertBorder = (tieneProyecto && sinDieta && !di.noLab) ? "border:2px solid #F59E0B;" : "";
-          var cellBg = bg || noLabBg;
-          if (tieneProyecto && sinDieta && !di.noLab && !cellBg) cellBg = "#FFFBEB"; // yellow hint
-          var style = "padding:0px 1px;text-align:center;cursor:pointer;min-width:28px;vertical-align:top;line-height:1.1;" + (cellBg ? "background:" + cellBg + ";" : "") + alertBorder + (bg ? "color:#fff;font-weight:600;" : "");
-          var proyLabel = tieneProyecto ? '<div style="font-size:7px;color:#888;overflow:hidden;white-space:nowrap;max-width:28px;">' + proyCodigo.substring(0, 4) + '</div>' : '';
-          var dietaLabel = abrev ? '<div style="font-size:9px;font-weight:700;' + (bg ? 'color:#fff;' : '') + '">' + abrev + '</div>' : (tieneProyecto && !di.noLab ? '<div style="font-size:8px;color:#F59E0B;">\u26a0</div>' : (di.noLab ? '' : ''));
-          var title = (proyCodigo ? 'Proy: ' + proyCodigo + ' | ' : '') + (tipo || 'Sin dieta');
+          var proy = proyMap[key] || null;
+          var dieta = dietasMap[key] || null;
+          cells.push({ idx: i, di: di, pid: proy ? proy.id : null, proy: proy, dieta: dieta });
+        }
+
+        // Detect streaks: consecutive days with same project_id (including weekends if assigned)
+        var streaks = []; // [{start, end, pid, proy, cells:[]}]
+        var si = 0;
+        while (si < nDias) {
+          var c = cells[si];
+          if (!c.pid) { si++; continue; }
+          var streak = { start: si, end: si, pid: c.pid, proy: c.proy, cells: [c] };
+          var sj = si + 1;
+          while (sj < nDias) {
+            var nc = cells[sj];
+            if (!nc.pid || nc.pid !== streak.pid) break;
+            streak.end = sj;
+            streak.cells.push(nc);
+            sj++;
+          }
+          streaks.push(streak);
+          si = sj;
+        }
+
+        // Render employee row
+        // Name cell
+        h += '<div style="position:sticky;left:0;z-index:2;background:#fff;padding:3px 6px;font-weight:500;white-space:nowrap;font-size:0.72rem;display:flex;align-items:center;border-bottom:1px solid #f1f1f1;">' + nombre + '</div>';
+
+        // Day cells container — use a sub-grid row spanning all day columns
+        h += '<div style="grid-column:2/' + (nDias + 2) + ';display:grid;grid-template-columns:repeat(' + nDias + ',minmax(26px,1fr));position:relative;border-bottom:1px solid #f1f1f1;">';
+
+        // Background layer: non-working day shading + today border
+        for (var di_i = 0; di_i < nDias; di_i++) {
+          var di2 = dayInfos[di_i];
+          var bgc = di2.noLab ? "#EEECEA" : "";
+          var hoyBg = di2.hoy ? "border-left:2px solid #378ADD;border-right:2px solid #378ADD;" : "";
+          // Clickable empty cell for days without assignment
+          var hasStreak = false;
+          for (var sk = 0; sk < streaks.length; sk++) {
+            if (di_i >= streaks[sk].start && di_i <= streaks[sk].end) { hasStreak = true; break; }
+          }
+          var proyCodigo = cells[di_i].proy ? (cells[di_i].proy.codigo || "") : "";
           var proyEsc = proyCodigo.replace(/'/g, "\\'");
-          h += '<td style="' + style + '" onclick="_rrhhDietaCellClick(this,' + emp.id + ',\'' + di.fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g, "\\'") + '\',\'' + proyEsc + '\')" title="' + title + '">' + proyLabel + dietaLabel + '</td>';
-          if (dieta && dieta.importe) total += dieta.importe;
+          // Show standalone dieta (no project) in the background cell
+          var standaloneDieta = "";
+          if (!hasStreak && cells[di_i].dieta && cells[di_i].dieta.tipo) {
+            var sdTipo = cells[di_i].dieta.tipo;
+            var sdImp = cells[di_i].dieta.importe || 0;
+            if (sdTipo === "sin_dieta") {
+              standaloneDieta = '<span style="font-size:10px;color:#aaa;">\u2715</span>';
+            } else if (sdImp > 0) {
+              standaloneDieta = '<span style="font-size:11px;font-weight:500;color:#2C2C2A;">' + Math.round(sdImp) + '</span>';
+            } else {
+              standaloneDieta = '<span style="font-size:11px;color:#0F6E56;">\u2713</span>';
+            }
+            total += sdImp;
+            if (sdTipo.indexOf("completa") >= 0) completas++;
+            if (sdTipo.indexOf("media") >= 0) medias++;
+          }
+          h += '<div style="grid-column:' + (di_i+1) + ';grid-row:1;height:40px;display:flex;align-items:center;justify-content:center;' + (bgc ? 'background:'+bgc+';' : '') + hoyBg + 'cursor:pointer;" ' +
+            'onclick="_rrhhDietaCellClick(this,' + emp.id + ',\'' + dayInfos[di_i].fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g,"\\'") + '\',\'' + proyEsc + '\')"' +
+            '>' + standaloneDieta + '</div>';
+        }
+
+        // Streak blocks layer (on top)
+        var total = 0; var completas = 0; var medias = 0; var proySet = {};
+        streaks.forEach(function(sk) {
+          var c = _proyColor(sk.pid);
+          var sc = _proyShortMap[sk.pid] || "???";
+          var opacity = _dietasCalFiltro && String(sk.pid) !== String(_dietasCalFiltro) ? "opacity:0.2;" : "";
+          var gcStart = sk.start + 1;
+          var gcEnd = sk.end + 2;
+
+          // Build diet icons row
+          var icons = '';
+          var skTotal = 0; var skComp = 0; var skMedia = 0; var skSinDieta = 0;
+          sk.cells.forEach(function(sc2) {
+            var tipo = sc2.dieta ? sc2.dieta.tipo : "";
+            var imp = sc2.dieta ? (sc2.dieta.importe || 0) : 0;
+            total += imp; skTotal += imp;
+            if (tipo && tipo.indexOf("completa") >= 0) { completas++; skComp++; }
+            if (tipo && tipo.indexOf("media") >= 0) { medias++; skMedia++; }
+            if (sc2.pid) proySet[sc2.pid] = true;
+
+            var icon = "";
+            if (tipo === "sin_dieta") {
+              icon = '<span style="font-size:10px;color:#aaa;">\u2715</span>';
+            } else if (tipo && (tipo.indexOf("completa") >= 0 || tipo.indexOf("media") >= 0)) {
+              icon = imp > 0
+                ? '<span style="font-size:11px;font-weight:500;color:#2C2C2A;">' + Math.round(imp) + '</span>'
+                : '<span style="font-size:11px;color:#0F6E56;">\u2713</span>';
+            } else { skSinDieta++; }
+            icons += '<span style="flex:1;text-align:center;cursor:pointer;min-height:16px;display:flex;align-items:center;justify-content:center;" onclick="event.stopPropagation();_rrhhDietaCellClick(this,' + emp.id + ',\'' + sc2.di.fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g,"\\'") + '\',\'' + (sc2.proy ? (sc2.proy.codigo||"").replace(/'/g,"\\'") : "") + '\')">' + icon + '</span>';
+          });
+
+          // Tooltip for entire block
+          var fn = sk.cells[0].dieta ? (sk.cells[0].dieta.funcion || "") : (_rrhhDietasFuncionesMap[emp.id + "_" + sk.cells[0].di.fecha] || "");
+          var pNombre = sk.proy ? (sk.proy.nombre || "") : "";
+          var rangeLabel = sk.cells[0].di.num + (sk.cells.length > 1 ? " - " + sk.cells[sk.cells.length-1].di.num : "");
+          var ttip = pNombre + " \u00b7 " + rangeLabel;
+          if (skSinDieta > 0) ttip += " \u00b7 \u26a0 " + skSinDieta + " d\u00eda(s) SIN dieta registrada";
+          if (skComp > 0 || skMedia > 0) ttip += " \u00b7 " + skComp + " completas + " + skMedia + " medias = " + skTotal + " \u20ac";
+          if (fn) ttip += " \u00b7 " + fn;
+
+          h += '<div style="grid-column:' + gcStart + '/' + gcEnd + ';grid-row:1;display:flex;flex-direction:column;align-items:stretch;justify-content:center;background:' + c.bg + ';border-left:3px solid ' + c.border + ';border-radius:4px;margin:2px 1px;padding:1px 2px;z-index:1;' + opacity + '" title="' + ttip.replace(/"/g,'&quot;') + '">' +
+            '<div style="font-size:10px;font-weight:500;color:' + c.text + ';text-align:center;line-height:1.2;">' + sc + '</div>' +
+            '<div style="display:flex;align-items:center;flex:1;">' + icons + '</div></div>';
         });
-        h += '<td style="padding:3px 4px;text-align:right;font-weight:600;">' + (total > 0 ? fmtEur(total) : '\u2014') + '</td>';
-        h += '</tr>';
+
+        // Also accumulate totals for days NOT in any streak but with dieta
+        for (var di3 = 0; di3 < nDias; di3++) {
+          var c3 = cells[di3];
+          if (!c3.pid && c3.dieta && c3.dieta.importe) total += c3.dieta.importe;
+        }
+
+        h += '</div>'; // end sub-grid
+
+        // Total column
+        var totalTitle = completas + " completas + " + medias + " medias \u00b7 " + Object.keys(proySet).length + " proyecto(s)";
+        h += '<div style="padding:3px 6px;text-align:right;font-weight:600;font-size:0.75rem;display:flex;align-items:center;justify-content:end;border-bottom:1px solid #f1f1f1;" title="' + totalTitle + '">' + (total > 0 ? fmtEur(total) : '\u2014') + '</div>';
       });
-      h += '</table></div>';
+
+      // ── Pendientes row ──
+      var pendientes = {};
+      for (var pi = 0; pi < nDias; pi++) {
+        var dii = dayInfos[pi];
+        if (dii.noLab) continue;
+        var cnt = 0;
+        var pendNames = [];
+        empleados.forEach(function(emp) {
+          var kk = emp.id + "_" + dii.fecha;
+          var pr = proyMap[kk];
+          var dt = dietasMap[kk];
+          if (pr && pr.id && (!dt || !dt.tipo)) {
+            cnt++;
+            pendNames.push(((emp.nombre||"") + " " + (emp.apellidos||"")).trim());
+          }
+        });
+        if (cnt > 0) pendientes[pi] = { count: cnt, names: pendNames };
+      }
+
+      h += '<div style="position:sticky;left:0;z-index:2;background:#fff;padding:3px 6px;font-weight:600;font-size:0.72rem;display:flex;align-items:center;border-top:2px solid #E5E5E5;color:#A32D2D;">\u26a0 Pendientes</div>';
+      for (var pj = 0; pj < nDias; pj++) {
+        var pdi = dayInfos[pj];
+        var pend = pendientes[pj];
+        var pendBg = pend ? "background:#FCEBEB;" : "";
+        var pendContent = pend ? '<span style="font-size:13px;font-weight:500;color:#A32D2D;cursor:pointer;" title="' + pend.names.join(', ').replace(/"/g,'&quot;') + '" onclick="alert(\'' + (pend.names.join('\\n').replace(/'/g,"\\'")) + '\')">' + pend.count + '</span>' : '';
+        h += '<div style="text-align:center;height:28px;display:flex;align-items:center;justify-content:center;border-top:2px solid #E5E5E5;' + pendBg + (pdi.noLab ? 'background:#EEECEA;' : '') + '">' + pendContent + '</div>';
+      }
+      h += '<div style="border-top:2px solid #E5E5E5;"></div>';
+
+      h += '</div></div>';
       grid.innerHTML = h;
     })
     .catch(function (err) { grid.innerHTML = '<p style="color:#dc3545;">Error: ' + err.message + '</p>'; });
@@ -1867,8 +2462,10 @@ function _rrhhDietaCellClick(td, empId, fecha, periodo, empNombre, proyCodigo) {
     { tipo: "nacional_media", label: "Nacional media", abrev: "NM", bg: "#93C5FD", color: "#1E3A5F" },
     { tipo: "internacional_completa", label: "Internacional completa", abrev: "IC", bg: "#F59E0B", color: "#fff" },
     { tipo: "internacional_media", label: "Internacional media", abrev: "IM", bg: "#FDE68A", color: "#78350F" },
-    { tipo: "", label: "Sin dieta", abrev: "\u2014", bg: "#E5E7EB", color: "#666" }
+    { tipo: "", label: "Quitar dieta", abrev: "\u2014", bg: "#E5E7EB", color: "#666" }
   ];
+
+  var sinDietaMotivos = ["Vacaciones", "Enfermedad", "Baja", "Formaci\u00f3n", "Otro"];
 
   var popup = document.createElement("div");
   popup.id = "rrhh-dieta-popup";
@@ -1891,11 +2488,19 @@ function _rrhhDietaCellClick(td, empId, fecha, periodo, empNombre, proyCodigo) {
     html += '<span>' + o.label + '</span>';
     html += '</button>';
   });
+  // Sin dieta submenu
+  html += '<div style="border-top:1px solid #e5e7eb;margin-top:4px;padding-top:4px;">';
+  html += '<div style="font-size:10px;color:#888;font-weight:600;margin-bottom:2px;">SIN DIETA (con motivo):</div>';
+  sinDietaMotivos.forEach(function(motivo) {
+    html += '<button type="button" onclick="_rrhhDietaSinDieta(' + empId + ',\'' + fecha + '\',\'' + periodo + '\',\'' + motivo + '\')" style="display:flex;align-items:center;gap:6px;width:100%;padding:4px 8px;margin-bottom:1px;border:none;border-radius:4px;cursor:pointer;background:transparent;font-size:11px;text-align:left;color:#666;" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'transparent\'">' +
+      '<span style="font-size:10px;color:#aaa;">\u2715</span> ' + motivo + '</button>';
+  });
+  html += '</div>';
   popup.innerHTML = html;
 
   document.body.appendChild(popup);
 
-  // Position near the cell (same pattern as Operaciones)
+  // Position near the cell
   var rect = td.getBoundingClientRect();
   var top = rect.bottom + 4;
   var left = rect.left;
@@ -1931,13 +2536,29 @@ function _rrhhDietaSeleccionar(empId, fecha, periodo, tipo) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ empleado_id: empId, fecha: fecha, tipo: tipo, importe: 0, funcion: _rrhhDietaFuncion })
+  }).then(function (r) {
+    if (!r.ok) { console.error("Error guardando dieta:", r.status); return; }
+    return r.json();
   }).then(function () {
     if (_rrhhDietasVista === "empleado") {
       _rrhhDietasEmpLoad();
     } else {
       _rrhhDietasCalLoad(periodo);
     }
-  });
+  }).catch(function (err) { console.error("Error dieta:", err); });
+}
+
+function _rrhhDietaSinDieta(empId, fecha, periodo, motivo) {
+  var popup = document.getElementById("rrhh-dieta-popup");
+  if (popup) popup.remove();
+  fetch("/api/rrhh/dietas/diaria", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ empleado_id: empId, fecha: fecha, tipo: "sin_dieta", importe: 0, notas: motivo, funcion: _rrhhDietaFuncion })
+  }).then(function (r) {
+    if (!r.ok) { console.error("Error guardando sin_dieta:", r.status); return; }
+    _rrhhDietasCalLoad(periodo);
+  }).catch(function (err) { console.error("Error sin_dieta:", err); });
 }
 
 function _rrhhDietasResumen(body) {
@@ -2704,6 +3325,7 @@ window._rrhhDietasCalReload = _rrhhDietasCalReload;
 window._rrhhDietasResLoad = _rrhhDietasResLoad;
 window._rrhhDietaCellClick = _rrhhDietaCellClick;
 window._rrhhDietaSeleccionar = _rrhhDietaSeleccionar;
+window._rrhhDietaSinDieta = _rrhhDietaSinDieta;
 window._rrhhDietaSetFn = _rrhhDietaSetFn;
 window._rrhhDietasEmpLoad = _rrhhDietasEmpLoad;
 window._rrhhDietaEmpCellClick = _rrhhDietaEmpCellClick;
@@ -2713,6 +3335,16 @@ window._rrhhBorrarDieta = _rrhhBorrarDieta;
 window._rrhhNuevaTarifaModal = _rrhhNuevaTarifaModal;
 window._rrhhGuardarNuevaTarifa = _rrhhGuardarNuevaTarifa;
 window._rrhhEditarTarifa = _rrhhEditarTarifa;
+window._rrhhCargarHorasExtras = _rrhhCargarHorasExtras;
+window._rrhhHECalReload = _rrhhHECalReload;
+window._rrhhHECellClick = _rrhhHECellClick;
+window._rrhhHEGuardar = _rrhhHEGuardar;
+window._rrhhHEEliminar = _rrhhHEEliminar;
+window._rrhhHESinHE = _rrhhHESinHE;
+window._rrhhHEResLoad = _rrhhHEResLoad;
+window._rrhhHEEmpLoad = _rrhhHEEmpLoad;
+window._rrhhHETarifasLoad = _rrhhHETarifasLoad;
+window._rrhhHENuevaTarifa = _rrhhHENuevaTarifa;
 window._rrhhCargarVacaciones = _rrhhCargarVacaciones;
 window._rrhhVacCalReload = _rrhhVacCalReload;
 window._rrhhVacCellClick = _rrhhVacCellClick;

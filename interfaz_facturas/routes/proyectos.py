@@ -48,6 +48,15 @@ def api_proyecto_dashboard(pid):
   return jsonify(data)
 
 
+@proyectos_bp.get("/api/proyectos/<int:pid>/dashboard-v2")
+def api_proyecto_dashboard_v2(pid):
+  proyectos_db.init_proyectos_db()
+  data = proyectos_db.calcular_dashboard_v2(pid)
+  if not data:
+    return jsonify({"error": "Proyecto no encontrado"}), 404
+  return jsonify(data)
+
+
 @proyectos_bp.post("/api/proyectos")
 def api_crear_proyecto():
   data = request.get_json(silent=True) or {}
@@ -206,6 +215,12 @@ def api_eliminar_parte(parte_id: int):
 def api_proyectos_dashboard():
   proyectos_db.init_proyectos_db()
   return jsonify(proyectos_db.dashboard())
+
+
+@proyectos_bp.get("/api/proyectos/dashboard-landing")
+def api_proyectos_dashboard_landing():
+  proyectos_db.init_proyectos_db()
+  return jsonify(proyectos_db.dashboard_landing())
 
 
 @proyectos_bp.post("/api/proyectos/<int:proyecto_id>/recursos")
