@@ -1894,17 +1894,16 @@ function _rrhhDietasCalLoad(periodo) {
           cells.push({ idx: i, di: di, pid: proy ? proy.id : null, proy: proy, dieta: dieta });
         }
 
-        // Detect streaks: consecutive working days with same project_id
+        // Detect streaks: consecutive days with same project_id (including weekends if assigned)
         var streaks = []; // [{start, end, pid, proy, cells:[]}]
         var si = 0;
         while (si < nDias) {
           var c = cells[si];
-          if (!c.pid || c.di.noLab) { si++; continue; }
+          if (!c.pid) { si++; continue; }
           var streak = { start: si, end: si, pid: c.pid, proy: c.proy, cells: [c] };
           var sj = si + 1;
           while (sj < nDias) {
             var nc = cells[sj];
-            if (nc.di.noLab) break; // weekend/festivo breaks streak
             if (!nc.pid || nc.pid !== streak.pid) break;
             streak.end = sj;
             streak.cells.push(nc);
