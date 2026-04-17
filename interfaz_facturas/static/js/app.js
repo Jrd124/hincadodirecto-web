@@ -39,7 +39,7 @@ const MODULOS = {
   operaciones: {
     linkId: "nav-operaciones-modulo",
     submenuId: "submenu-operaciones",
-    paneles: { inicio: "panel-operaciones-inicio", transporte: "panel-proyectos-transporte", onboarding: "panel-onboarding-inicio" },
+    paneles: { inicio: "panel-operaciones-inicio", transporte: "panel-operaciones-transporte", onboarding: "panel-operaciones-onboarding" },
     subNavLinks: { transporte: "nav-operaciones-transporte", onboarding: "nav-operaciones-onboarding" },
     defecto: "inicio",
   },
@@ -71,13 +71,7 @@ const MODULOS = {
     subNavLinks: { equipo: "nav-rrhh-equipo", nominas: "nav-rrhh-nominas", verificador: "nav-rrhh-verificador", dietas: "nav-rrhh-dietas", horasextras: "nav-rrhh-horasextras", vacaciones: "nav-rrhh-vacaciones", adelantos: "nav-rrhh-adelantos", ss: "nav-rrhh-ss", irpf: "nav-rrhh-irpf", costeproyecto: "nav-rrhh-coste-proyecto" },
     defecto: "inicio",
   },
-  onboarding: {
-    linkId: "nav-onboarding-modulo",
-    submenuId: "submenu-onboarding",
-    paneles: { inicio: "panel-onboarding-inicio" },
-    subNavLinks: {},
-    defecto: "inicio",
-  },
+  // onboarding: moved to operaciones submenu
   control_calidad: {
     linkId: null,
     submenuId: "submenu-control-calidad",
@@ -402,10 +396,15 @@ function restaurarDesdeHash() {
       finanzasChild = "inicio";
       activarModulo("finanzas");
     }
+  } else if (mod === "operaciones") {
+    activarModulo("operaciones");
+    if (partes.length >= 2 && ["transporte","onboarding"].indexOf(partes[1]) >= 0) {
+      activarSubpanel("operaciones", partes[1]);
+    }
   } else if (mod === "proyectos") {
     if (partes.length >= 2) {
       var sp = partes[1];
-      if (["cotizados", "vivos", "terminados", "transporte", "onboarding"].indexOf(sp) >= 0) {
+      if (["cotizados", "adjudicados", "vivos", "terminados"].indexOf(sp) >= 0) {
         proyectosSubpanel = sp;
         activarModulo("proyectos");
         activarSubpanel("proyectos", sp);
@@ -450,8 +449,6 @@ function restaurarDesdeHash() {
     }
   } else if (mod === "inicio") {
     if (moduloActivo !== "inicio") activarModulo("inicio");
-  } else if (mod === "onboarding") {
-    activarModulo("onboarding");
   } else if (mod === "crm") {
     activarModulo("crm");
     if (partes.length >= 2) {
@@ -664,12 +661,7 @@ document.getElementById("nav-rrhh-modulo").addEventListener("click", (e) => {
   activarModulo("rrhh");
   if (typeof window._rrhhOnPanelShow === "function") window._rrhhOnPanelShow("inicio");
 });
-if (document.getElementById("nav-onboarding-modulo")) {
-  document.getElementById("nav-onboarding-modulo").addEventListener("click", (e) => {
-    e.preventDefault();
-    activarModulo("onboarding");
-  });
-}
+// onboarding handler moved to operaciones submenu forEach
 document.getElementById("nav-finanzas-proveedores").addEventListener("click", (e) => {
   e.preventDefault();
   activarFinanzasChild("proveedores");
