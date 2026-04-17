@@ -1753,17 +1753,9 @@ function _rrhhDietasCalendario(body) {
     '<label style="font-size:0.82rem;font-weight:600;">Mes:</label>' +
     '<select id="rrhh-dietas-cal-mesn" style="width:115px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhDietasCalReload()">' +
     _MESES_NOMBRE.map(function(n,i){return '<option value="'+(i+1)+'"'+(i+1===mes?' selected':'')+'>'+n+'</option>';}).join('') +
-    '</select>' +
-    '<label style="font-size:0.82rem;font-weight:600;margin-left:8px;">Proyecto:</label>' +
-    '<select id="rrhh-dietas-cal-proy" style="max-width:200px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhDietasCalReload()">' +
-    '<option value="">Todos</option></select>' +
-    '</div><div id="rrhh-dietas-cal-grid" style="overflow-x:auto;"><p style="color:var(--text-secondary);padding:1rem;">Cargando...</p></div>';
-  // Load projects
-  fetch("/api/proyectos?estado=vivo").then(function(r){return r.json();}).then(function(d){
-    var sel = document.getElementById("rrhh-dietas-cal-proy");
-    if (!sel) return;
-    (d.proyectos || []).forEach(function(p){ sel.innerHTML += '<option value="'+p.id+'">'+((p.nombre||p.codigo||'').substring(0,30))+'</option>'; });
-  }).catch(function(){});
+    '</select></div>' +
+    '<div id="rrhh-dietas-cal-legend" style="margin-bottom:8px;"></div>' +
+    '<div id="rrhh-dietas-cal-grid" style="overflow-x:auto;"><p style="color:var(--text-secondary);padding:1rem;">Cargando...</p></div>';
   _rrhhDietasCalReload();
 }
 
@@ -1775,6 +1767,38 @@ var _RRHH_FESTIVOS = [
 ];
 var _DIAS_SEMANA = ["D","L","M","X","J","V","S"];
 
+// ── Dietas calendar project colors & short codes ──
+
+var _PROY_COLORES = [
+  {bg:'#E6F1FB',text:'#042C53',border:'#85B7EB'},
+  {bg:'#E1F5EE',text:'#04342C',border:'#5DCAA5'},
+  {bg:'#EEEDFE',text:'#26215C',border:'#AFA9EC'},
+  {bg:'#FAECE7',text:'#4A1B0C',border:'#F0997B'},
+  {bg:'#FBEAF0',text:'#4B1528',border:'#ED93B1'},
+  {bg:'#FAEEDA',text:'#412402',border:'#EF9F27'},
+  {bg:'#F1EFE8',text:'#2C2C2A',border:'#B4B2A9'},
+];
+var _proyColorMap = {}; // pid -> color index
+var _proyShortMap = {}; // pid -> 3-letter code
+
+function _proyShortCode(nombre) {
+  if (!nombre) return "???";
+  var skip = ["pv","parque","planta","la","el","los","las","de","del","y","i","ii","iii","iv","v","solar","fotovoltaica","fotovoltaico"];
+  var words = nombre.replace(/['"()]/g, "").split(/[\s\-_]+/).filter(function(w) { return w.length > 0 && skip.indexOf(w.toLowerCase()) < 0; });
+  var best = words.length ? words[words.length > 1 ? 1 : 0] : nombre;
+  return best.substring(0, 3).toUpperCase();
+}
+
+function _proyColor(pid) {
+  if (_proyColorMap[pid] == null) {
+    var idx = Object.keys(_proyColorMap).length % _PROY_COLORES.length;
+    _proyColorMap[pid] = idx;
+  }
+  return _PROY_COLORES[_proyColorMap[pid]];
+}
+
+var _dietasCalFiltro = ""; // proyecto_id or "" for all
+
 function _rrhhDietasCalReload() {
   var a = document.getElementById("rrhh-dietas-cal-anio");
   var m = document.getElementById("rrhh-dietas-cal-mesn");
@@ -1785,8 +1809,8 @@ function _rrhhDietasCalReload() {
 
 function _rrhhDietasCalLoad(periodo) {
   var grid = document.getElementById("rrhh-dietas-cal-grid");
+  var legend = document.getElementById("rrhh-dietas-cal-legend");
   if (!grid) return;
-  var proyFiltro = (document.getElementById("rrhh-dietas-cal-proy") || {}).value || "";
   grid.innerHTML = '<p style="color:var(--text-secondary);padding:1rem;">Cargando...</p>';
   fetch("/api/rrhh/dietas/calendario/" + periodo)
     .then(function (r) { return r.json(); })
@@ -1794,89 +1818,124 @@ function _rrhhDietasCalLoad(periodo) {
       var empleados = d.empleados || [];
       var diasArr = d.dias || [];
       var dietasMap = d.dietas || {};
-      var proyMapCal = d.proyectos || {};
+      var proyMap = d.proyectos || {};
       _rrhhDietasFuncionesMap = d.funciones || {};
+      var hoyStr = new Date().toISOString().slice(0, 10);
 
-      // Filter by project if selected
-      if (proyFiltro) {
-        var empIdsConProy = {};
-        Object.keys(proyMapCal).forEach(function(k) {
-          // k = "empId_fecha", value = "CODIGO"
-          // Need to check if this project matches. But proyectos dict has codigo as value.
-          // We filter by checking if ANY day for the employee has this project assigned
-          // For now, filter by checking proyecto_asignaciones (the proyMapCal has empId_fecha -> codigo)
+      // Collect unique projects for legend
+      var proyUnicos = {};
+      Object.keys(proyMap).forEach(function(k) {
+        var p = proyMap[k];
+        if (p && p.id && !proyUnicos[p.id]) {
+          proyUnicos[p.id] = p;
+          if (!_proyShortMap[p.id]) _proyShortMap[p.id] = _proyShortCode(p.nombre);
+          _proyColor(p.id);
+        }
+      });
+
+      // Build legend pills
+      if (legend) {
+        var lg = '<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">';
+        lg += '<button onclick="_dietasCalFiltro=\'\';_rrhhDietasCalReload()" style="padding:3px 10px;border-radius:9999px;font-size:0.75rem;font-weight:' + (!_dietasCalFiltro ? '700' : '400') + ';border:1px solid ' + (!_dietasCalFiltro ? '#555' : '#ccc') + ';background:' + (!_dietasCalFiltro ? '#f1f1f1' : 'transparent') + ';cursor:pointer;">Todos</button>';
+        Object.keys(proyUnicos).forEach(function(pid) {
+          var p = proyUnicos[pid]; var c = _proyColor(parseInt(pid)); var sc = _proyShortMap[pid] || "???";
+          var active = _dietasCalFiltro == pid;
+          lg += '<button onclick="_dietasCalFiltro=\'' + pid + '\';_rrhhDietasCalReload()" style="padding:3px 10px;border-radius:9999px;font-size:0.75rem;font-weight:500;background:' + c.bg + ';color:' + c.text + ';border:' + (active ? '2px solid ' + c.border : '1px solid ' + c.border + '40') + ';cursor:pointer;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' + c.border + ';margin-right:4px;vertical-align:middle;"></span>' + sc + ' ' + (p.nombre || "").substring(0, 18) + '</button>';
         });
-        // Simpler: only show employees that have at least one assignment to this project
+        lg += '</div>'; legend.innerHTML = lg;
+      }
+
+      // Filter by project pill
+      if (_dietasCalFiltro) {
         empleados = empleados.filter(function(emp) {
           for (var i = 0; i < diasArr.length; i++) {
-            var k = emp.id + "_" + diasArr[i];
-            if (proyMapCal[k]) return true;
+            var pk = emp.id + "_" + diasArr[i];
+            var p = proyMap[pk];
+            if (p && String(p.id) === String(_dietasCalFiltro)) return true;
           }
           return false;
         });
       }
 
-      if (!empleados.length) { grid.innerHTML = '<p style="padding:1rem;color:var(--text-secondary);">Sin empleados' + (proyFiltro ? ' asignados a este proyecto' : ' activos') + '</p>'; return; }
+      if (!empleados.length) { grid.innerHTML = '<p style="padding:1rem;color:var(--text-secondary);">Sin empleados' + (_dietasCalFiltro ? ' en este proyecto' : ' activos') + '</p>'; return; }
 
-      // Build day info
       var dayInfos = diasArr.map(function (fecha) {
-        var dt = new Date(fecha + "T12:00:00");
-        var dow = dt.getDay(); // 0=Sun
+        var dt = new Date(fecha + "T12:00:00"); var dow = dt.getDay();
         var esFestivo = _RRHH_FESTIVOS.indexOf(fecha) >= 0;
-        var esFinSemana = dow === 0 || dow === 6;
-        return { fecha: fecha, num: dt.getDate(), dowLabel: _DIAS_SEMANA[dow], noLab: esFinSemana || esFestivo };
+        return { fecha: fecha, num: dt.getDate(), dowLabel: _DIAS_SEMANA[dow], noLab: dow===0||dow===6||esFestivo, esFestivo: esFestivo, esHoy: fecha===hoyStr, esDom: dow===0 };
       });
 
-      var colorMap = { nacional_completa: "#3B82F6", nacional_media: "#93C5FD", internacional_completa: "#F59E0B", internacional_media: "#FDE68A", NC: "#3B82F6", NM: "#93C5FD", IC: "#F59E0B", IM: "#FDE68A" };
-      var abrevMap = { nacional_completa: "NC", nacional_media: "NM", internacional_completa: "IC", internacional_media: "IM", NC: "NC", NM: "NM", IC: "IC", IM: "IM" };
-
+      var dietaLabels = {nacional_completa:"Completa",nacional_media:"Media",internacional_completa:"Int. completa",internacional_media:"Int. media"};
       var h = '<div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:0.72rem;">';
-      // Header row 1: day of week
-      h += '<tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:2px 6px;min-width:120px;position:sticky;left:0;background:var(--bg-secondary,#f8f9fa);z-index:2;"></th>';
-      dayInfos.forEach(function (di) {
-        var bg = di.noLab ? "background:#E5E7EB;" : "";
-        h += '<th style="padding:2px 1px;text-align:center;min-width:26px;font-weight:400;font-size:0.65rem;color:#888;' + bg + '">' + di.dowLabel + '</th>';
+      // Header: day of week
+      h += '<tr><th style="padding:2px 6px;min-width:120px;position:sticky;left:0;background:#fff;z-index:2;"></th>';
+      dayInfos.forEach(function(di) {
+        var colBg = di.noLab ? "#F9F9F7" : (di.esHoy ? "#F0F7FF" : "");
+        var sep = di.esDom ? "border-right:0.5px solid #E5E5E5;" : "";
+        h += '<th style="padding:2px 1px;text-align:center;min-width:28px;font-weight:400;font-size:0.62rem;color:#aaa;' + (colBg ? 'background:'+colBg+';' : '') + sep + '">' + di.dowLabel + '</th>';
       });
-      h += '<th style="padding:2px 4px;"></th></tr>';
-      // Header row 2: day number
-      h += '<tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:2px 6px;font-weight:700;position:sticky;left:0;background:var(--bg-secondary,#f8f9fa);z-index:2;">Empleado</th>';
-      dayInfos.forEach(function (di) {
-        var bg = di.noLab ? "background:#E5E7EB;" : "";
-        h += '<th style="padding:2px 1px;text-align:center;font-weight:600;' + bg + '">' + di.num + '</th>';
+      h += '<th style="padding:2px 6px;"></th></tr>';
+      // Header: day number
+      h += '<tr><th style="padding:2px 6px;font-weight:700;font-size:0.72rem;position:sticky;left:0;background:#fff;z-index:2;">Empleado</th>';
+      dayInfos.forEach(function(di) {
+        var colBg = di.noLab ? "#F9F9F7" : (di.esHoy ? "#F0F7FF" : "");
+        var sep = di.esDom ? "border-right:0.5px solid #E5E5E5;" : "";
+        var festDot = di.esFestivo ? '<span style="display:block;width:4px;height:4px;border-radius:50%;background:#dc2626;margin:0 auto 1px;"></span>' : '';
+        var hoyB = di.esHoy ? "border-left:2px solid #378ADD;border-right:2px solid #378ADD;border-top:2px solid #378ADD;" : "";
+        h += '<th style="padding:1px 1px;text-align:center;font-weight:600;font-size:0.72rem;' + (colBg?'background:'+colBg+';':'') + sep + hoyB + '">' + festDot + di.num + '</th>';
       });
-      h += '<th style="padding:2px 4px;text-align:right;font-weight:700;">Total</th></tr>';
+      h += '<th style="padding:2px 6px;text-align:right;font-weight:700;font-size:0.72rem;">Total \u20ac</th></tr>';
 
       // Employee rows
-      var proyMap = d.proyectos || {}; // "empId_fecha" -> "CODIGO" or object
-      empleados.forEach(function (emp) {
-        var nombre = (emp.nombre || "") + " " + (emp.apellidos || "");
-        h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">';
-        h += '<td style="padding:3px 6px;font-weight:500;white-space:nowrap;position:sticky;left:0;background:#fff;z-index:1;font-size:0.72rem;">' + nombre.trim() + '</td>';
-        var total = 0;
-        dayInfos.forEach(function (di) {
+      empleados.forEach(function(emp) {
+        var nombre = ((emp.nombre || "") + " " + (emp.apellidos || "")).trim();
+        h += '<tr style="border-bottom:1px solid #f1f1f1;">';
+        h += '<td style="padding:3px 6px;font-weight:500;white-space:nowrap;position:sticky;left:0;background:#fff;z-index:1;font-size:0.72rem;">' + nombre + '</td>';
+        var total = 0; var completas = 0; var medias = 0; var proySet = {};
+        dayInfos.forEach(function(di) {
           var key = emp.id + "_" + di.fecha;
           var dieta = dietasMap[key];
-          var proy = proyMap[key]; // string (codigo) or null
-          var proyCodigo = typeof proy === "string" ? proy : (proy && proy.codigo ? proy.codigo : "");
+          var proy = proyMap[key];
+          var pid = proy ? proy.id : null;
+          var proyNombre = proy ? (proy.nombre || "") : "";
+          var proyCodigo = proy ? (proy.codigo || "") : "";
+          var sc = pid ? (_proyShortMap[pid] || _proyShortCode(proyNombre)) : "";
           var tipo = dieta ? dieta.tipo : "";
-          var abrev = abrevMap[tipo] || "";
-          var bg = colorMap[tipo] || "";
-          var noLabBg = di.noLab ? "#E5E7EB" : "";
-          var tieneProyecto = !!proyCodigo;
+          var tieneProyecto = !!pid;
           var sinDieta = !tipo;
-          // Alert: proyecto asignado pero sin dieta
-          var alertBorder = (tieneProyecto && sinDieta && !di.noLab) ? "border:2px solid #F59E0B;" : "";
-          var cellBg = bg || noLabBg;
-          if (tieneProyecto && sinDieta && !di.noLab && !cellBg) cellBg = "#FFFBEB"; // yellow hint
-          var style = "padding:0px 1px;text-align:center;cursor:pointer;min-width:28px;vertical-align:top;line-height:1.1;" + (cellBg ? "background:" + cellBg + ";" : "") + alertBorder + (bg ? "color:#fff;font-weight:600;" : "");
-          var proyLabel = tieneProyecto ? '<div style="font-size:7px;color:#888;overflow:hidden;white-space:nowrap;max-width:28px;">' + proyCodigo.substring(0, 4) + '</div>' : '';
-          var dietaLabel = abrev ? '<div style="font-size:9px;font-weight:700;' + (bg ? 'color:#fff;' : '') + '">' + abrev + '</div>' : (tieneProyecto && !di.noLab ? '<div style="font-size:8px;color:#F59E0B;">\u26a0</div>' : (di.noLab ? '' : ''));
-          var title = (proyCodigo ? 'Proy: ' + proyCodigo + ' | ' : '') + (tipo || 'Sin dieta');
-          var proyEsc = proyCodigo.replace(/'/g, "\\'");
-          h += '<td style="' + style + '" onclick="_rrhhDietaCellClick(this,' + emp.id + ',\'' + di.fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g, "\\'") + '\',\'' + proyEsc + '\')" title="' + title + '">' + proyLabel + dietaLabel + '</td>';
+          var esCompleta = tipo && tipo.indexOf("completa") >= 0;
+          var esMedia = tipo && tipo.indexOf("media") >= 0;
+          var fn = (dieta && dieta.funcion) || (_rrhhDietasFuncionesMap[key]) || "";
           if (dieta && dieta.importe) total += dieta.importe;
+          if (esCompleta) completas++;
+          if (esMedia) medias++;
+          if (pid) proySet[pid] = true;
+
+          var c = pid ? _proyColor(pid) : null;
+          var cellBg = di.noLab ? "#F9F9F7" : (c ? c.bg : "");
+          var borderLeft = c && !di.noLab ? "border-left:3px solid " + c.border + ";" : "";
+          var opacity = _dietasCalFiltro && pid && String(pid) !== String(_dietasCalFiltro) ? "opacity:0.2;" : "";
+          var alertBorder = (tieneProyecto && sinDieta && !di.noLab) ? "border:1.5px solid #F59E0B;" : "";
+          var sep = di.esDom ? "border-right:0.5px solid #E5E5E5;" : "";
+          var hoyB = di.esHoy ? "border-left:2px solid #378ADD;border-right:2px solid #378ADD;" : "";
+
+          var content = "";
+          if (tieneProyecto && !di.noLab) {
+            content = '<div style="font-size:10px;font-weight:500;color:' + (c?c.text:'#333') + ';line-height:1.2;">' + sc + '</div>';
+            if (esCompleta) content += '<div style="font-size:8px;color:' + (c?c.border:'#888') + ';">\u25cf</div>';
+            else if (esMedia) content += '<div style="font-size:8px;color:' + (c?c.border:'#888') + ';">\u25d0</div>';
+            else if (sinDieta) content += '<div style="font-size:7px;color:#F59E0B;">\u26a0</div>';
+          }
+
+          var title = proyNombre ? proyNombre + " \u00b7 " + di.fecha : di.fecha;
+          if (tipo) title += " \u00b7 " + (dietaLabels[tipo]||tipo);
+          if (dieta && dieta.importe) title += " \u00b7 " + dieta.importe + " \u20ac";
+          if (fn) title += " \u00b7 " + fn;
+          var proyEsc = proyCodigo.replace(/'/g, "\\'");
+          h += '<td style="padding:0;text-align:center;cursor:pointer;min-width:28px;height:38px;vertical-align:middle;' + (cellBg?'background:'+cellBg+';':'') + borderLeft + alertBorder + opacity + sep + hoyB + '" title="' + title.replace(/"/g,'&quot;') + '" onclick="_rrhhDietaCellClick(this,' + emp.id + ',\'' + di.fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g,"\\'") + '\',\'' + proyEsc + '\')">' + content + '</td>';
         });
-        h += '<td style="padding:3px 4px;text-align:right;font-weight:600;">' + (total > 0 ? fmtEur(total) : '\u2014') + '</td>';
+        var totalTitle = completas + " completas + " + medias + " medias \u00b7 " + Object.keys(proySet).length + " proyecto(s)";
+        h += '<td style="padding:3px 6px;text-align:right;font-weight:600;font-size:0.75rem;" title="' + totalTitle + '">' + (total > 0 ? fmtEur(total) : '\u2014') + '</td>';
         h += '</tr>';
       });
       h += '</table></div>';
