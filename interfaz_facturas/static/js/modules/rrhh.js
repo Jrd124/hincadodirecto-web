@@ -1821,8 +1821,9 @@ function _rrhhDietasCalLoad(periodo) {
       var proyMap = d.proyectos || {};
       _rrhhDietasFuncionesMap = d.funciones || {};
       var hoyStr = new Date().toISOString().slice(0, 10);
+      var nDias = diasArr.length;
 
-      // Collect unique projects for legend
+      // Collect unique projects
       var proyUnicos = {};
       Object.keys(proyMap).forEach(function(k) {
         var p = proyMap[k];
@@ -1833,7 +1834,7 @@ function _rrhhDietasCalLoad(periodo) {
         }
       });
 
-      // Build legend pills
+      // Legend pills
       if (legend) {
         var lg = '<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">';
         lg += '<button onclick="_dietasCalFiltro=\'\';_rrhhDietasCalReload()" style="padding:3px 10px;border-radius:9999px;font-size:0.75rem;font-weight:' + (!_dietasCalFiltro ? '700' : '400') + ';border:1px solid ' + (!_dietasCalFiltro ? '#555' : '#ccc') + ';background:' + (!_dietasCalFiltro ? '#f1f1f1' : 'transparent') + ';cursor:pointer;">Todos</button>';
@@ -1845,100 +1846,150 @@ function _rrhhDietasCalLoad(periodo) {
         lg += '</div>'; legend.innerHTML = lg;
       }
 
-      // Filter by project pill
+      // Filter
       if (_dietasCalFiltro) {
         empleados = empleados.filter(function(emp) {
-          for (var i = 0; i < diasArr.length; i++) {
-            var pk = emp.id + "_" + diasArr[i];
-            var p = proyMap[pk];
+          for (var i = 0; i < nDias; i++) {
+            var p = proyMap[emp.id + "_" + diasArr[i]];
             if (p && String(p.id) === String(_dietasCalFiltro)) return true;
-          }
-          return false;
+          } return false;
         });
       }
-
       if (!empleados.length) { grid.innerHTML = '<p style="padding:1rem;color:var(--text-secondary);">Sin empleados' + (_dietasCalFiltro ? ' en este proyecto' : ' activos') + '</p>'; return; }
 
-      var dayInfos = diasArr.map(function (fecha) {
+      // Day info
+      var dayInfos = diasArr.map(function(fecha) {
         var dt = new Date(fecha + "T12:00:00"); var dow = dt.getDay();
-        var esFestivo = _RRHH_FESTIVOS.indexOf(fecha) >= 0;
-        return { fecha: fecha, num: dt.getDate(), dowLabel: _DIAS_SEMANA[dow], noLab: dow===0||dow===6||esFestivo, esFestivo: esFestivo, esHoy: fecha===hoyStr, esDom: dow===0 };
+        var fest = _RRHH_FESTIVOS.indexOf(fecha) >= 0;
+        return { fecha: fecha, num: dt.getDate(), dow: dow, dowLabel: _DIAS_SEMANA[dow], noLab: dow===0||dow===6||fest, fest: fest, hoy: fecha===hoyStr };
       });
 
-      var dietaLabels = {nacional_completa:"Completa",nacional_media:"Media",internacional_completa:"Int. completa",internacional_media:"Int. media"};
-      var h = '<div style="overflow-x:auto;"><table style="border-collapse:collapse;font-size:0.72rem;">';
-      // Header: day of week
-      h += '<tr><th style="padding:2px 6px;min-width:120px;position:sticky;left:0;background:#fff;z-index:2;"></th>';
+      var dietaLabels = {nacional_completa:"Completa",nacional_media:"Media",internacional_completa:"Int. compl.",internacional_media:"Int. media"};
+      var gridCols = "180px repeat(" + nDias + ", minmax(26px, 1fr)) 80px";
+
+      var h = '<div style="overflow-x:auto;"><div style="display:grid;grid-template-columns:' + gridCols + ';min-width:' + (180 + nDias * 26 + 80) + 'px;font-size:0.72rem;">';
+
+      // Header row 1: day numbers
+      h += '<div style="position:sticky;left:0;z-index:3;background:#fff;padding:2px 6px;font-weight:700;font-size:0.72rem;display:flex;align-items:end;">Empleado</div>';
       dayInfos.forEach(function(di) {
-        var colBg = di.noLab ? "#F9F9F7" : (di.esHoy ? "#F0F7FF" : "");
-        var sep = di.esDom ? "border-right:0.5px solid #E5E5E5;" : "";
-        h += '<th style="padding:2px 1px;text-align:center;min-width:28px;font-weight:400;font-size:0.62rem;color:#aaa;' + (colBg ? 'background:'+colBg+';' : '') + sep + '">' + di.dowLabel + '</th>';
+        var bg = di.noLab ? "#EEECEA" : (di.hoy ? "#F0F7FF" : "#fff");
+        var hoyB = di.hoy ? "border-left:2px solid #378ADD;border-right:2px solid #378ADD;border-top:2px solid #378ADD;" : "";
+        var festDot = di.fest ? '<span style="display:block;width:5px;height:5px;border-radius:50%;background:#E24B4A;margin:0 auto 1px;"></span>' : '';
+        var numCol = di.hoy ? "color:#378ADD;font-weight:600;" : "";
+        h += '<div style="text-align:center;background:' + bg + ';padding:1px 0;' + hoyB + '">' + festDot + '<div style="font-size:12px;font-weight:600;' + numCol + '">' + di.num + '</div><div style="font-size:9px;color:#aaa;">' + di.dowLabel + '</div></div>';
       });
-      h += '<th style="padding:2px 6px;"></th></tr>';
-      // Header: day number
-      h += '<tr><th style="padding:2px 6px;font-weight:700;font-size:0.72rem;position:sticky;left:0;background:#fff;z-index:2;">Empleado</th>';
-      dayInfos.forEach(function(di) {
-        var colBg = di.noLab ? "#F9F9F7" : (di.esHoy ? "#F0F7FF" : "");
-        var sep = di.esDom ? "border-right:0.5px solid #E5E5E5;" : "";
-        var festDot = di.esFestivo ? '<span style="display:block;width:4px;height:4px;border-radius:50%;background:#dc2626;margin:0 auto 1px;"></span>' : '';
-        var hoyB = di.esHoy ? "border-left:2px solid #378ADD;border-right:2px solid #378ADD;border-top:2px solid #378ADD;" : "";
-        h += '<th style="padding:1px 1px;text-align:center;font-weight:600;font-size:0.72rem;' + (colBg?'background:'+colBg+';':'') + sep + hoyB + '">' + festDot + di.num + '</th>';
-      });
-      h += '<th style="padding:2px 6px;text-align:right;font-weight:700;font-size:0.72rem;">Total \u20ac</th></tr>';
+      h += '<div style="padding:2px 6px;text-align:right;font-weight:700;font-size:0.72rem;display:flex;align-items:end;justify-content:end;">Total \u20ac</div>';
 
       // Employee rows
       empleados.forEach(function(emp) {
         var nombre = ((emp.nombre || "") + " " + (emp.apellidos || "")).trim();
-        h += '<tr style="border-bottom:1px solid #f1f1f1;">';
-        h += '<td style="padding:3px 6px;font-weight:500;white-space:nowrap;position:sticky;left:0;background:#fff;z-index:1;font-size:0.72rem;">' + nombre + '</td>';
-        var total = 0; var completas = 0; var medias = 0; var proySet = {};
-        dayInfos.forEach(function(di) {
+
+        // Build streak data for this employee
+        var cells = []; // array of {pid, proy, dieta, di, idx}
+        for (var i = 0; i < nDias; i++) {
+          var di = dayInfos[i];
           var key = emp.id + "_" + di.fecha;
-          var dieta = dietasMap[key];
-          var proy = proyMap[key];
-          var pid = proy ? proy.id : null;
-          var proyNombre = proy ? (proy.nombre || "") : "";
-          var proyCodigo = proy ? (proy.codigo || "") : "";
-          var sc = pid ? (_proyShortMap[pid] || _proyShortCode(proyNombre)) : "";
-          var tipo = dieta ? dieta.tipo : "";
-          var tieneProyecto = !!pid;
-          var sinDieta = !tipo;
-          var esCompleta = tipo && tipo.indexOf("completa") >= 0;
-          var esMedia = tipo && tipo.indexOf("media") >= 0;
-          var fn = (dieta && dieta.funcion) || (_rrhhDietasFuncionesMap[key]) || "";
-          if (dieta && dieta.importe) total += dieta.importe;
-          if (esCompleta) completas++;
-          if (esMedia) medias++;
-          if (pid) proySet[pid] = true;
+          var proy = proyMap[key] || null;
+          var dieta = dietasMap[key] || null;
+          cells.push({ idx: i, di: di, pid: proy ? proy.id : null, proy: proy, dieta: dieta });
+        }
 
-          var c = pid ? _proyColor(pid) : null;
-          var cellBg = di.noLab ? "#F9F9F7" : (c ? c.bg : "");
-          var borderLeft = c && !di.noLab ? "border-left:3px solid " + c.border + ";" : "";
-          var opacity = _dietasCalFiltro && pid && String(pid) !== String(_dietasCalFiltro) ? "opacity:0.2;" : "";
-          var alertBorder = (tieneProyecto && sinDieta && !di.noLab) ? "border:1.5px solid #F59E0B;" : "";
-          var sep = di.esDom ? "border-right:0.5px solid #E5E5E5;" : "";
-          var hoyB = di.esHoy ? "border-left:2px solid #378ADD;border-right:2px solid #378ADD;" : "";
-
-          var content = "";
-          if (tieneProyecto && !di.noLab) {
-            content = '<div style="font-size:10px;font-weight:500;color:' + (c?c.text:'#333') + ';line-height:1.2;">' + sc + '</div>';
-            if (esCompleta) content += '<div style="font-size:8px;color:' + (c?c.border:'#888') + ';">\u25cf</div>';
-            else if (esMedia) content += '<div style="font-size:8px;color:' + (c?c.border:'#888') + ';">\u25d0</div>';
-            else if (sinDieta) content += '<div style="font-size:7px;color:#F59E0B;">\u26a0</div>';
+        // Detect streaks: consecutive working days with same project_id
+        var streaks = []; // [{start, end, pid, proy, cells:[]}]
+        var si = 0;
+        while (si < nDias) {
+          var c = cells[si];
+          if (!c.pid || c.di.noLab) { si++; continue; }
+          var streak = { start: si, end: si, pid: c.pid, proy: c.proy, cells: [c] };
+          var sj = si + 1;
+          while (sj < nDias) {
+            var nc = cells[sj];
+            if (nc.di.noLab) break; // weekend/festivo breaks streak
+            if (!nc.pid || nc.pid !== streak.pid) break;
+            streak.end = sj;
+            streak.cells.push(nc);
+            sj++;
           }
+          streaks.push(streak);
+          si = sj;
+        }
 
-          var title = proyNombre ? proyNombre + " \u00b7 " + di.fecha : di.fecha;
-          if (tipo) title += " \u00b7 " + (dietaLabels[tipo]||tipo);
-          if (dieta && dieta.importe) title += " \u00b7 " + dieta.importe + " \u20ac";
-          if (fn) title += " \u00b7 " + fn;
+        // Render employee row
+        // Name cell
+        h += '<div style="position:sticky;left:0;z-index:2;background:#fff;padding:3px 6px;font-weight:500;white-space:nowrap;font-size:0.72rem;display:flex;align-items:center;border-bottom:1px solid #f1f1f1;">' + nombre + '</div>';
+
+        // Day cells container — use a sub-grid row spanning all day columns
+        h += '<div style="grid-column:2/' + (nDias + 2) + ';display:grid;grid-template-columns:repeat(' + nDias + ',minmax(26px,1fr));position:relative;border-bottom:1px solid #f1f1f1;">';
+
+        // Background layer: non-working day shading + today border
+        for (var di_i = 0; di_i < nDias; di_i++) {
+          var di2 = dayInfos[di_i];
+          var bgc = di2.noLab ? "#EEECEA" : "";
+          var hoyBg = di2.hoy ? "border-left:2px solid #378ADD;border-right:2px solid #378ADD;" : "";
+          // Clickable empty cell for days without assignment
+          var hasStreak = false;
+          for (var sk = 0; sk < streaks.length; sk++) {
+            if (di_i >= streaks[sk].start && di_i <= streaks[sk].end) { hasStreak = true; break; }
+          }
+          var proyCodigo = cells[di_i].proy ? (cells[di_i].proy.codigo || "") : "";
           var proyEsc = proyCodigo.replace(/'/g, "\\'");
-          h += '<td style="padding:0;text-align:center;cursor:pointer;min-width:28px;height:38px;vertical-align:middle;' + (cellBg?'background:'+cellBg+';':'') + borderLeft + alertBorder + opacity + sep + hoyB + '" title="' + title.replace(/"/g,'&quot;') + '" onclick="_rrhhDietaCellClick(this,' + emp.id + ',\'' + di.fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g,"\\'") + '\',\'' + proyEsc + '\')">' + content + '</td>';
+          h += '<div style="grid-column:' + (di_i+1) + ';grid-row:1;height:40px;' + (bgc ? 'background:'+bgc+';' : '') + hoyBg + (hasStreak ? '' : 'cursor:pointer;') + '" ' +
+            (!hasStreak ? 'onclick="_rrhhDietaCellClick(this,' + emp.id + ',\'' + dayInfos[di_i].fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g,"\\'") + '\',\'' + proyEsc + '\')"' : '') +
+            '></div>';
+        }
+
+        // Streak blocks layer (on top)
+        var total = 0; var completas = 0; var medias = 0; var proySet = {};
+        streaks.forEach(function(sk) {
+          var c = _proyColor(sk.pid);
+          var sc = _proyShortMap[sk.pid] || "???";
+          var opacity = _dietasCalFiltro && String(sk.pid) !== String(_dietasCalFiltro) ? "opacity:0.2;" : "";
+          var gcStart = sk.start + 1;
+          var gcEnd = sk.end + 2;
+
+          // Build diet icons row
+          var icons = '';
+          var skTotal = 0; var skComp = 0; var skMedia = 0;
+          sk.cells.forEach(function(sc2) {
+            var tipo = sc2.dieta ? sc2.dieta.tipo : "";
+            var imp = sc2.dieta ? (sc2.dieta.importe || 0) : 0;
+            total += imp; skTotal += imp;
+            if (tipo && tipo.indexOf("completa") >= 0) { completas++; skComp++; }
+            if (tipo && tipo.indexOf("media") >= 0) { medias++; skMedia++; }
+            if (sc2.pid) proySet[sc2.pid] = true;
+
+            var icon = "";
+            if (tipo && tipo.indexOf("completa") >= 0) icon = '<span style="font-size:11px;color:' + c.border + ';">\u25cf</span>';
+            else if (tipo && tipo.indexOf("media") >= 0) icon = '<span style="font-size:11px;color:' + c.border + ';">\u25d0</span>';
+            else icon = '<span style="font-size:7px;color:#F59E0B;">\u26a0</span>';
+            icons += '<span style="flex:1;text-align:center;cursor:pointer;" onclick="event.stopPropagation();_rrhhDietaCellClick(this,' + emp.id + ',\'' + sc2.di.fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g,"\\'") + '\',\'' + (sc2.proy ? (sc2.proy.codigo||"").replace(/'/g,"\\'") : "") + '\')">' + icon + '</span>';
+          });
+
+          // Tooltip for entire block
+          var fn = sk.cells[0].dieta ? (sk.cells[0].dieta.funcion || "") : (_rrhhDietasFuncionesMap[emp.id + "_" + sk.cells[0].di.fecha] || "");
+          var pNombre = sk.proy ? (sk.proy.nombre || "") : "";
+          var rangeLabel = sk.cells[0].di.num + (sk.cells.length > 1 ? " - " + sk.cells[sk.cells.length-1].di.num : "");
+          var ttip = pNombre + " \u00b7 " + rangeLabel + " \u00b7 " + skComp + " completas + " + skMedia + " medias = " + skTotal + " \u20ac" + (fn ? " \u00b7 " + fn : "");
+
+          h += '<div style="grid-column:' + gcStart + '/' + gcEnd + ';grid-row:1;display:flex;flex-direction:column;align-items:stretch;justify-content:center;background:' + c.bg + ';border-left:3px solid ' + c.border + ';border-radius:4px;margin:2px 1px;padding:1px 2px;z-index:1;' + opacity + '" title="' + ttip.replace(/"/g,'&quot;') + '">' +
+            '<div style="font-size:10px;font-weight:500;color:' + c.text + ';text-align:center;line-height:1.2;">' + sc + '</div>' +
+            '<div style="display:flex;align-items:center;">' + icons + '</div></div>';
         });
+
+        // Also accumulate totals for days NOT in any streak but with dieta
+        for (var di3 = 0; di3 < nDias; di3++) {
+          var c3 = cells[di3];
+          if (!c3.pid && c3.dieta && c3.dieta.importe) total += c3.dieta.importe;
+        }
+
+        h += '</div>'; // end sub-grid
+
+        // Total column
         var totalTitle = completas + " completas + " + medias + " medias \u00b7 " + Object.keys(proySet).length + " proyecto(s)";
-        h += '<td style="padding:3px 6px;text-align:right;font-weight:600;font-size:0.75rem;" title="' + totalTitle + '">' + (total > 0 ? fmtEur(total) : '\u2014') + '</td>';
-        h += '</tr>';
+        h += '<div style="padding:3px 6px;text-align:right;font-weight:600;font-size:0.75rem;display:flex;align-items:center;justify-content:end;border-bottom:1px solid #f1f1f1;" title="' + totalTitle + '">' + (total > 0 ? fmtEur(total) : '\u2014') + '</div>';
       });
-      h += '</table></div>';
+
+      h += '</div></div>';
       grid.innerHTML = h;
     })
     .catch(function (err) { grid.innerHTML = '<p style="color:#dc3545;">Error: ' + err.message + '</p>'; });
