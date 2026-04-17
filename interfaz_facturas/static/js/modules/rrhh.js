@@ -61,6 +61,7 @@ function _rrhhOnPanelShow(panel) {
   else if (panel === "nominas") _rrhhCargarNominas();
   else if (panel === "verificador") _rrhhCargarVerificador();
   else if (panel === "dietas") _rrhhCargarDietas();
+  else if (panel === "horasextras") _rrhhCargarHorasExtras();
   else if (panel === "vacaciones") _rrhhCargarVacaciones();
   else if (panel === "adelantos") _rrhhCargarAdelantos();
   else if (panel === "ss") _rrhhCargarSS();
@@ -1434,6 +1435,329 @@ function _rrhhLoadEstimacion() {
     .catch(function () {
       tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:2rem;color:#dc3545;">Error al cargar</td></tr>';
     });
+}
+
+// ===============================================================================
+// ==  5c. HORAS EXTRAS                                                         ==
+// ===============================================================================
+
+var _rrhhHEVista = "calendario";
+
+function _rrhhCargarHorasExtras() {
+  var container = document.getElementById("rrhh-horasextras-contenido");
+  if (!container) return;
+  var pillsHtml = '<div style="display:flex;gap:6px;margin-bottom:12px;">';
+  [["calendario","Calendario"],["resumen","Resumen"],["empleado","Por empleado"],["tarifas","Tarifas"]].forEach(function(v) {
+    var active = _rrhhHEVista === v[0];
+    pillsHtml += '<button onclick="_rrhhHEVista=\'' + v[0] + '\';_rrhhCargarHorasExtras()" style="padding:5px 14px;border-radius:9999px;font-size:0.82rem;font-weight:' + (active ? '700' : '400') + ';border:1px solid ' + (active ? '#3B82F6' : 'var(--border,#ccc)') + ';background:' + (active ? '#EFF6FF' : 'transparent') + ';color:' + (active ? '#3B82F6' : 'inherit') + ';cursor:pointer;">' + v[1] + '</button>';
+  });
+  pillsHtml += '</div><div id="rrhh-he-vista-body"></div>';
+  container.innerHTML = pillsHtml;
+  var body = document.getElementById("rrhh-he-vista-body");
+  if (_rrhhHEVista === "calendario") _rrhhHECalendario(body);
+  else if (_rrhhHEVista === "resumen") _rrhhHEResumen(body);
+  else if (_rrhhHEVista === "empleado") _rrhhHEEmpleado(body);
+  else _rrhhHETarifas(body);
+}
+
+// ── HE Calendario ──
+
+function _rrhhHECalendario(body) {
+  var now = new Date(); var anio = now.getFullYear(), mes = now.getMonth() + 1;
+  body.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">' +
+    '<label style="font-size:0.82rem;font-weight:600;">A\u00f1o:</label>' +
+    '<select id="rrhh-he-cal-anio" style="width:75px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhHECalReload()">' +
+    '<option value="2025"' + (anio===2025?' selected':'') + '>2025</option><option value="2026"' + (anio===2026?' selected':'') + '>2026</option><option value="2027">2027</option></select>' +
+    '<label style="font-size:0.82rem;font-weight:600;">Mes:</label>' +
+    '<select id="rrhh-he-cal-mes" style="width:115px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhHECalReload()">' +
+    _MESES_NOMBRE.map(function(n,i){return '<option value="'+(i+1)+'"'+(i+1===mes?' selected':'')+'>'+n+'</option>';}).join('') +
+    '</select></div>' +
+    '<div id="rrhh-he-cal-grid" style="overflow-x:auto;"><p style="color:var(--text-secondary);padding:1rem;">Cargando...</p></div>';
+  _rrhhHECalReload();
+}
+
+function _rrhhHECalReload() {
+  var a = document.getElementById("rrhh-he-cal-anio");
+  var m = document.getElementById("rrhh-he-cal-mes");
+  if (!a || !m) return;
+  var periodo = a.value + "-" + String(m.value).padStart(2, "0");
+  _rrhhHECalLoad(periodo);
+}
+
+function _rrhhHECalLoad(periodo) {
+  var grid = document.getElementById("rrhh-he-cal-grid");
+  if (!grid) return;
+  grid.innerHTML = '<p style="color:var(--text-secondary);padding:1rem;">Cargando...</p>';
+  fetch("/api/rrhh/horas-extras/calendario/" + periodo)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var emps = d.empleados || [];
+      var diasArr = d.dias || [];
+      var heMap = d.horas_extras || {};
+      var proyMap = d.proyectos || {};
+      var precioHora = d.precio_hora || 15;
+      var nDias = diasArr.length;
+      var hoyStr = new Date().toISOString().slice(0, 10);
+
+      if (!emps.length) { grid.innerHTML = '<p style="padding:1rem;color:var(--text-secondary);">Sin empleados activos</p>'; return; }
+
+      var dayInfos = diasArr.map(function(fecha) {
+        var dt = new Date(fecha + "T12:00:00"); var dow = dt.getDay();
+        var fest = _RRHH_FESTIVOS.indexOf(fecha) >= 0;
+        return { fecha: fecha, num: dt.getDate(), dowLabel: _DIAS_SEMANA[dow], noLab: dow===0||dow===6||fest, fest: fest, hoy: fecha===hoyStr };
+      });
+
+      var gridCols = "180px repeat(" + nDias + ", minmax(26px, 1fr)) 80px";
+      var h = '<div style="display:grid;grid-template-columns:' + gridCols + ';min-width:' + (180 + nDias*26 + 80) + 'px;font-size:0.72rem;">';
+
+      // Header
+      h += '<div style="position:sticky;left:0;z-index:3;background:#fff;padding:2px 6px;font-weight:700;font-size:0.72rem;display:flex;align-items:end;">Empleado</div>';
+      dayInfos.forEach(function(di) {
+        var bg = di.noLab ? "#EEECEA" : (di.hoy ? "#F0F7FF" : "#fff");
+        var hoyB = di.hoy ? "border-left:2px solid #378ADD;border-right:2px solid #378ADD;border-top:2px solid #378ADD;" : "";
+        var festDot = di.fest ? '<span style="display:block;width:5px;height:5px;border-radius:50%;background:#E24B4A;margin:0 auto 1px;"></span>' : '';
+        var numCol = di.hoy ? "color:#378ADD;font-weight:600;" : "";
+        h += '<div style="text-align:center;background:' + bg + ';padding:1px 0;' + hoyB + '">' + festDot + '<div style="font-size:12px;font-weight:600;' + numCol + '">' + di.num + '</div><div style="font-size:9px;color:#aaa;">' + di.dowLabel + '</div></div>';
+      });
+      h += '<div style="padding:2px 6px;text-align:right;font-weight:700;font-size:0.72rem;display:flex;align-items:end;justify-content:end;">Total \u20ac</div>';
+
+      // Employee rows
+      emps.forEach(function(emp) {
+        var nombre = ((emp.nombre || "") + " " + (emp.apellidos || "")).trim();
+        h += '<div style="position:sticky;left:0;z-index:2;background:#fff;padding:3px 6px;font-weight:500;white-space:nowrap;font-size:0.72rem;display:flex;align-items:center;border-bottom:1px solid #f1f1f1;">' + nombre + '</div>';
+        var total = 0;
+        dayInfos.forEach(function(di) {
+          var key = emp.id + "_" + di.fecha;
+          var he = heMap[key];
+          var proy = proyMap[key];
+          var pid = proy ? proy.id : null;
+          var c = pid ? _proyColor(pid) : null;
+          var bg = di.noLab ? "#EEECEA" : (c ? c.bg : "#fff");
+          var hoyB = di.hoy ? "border-left:2px solid #378ADD;border-right:2px solid #378ADD;" : "";
+          var borderL = c ? "border-left:3px solid " + c.border + ";" : "";
+          var content = "";
+          if (he && he.horas > 0) {
+            content = '<span style="font-size:12px;font-weight:500;color:#2C2C2A;">' + he.horas + 'h</span>';
+            total += he.importe || 0;
+          }
+          var title = (proy ? (proy.nombre || "") + " \u00b7 " : "") + di.fecha + (he ? " \u00b7 " + he.horas + "h \u00d7 " + precioHora + "\u20ac = " + (he.importe||0) + "\u20ac" : "");
+          var proyEsc = proy ? (proy.codigo||"").replace(/'/g,"\\'") : "";
+          h += '<div style="text-align:center;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:' + bg + ';' + borderL + hoyB + 'border-bottom:1px solid #f1f1f1;" title="' + title.replace(/"/g,"&quot;") + '" onclick="_rrhhHECellClick(' + emp.id + ',\'' + di.fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g,"\\'") + '\',' + (he ? he.horas : 0) + ')">' + content + '</div>';
+        });
+        h += '<div style="padding:3px 6px;text-align:right;font-weight:600;font-size:0.75rem;display:flex;align-items:center;justify-content:end;border-bottom:1px solid #f1f1f1;">' + (total > 0 ? fmtEur(total) : '\u2014') + '</div>';
+      });
+
+      // Totals row
+      h += '<div style="position:sticky;left:0;z-index:2;background:#fff;padding:3px 6px;font-weight:700;font-size:0.72rem;display:flex;align-items:center;border-top:2px solid #E5E5E5;">Total horas</div>';
+      var grandTotal = 0;
+      dayInfos.forEach(function(di) {
+        var dayTotal = 0;
+        emps.forEach(function(emp) { var he = heMap[emp.id + "_" + di.fecha]; if (he) dayTotal += he.horas || 0; });
+        grandTotal += dayTotal * precioHora;
+        h += '<div style="text-align:center;font-weight:600;font-size:0.75rem;display:flex;align-items:center;justify-content:center;border-top:2px solid #E5E5E5;' + (di.noLab ? 'background:#EEECEA;' : '') + '">' + (dayTotal > 0 ? dayTotal + 'h' : '') + '</div>';
+      });
+      h += '<div style="padding:3px 6px;text-align:right;font-weight:700;font-size:0.75rem;display:flex;align-items:center;justify-content:end;border-top:2px solid #E5E5E5;">' + fmtEur(grandTotal) + '</div>';
+
+      h += '</div>';
+      grid.innerHTML = h;
+    })
+    .catch(function(err) { grid.innerHTML = '<p style="color:#dc3545;">Error: ' + err.message + '</p>'; });
+}
+
+function _rrhhHECellClick(empId, fecha, periodo, empNombre, currentHoras) {
+  var old = document.getElementById("rrhh-he-popup");
+  if (old) old.remove();
+  var popup = document.createElement("div");
+  popup.id = "rrhh-he-popup";
+  popup.style.cssText = "position:fixed;z-index:1000;background:#fff;border:1px solid var(--color-border,#e2e8f0);border-radius:8px;padding:12px;box-shadow:0 4px 12px rgba(0,0,0,.15);min-width:220px;font-size:13px;top:50%;left:50%;transform:translate(-50%,-50%);";
+  var html = '<div style="font-weight:600;margin-bottom:2px;font-size:12px;">\u23f1 Horas extras</div>' +
+    '<div style="font-size:11px;color:#888;margin-bottom:8px;">' + empNombre + ' \u00b7 ' + fecha + '</div>' +
+    '<div style="margin-bottom:6px;"><label style="font-size:11px;font-weight:600;">N\u00famero de horas:</label><br>' +
+    '<input type="number" id="rrhh-he-input" step="0.5" min="0" max="24" value="' + (currentHoras || '') + '" style="width:100%;padding:6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:14px;margin-top:4px;" autofocus></div>' +
+    '<div id="rrhh-he-calc" style="font-size:11px;color:#666;margin-bottom:8px;"></div>' +
+    '<div style="margin-bottom:6px;"><label style="font-size:11px;font-weight:600;">Notas:</label><br>' +
+    '<input type="text" id="rrhh-he-notas" placeholder="Opcional" style="width:100%;padding:4px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:12px;margin-top:2px;"></div>' +
+    '<div style="display:flex;gap:6px;margin-top:8px;">' +
+    '<button onclick="_rrhhHEGuardar(' + empId + ',\'' + fecha + '\',\'' + periodo + '\')" style="flex:1;padding:6px;background:#2563eb;color:#fff;border:none;border-radius:5px;cursor:pointer;font-weight:600;font-size:12px;">Guardar</button>';
+  if (currentHoras > 0) {
+    html += '<button onclick="_rrhhHEEliminar(' + empId + ',\'' + fecha + '\',\'' + periodo + '\')" style="padding:6px 10px;background:#FEF2F2;color:#dc2626;border:1px solid #FCA5A5;border-radius:5px;cursor:pointer;font-size:12px;">Eliminar</button>';
+  }
+  html += '<button onclick="document.getElementById(\'rrhh-he-popup\').remove()" style="padding:6px 10px;background:#f1f1f1;border:none;border-radius:5px;cursor:pointer;font-size:12px;">Cancelar</button></div>';
+  popup.innerHTML = html;
+  document.body.appendChild(popup);
+  var inp = document.getElementById("rrhh-he-input");
+  var calc = document.getElementById("rrhh-he-calc");
+  function updateCalc() {
+    var h = parseFloat(inp.value) || 0;
+    calc.textContent = h > 0 ? h + "h \u00d7 15\u20ac = " + (h * 15).toFixed(0) + "\u20ac" : "";
+  }
+  inp.addEventListener("input", updateCalc);
+  updateCalc();
+  inp.focus();
+  setTimeout(function() {
+    document.addEventListener("click", function _cl(e) {
+      if (!popup.contains(e.target)) { popup.remove(); document.removeEventListener("click", _cl); }
+    });
+  }, 10);
+}
+
+function _rrhhHEGuardar(empId, fecha, periodo) {
+  var horas = parseFloat((document.getElementById("rrhh-he-input") || {}).value) || 0;
+  var notas = (document.getElementById("rrhh-he-notas") || {}).value || "";
+  var popup = document.getElementById("rrhh-he-popup");
+  if (popup) popup.remove();
+  if (horas <= 0) return;
+  fetch("/api/rrhh/horas-extras/dia", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ empleado_id: empId, fecha: fecha, horas: horas, notas: notas })
+  }).then(function(r) {
+    if (!r.ok) console.error("Error HE:", r.status);
+    _rrhhHECalLoad(periodo);
+  }).catch(function(err) { console.error("Error HE:", err); });
+}
+
+function _rrhhHEEliminar(empId, fecha, periodo) {
+  var popup = document.getElementById("rrhh-he-popup");
+  if (popup) popup.remove();
+  fetch("/api/rrhh/horas-extras/dia", {
+    method: "DELETE", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ empleado_id: empId, fecha: fecha })
+  }).then(function() { _rrhhHECalLoad(periodo); });
+}
+
+// ── HE Resumen ──
+
+function _rrhhHEResumen(body) {
+  var now = new Date(); var anio = now.getFullYear(), mes = now.getMonth() + 1;
+  body.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">' +
+    '<label style="font-size:0.82rem;font-weight:600;">A\u00f1o:</label>' +
+    '<select id="rrhh-he-res-anio" style="width:75px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhHEResLoad()">' +
+    '<option value="2025"' + (anio===2025?' selected':'') + '>2025</option><option value="2026"' + (anio===2026?' selected':'') + '>2026</option><option value="2027">2027</option></select>' +
+    '<label style="font-size:0.82rem;font-weight:600;">Mes:</label>' +
+    '<select id="rrhh-he-res-mes" style="width:115px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhHEResLoad()">' +
+    _MESES_NOMBRE.map(function(n,i){return '<option value="'+(i+1)+'"'+(i+1===mes?' selected':'')+'>'+n+'</option>';}).join('') +
+    '</select></div><div id="rrhh-he-res-body">Cargando...</div>';
+  _rrhhHEResLoad();
+}
+
+function _rrhhHEResLoad() {
+  var selA = document.getElementById("rrhh-he-res-anio");
+  var selM = document.getElementById("rrhh-he-res-mes");
+  if (!selA || !selM) return;
+  var body = document.getElementById("rrhh-he-res-body");
+  body.innerHTML = "Cargando...";
+  fetch("/api/rrhh/horas-extras/resumen/" + selA.value + "/" + selM.value)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var lin = d.lineas || []; var tot = d.totales || {};
+      var h = '<div class="card" style="overflow-x:auto;padding:0;"><table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+      h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:6px 8px;text-align:left;">Empleado</th><th style="padding:6px 4px;text-align:right;">Horas mes</th><th style="padding:6px 4px;text-align:right;">Importe mes</th><th style="padding:6px 4px;text-align:right;">Acumulado a\u00f1o</th><th style="padding:6px 4px;text-align:right;">D\u00edas con HE</th></tr></thead><tbody>';
+      lin.forEach(function(l) {
+        h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);"><td style="padding:5px 8px;font-weight:500;">' + l.nombre + '</td><td style="padding:5px 4px;text-align:right;">' + l.horas_mes + 'h</td><td style="padding:5px 4px;text-align:right;">' + fmtEur(l.importe_mes) + '</td><td style="padding:5px 4px;text-align:right;">' + fmtEur(l.acumulado_anio) + '</td><td style="padding:5px 4px;text-align:right;">' + l.dias_con_he + '</td></tr>';
+      });
+      if (!lin.length) h += '<tr><td colspan="5" style="text-align:center;padding:2rem;color:#888;">Sin horas extras este mes</td></tr>';
+      h += '</tbody><tfoot><tr style="font-weight:700;background:var(--bg-secondary,#f8f9fa);"><td style="padding:6px 8px;">TOTALES</td><td style="padding:6px 4px;text-align:right;">' + (tot.horas||0) + 'h</td><td style="padding:6px 4px;text-align:right;">' + fmtEur(tot.importe||0) + '</td><td style="padding:6px 4px;text-align:right;">' + fmtEur(tot.acumulado||0) + '</td><td style="padding:6px 4px;text-align:right;">' + (tot.dias||0) + '</td></tr></tfoot></table></div>';
+      body.innerHTML = h;
+    });
+}
+
+// ── HE Por empleado ──
+
+function _rrhhHEEmpleado(body) {
+  var now = new Date(); var anio = now.getFullYear();
+  body.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">' +
+    '<label style="font-size:0.82rem;font-weight:600;">Empleado:</label>' +
+    '<select id="rrhh-he-emp-sel" style="max-width:250px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhHEEmpLoad()"><option value="">Selecciona...</option></select>' +
+    '<label style="font-size:0.82rem;font-weight:600;margin-left:8px;">A\u00f1o:</label>' +
+    '<select id="rrhh-he-emp-anio" style="width:75px;padding:4px 6px;border:1px solid var(--border,#ccc);border-radius:5px;font-size:0.82rem;" onchange="_rrhhHEEmpLoad()">' +
+    '<option value="2025"' + (anio===2025?' selected':'') + '>2025</option><option value="2026"' + (anio===2026?' selected':'') + '>2026</option><option value="2027">2027</option></select>' +
+    '</div><div id="rrhh-he-emp-body"></div>';
+  var cache = _rrhhEmpleadosCache || [];
+  if (cache.length) {
+    var sel = document.getElementById("rrhh-he-emp-sel");
+    cache.forEach(function(e) { if (e.estado === "activo") sel.innerHTML += '<option value="' + e.id + '">' + e.nombre + ' ' + (e.apellidos||'') + '</option>'; });
+  } else {
+    fetch("/api/rrhh/empleados").then(function(r){return r.json();}).then(function(d){
+      var sel = document.getElementById("rrhh-he-emp-sel"); if (!sel) return;
+      (d.empleados||[]).forEach(function(e){ if (e.estado==="activo") sel.innerHTML += '<option value="'+e.id+'">'+e.nombre+' '+(e.apellidos||'')+'</option>'; });
+    });
+  }
+}
+
+function _rrhhHEEmpLoad() {
+  var sel = document.getElementById("rrhh-he-emp-sel");
+  var anioSel = document.getElementById("rrhh-he-emp-anio");
+  var body = document.getElementById("rrhh-he-emp-body");
+  if (!sel || !anioSel || !body || !sel.value) { if (body) body.innerHTML = ''; return; }
+  body.innerHTML = 'Cargando...';
+  fetch("/api/rrhh/horas-extras/empleado/" + sel.value + "/" + anioSel.value)
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var h = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px;">';
+      h += _rrhhKpiCard("Horas totales", d.total_horas + "h", " tes-card-blue");
+      h += _rrhhKpiCard("Importe total", fmtEurFull(d.total_importe), " tes-card-green");
+      h += _rrhhKpiCard("Media/mes", d.media_mes + "h", "");
+      h += _rrhhKpiCard("Mejor mes", d.mejor_mes || "\u2014", "");
+      h += '</div>';
+      // Monthly chart
+      h += '<div class="card" style="padding:14px;margin-bottom:14px;"><h4 style="margin:0 0 8px;font-size:0.88rem;font-weight:700;">Horas extras por mes</h4><div style="position:relative;height:200px;"><canvas id="rrhh-he-chart-mensual"></canvas></div></div>';
+      // Detail table
+      h += '<div class="card" style="overflow-x:auto;padding:0;"><table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+      h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:6px 8px;">Fecha</th><th style="padding:6px 4px;">D\u00eda</th><th style="padding:6px 4px;text-align:right;">Horas</th><th style="padding:6px 4px;text-align:right;">Importe</th><th style="padding:6px 4px;">Notas</th><th style="padding:6px 4px;text-align:center;">Acc.</th></tr></thead><tbody>';
+      (d.dias || []).forEach(function(v) {
+        h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);"><td style="padding:5px 8px;">' + v.fecha + '</td><td style="padding:5px 4px;">' + (v.dia_semana||'') + '</td><td style="padding:5px 4px;text-align:right;font-weight:500;">' + v.horas + 'h</td><td style="padding:5px 4px;text-align:right;">' + fmtEur(v.importe) + '</td><td style="padding:5px 4px;font-size:0.78rem;">' + (v.notas||'\u2014') + '</td><td style="padding:5px 4px;text-align:center;"><button onclick="_rrhhHEEliminar(' + d.empleado_id + ',\'' + v.fecha + '\',\'' + d.anio + '-01\');_rrhhHEEmpLoad()" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:0.85rem;">\u2716</button></td></tr>';
+      });
+      if (!(d.dias||[]).length) h += '<tr><td colspan="6" style="text-align:center;padding:2rem;color:#888;">Sin horas extras</td></tr>';
+      h += '</tbody></table></div>';
+      body.innerHTML = h;
+      // Render chart
+      var canvas = document.getElementById("rrhh-he-chart-mensual");
+      if (canvas && d.horas_por_mes) {
+        var mLabels = _MESES_NOMBRE.map(function(n){return n.substring(0,3);});
+        if (window._rrhhHEChart) { try { window._rrhhHEChart.destroy(); } catch(e){} }
+        window._rrhhHEChart = new Chart(canvas.getContext("2d"), {
+          type: "bar",
+          data: { labels: mLabels, datasets: [{ label: "Horas", data: d.horas_por_mes, backgroundColor: "#3B82F680", borderColor: "#3B82F6", borderWidth: 1, borderRadius: 4 }] },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, title: { display: true, text: "Horas", font: { size: 10 } } } } }
+        });
+      }
+    });
+}
+
+// ── HE Tarifas ──
+
+function _rrhhHETarifas(body) {
+  body.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h4 style="margin:0;font-size:0.95rem;">Tarifas de horas extras</h4><button onclick="_rrhhHENuevaTarifa()" class="btn-small" style="background:#2563eb;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:0.82rem;cursor:pointer;">+ Nueva tarifa</button></div><div id="rrhh-he-tarifas-body">Cargando...</div>';
+  _rrhhHETarifasLoad();
+}
+
+function _rrhhHETarifasLoad() {
+  var body = document.getElementById("rrhh-he-tarifas-body");
+  if (!body) return;
+  fetch("/api/rrhh/horas-extras/tarifas").then(function(r){return r.json();}).then(function(d) {
+    var tarifas = d.tarifas || [];
+    var h = '<div class="card" style="overflow-x:auto;padding:0;"><table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+    h += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);"><th style="padding:6px 8px;">Precio/hora</th><th style="padding:6px 4px;">Desde</th><th style="padding:6px 4px;">Hasta</th><th style="padding:6px 4px;">Notas</th></tr></thead><tbody>';
+    tarifas.forEach(function(t) {
+      var activa = !t.fecha_vigencia_hasta;
+      h += '<tr style="border-bottom:1px solid var(--border,#e9ecef);' + (activa ? 'background:#F0FDF4;' : '') + '"><td style="padding:5px 8px;font-weight:600;">' + t.precio_hora + ' \u20ac/h' + (activa ? ' <span style="color:#16a34a;font-size:0.75rem;">(vigente)</span>' : '') + '</td><td style="padding:5px 4px;">' + (t.fecha_vigencia_desde||'\u2014') + '</td><td style="padding:5px 4px;">' + (t.fecha_vigencia_hasta||'\u2014') + '</td><td style="padding:5px 4px;font-size:0.78rem;">' + (t.notas||'') + '</td></tr>';
+    });
+    if (!tarifas.length) h += '<tr><td colspan="4" style="text-align:center;padding:2rem;color:#888;">Sin tarifas</td></tr>';
+    h += '</tbody></table></div>';
+    body.innerHTML = h;
+  });
+}
+
+function _rrhhHENuevaTarifa() {
+  var precio = prompt("Nuevo precio por hora extra (\u20ac):", "15");
+  if (!precio) return;
+  var desde = prompt("Vigente desde (YYYY-MM-DD):", new Date().toISOString().slice(0,10));
+  if (!desde) return;
+  var notas = prompt("Notas (opcional):", "") || "";
+  fetch("/api/rrhh/horas-extras/tarifas", {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ precio_hora: parseFloat(precio), fecha_vigencia_desde: desde, notas: notas })
+  }).then(function() { _rrhhHETarifasLoad(); });
 }
 
 // ===============================================================================
@@ -2927,6 +3251,15 @@ window._rrhhBorrarDieta = _rrhhBorrarDieta;
 window._rrhhNuevaTarifaModal = _rrhhNuevaTarifaModal;
 window._rrhhGuardarNuevaTarifa = _rrhhGuardarNuevaTarifa;
 window._rrhhEditarTarifa = _rrhhEditarTarifa;
+window._rrhhCargarHorasExtras = _rrhhCargarHorasExtras;
+window._rrhhHECalReload = _rrhhHECalReload;
+window._rrhhHECellClick = _rrhhHECellClick;
+window._rrhhHEGuardar = _rrhhHEGuardar;
+window._rrhhHEEliminar = _rrhhHEEliminar;
+window._rrhhHEResLoad = _rrhhHEResLoad;
+window._rrhhHEEmpLoad = _rrhhHEEmpLoad;
+window._rrhhHETarifasLoad = _rrhhHETarifasLoad;
+window._rrhhHENuevaTarifa = _rrhhHENuevaTarifa;
 window._rrhhCargarVacaciones = _rrhhCargarVacaciones;
 window._rrhhVacCalReload = _rrhhVacCalReload;
 window._rrhhVacCellClick = _rrhhVacCellClick;

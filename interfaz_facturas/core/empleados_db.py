@@ -212,6 +212,35 @@ def init_empleados_db() -> None:
             )
         """)
 
+        # ── Tablas de horas extras ────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS horas_extras_dias (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                empleado_id INTEGER NOT NULL,
+                fecha TEXT NOT NULL,
+                horas REAL NOT NULL,
+                precio_hora REAL NOT NULL,
+                importe REAL NOT NULL,
+                notas TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (empleado_id) REFERENCES empleados(id),
+                UNIQUE(empleado_id, fecha)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS horas_extras_config (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                precio_hora REAL NOT NULL,
+                fecha_vigencia_desde TEXT,
+                fecha_vigencia_hasta TEXT,
+                notas TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        # Seed initial config if empty
+        if conn.execute("SELECT COUNT(*) FROM horas_extras_config").fetchone()[0] == 0:
+            conn.execute("INSERT INTO horas_extras_config (precio_hora, fecha_vigencia_desde, notas) VALUES (15.0, '2026-01-01', 'Tarifa inicial')")
+
     _initialized = True
 
 
