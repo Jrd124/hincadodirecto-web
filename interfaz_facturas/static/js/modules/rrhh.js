@@ -1405,9 +1405,18 @@ function _rrhhLoadEstimacion() {
       var html = "";
       var _per = periodo;
       lineas.forEach(function (l) {
-        var fbTitle = l.fallback ? (l.fallback_source ? 'IRPF estimado seg\u00fan ' + l.fallback_source : 'IRPF por defecto 15%') : '';
-        var warn = l.fallback ? ' title="' + fbTitle + '" style="color:#ca8a04;"' : '';
-        var rowBg = l.fallback ? "background:#FFFBEB;" : "";
+        var irpfTitle = "";
+        var rowBg = "";
+        if (l.irpf_fuente === "propia") {
+          irpfTitle = "IRPF de \u00faltima n\u00f3mina completa" + (l.irpf_periodo_ref ? " (" + l.irpf_periodo_ref + ")" : "");
+        } else if (l.irpf_fuente === "referencia") {
+          irpfTitle = "IRPF de referencia (neto similar a " + (l.fallback_source || "?") + ")";
+          rowBg = "background:#FFFBEB;";
+        } else {
+          irpfTitle = "Sin referencia \u2014 IRPF estimado al 15%";
+          rowBg = "background:#FEF3C7;";
+        }
+        var warn = l.fallback ? ' title="' + irpfTitle + '" style="color:#ca8a04;"' : ' title="' + irpfTitle + '"';
         html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);' + rowBg + '">' +
           '<td style="padding:5px 6px;font-weight:500;">' + (l.fallback ? '\u26a0\ufe0f ' : '') + (l.nombre || "") + '</td>' +
           '<td style="padding:5px 3px;"><a href="#" onclick="event.preventDefault();event.stopPropagation();_rrhhVerFichaEmpleado(' + l.empleado_id + ',\'verificador\')" style="color:#3B82F6;font-size:0.75rem;">Ficha</a></td>' +

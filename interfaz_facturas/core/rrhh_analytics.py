@@ -296,58 +296,77 @@ def estimacion_nominas(periodo):
             "FROM empleados WHERE estado IN ('activo','vacaciones') ORDER BY apellidos, nombre"
         ).fetchall()]
 
-        # -- 2. IRPF from last nómina, SS fija 6.35%, SS empresa histórica --
-        # Build map of all employees with their última nómina
-        ultima_nomina = {}  # eid -> {irpf_pct, ratio_ss_emp}
+        # -- 2. IRPF from last FULL-MONTH nómina (dias>=28), SS fija 6.35% --
+        # Minimum IRPF is always 15%
+        MIN_IRPF = 15.0
+
+        # Build map: last full-month nómina per employee
+        nomina_completa = {}  # eid -> {irpf_pct, ratio_ss_emp, periodo}
         for e in emps:
             eid = e["id"]
             n = conn.execute(
-                "SELECT total_devengado, irpf_euros, ss_empresa "
+                "SELECT total_devengado, irpf_euros, ss_empresa, dias, periodo "
                 "FROM nominas WHERE empleado_id=? AND tipo='NOMINA' "
-                "AND total_devengado > 0 ORDER BY periodo DESC LIMIT 1", (eid,)
+                "AND total_devengado > 0 AND COALESCE(dias, 30) >= 28 "
+                "ORDER BY periodo DESC LIMIT 1", (eid,)
             ).fetchone()
             if n and n["total_devengado"] > 0:
                 td = n["total_devengado"]
-                ultima_nomina[eid] = {
-                    "irpf_pct": round((n["irpf_euros"] or 0) / td * 100, 2),
+                raw_irpf = round((n["irpf_euros"] or 0) / td * 100, 2)
+                nomina_completa[eid] = {
+                    "irpf_pct": max(raw_irpf, MIN_IRPF),
                     "ratio_ss_emp": (n["ss_empresa"] or 0) / td,
+                    "periodo": n["periodo"],
                 }
 
         ratios = {}
         for e in emps:
             eid = e["id"]
-            if eid in ultima_nomina:
+            if eid in nomina_completa:
+                nc = nomina_completa[eid]
                 ratios[eid] = {
-                    "pct_irpf": ultima_nomina[eid]["irpf_pct"],
+                    "pct_irpf": nc["irpf_pct"],
                     "pct_ss": 6.35,
-                    "ratio_ss_emp": ultima_nomina[eid]["ratio_ss_emp"],
+                    "ratio_ss_emp": nc["ratio_ss_emp"],
                     "fallback": False,
                     "fallback_source": None,
+                    "irpf_fuente": "propia",
+                    "irpf_periodo_ref": nc["periodo"],
                 }
             else:
-                # Fallback: find employee with similar neto_pactado
+                # Fallback: find employee with similar neto_pactado and full-month nómina
                 neto = e["neto_pactado"] or 0
                 fallback_src = None
-                fallback_irpf = 15.0
+                fallback_irpf = MIN_IRPF
                 fallback_ss_emp = 0.32
+                fallback_fuente = "fallback"
                 if neto > 0:
-                    candidates = []
-                    for e2 in emps:
-                        if e2["id"] in ultima_nomina and e2["neto_pactado"]:
-                            if abs(e2["neto_pactado"] - neto) <= neto * 0.10:
-                                candidates.append(e2)
-                    if candidates:
-                        closest = min(candidates, key=lambda x: abs(x["neto_pactado"] - neto))
-                        un = ultima_nomina[closest["id"]]
-                        fallback_irpf = un["irpf_pct"]
-                        fallback_ss_emp = un["ratio_ss_emp"]
-                        fallback_src = ((closest["nombre"] or "") + " " + (closest["apellidos"] or "")).strip()
+                    # Search directly in DB for efficiency
+                    ref = conn.execute(
+                        "SELECT e2.nombre, e2.apellidos, e2.neto_pactado, "
+                        "       n.irpf_euros, n.total_devengado, n.ss_empresa "
+                        "FROM empleados e2 "
+                        "JOIN nominas n ON n.empleado_id = e2.id "
+                        "WHERE e2.id != ? AND e2.neto_pactado IS NOT NULL "
+                        "AND ABS(e2.neto_pactado - ?) <= ? * 0.10 "
+                        "AND COALESCE(n.dias, 30) >= 28 AND n.tipo = 'NOMINA' "
+                        "AND n.total_devengado > 0 "
+                        "ORDER BY ABS(e2.neto_pactado - ?) ASC, n.periodo DESC LIMIT 1",
+                        (eid, neto, neto, neto)
+                    ).fetchone()
+                    if ref and ref["total_devengado"] > 0:
+                        raw = round((ref["irpf_euros"] or 0) / ref["total_devengado"] * 100, 2)
+                        fallback_irpf = max(raw, MIN_IRPF)
+                        fallback_ss_emp = (ref["ss_empresa"] or 0) / ref["total_devengado"]
+                        fallback_src = ((ref["nombre"] or "") + " " + (ref["apellidos"] or "")).strip()
+                        fallback_fuente = "referencia"
                 ratios[eid] = {
                     "pct_irpf": fallback_irpf,
                     "pct_ss": 6.35,
                     "ratio_ss_emp": fallback_ss_emp,
                     "fallback": True,
                     "fallback_source": fallback_src,
+                    "irpf_fuente": fallback_fuente,
                 }
 
         # -- 3. Días nómina por empleado (30 si activo todo el mes, proporcional si alta/baja mid-month) --
@@ -543,6 +562,8 @@ def estimacion_nominas(periodo):
                 "liquido_pendiente": liquido_pendiente,
                 "fallback": r["fallback"],
                 "fallback_source": r.get("fallback_source"),
+                "irpf_fuente": r.get("irpf_fuente", "propia"),
+                "irpf_periodo_ref": r.get("irpf_periodo_ref"),
             })
 
             t_neto += neto_proporcional
