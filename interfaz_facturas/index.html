@@ -2345,6 +2345,17 @@
               <button type="button" class="danger" id="btn-eliminar-crm-oportunidad" style="display:none;margin-left:auto;">🗑 Eliminar</button>
             </div>
           </form>
+
+          <!-- Timeline de interacciones vinculadas a la oportunidad (solo en modo edicion) -->
+          <div id="crm-op-interacciones-wrap" style="display:none;margin-top:20px;padding-top:16px;border-top:1px solid #e2e8f0;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+              <h3 style="margin:0;font-size:0.95rem;color:#1e293b;">
+                📋 Interacciones <span id="crm-op-interacciones-count" style="color:#64748b;font-weight:400;"></span>
+              </h3>
+              <button type="button" id="btn-crm-op-nueva-interaccion" class="secondary" style="font-size:0.8rem;padding:4px 10px;">+ Interacción</button>
+            </div>
+            <div id="crm-op-interacciones-lista" style="max-height:300px;overflow-y:auto;"></div>
+          </div>
         </div>
       </div>
 
@@ -2386,7 +2397,7 @@
             </select>
             <input type="date" id="crm-inter-fecha-desde" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:0.85rem;" />
             <input type="date" id="crm-inter-fecha-hasta" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:0.85rem;" />
-            <input type="text" id="crm-inter-buscar" placeholder="Buscar..." style="flex:1;min-width:120px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:0.85rem;" />
+            <input type="text" id="crm-inter-buscar" placeholder="Buscar en asunto, descripción, empresa, contacto…" style="flex:1;min-width:120px;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:0.85rem;" />
           </div>
           <div id="crm-interacciones-timeline" class="crm-timeline-global"></div>
           <div id="crm-interacciones-paginacion" class="crm-paginacion"></div>
@@ -4073,7 +4084,7 @@
     <script src="/static/js/modules/finanzas.js?v=27"></script>
     <script src="/static/js/modules/proyectos.js?v=27"></script>
     <script src="/static/js/modules/presupuestos.js?v=27"></script>
-    <script src="/static/js/modules/crm.js?v=36"></script>
+    <script src="/static/js/modules/crm.js?v=37"></script>
     <script src="/static/js/modules/maquinaria.js?v=32"></script>
     <script src="/static/js/modules/maquinaria_fase2b.js?v=1"></script>
     <script src="/static/js/modules/certificaciones.js?v=27"></script>

@@ -205,6 +205,7 @@ def crm_eliminar_contacto(contacto_id: int):
 def crm_listar_interacciones():
   empresa_id = request.args.get("empresa_id", type=int)
   contacto_id = request.args.get("contacto_id", type=int)
+  oportunidad_id = request.args.get("oportunidad_id", type=int)
   tipo = (request.args.get("tipo") or "").strip() or None
   fecha_desde = (request.args.get("fecha_desde") or "").strip() or None
   fecha_hasta = (request.args.get("fecha_hasta") or "").strip() or None
@@ -212,7 +213,8 @@ def crm_listar_interacciones():
   limit = min(int(request.args.get("limit") or 50), 200)
   offset = int(request.args.get("offset") or 0)
   return jsonify(crm_db.listar_interacciones(
-    empresa_id=empresa_id, contacto_id=contacto_id, tipo=tipo,
+    empresa_id=empresa_id, contacto_id=contacto_id,
+    oportunidad_id=oportunidad_id, tipo=tipo,
     fecha_desde=fecha_desde, fecha_hasta=fecha_hasta, q=q,
     limit=limit, offset=offset,
   ))

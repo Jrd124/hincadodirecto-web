@@ -1170,8 +1170,14 @@
   });
 
   // Modal interaccion
+  // oportunidad_id "pendiente" para adjuntar al crear/editar. Se resetea al abrir/cerrar modal.
+  var _intOportunidadIdPending = null;
+
   function _intAbrirModal(i, defaults) {
     var def = defaults || {};
+    // Prioridad: interaccion existente > defaults explicitos > null
+    _intOportunidadIdPending = (i && i.oportunidad_id) ? i.oportunidad_id
+      : (def.oportunidad_id || null);
     document.getElementById("modal-crm-interaccion-titulo").textContent = i ? "Editar interaccion" : "Nueva interaccion";
     document.getElementById("crm-int-edit-id").value = i ? i.id : "";
     document.getElementById("crm-int-tipo").value = i ? i.tipo || "nota" : "llamada";
@@ -1235,7 +1241,7 @@
     _intCargarContactosEmpresa(this.value, "");
   });
 
-  function _intCerrarModal() { intModalEl.classList.remove("visible"); intModalEl.setAttribute("aria-hidden", "true"); }
+  function _intCerrarModal() { intModalEl.classList.remove("visible"); intModalEl.setAttribute("aria-hidden", "true"); _intOportunidadIdPending = null; }
   document.getElementById("btn-nueva-interaccion-crm").addEventListener("click", function () { _intAbrirModal(null); });
   document.getElementById("btn-cancelar-crm-interaccion").addEventListener("click", _intCerrarModal);
   intModalEl.addEventListener("click", function (e) { if (e.target === intModalEl) _intCerrarModal(); });
@@ -1269,6 +1275,7 @@
       resultado: document.getElementById("crm-int-resultado").value,
       siguiente_accion: document.getElementById("crm-int-siguiente").value,
       fecha_siguiente_accion: document.getElementById("crm-int-fecha-siguiente").value || null,
+      oportunidad_id: _intOportunidadIdPending || null,
     };
     var url = id ? "/api/crm/interacciones/" + id : "/api/crm/interacciones";
     var method = id ? "PUT" : "POST";
@@ -1276,10 +1283,15 @@
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
       .then(function (res) {
         if (!res.ok) { mostrarToast(res.data.error || "Error", "error"); return; }
+        var opIdAdjunto = _intOportunidadIdPending;
         _intCerrarModal();
         _crmCargarInteracciones();
         if (_contSeleccionado) _contSeleccionar(_contSeleccionado);
         if (_crmEmpresaSeleccionada) _crmSeleccionarEmpresa(_crmEmpresaSeleccionada);
+        // Si el modal de oportunidad esta abierto y la interaccion iba vinculada, refrescar su timeline
+        if (opIdAdjunto && opModalEl.classList.contains("visible")) {
+          _opCargarInteraccionesModal(opIdAdjunto);
+        }
         mostrarToast("Interaccion guardada.", "success");
       })
       .catch(function () { mostrarToast("Error de conexion.", "error"); });
@@ -1791,8 +1803,65 @@
           _opCargarContactosAC(empId, contId);
         }
       });
+
+    // Timeline de interacciones: solo en modo edicion (hay id)
+    var intWrap = document.getElementById("crm-op-interacciones-wrap");
+    if (o && o.id) {
+      intWrap.style.display = "";
+      _opCargarInteraccionesModal(o.id);
+    } else {
+      intWrap.style.display = "none";
+      var listaEl = document.getElementById("crm-op-interacciones-lista");
+      if (listaEl) listaEl.innerHTML = "";
+      var cntEl = document.getElementById("crm-op-interacciones-count");
+      if (cntEl) cntEl.textContent = "";
+    }
+
     opModalEl.classList.add("visible");
     opModalEl.setAttribute("aria-hidden", "false");
+  }
+
+  // Carga y renderiza el timeline de interacciones de una oportunidad en el modal
+  function _opCargarInteraccionesModal(opId) {
+    var listaEl = document.getElementById("crm-op-interacciones-lista");
+    var cntEl = document.getElementById("crm-op-interacciones-count");
+    if (!listaEl) return;
+    listaEl.innerHTML = '<p class="crm-placeholder" style="padding:12px;color:#94a3b8;font-size:0.85rem;">Cargando…</p>';
+    fetch("/api/crm/interacciones?oportunidad_id=" + opId + "&limit=200")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var list = data.interacciones || [];
+        if (cntEl) cntEl.textContent = "(" + (data.total || list.length) + ")";
+        if (list.length === 0) {
+          listaEl.innerHTML = '<p class="crm-placeholder" style="padding:12px;color:#94a3b8;font-size:0.85rem;">Sin interacciones vinculadas a esta oportunidad.</p>';
+          return;
+        }
+        listaEl.innerHTML = list.map(function (i) {
+          var icon = _tlIcons[i.tipo] || "\uD83D\uDCDD";
+          var srcBadge = "";
+          if (i.source === "gmail") {
+            srcBadge = '<span style="display:inline-flex;align-items:center;gap:3px;font-size:0.65rem;font-weight:600;background:#fce8e6;color:#ea4335;border:1px solid #f5c6c2;border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:middle;">📧 Gmail</span>';
+          }
+          return '<div class="crm-tl-card" data-op-int-id="' + i.id + '" style="cursor:pointer;">' +
+            '<div class="crm-tl-icon crm-tl-icon-' + _esc(i.tipo) + '">' + icon + '</div>' +
+            '<div class="crm-tl-body">' +
+              '<div class="crm-tl-asunto">' + _esc(i.asunto || "(Sin asunto)") + srcBadge + '</div>' +
+              '<div class="crm-tl-meta">' + _esc(i.nombre_contacto ? (i.nombre_contacto + ' ' + (i.apellidos_contacto || '')) : (i.nombre_empresa || '')) + '</div>' +
+              (i.descripcion ? '<div class="crm-tl-desc">' + _esc(i.descripcion) + '</div>' : '') +
+            '</div>' +
+            '<div class="crm-tl-fecha">' + _esc((i.fecha || "").substring(0, 10)) + '</div>' +
+          '</div>';
+        }).join("");
+        listaEl.querySelectorAll("[data-op-int-id]").forEach(function (el) {
+          el.addEventListener("click", function () {
+            var intId = parseInt(el.getAttribute("data-op-int-id"));
+            if (window._intAbrirModalEditar) _intAbrirModalEditar(intId);
+          });
+        });
+      })
+      .catch(function () {
+        listaEl.innerHTML = '<p class="crm-placeholder" style="padding:12px;color:#b91c1c;font-size:0.85rem;">Error al cargar interacciones.</p>';
+      });
   }
 
   // ── Autocomplete helpers para el modal de oportunidad ─────────────────────
@@ -1895,6 +1964,23 @@
   document.getElementById("btn-nueva-oportunidad-crm").addEventListener("click", function () { _opAbrirModal(null); });
   document.getElementById("btn-cancelar-crm-oportunidad").addEventListener("click", _opCerrarModal);
   opModalEl.addEventListener("click", function (e) { if (e.target === opModalEl) _opCerrarModal(); });
+
+  // "+ Interacción" dentro del modal oportunidad: abre modal de interacción con
+  // oportunidad / empresa / contacto pre-rellenados.
+  var _btnOpNuevaInt = document.getElementById("btn-crm-op-nueva-interaccion");
+  if (_btnOpNuevaInt) {
+    _btnOpNuevaInt.addEventListener("click", function () {
+      var opId = parseInt(document.getElementById("crm-op-edit-id").value) || null;
+      if (!opId) { mostrarToast("Guarda la oportunidad antes de añadir interacciones.", "info"); return; }
+      var empId = document.getElementById("crm-op-empresa").value || null;
+      var contId = document.getElementById("crm-op-contacto").value || null;
+      _intAbrirModal(null, {
+        oportunidad_id: opId,
+        empresa_id: empId,
+        contacto_id: contId,
+      });
+    });
+  }
 
   document.getElementById("btn-eliminar-crm-oportunidad").addEventListener("click", function () {
     var id = parseInt(document.getElementById("crm-op-edit-id").value);

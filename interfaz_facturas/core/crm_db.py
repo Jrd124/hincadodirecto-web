@@ -788,6 +788,7 @@ def eliminar_contacto(contacto_id: int) -> bool:
 def listar_interacciones(
     empresa_id: int | None = None,
     contacto_id: int | None = None,
+    oportunidad_id: int | None = None,
     tipo: str | None = None,
     fecha_desde: str | None = None,
     fecha_hasta: str | None = None,
@@ -804,6 +805,9 @@ def listar_interacciones(
     if contacto_id:
         where_parts.append("i.contacto_id = ?")
         params.append(contacto_id)
+    if oportunidad_id:
+        where_parts.append("i.oportunidad_id = ?")
+        params.append(oportunidad_id)
     if tipo:
         where_parts.append("i.tipo = ?")
         params.append(tipo)
@@ -814,20 +818,43 @@ def listar_interacciones(
         where_parts.append("i.fecha <= ?")
         params.append(fecha_hasta + "T23:59:59")
     if q:
-        where_parts.append("(i.asunto LIKE ? OR i.descripcion LIKE ?)")
+        # Búsqueda libre en todos los campos de texto relevantes:
+        # asunto, descripción, resultado, siguiente acción, snippet Gmail,
+        # nombre de empresa, nombre+apellidos de contacto y tipo.
+        where_parts.append(
+            "("
+            "i.asunto LIKE ? OR "
+            "i.descripcion LIKE ? OR "
+            "i.resultado LIKE ? OR "
+            "i.siguiente_accion LIKE ? OR "
+            "i.gmail_snippet LIKE ? OR "
+            "i.tipo LIKE ? OR "
+            "e.nombre LIKE ? OR "
+            "c.nombre LIKE ? OR "
+            "c.apellidos LIKE ? OR "
+            "(COALESCE(c.nombre,'') || ' ' || COALESCE(c.apellidos,'')) LIKE ?"
+            ")"
+        )
         like = f"%{q}%"
-        params.extend([like, like])
+        params.extend([like] * 10)
     where = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
 
+    # Tanto COUNT como SELECT necesitan los JOINs porque la búsqueda libre
+    # puede referenciar e.nombre / c.nombre / c.apellidos.
+    joins = (
+        "LEFT JOIN crm_contactos c ON c.id = i.contacto_id "
+        "LEFT JOIN crm_empresas e ON e.id = i.empresa_id"
+    )
     with _conectar() as conn:
-        total = conn.execute(f"SELECT COUNT(*) FROM crm_interacciones i {where}", params).fetchone()[0]
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM crm_interacciones i {joins} {where}", params
+        ).fetchone()[0]
         rows = conn.execute(f"""
             SELECT i.*,
                 c.nombre AS nombre_contacto, c.apellidos AS apellidos_contacto,
                 e.nombre AS nombre_empresa
             FROM crm_interacciones i
-            LEFT JOIN crm_contactos c ON c.id = i.contacto_id
-            LEFT JOIN crm_empresas e ON e.id = i.empresa_id
+            {joins}
             {where}
             ORDER BY i.fecha DESC
             LIMIT ? OFFSET ?
