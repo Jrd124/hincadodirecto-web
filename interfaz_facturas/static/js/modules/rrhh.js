@@ -1342,11 +1342,13 @@ function _rrhhVerifEstimacionView(body) {
           '<th style="padding:6px 4px;font-weight:700;text-align:right;">% SS hist.</th>' +
           '<th style="padding:6px 4px;font-weight:700;text-align:right;font-weight:800;">Coste empresa</th>' +
           '<th style="padding:6px 4px;font-weight:700;text-align:right;">Dietas estim.</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">HE h</th>' +
+          '<th style="padding:6px 4px;font-weight:700;text-align:right;">HE \u20ac</th>' +
           '<th style="padding:6px 4px;font-weight:700;text-align:right;">Total devengado</th>' +
           '<th style="padding:6px 4px;font-weight:700;text-align:right;">Adelantos</th>' +
           '<th style="padding:6px 4px;font-weight:700;text-align:right;font-weight:800;background:#F0FDF4;">L\u00edquido pendiente</th>' +
         '</tr></thead>' +
-        '<tbody id="rrhh-estim-tbody"><tr><td colspan="12" style="text-align:center;padding:2rem;">Cargando...</td></tr></tbody>' +
+        '<tbody id="rrhh-estim-tbody"><tr><td colspan="14" style="text-align:center;padding:2rem;">Cargando...</td></tr></tbody>' +
         '<tfoot id="rrhh-estim-tfoot" style="font-weight:700;background:var(--bg-secondary,#f8f9fa);"></tfoot>' +
       '</table>' +
     '</div>';
@@ -1414,6 +1416,8 @@ function _rrhhLoadEstimacion() {
           '<td style="padding:5px 4px;text-align:right;"' + warn + '>' + (l.pct_ss != null ? l.pct_ss.toFixed(2) + '%' : '\u2014') + '</td>' +
           '<td style="padding:5px 4px;text-align:right;font-weight:700;">' + fmtEur(l.coste_total) + '</td>' +
           '<td style="padding:5px 4px;text-align:right;">' + fmtEur(l.dietas) + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;">' + (l.horas_extras_horas > 0 ? l.horas_extras_horas + 'h' : '\u2014') + '</td>' +
+          '<td style="padding:5px 4px;text-align:right;" title="' + (l.horas_extras_horas||0) + 'h \u00d7 15\u20ac = ' + (l.horas_extras||0) + '\u20ac">' + fmtEur(l.horas_extras) + '</td>' +
           '<td style="padding:5px 4px;text-align:right;">' + fmtEur(l.total_devengado) + '</td>' +
           '<td style="padding:5px 4px;text-align:right;">' + (l.adelantos > 0 ? '<span style="color:#dc2626;">(' + fmtEur(l.adelantos) + ')</span>' : '\u2014') + '</td>' +
           '<td style="padding:5px 4px;text-align:right;font-weight:700;background:#F0FDF4;">' + fmtEur(l.liquido_pendiente) + '</td>' +
@@ -1428,6 +1432,8 @@ function _rrhhLoadEstimacion() {
           '<td colspan="2"></td>' +
           '<td style="padding:6px;text-align:right;font-weight:800;">' + fmtEur(tot.coste_total) + '</td>' +
           '<td style="padding:6px;text-align:right;">' + fmtEur(tot.dietas) + '</td>' +
+          '<td style="padding:6px;text-align:right;">' + (function(){ var th=0; (d.lineas||[]).forEach(function(l){th+=(l.horas_extras_horas||0);}); return th > 0 ? th+'h' : '\u2014'; })() + '</td>' +
+          '<td style="padding:6px;text-align:right;">' + fmtEur(tot.horas_extras) + '</td>' +
           '<td style="padding:6px;text-align:right;">' + fmtEur(tot.total_devengado) + '</td>' +
           '<td style="padding:6px;text-align:right;">' + fmtEur(tot.adelantos) + '</td>' +
           '<td style="padding:6px;text-align:right;font-weight:800;background:#F0FDF4;">' + fmtEur(tot.liquido_pendiente) + '</td>' +

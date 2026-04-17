@@ -413,14 +413,14 @@ def estimacion_nominas(periodo):
             dietas_emp[eid] = dietas_emp.get(eid, 0) + imp
 
         # -- 4b. Horas extras del mes --
-        horas_extras_emp = {}
+        horas_extras_emp = {}  # eid -> {importe, horas}
         try:
             for r in conn.execute(
-                "SELECT empleado_id, COALESCE(SUM(importe),0) as total "
+                "SELECT empleado_id, COALESCE(SUM(importe),0) as total, COALESCE(SUM(horas),0) as horas "
                 "FROM horas_extras_dias WHERE fecha >= ? AND fecha < ? "
                 "GROUP BY empleado_id", (fecha_ini, fecha_fin)
             ).fetchall():
-                horas_extras_emp[r["empleado_id"]] = r["total"]
+                horas_extras_emp[r["empleado_id"]] = {"importe": r["total"], "horas": r["horas"]}
         except Exception:
             pass
 
@@ -455,7 +455,9 @@ def estimacion_nominas(periodo):
             r = ratios[eid]
             dp = dias_plan.get(eid, 0)
             dietas = round(dietas_emp.get(eid, 0), 2)
-            horas_extras = round(horas_extras_emp.get(eid, 0), 2)
+            he_data = horas_extras_emp.get(eid, {"importe": 0, "horas": 0})
+            horas_extras = round(he_data["importe"], 2)
+            horas_extras_h = round(he_data["horas"], 1)
             adel = round(adelantos_banco.get(eid, 0), 2)
 
             # Proporción del mes
@@ -491,6 +493,7 @@ def estimacion_nominas(periodo):
                 "coste_total": coste_total,
                 "dietas": dietas,
                 "horas_extras": horas_extras,
+                "horas_extras_horas": horas_extras_h,
                 "adelantos": adel,
                 "liquido_total": liquido_total,
                 "liquido_pendiente": liquido_pendiente,
