@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 _initialized = False
 
-_ESTADOS = ("cotizado", "vivo", "pausado", "terminado", "cancelado")
+_ESTADOS = ("cotizado", "adjudicado", "vivo", "pausado", "terminado", "cancelado", "perdido")
 
 
 def init_proyectos_db() -> None:
@@ -245,6 +245,21 @@ def init_proyectos_db() -> None:
             col_list = ", ".join(cols)
             conn.execute(f"INSERT INTO proyectos ({col_list}) SELECT {col_list} FROM _proyectos_old")
             conn.execute("DROP TABLE _proyectos_old")
+
+        # Migración: añadir estado 'adjudicado' si no existe
+        row_sql2 = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='proyectos'").fetchone()
+        if row_sql2 and "'adjudicado'" not in (row_sql2[0] or ""):
+            conn.execute("ALTER TABLE proyectos RENAME TO _proyectos_old2")
+            old2 = row_sql2[0]
+            new2 = old2.replace(
+                "'cotizado','vivo','pausado','terminado','cancelado','perdido'",
+                "'cotizado','adjudicado','vivo','pausado','terminado','cancelado','perdido'"
+            )
+            conn.execute(new2)
+            cols2 = [r[1] for r in conn.execute("PRAGMA table_info(proyectos)").fetchall()]
+            col2_list = ", ".join(cols2)
+            conn.execute(f"INSERT INTO proyectos ({col2_list}) SELECT {col2_list} FROM _proyectos_old2")
+            conn.execute("DROP TABLE _proyectos_old2")
 
         # Migración: campos pricing hinca/perforación
         existing = {r[1] for r in conn.execute("PRAGMA table_info(proyectos)").fetchall()}
@@ -1011,17 +1026,25 @@ def dashboard_landing() -> dict:
             "en_riesgo": en_riesgo,
         }
 
-        # ── Pipeline ──
+        # ── Pipeline with leads ──
+        # Leads from CRM
+        pip_leads = {"c": 0, "s": 0}
+        try:
+            r = conn.execute("SELECT COUNT(*) as c, COALESCE(SUM(importe_estimado),0) as s FROM crm_oportunidades WHERE estado NOT IN ('ganada','perdida','descartada')").fetchone()
+            pip_leads = {"c": r["c"], "s": _safe_float(r["s"])}
+        except Exception:
+            pass
         pip_cotizados = conn.execute("SELECT COUNT(*) as c, COALESCE(SUM(importe_presupuestado),0) as s FROM proyectos WHERE estado='cotizado'").fetchone()
+        pip_adjudicados = conn.execute("SELECT COUNT(*) as c, COALESCE(SUM(importe_presupuestado),0) as s FROM proyectos WHERE estado='adjudicado'").fetchone()
         pip_vivos = conn.execute("SELECT COUNT(*) as c, COALESCE(SUM(importe_presupuestado),0) as s FROM proyectos WHERE estado IN ('vivo','en_curso')").fetchone()
         pip_terminados = conn.execute("SELECT COUNT(*) as c, COALESCE(SUM(importe_facturado),0) as s FROM proyectos WHERE estado='terminado' AND SUBSTR(COALESCE(fecha_fin_real, created_at),1,4)=?", (str(anio),)).fetchone()
-        pip_adjudicados = conn.execute("SELECT COUNT(*) as c, COALESCE(SUM(importe_presupuestado),0) as s FROM proyectos WHERE estado NOT IN ('cotizado','perdido') AND SUBSTR(created_at,1,4)=?", (str(anio),)).fetchone()
-        total_pipeline = _safe_float(pip_cotizados["s"]) + _safe_float(pip_vivos["s"])
-        total_count = pip_cotizados["c"] + pip_vivos["c"] + pip_terminados["c"]
+        total_pipeline = _safe_float(pip_cotizados["s"]) + _safe_float(pip_adjudicados["s"]) + _safe_float(pip_vivos["s"])
+        total_count = pip_cotizados["c"] + pip_adjudicados["c"] + pip_vivos["c"] + pip_terminados["c"]
 
         pipeline = {
+            "leads": {"count": pip_leads["c"], "importe": round(pip_leads["s"], 0)},
             "cotizados": {"count": pip_cotizados["c"], "importe": round(_safe_float(pip_cotizados["s"]), 0)},
-            "adjudicados_ytd": {"count": pip_adjudicados["c"], "importe": round(_safe_float(pip_adjudicados["s"]), 0)},
+            "adjudicados": {"count": pip_adjudicados["c"], "importe": round(_safe_float(pip_adjudicados["s"]), 0)},
             "vivos": {"count": pip_vivos["c"], "importe": round(_safe_float(pip_vivos["s"]), 0)},
             "terminados_ytd": {"count": pip_terminados["c"], "importe": round(_safe_float(pip_terminados["s"]), 0)},
             "tasa_conversion": round(pip_adjudicados["c"] / max(pip_adjudicados["c"] + pip_cotizados["c"], 1) * 100, 0),

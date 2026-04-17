@@ -38,8 +38,9 @@ const MODULOS = {
   },
   operaciones: {
     linkId: "nav-operaciones-modulo",
-    paneles: { inicio: "panel-operaciones-inicio" },
-    subNavLinks: {},
+    submenuId: "submenu-operaciones",
+    paneles: { inicio: "panel-operaciones-inicio", transporte: "panel-proyectos-transporte", onboarding: "panel-onboarding-inicio" },
+    subNavLinks: { transporte: "nav-operaciones-transporte", onboarding: "nav-operaciones-onboarding" },
     defecto: "inicio",
   },
   gasoil: {
@@ -52,8 +53,8 @@ const MODULOS = {
   proyectos: {
     linkId: "nav-proyectos-modulo",
     submenuId: "submenu-proyectos",
-    paneles: { inicio: "panel-proyectos-inicio", cotizados: "panel-proyectos-cotizados", vivos: "panel-proyectos-vivos", terminados: "panel-proyectos-terminados", dashboard: "panel-proyecto-dashboard", transporte: "panel-proyectos-transporte", onboarding: "panel-onboarding-inicio" },
-    subNavLinks: { cotizados: "nav-proyectos-cotizados", vivos: "nav-proyectos-vivos", terminados: "nav-proyectos-terminados", transporte: "nav-proyectos-transporte", onboarding: "nav-proyectos-onboarding" },
+    paneles: { inicio: "panel-proyectos-inicio", cotizados: "panel-proyectos-cotizados", adjudicados: "panel-proyectos-adjudicados", vivos: "panel-proyectos-vivos", terminados: "panel-proyectos-terminados", dashboard: "panel-proyecto-dashboard" },
+    subNavLinks: { cotizados: "nav-proyectos-cotizados", adjudicados: "nav-proyectos-adjudicados", vivos: "nav-proyectos-vivos", terminados: "nav-proyectos-terminados" },
     defecto: "inicio",
   },
   bancos: {
@@ -750,25 +751,13 @@ document.getElementById("nav-clientes-listado").addEventListener("click", (e) =>
   activarSubpanel("clientes", "clientes_listado");
   if (typeof window._comprobarBannerDuplicados === "function") window._comprobarBannerDuplicados("cliente");
 });
-document.getElementById("nav-proyectos-cotizados").addEventListener("click", (e) => {
-  e.preventDefault();
-  activarSubpanel("proyectos", "cotizados");
+["cotizados","adjudicados","vivos","terminados"].forEach(function(sp) {
+  var el = document.getElementById("nav-proyectos-" + sp);
+  if (el) el.addEventListener("click", function(e) { e.preventDefault(); activarSubpanel("proyectos", sp); });
 });
-document.getElementById("nav-proyectos-vivos").addEventListener("click", (e) => {
-  e.preventDefault();
-  activarSubpanel("proyectos", "vivos");
-});
-document.getElementById("nav-proyectos-terminados").addEventListener("click", (e) => {
-  e.preventDefault();
-  activarSubpanel("proyectos", "terminados");
-});
-document.getElementById("nav-proyectos-transporte").addEventListener("click", (e) => {
-  e.preventDefault();
-  activarSubpanel("proyectos", "transporte");
-});
-document.getElementById("nav-proyectos-onboarding").addEventListener("click", (e) => {
-  e.preventDefault();
-  activarSubpanel("proyectos", "onboarding");
+["transporte","onboarding"].forEach(function(sp) {
+  var el = document.getElementById("nav-operaciones-" + sp);
+  if (el) el.addEventListener("click", function(e) { e.preventDefault(); activarSubpanel("operaciones", sp); });
 });
 
 ["equipo","nominas","verificador","dietas","horasextras","vacaciones","adelantos","ss","irpf","costeproyecto"].forEach(function(sp) {

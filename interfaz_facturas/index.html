@@ -62,17 +62,23 @@
           </a>
           <div class="sidebar-children" id="sidebar-children-proyectos">
             <a href="#" class="sidebar-child" id="nav-proyectos-cotizados">Cotizados</a>
+            <a href="#" class="sidebar-child" id="nav-proyectos-adjudicados">Adjudicados</a>
             <a href="#" class="sidebar-child" id="nav-proyectos-vivos">Vivos</a>
             <a href="#" class="sidebar-child" id="nav-proyectos-terminados">Terminados</a>
-            <a href="#" class="sidebar-child" id="nav-proyectos-transporte">Transporte</a>
-            <a href="#" class="sidebar-child" id="nav-proyectos-onboarding">Onboarding</a>
           </div>
         </div>
         <!-- Operaciones -->
-        <a href="#" class="sidebar-item" id="nav-operaciones-modulo">
-          <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="2" width="14" height="12" rx="1.5"/><path d="M1 6h14"/><path d="M5 2v4"/><path d="M11 2v4"/><path d="M4 9h2v2H4z"/><path d="M7 9h2v2H7z"/><path d="M10 9h2v2h-2z"/></svg>
-          <span class="sidebar-label">Operaciones</span>
-        </a>
+        <div class="sidebar-group">
+          <a href="#" class="sidebar-item sidebar-parent" id="nav-operaciones-modulo" data-group="operaciones">
+            <svg class="sidebar-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="2" width="14" height="12" rx="1.5"/><path d="M1 6h14"/><path d="M5 2v4"/><path d="M11 2v4"/><path d="M4 9h2v2H4z"/><path d="M7 9h2v2H7z"/><path d="M10 9h2v2h-2z"/></svg>
+            <span class="sidebar-label">Operaciones</span>
+            <svg class="sidebar-chevron" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4"/></svg>
+          </a>
+          <div class="sidebar-children" id="sidebar-children-operaciones">
+            <a href="#" class="sidebar-child" id="nav-operaciones-transporte">Transporte</a>
+            <a href="#" class="sidebar-child" id="nav-operaciones-onboarding">Onboarding</a>
+          </div>
+        </div>
         <!-- Gasoil -->
         <div class="sidebar-group">
           <a href="#" class="sidebar-item sidebar-parent" id="nav-gasoil-modulo" data-group="gasoil">
@@ -779,6 +785,13 @@
         <section style="max-width:1300px;margin:0 auto;padding:24px 20px;">
           <div class="crm-empresas-header"><h1>Proyectos cotizados</h1><div style="display:flex;gap:8px;"><button type="button" class="primary" id="btn-nuevo-proyecto" style="font-size:0.85rem;padding:6px 16px;">+ Nuevo cotizado</button></div></div>
           <div id="proy-cotizados-tabla"></div>
+        </section>
+      </div>
+      <!-- ═══ ADJUDICADOS ═══ -->
+      <div id="panel-proyectos-adjudicados" class="panel-proyectos">
+        <section style="max-width:1300px;margin:0 auto;padding:24px 20px;">
+          <h2 style="margin:0 0 16px;font-size:1.1rem;">Proyectos adjudicados</h2>
+          <div id="proy-adjudicados-content"><p style="color:#94a3b8;text-align:center;padding:2rem;">Cargando...</p></div>
         </section>
       </div>
       <!-- ═══ VIVOS ═══ -->

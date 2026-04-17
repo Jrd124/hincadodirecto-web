@@ -66,18 +66,21 @@
         h += '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#555;margin-bottom:10px;">Pipeline comercial</div>';
         h += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">';
         var phases = [
-          {k:"cotizados",label:"Cotizados",bg:"#FAEEDA",col:"#854F0B"},
-          {k:"adjudicados_ytd",label:"Adjudicados",bg:"#E6F1FB",col:"#1E40AF"},
-          {k:"vivos",label:"Vivos",bg:"#E1F5EE",col:"#0F6E56"},
-          {k:"terminados_ytd",label:"Terminados YTD",bg:"#F1EFE8",col:"#57534E"},
+          {k:"leads",label:"Leads",bg:"#F3F2EF",col:"#57534E",nav:"crm"},
+          {k:"cotizados",label:"Cotizados",bg:"#FAEEDA",col:"#854F0B",nav:"proyectos:cotizados"},
+          {k:"adjudicados",label:"Adjudicados",bg:"#E6F1FB",col:"#1E40AF",nav:"proyectos:adjudicados"},
+          {k:"vivos",label:"Vivos",bg:"#E1F5EE",col:"#0F6E56",nav:"proyectos:vivos"},
+          {k:"terminados_ytd",label:"Terminados",bg:"#F1EFE8",col:"#57534E",nav:"proyectos:terminados"},
         ];
         phases.forEach(function(ph, i) {
           var pd = pip[ph.k] || {};
-          h += '<div style="flex:1;min-width:100px;background:' + ph.bg + ';border-radius:6px;padding:10px 12px;text-align:center;">' +
+          var navParts = ph.nav.split(":");
+          var navClick = navParts.length > 1 ? 'activarSubpanel(\'' + navParts[0] + '\',\'' + navParts[1] + '\')' : 'activarModulo(\'' + navParts[0] + '\')';
+          h += '<div onclick="' + navClick + '" style="flex:1;min-width:80px;background:' + ph.bg + ';border-radius:6px;padding:10px 12px;text-align:center;cursor:pointer;" onmouseover="this.style.opacity=0.85" onmouseout="this.style.opacity=1">' +
             '<div style="font-size:20px;font-weight:600;color:' + ph.col + ';">' + (pd.count || 0) + '</div>' +
             '<div style="font-size:11px;color:' + ph.col + ';">' + ph.label + '</div>' +
             '<div style="font-size:10px;color:#888;margin-top:2px;">' + _dashFmtEurCompact(pd.importe || 0) + '</div></div>';
-          if (i < 3) h += '<span style="font-size:16px;color:#ccc;">\u2192</span>';
+          if (i < 4) h += '<span style="font-size:16px;color:#ccc;">\u2192</span>';
         });
         h += '</div>';
         h += '<div style="display:flex;gap:20px;margin-top:10px;font-size:11px;color:#666;">' +
@@ -344,7 +347,7 @@
         var k = p.kpis || {};
         var fin = p.financiero || {};
         // ── State colors ──
-        var _EC = {cotizado:"#eab308",vivo:"#22c55e",en_curso:"#22c55e",terminado:"#3B82F6",perdido:"#ef4444"};
+        var _EC = {cotizado:"#eab308",adjudicado:"#2563eb",vivo:"#22c55e",en_curso:"#22c55e",terminado:"#3B82F6",perdido:"#ef4444",pausado:"#f59e0b"};
         var estadoColor = _EC[p.estado] || "#6B7280";
         var estadoLabel = (p.estado || "?").charAt(0).toUpperCase() + (p.estado || "").slice(1);
         var cliente = p.cliente_nombre || "";
@@ -359,8 +362,12 @@
           accBtns = '<button style="' + _bs + '#FFFBEB;color:#92400E;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'pausado\')">Pausar</button>' +
             '<button style="' + _bs + '#EFF6FF;color:#1E40AF;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'terminado\')">Terminar</button>';
         } else if (p.estado === "cotizado") {
-          accBtns = '<button style="' + _bs + '#DCFCE7;color:#166534;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'vivo\')">Adjudicar</button>' +
-            '<button style="' + _bs + '#FEF2F2;color:#991B1B;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'perdido\')">Perder</button>';
+          accBtns = '<button style="' + _bs + '#E6F1FB;color:#1E40AF;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'adjudicado\')">Adjudicar</button>' +
+            '<button style="' + _bs + '#FEF2F2;color:#991B1B;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'perdido\')">Perder</button>' +
+            '<button style="' + _bs + '#FEF2F2;color:#991B1B;" onclick="_proyEliminar(' + p.id + ',\'' + (p.nombre||'').replace(/'/g,"\\'") + '\')">Eliminar</button>';
+        } else if (p.estado === "adjudicado") {
+          accBtns = '<button style="' + _bs + '#DCFCE7;color:#166534;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'vivo\')">Iniciar obra</button>' +
+            '<button style="' + _bs + '#FEF2F2;color:#991B1B;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'cancelado\')">Cancelar</button>';
         } else if (p.estado === "pausado") {
           accBtns = '<button style="' + _bs + '#DCFCE7;color:#166534;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'vivo\')">Reanudar</button>' +
             '<button style="' + _bs + '#EFF6FF;color:#1E40AF;" onclick="_proyCambiarEstadoDash(' + p.id + ',\'terminado\')">Terminar</button>';
@@ -1011,11 +1018,22 @@
   } // end if(false) — dead old code above
 
   window._proyCambiarEstadoDash = function (id, estado) {
-    var labelEstado = estado === "vivo" ? "reactivar (volver a vivo)" : estado;
+    var labelEstado = estado === "vivo" ? "iniciar obra" : (estado === "adjudicado" ? "adjudicar" : estado);
     if (!confirm("Cambiar estado del proyecto a '" + labelEstado + "'?")) return;
     fetch("/api/proyectos/" + id + "/estado", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ estado: estado }) })
       .then(function (r) { return r.json(); })
       .then(function () { mostrarToast("Estado actualizado.", "success"); proyectoDashboard(id); });
+  };
+
+  window._proyEliminar = function (id, nombre) {
+    if (!confirm("\u00bfSeguro que quieres eliminar el proyecto " + nombre + "? Esta acci\u00f3n no se puede deshacer.")) return;
+    fetch("/api/proyectos/" + id, { method: "DELETE" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.error) { mostrarToast(d.error, "error"); return; }
+        mostrarToast("Proyecto eliminado.", "success");
+        activarSubpanel("proyectos", "cotizados");
+      });
   };
 
   window.proyectoDashboardVolver = function () {
@@ -1732,6 +1750,35 @@
     });
   }
 
+  // ── Adjudicados ──
+  window._proyAdjudicados = function () {
+    var el = document.getElementById("proy-adjudicados-content");
+    if (!el) return;
+    el.innerHTML = '<p style="color:#94a3b8;text-align:center;padding:1rem;">Cargando...</p>';
+    fetch("/api/proyectos?estado=adjudicado")
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var proys = d.proyectos || [];
+        if (!proys.length) { el.innerHTML = '<p style="color:#94a3b8;text-align:center;padding:2rem;">Sin proyectos adjudicados.</p>'; return; }
+        var h = '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+        h += '<thead><tr style="background:#f1f3f5;"><th style="padding:6px 8px;text-align:left;">C\u00f3digo</th><th style="padding:6px 4px;text-align:left;">Nombre</th><th style="padding:6px 4px;">Cliente</th><th style="padding:6px 4px;">Ubicaci\u00f3n</th><th style="padding:6px 4px;text-align:right;">Presupuesto</th><th style="padding:6px 4px;">Inicio est.</th><th style="padding:6px 4px;text-align:center;">Acc.</th></tr></thead><tbody>';
+        proys.forEach(function (p) {
+          h += '<tr style="border-bottom:1px solid #e9ecef;cursor:pointer;" onclick="proyectoDashboard(' + p.id + ')">' +
+            '<td style="padding:5px 8px;font-family:monospace;">' + (p.codigo || "") + '</td>' +
+            '<td style="padding:5px 4px;font-weight:500;">' + (p.nombre || "") + '</td>' +
+            '<td style="padding:5px 4px;font-size:0.78rem;">' + (p.cliente_nombre || "\u2014") + '</td>' +
+            '<td style="padding:5px 4px;font-size:0.78rem;">' + (p.provincia || p.ubicacion_texto || "\u2014") + '</td>' +
+            '<td style="padding:5px 4px;text-align:right;">' + _dashFmtEurCompact(p.importe_presupuestado) + '</td>' +
+            '<td style="padding:5px 4px;">' + (p.fecha_inicio_estimada || "\u2014") + '</td>' +
+            '<td style="padding:5px 4px;text-align:center;"><button onclick="event.stopPropagation();_proyCambiarEstadoDash(' + p.id + ',\'vivo\')" style="padding:3px 8px;background:#DCFCE7;color:#166534;border:1px solid #86EFAC;border-radius:4px;font-size:0.75rem;cursor:pointer;">Iniciar obra</button></td></tr>';
+        });
+        h += '</tbody></table>';
+        el.innerHTML = h;
+      });
+  };
+  var panelAdj = document.getElementById("panel-proyectos-adjudicados");
+  if (panelAdj) new MutationObserver(function () { if (panelAdj.classList.contains("visible")) _proyAdjudicados(); }).observe(panelAdj, { attributes: true, attributeFilter: ["class"] });
+
   var panelViv = document.getElementById("panel-proyectos-vivos");
   if (panelViv) new MutationObserver(function () { if (panelViv.classList.contains("visible")) _proyVivos(); }).observe(panelViv, { attributes: true, attributeFilter: ["class"] });
 
@@ -1740,7 +1787,7 @@
     if (!confirm("Cambiar estado del proyecto a '" + labelEstado + "'?")) return;
     fetch("/api/proyectos/" + id + "/estado", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ estado: estado }) })
       .then(function (r) { return r.json(); })
-      .then(function () { mostrarToast("Estado actualizado.", "success"); _proyVivos(); _proyCotizados(); _proyTerminados(); });
+      .then(function () { mostrarToast("Estado actualizado.", "success"); _proyVivos(); _proyCotizados(); if(typeof _proyAdjudicados==='function')_proyAdjudicados(); _proyTerminados(); });
   };
 
   // ── Terminados (incluye cancelados) ──

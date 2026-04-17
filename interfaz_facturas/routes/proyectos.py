@@ -171,6 +171,34 @@ def api_cambiar_estado_proyecto(proyecto_id: int):
   return jsonify(p)
 
 
+@proyectos_bp.delete("/api/proyectos/<int:pid>")
+def api_eliminar_proyecto(pid):
+  proyectos_db.init_proyectos_db()
+  from core.db import get_conn
+  conn = get_conn()
+  try:
+    row = conn.execute("SELECT estado FROM proyectos WHERE id=?", (pid,)).fetchone()
+    if not row:
+      return jsonify({"error": "Proyecto no encontrado"}), 404
+    if row["estado"] not in ("cotizado", "perdido"):
+      return jsonify({"error": "Solo se pueden eliminar proyectos cotizados o perdidos"}), 400
+    conn.execute("DELETE FROM proyecto_asignaciones WHERE proyecto_id=?", (pid,))
+    conn.execute("DELETE FROM proyecto_partes WHERE proyecto_id=?", (pid,))
+    conn.execute("DELETE FROM certificaciones WHERE proyecto_id=?", (pid,))
+    conn.execute("DELETE FROM proyecto_historial WHERE proyecto_id=?", (pid,))
+    try:
+      conn.execute("UPDATE facturas_cliente SET proyecto_id=NULL WHERE proyecto_id=?", (pid,))
+    except Exception: pass
+    try:
+      conn.execute("UPDATE facturas_proveedor SET proyecto_id=NULL WHERE proyecto_id=?", (pid,))
+    except Exception: pass
+    conn.execute("DELETE FROM proyectos WHERE id=?", (pid,))
+    conn.commit()
+    return jsonify({"ok": True})
+  finally:
+    conn.close()
+
+
 @proyectos_bp.get("/api/proyectos/<int:proyecto_id>/partes")
 def api_listar_partes(proyecto_id: int):
   return jsonify({"partes": proyectos_db.listar_partes(proyecto_id)})
