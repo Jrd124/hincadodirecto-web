@@ -1112,9 +1112,15 @@ def consultar_cumpleanos(tipo="proximos_15d", nombre_empleado=None):
                 fn = date.fromisoformat(e["fecha_nacimiento"])
             except Exception:
                 continue
-            cumple = fn.replace(year=hoy.year)
+            try:
+                cumple = fn.replace(year=hoy.year)
+            except ValueError:
+                cumple = fn.replace(year=hoy.year, day=28)
             if cumple < hoy:
-                cumple = fn.replace(year=hoy.year + 1)
+                try:
+                    cumple = fn.replace(year=hoy.year + 1)
+                except ValueError:
+                    cumple = fn.replace(year=hoy.year + 1, day=28)
             dias = (cumple - hoy).days
             edad = cumple.year - fn.year
             nm = f"{e['nombre']} {e.get('apellidos') or ''}".strip()
@@ -2923,9 +2929,15 @@ async def check_cumpleanos(context: ContextTypes.DEFAULT_TYPE):
                 fn = date.fromisoformat(emp["fecha_nacimiento"])
             except Exception:
                 continue
-            cumple = fn.replace(year=hoy.year)
+            try:
+                cumple = fn.replace(year=hoy.year)
+            except ValueError:
+                cumple = fn.replace(year=hoy.year, day=28)
             if cumple < hoy:
-                cumple = fn.replace(year=hoy.year + 1)
+                try:
+                    cumple = fn.replace(year=hoy.year + 1)
+                except ValueError:
+                    cumple = fn.replace(year=hoy.year + 1, day=28)
             dias = (cumple - hoy).days
             edad = cumple.year - fn.year
             nombre = f"{emp['nombre']} {emp.get('apellidos') or ''}".strip()

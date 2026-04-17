@@ -888,9 +888,15 @@ def api_cumpleanos_proximos():
         fn = date.fromisoformat(e["fecha_nacimiento"])
       except Exception:
         continue
-      cumple = fn.replace(year=hoy.year)
+      try:
+        cumple = fn.replace(year=hoy.year)
+      except ValueError:
+        cumple = fn.replace(year=hoy.year, day=28)
       if cumple < hoy:
-        cumple = fn.replace(year=hoy.year + 1)
+        try:
+          cumple = fn.replace(year=hoy.year + 1)
+        except ValueError:
+          cumple = fn.replace(year=hoy.year + 1, day=28)
       dias = (cumple - hoy).days
       if dias <= 15:
         resultado.append({
