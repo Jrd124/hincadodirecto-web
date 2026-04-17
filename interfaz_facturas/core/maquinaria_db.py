@@ -299,17 +299,33 @@ def _seed_maquinas(conn):
 
 
 def _seed_checklist_templates(conn):
-    """Seed de templates de checklist según manual Orteco HD 800-1000 (págs. 76-77)."""
+    """Seed de templates de checklist según manual Orteco HD 800-1000 + checklist Grupo Ortiz."""
     if conn.execute("SELECT COUNT(*) FROM maquinaria_checklist_templates").fetchone()[0] > 0:
+        # Migración: añadir ítems Grupo Ortiz si aún no existen
+        _migrate_checklist_ortiz(conn)
         return
     items = [
-        # ── Semanal (check general del operario) ──
-        ("semanal", 1, "Nivel aceite hidráulico", "Verificar nivel y rellenar si necesario", 0),
-        ("semanal", 2, "Nivel aceite reductores", "Verificar nivel en ambos reductores", 0),
-        ("semanal", 3, "Tornillería", "Revisar apriete de tornillería general", 0),
-        ("semanal", 4, "Filtro aire", "Limpiar o sustituir filtro de aire", 0),
-        ("semanal", 5, "Tensión orugas", "Verificar tensión de las orugas", 0),
-        ("semanal", 6, "Limpieza general", "Limpieza general de la máquina", 0),
+        # ── Semanal (check general del operario — Orteco + Grupo Ortiz) ──
+        ("semanal", 1, "Tornillería", "Revisar apriete de tornillería general", 0),
+        ("semanal", 2, "Estado general equipo", "Inspección visual: golpes, abolladuras, daños estructurales", 0),
+        ("semanal", 3, "Estado de mangueras", "Revisar mangueras hidráulicas y de combustible — fugas, desgaste, roces", 0),
+        ("semanal", 4, "Niveles aceite", "Verificar nivel aceite hidráulico y reductores; rellenar si necesario", 0),
+        ("semanal", 5, "Nivel combustible", "Verificar nivel de combustible", 0),
+        ("semanal", 6, "Nivel refrigerante", "Verificar nivel de refrigerante del motor", 0),
+        ("semanal", 7, "Batería", "Comprobar estado y bornes de la batería", 0),
+        ("semanal", 8, "Parada de emergencia", "Comprobar funcionamiento de la seta de emergencia", 0),
+        ("semanal", 9, "Cables/cadenas sujeción martillo y bulones", "Revisar estado de cables o cadenas de sujeción del martillo y bulones", 0),
+        ("semanal", 10, "Orugas y rodillos", "Verificar tensión de orugas y estado de los rodillos", 0),
+        ("semanal", 11, "Engrase de guías carro", "Engrasar guías del carro según esquema de lubricación", 0),
+        ("semanal", 12, "Faros de trabajo", "Comprobar funcionamiento de faros de trabajo", 0),
+        ("semanal", 13, "Zumbador acústico", "Comprobar funcionamiento del zumbador acústico / claxon", 0),
+        ("semanal", 14, "Luz rotativa", "Comprobar funcionamiento de la luz rotativa de señalización", 0),
+        ("semanal", 15, "Filtro aire", "Limpiar o sustituir filtro de aire", 0),
+        ("semanal", 16, "Extintor", "Verificar fecha de caducidad y carga correcta del extintor", 0),
+        ("semanal", 17, "Botiquín", "Comprobar que el botiquín está completo y en buen estado", 0),
+        ("semanal", 18, "Kit antiderrame", "Comprobar disponibilidad y estado del kit antiderrame", 0),
+        ("semanal", 19, "Fugas visibles aceite o combustible", "Inspección visual de fugas de aceite o combustible en la máquina", 0),
+        ("semanal", 20, "Limpieza general", "Limpieza general de la máquina", 0),
         # ── 100h — Mantenedor ──
         ("100h", 1, "Reductores orugas — Control nivel aceite", "Control nivel del aceite de los reductores de orugas", 0),
         ("100h", 2, "Reductores orugas — Sustitución aceite (1ª vez)", "Sustitución aceite (solo la primera vez a 100h)", 0),
@@ -349,6 +365,69 @@ def _seed_checklist_templates(conn):
             "VALUES (?, ?, ?, ?, ?)",
             item,
         )
+
+
+def _migrate_checklist_ortiz(conn):
+    """Migra los 6 ítems semanales originales (Orteco) al checklist ampliado (Orteco + Grupo Ortiz).
+
+    - Actualiza los existentes (nombre, descripción, orden) para alinear con el nuevo listado
+    - Añade los ítems nuevos que no existían
+    - No borra nada para no romper checks ya completados
+    """
+    existing = conn.execute(
+        "SELECT id, nombre FROM maquinaria_checklist_templates WHERE tipo = 'semanal'"
+    ).fetchall()
+    existing_names = {r[1] for r in existing}
+
+    new_items = [
+        (2, "Estado general equipo", "Inspección visual: golpes, abolladuras, daños estructurales"),
+        (3, "Estado de mangueras", "Revisar mangueras hidráulicas y de combustible — fugas, desgaste, roces"),
+        (5, "Nivel combustible", "Verificar nivel de combustible"),
+        (6, "Nivel refrigerante", "Verificar nivel de refrigerante del motor"),
+        (7, "Batería", "Comprobar estado y bornes de la batería"),
+        (8, "Parada de emergencia", "Comprobar funcionamiento de la seta de emergencia"),
+        (9, "Cables/cadenas sujeción martillo y bulones", "Revisar estado de cables o cadenas de sujeción del martillo y bulones"),
+        (11, "Engrase de guías carro", "Engrasar guías del carro según esquema de lubricación"),
+        (12, "Faros de trabajo", "Comprobar funcionamiento de faros de trabajo"),
+        (13, "Zumbador acústico", "Comprobar funcionamiento del zumbador acústico / claxon"),
+        (14, "Luz rotativa", "Comprobar funcionamiento de la luz rotativa de señalización"),
+        (16, "Extintor", "Verificar fecha de caducidad y carga correcta del extintor"),
+        (17, "Botiquín", "Comprobar que el botiquín está completo y en buen estado"),
+        (18, "Kit antiderrame", "Comprobar disponibilidad y estado del kit antiderrame"),
+        (19, "Fugas visibles aceite o combustible", "Inspección visual de fugas de aceite o combustible en la máquina"),
+    ]
+
+    for orden, nombre, desc in new_items:
+        if nombre not in existing_names:
+            conn.execute(
+                "INSERT INTO maquinaria_checklist_templates (tipo, orden, nombre, descripcion, requiere_taller) "
+                "VALUES ('semanal', ?, ?, ?, 0)",
+                (orden, nombre, desc),
+            )
+
+    # Actualizar orden y descripciones de los existentes para alinear
+    renames = {
+        "Nivel aceite hidráulico": (4, "Niveles aceite", "Verificar nivel aceite hidráulico y reductores; rellenar si necesario"),
+        "Nivel aceite reductores": None,  # fusionado con "Niveles aceite" — desactivar
+        "Tornillería": (1, "Tornillería", "Revisar apriete de tornillería general"),
+        "Filtro aire": (15, "Filtro aire", "Limpiar o sustituir filtro de aire"),
+        "Tensión orugas": (10, "Orugas y rodillos", "Verificar tensión de orugas y estado de los rodillos"),
+        "Limpieza general": (20, "Limpieza general", "Limpieza general de la máquina"),
+    }
+    for old_name, val in renames.items():
+        if old_name in existing_names:
+            if val is None:
+                conn.execute(
+                    "UPDATE maquinaria_checklist_templates SET activo = 0 WHERE tipo = 'semanal' AND nombre = ?",
+                    (old_name,),
+                )
+            else:
+                orden, new_name, desc = val
+                conn.execute(
+                    "UPDATE maquinaria_checklist_templates SET orden = ?, nombre = ?, descripcion = ? "
+                    "WHERE tipo = 'semanal' AND nombre = ?",
+                    (orden, new_name, desc, old_name),
+                )
 
 
 def _seed_maintenance_tasks(conn):
@@ -647,8 +726,11 @@ def _seed_maintenance_tasks(conn):
 def listar_maquinas(solo_activas: bool = True) -> list:
     init_maquinaria_db()
     with _conectar() as conn:
-        q = ("SELECT m.*, p.nombre AS proyecto_nombre FROM maquinas m "
-             "LEFT JOIN proyectos p ON p.id = m.proyecto_id")
+        q = ("SELECT m.*, p.nombre AS proyecto_nombre, "
+             "(e.nombre || ' ' || COALESCE(e.apellidos, '')) AS operario_nombre "
+             "FROM maquinas m "
+             "LEFT JOIN proyectos p ON p.id = m.proyecto_id "
+             "LEFT JOIN empleados e ON e.id = m.responsable_id")
         if solo_activas:
             q += " WHERE m.activa = 1"
         q += " ORDER BY m.nombre"

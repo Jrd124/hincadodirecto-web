@@ -42,7 +42,12 @@ function cargarMaquinaria() {
               '<div style="font-size:16px;font-weight:600;">' + (m.horometro_actual || 0).toLocaleString("es-ES") + 'h</div></div>' +
             '<div><div style="font-size:11px;color:var(--color-text-secondary);">Proyecto</div>' +
               '<div style="font-size:13px;font-weight:500;">' + (m.proyecto_actual && (m.proyecto_actual.nombre || m.proyecto_actual.codigo) ? _esc(m.proyecto_actual.nombre || m.proyecto_actual.codigo) : (m.proyecto_nombre ? _esc(m.proyecto_nombre) : '\u2014')) + '</div></div>' +
-          '</div></div>';
+          '</div>' +
+          (m.operario_nombre ? '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--color-border);font-size:12px;color:var(--color-text-secondary);display:flex;align-items:center;justify-content:space-between;">' +
+            '<span>\ud83d\udc77 ' + _esc(m.operario_nombre) + '</span>' +
+            (m.responsable_id ? '<button onclick="event.stopPropagation();maqCopiarTelegramLink(' + m.responsable_id + ')" style="background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;" title="Copiar enlace Telegram para este operario">\u2709\ufe0f</button>' : '') +
+          '</div>' : '') +
+          '</div>';
       }).join("");
 
       container.innerHTML =
@@ -755,11 +760,16 @@ window.maqNuevoCheck = function (maqId) {
       var hoy = new Date().toISOString().substring(0, 10);
 
       var itemsHtml = templates.map(function (t) {
-        return '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--color-border);cursor:pointer;">' +
-          '<input type="checkbox" data-template-id="' + t.id + '" style="width:20px;height:20px;accent-color:#16A34A;cursor:pointer;">' +
-          '<div style="flex:1;"><div style="font-size:14px;font-weight:500;">' + _esc(t.nombre) + '</div>' +
-            (t.descripcion ? '<div style="font-size:12px;color:var(--color-text-secondary);">' + _esc(t.descripcion) + '</div>' : '') +
-          '</div></label>';
+        return '<div style="padding:10px 12px;border-bottom:1px solid var(--color-border);">' +
+          '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;">' +
+            '<input type="checkbox" data-template-id="' + t.id + '" style="width:20px;height:20px;accent-color:#16A34A;cursor:pointer;" ' +
+              'onchange="var n=this.closest(\'div\').querySelector(\'.check-nota\');if(n)n.style.display=this.checked?\'none\':\'block\';">' +
+            '<div style="flex:1;"><div style="font-size:14px;font-weight:500;">' + _esc(t.nombre) + '</div>' +
+              (t.descripcion ? '<div style="font-size:12px;color:var(--color-text-secondary);">' + _esc(t.descripcion) + '</div>' : '') +
+            '</div></label>' +
+          '<input type="text" class="check-nota form-input" data-nota-id="' + t.id + '" placeholder="Observaci\u00f3n si No OK..." ' +
+            'style="display:block;margin-top:6px;margin-left:30px;font-size:12px;padding:4px 8px;">' +
+        '</div>';
       }).join("");
 
       var modal = document.createElement("div");
@@ -767,15 +777,15 @@ window.maqNuevoCheck = function (maqId) {
       modal.id = "modal-maq-check";
       modal.onclick = function (e) { if (e.target === modal) modal.remove(); };
       modal.innerHTML =
-        '<div class="modal-content" style="max-width:550px;">' +
+        '<div class="modal-content" style="max-width:600px;max-height:90vh;display:flex;flex-direction:column;">' +
           '<h2 style="margin:0 0 16px;">Check semanal</h2>' +
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">' +
             '<div><label class="form-label">Fecha</label><input type="date" id="maq-check-fecha" class="form-input" value="' + hoy + '"></div>' +
             '<div><label class="form-label">Hor\u00f3metro actual</label><input type="number" id="maq-check-horometro" class="form-input" step="any" placeholder="Horas"></div>' +
           '</div>' +
-          '<div style="border:1px solid var(--color-border);border-radius:var(--radius-md);overflow:hidden;margin-bottom:16px;">' +
-            '<div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);font-size:14px;font-weight:600;">Checklist ORTECO</div>' +
-            '<div style="padding:8px;">' + itemsHtml + '</div></div>' +
+          '<div style="border:1px solid var(--color-border);border-radius:var(--radius-md);overflow:hidden;margin-bottom:16px;flex:1;display:flex;flex-direction:column;min-height:0;">' +
+            '<div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);font-size:14px;font-weight:600;">Checklist semanal (' + templates.length + ' puntos)</div>' +
+            '<div style="padding:8px;overflow-y:auto;flex:1;">' + itemsHtml + '</div></div>' +
           '<div style="margin-bottom:16px;"><label class="form-label">Observaciones</label>' +
             '<textarea id="maq-check-obs" class="form-input" rows="2" placeholder="Notas adicionales..."></textarea></div>' +
           '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
@@ -790,7 +800,8 @@ window.maqNuevoCheck = function (maqId) {
 window.maqGuardarCheck = function (maqId) {
   var checklist = {};
   document.querySelectorAll("#modal-maq-check [data-template-id]").forEach(function (cb) {
-    checklist[cb.dataset.templateId] = { ok: cb.checked, nota: "" };
+    var notaEl = document.querySelector('#modal-maq-check [data-nota-id="' + cb.dataset.templateId + '"]');
+    checklist[cb.dataset.templateId] = { ok: cb.checked, nota: notaEl ? notaEl.value.trim() : "" };
   });
   var payload = {
     maquina_id: maqId,
@@ -1288,6 +1299,23 @@ window.maqCopiarToken = function (token) {
   } else {
     prompt("Copia este enlace:", url);
   }
+};
+
+window.maqCopiarTelegramLink = function (empleadoId) {
+  fetch("/api/maquinaria/telegram-link/" + empleadoId)
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (d.link) {
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(d.link).then(function () {
+            mostrarToast("Enlace Telegram copiado", "success");
+          });
+        } else {
+          prompt("Enlace Telegram para el operario:", d.link);
+        }
+      }
+    })
+    .catch(function () { mostrarToast("Error al obtener enlace", "error"); });
 };
 
 window.maqQrToken = function (token, operario) {

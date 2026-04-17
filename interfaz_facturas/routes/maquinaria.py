@@ -2242,3 +2242,16 @@ td{{padding:6px 8px;border-bottom:1px solid #F1F5F9;}}
 }})();
 </script>
 </body></html>"""
+
+
+# ── Enlace de vinculación Telegram para operarios ──────────────────────────
+
+TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "Hinca_bot")
+
+
+@maquinaria_bp.route("/api/maquinaria/telegram-link/<int:empleado_id>")
+@login_required
+def telegram_link(empleado_id):
+    """Devuelve el deep-link de Telegram para vincular un empleado al bot."""
+    link = f"https://t.me/{TELEGRAM_BOT_USERNAME}?start=emp_{empleado_id}"
+    return jsonify({"link": link, "empleado_id": empleado_id})

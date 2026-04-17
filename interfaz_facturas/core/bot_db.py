@@ -217,6 +217,15 @@ def clear_estado(telegram_id: int):
         conn.execute("DELETE FROM bot_telegram_estado WHERE telegram_id = ?", (telegram_id,))
 
 
+def vincular_empleado(telegram_id: int, empleado_id: int):
+    """Vincula un usuario de Telegram con su ficha de empleado en el ERP."""
+    with conectar() as conn:
+        conn.execute(
+            "UPDATE bot_telegram_usuarios SET empleado_id = ? WHERE telegram_id = ?",
+            (empleado_id, telegram_id),
+        )
+
+
 def asignar_tarjeta(telegram_id: int, tarjeta_id: int | None, tarjeta_alias: str = ""):
     with conectar() as conn:
         conn.execute(

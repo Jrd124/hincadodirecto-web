@@ -54,6 +54,7 @@ from core.bot_db import (
     get_estado,
     set_estado,
     clear_estado,
+    vincular_empleado,
 )
 
 logging.basicConfig(
@@ -116,8 +117,44 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     nombre = update.effective_user.full_name
     user = get_usuario(tid)
 
+    # ── Deep-link: t.me/Hinca_bot?start=emp_<ID> ──────────────────────
+    # Vincula automáticamente al operario con su ficha de empleado,
+    # lo aprueba como operario y le da la bienvenida sin esperar admin.
+    deep_link_empleado_id = None
+    if context.args:
+        payload = context.args[0]  # e.g. "emp_42"
+        if payload.startswith("emp_"):
+            try:
+                deep_link_empleado_id = int(payload[4:])
+            except ValueError:
+                pass
+
     if not user:
         user = registrar_usuario(tid, nombre)
+
+        if deep_link_empleado_id:
+            # Vincular y aprobar de golpe
+            vincular_empleado(tid, deep_link_empleado_id)
+            aprobar_usuario(tid, "operario")
+            from core.db import conectar as _conectar
+            with _conectar() as conn:
+                emp = conn.execute(
+                    "SELECT nombre, apellidos FROM empleados WHERE id = ?",
+                    (deep_link_empleado_id,),
+                ).fetchone()
+            emp_nombre = f"{emp[0]} {emp[1] or ''}".strip() if emp else "?"
+            await update.message.reply_text(
+                f"👋 *Bienvenido, {emp_nombre}*\n\n"
+                "Tu cuenta ha sido vinculada automáticamente.\n"
+                "Recibirás recordatorios semanales de tus máquinas cada viernes.",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            await _notify_superadmins(
+                context,
+                f"🔗 *Auto-vinculación*\n{nombre} (ID: `{tid}`) se vinculó al empleado {emp_nombre} (#{deep_link_empleado_id}) vía deep link.",
+            )
+            return
+
         await update.message.reply_text(
             f"👋 *Bienvenido a Hincado Directo*, {nombre}.\n\n"
             "Tu solicitud de acceso ha sido enviada al administrador. "
@@ -129,6 +166,17 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🆕 *Solicitud de acceso*\n{nombre} (ID: `{tid}`) quiere acceder al bot.\nUsa /aprobar para gestionar.",
         )
         return
+
+    # Si ya existe pero viene con deep link y no tiene empleado vinculado
+    if deep_link_empleado_id and not user.get("empleado_id"):
+        vincular_empleado(tid, deep_link_empleado_id)
+        if user["rol"] == "pendiente":
+            aprobar_usuario(tid, "operario")
+        await update.message.reply_text(
+            "🔗 Tu cuenta ha sido vinculada con tu ficha de empleado.\n"
+            "Recibirás recordatorios semanales de tus máquinas cada viernes.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
 
     if user["rol"] == "pendiente":
         await update.message.reply_text("⏳ Tu solicitud está pendiente de aprobación.")
@@ -2880,32 +2928,102 @@ _ESTADO_INC_LABELS = {
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def recordatorio_check_semanal(context: ContextTypes.DEFAULT_TYPE):
-    """Viernes 12:00 — recordar a todos los operarios el chequeo semanal de maquinaria."""
-    from core.maquinaria_db import listar_maquinas
+    """Viernes 12:00 — recordatorio personalizado por operario.
+
+    Incluye:
+      1. Recordatorio de check semanal
+      2. Incidencias abiertas de sus máquinas
+      3. Próxima revisión de cada máquina
+    """
+    from core.maquinaria_db import (
+        listar_maquinas, listar_incidencias,
+        _calcular_revisiones_pendientes, get_telegram_id_para_maquina,
+    )
+    from core.db import conectar as _conectar
+
     operarios = listar_usuarios(rol="operario")
     if not operarios:
         return
+
     try:
         maquinas = [m for m in listar_maquinas() if m.get("activa")]
     except Exception:
-        maquinas = []
+        return
 
-    resumen = ""
-    if maquinas:
-        resumen = "\n\nMáquinas activas:\n" + "\n".join(f"• {m['nombre']}" for m in maquinas[:10])
+    # Mapear telegram_id → lista de máquinas asignadas
+    maquinas_por_operario = {}  # {telegram_id: [maquina, ...]}
+    for m in maquinas:
+        tid = get_telegram_id_para_maquina(m["id"])
+        if tid:
+            maquinas_por_operario.setdefault(tid, []).append(m)
 
-    texto = (
-        "🔧 *Recordatorio semanal de maquinaria*\n\n"
-        "Es viernes — recuerda hacer el chequeo semanal de mantenimiento "
-        "de las máquinas a tu cargo antes de terminar la jornada."
-        + resumen
-    )
     for op in operarios:
+        tid = op["telegram_id"]
+        mis_maquinas = maquinas_por_operario.get(tid, [])
+
+        # Cabecera (HTML — más robusto que Markdown con texto libre)
+        from html import escape as _h
+
+        texto = "🔧 <b>Recordatorio semanal de maquinaria</b>\n\n"
+
+        if not mis_maquinas:
+            texto += "No tienes máquinas asignadas esta semana."
+        else:
+            texto += (
+                "Es viernes — recuerda completar el chequeo semanal "
+                "de tus máquinas antes de terminar la jornada.\n"
+            )
+
+            with _conectar() as conn:
+                for m in mis_maquinas:
+                    nombre = _h(m.get("nombre") or m.get("identificador_interno") or "?")
+                    horo = m.get("horometro_actual") or 0
+                    texto += f"\n━━━ <b>{nombre}</b> ({horo:,.0f}h) ━━━\n"
+
+                    # Incidencias abiertas
+                    try:
+                        incs = listar_incidencias(maquina_id=m["id"])
+                        abiertas = [i for i in incs if i.get("estado") not in ("cerrada", "rechazada")]
+                    except Exception:
+                        abiertas = []
+
+                    if abiertas:
+                        texto += f"⚠️ {len(abiertas)} incidencia(s) abierta(s):\n"
+                        for inc in abiertas[:5]:
+                            sev = _h(inc.get("severidad", "?"))
+                            desc = _h((inc.get("descripcion") or "")[:60])
+                            estado = _h(inc.get("estado", "?"))
+                            texto += f"  • [{sev}] {desc} <i>({estado})</i>\n"
+                        if len(abiertas) > 5:
+                            texto += f"  ... y {len(abiertas) - 5} más\n"
+                    else:
+                        texto += "✅ Sin incidencias abiertas\n"
+
+                    # Próxima revisión
+                    try:
+                        revs = _calcular_revisiones_pendientes(conn, m["id"], horo)
+                    except Exception:
+                        revs = []
+
+                    if revs:
+                        rev = revs[0]
+                        hito = rev.get("proximo_hito", 0)
+                        tipo = _h(rev.get("tipo", "?"))
+                        faltan = hito - horo
+                        if faltan <= 0:
+                            texto += f"🔴 Revisión <b>{tipo}</b> VENCIDA (debía a {hito:,.0f}h)\n"
+                        else:
+                            texto += f"🔜 Próxima revisión: <b>{tipo}</b> a {hito:,.0f}h (faltan {faltan:,.0f}h)\n"
+                        if len(revs) > 1:
+                            texto += f"   <i>{len(revs)} revisiones pendientes en total</i>\n"
+                    else:
+                        texto += "✅ Revisiones al día\n"
+
         try:
             await context.bot.send_message(
-                chat_id=op["telegram_id"],
+                chat_id=tid,
                 text=texto,
-                parse_mode=ParseMode.MARKDOWN,
+                parse_mode=ParseMode.HTML,
             )
         except Exception:
             pass
