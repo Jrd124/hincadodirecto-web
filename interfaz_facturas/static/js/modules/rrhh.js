@@ -1966,7 +1966,7 @@ function _rrhhDietasCalLoad(periodo) {
             } else if (tipo && tipo.indexOf("media") >= 0) {
               icon = '<span style="font-size:11px;font-weight:500;color:#2C2C2A;">' + Math.round(imp) + '</span>';
             } else { skSinDieta++; }
-            icons += '<span style="flex:1;text-align:center;cursor:pointer;" onclick="event.stopPropagation();_rrhhDietaCellClick(this,' + emp.id + ',\'' + sc2.di.fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g,"\\'") + '\',\'' + (sc2.proy ? (sc2.proy.codigo||"").replace(/'/g,"\\'") : "") + '\')">' + icon + '</span>';
+            icons += '<span style="flex:1;text-align:center;cursor:pointer;min-height:16px;display:flex;align-items:center;justify-content:center;" onclick="event.stopPropagation();_rrhhDietaCellClick(this,' + emp.id + ',\'' + sc2.di.fecha + '\',\'' + periodo + '\',\'' + nombre.replace(/'/g,"\\'") + '\',\'' + (sc2.proy ? (sc2.proy.codigo||"").replace(/'/g,"\\'") : "") + '\')">' + icon + '</span>';
           });
 
           // Tooltip for entire block
@@ -1980,7 +1980,7 @@ function _rrhhDietasCalLoad(periodo) {
 
           h += '<div style="grid-column:' + gcStart + '/' + gcEnd + ';grid-row:1;display:flex;flex-direction:column;align-items:stretch;justify-content:center;background:' + c.bg + ';border-left:3px solid ' + c.border + ';border-radius:4px;margin:2px 1px;padding:1px 2px;z-index:1;' + opacity + '" title="' + ttip.replace(/"/g,'&quot;') + '">' +
             '<div style="font-size:10px;font-weight:500;color:' + c.text + ';text-align:center;line-height:1.2;">' + sc + '</div>' +
-            '<div style="display:flex;align-items:center;">' + icons + '</div></div>';
+            '<div style="display:flex;align-items:center;flex:1;">' + icons + '</div></div>';
         });
 
         // Also accumulate totals for days NOT in any streak but with dieta
