@@ -53,7 +53,7 @@
         var margenCol = k.margen_medio_pct > 25 ? "#22c55e" : (k.margen_medio_pct > 15 ? "#eab308" : "#dc2626");
         var hincasVar = k.hincas_prev > 0 ? Math.round((k.hincas_mes - k.hincas_prev) / k.hincas_prev * 100) : 0;
         h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;">';
-        h += _landingKpi("Proyectos vivos", k.vivos || 0, k.cotizados + " cotizados", "#2563eb");
+        h += _landingKpi("Proyectos activos", k.vivos || 0, k.cotizados + " cotizados", "#2563eb");
         h += _landingKpi("Facturado YTD", _dashFmtEurCompact(k.facturado_ytd), (k.facturado_ytd_var > 0 ? "+" : "") + k.facturado_ytd_var + "% vs anterior", "#22c55e");
         h += _landingKpi("Margen medio", k.margen_medio_pct + "%", k.margen_status, margenCol);
         h += _landingKpi("Hincas mes", k.hincas_mes || 0, (hincasVar > 0 ? "+" : "") + hincasVar + "% vs anterior", "#8B5CF6");
@@ -69,7 +69,7 @@
           {k:"leads",label:"Leads",bg:"#F3F2EF",col:"#57534E",nav:"crm"},
           {k:"cotizados",label:"Cotizados",bg:"#FAEEDA",col:"#854F0B",nav:"proyectos:cotizados"},
           {k:"adjudicados",label:"Adjudicados",bg:"#E6F1FB",col:"#1E40AF",nav:"proyectos:adjudicados"},
-          {k:"vivos",label:"Vivos",bg:"#E1F5EE",col:"#0F6E56",nav:"proyectos:vivos"},
+          {k:"vivos",label:"Activos",bg:"#E1F5EE",col:"#0F6E56",nav:"proyectos:vivos"},
           {k:"terminados_ytd",label:"Terminados",bg:"#F1EFE8",col:"#57534E",nav:"proyectos:terminados"},
         ];
         phases.forEach(function(ph, i) {
@@ -349,7 +349,8 @@
         // ── State colors ──
         var _EC = {cotizado:"#eab308",adjudicado:"#2563eb",vivo:"#22c55e",en_curso:"#22c55e",terminado:"#3B82F6",perdido:"#ef4444",pausado:"#f59e0b"};
         var estadoColor = _EC[p.estado] || "#6B7280";
-        var estadoLabel = (p.estado || "?").charAt(0).toUpperCase() + (p.estado || "").slice(1);
+        var _estadoLabels = {cotizado:"Cotizado",adjudicado:"Adjudicado",vivo:"Activo",en_curso:"Activo",pausado:"Pausado",terminado:"Terminado",cancelado:"Cancelado",perdido:"Perdido"};
+        var estadoLabel = _estadoLabels[p.estado] || (p.estado || "?").charAt(0).toUpperCase() + (p.estado || "").slice(1);
         var cliente = p.cliente_nombre || "";
         var ubicacion = p.ubicacion_texto || p.provincia || "";
         var modalLabel = (k.modalidad === "administracion" ? "Administraci\u00f3n" : "Producci\u00f3n");
@@ -511,7 +512,9 @@
             '<td style="padding:4px 4px;text-align:right;">' + (pt.horas_admin || 0) + '</td>' +
             '<td style="padding:4px 4px;font-size:0.75rem;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (pt.incidencias || "\u2014") + '</td>' +
             '<td style="padding:4px 4px;text-align:center;">' + estPill + '</td>' +
-            '<td style="padding:4px 4px;text-align:center;"><button onclick="parteEditar(' + pt.id + ',' + p.id + ')" title="Editar" style="background:none;border:none;cursor:pointer;color:#3B82F6;font-size:0.8rem;">&#x270E;</button></td></tr>';
+            '<td style="padding:4px 4px;text-align:center;white-space:nowrap;">' +
+              '<button onclick="parteVer(' + pt.id + ',' + p.id + ')" title="Ver" style="background:none;border:none;cursor:pointer;color:#6B7280;font-size:0.8rem;margin-right:2px;">&#x1F441;</button>' +
+              '<button onclick="parteEditar(' + pt.id + ',' + p.id + ')" title="Editar" style="background:none;border:none;cursor:pointer;color:#3B82F6;font-size:0.8rem;">&#x270E;</button></td></tr>';
         });
         if (!(p.partes || []).length) tabOper += '<tr><td colspan="8" style="text-align:center;padding:2rem;color:#888;">Sin partes</td></tr>';
         tabOper += '</tbody></table></div></div>';
@@ -565,6 +568,8 @@
 
         // ── TAB: CERTIFICACIONES ──
         var tabCert = '<div id="proy-dash-tab-certificaciones" class="proy-dash-tab-content" style="display:none;">';
+        // Button to generate new certification
+        tabCert += '<div style="display:flex;justify-content:flex-end;margin-bottom:12px;"><button onclick="_proyGenerarCertModal(' + p.id + ')" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:0.82rem;font-weight:600;cursor:pointer;">+ Generar certificaci\u00f3n</button></div>';
         var cr = p.certificaciones_resumen || {};
         tabCert += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">' +
           _kpiCard("Total importe", _dashFmtEurCompact(cr.total_importe || 0), "", "#3B82F6") +
@@ -2434,6 +2439,56 @@
         }
       })
       .catch(function () { mostrarToast("Error de conexion.", "error"); });
+  };
+
+  // ── Generar certificación modal ──
+  window._proyGenerarCertModal = function (proyId) {
+    var old = document.getElementById("modal-gen-cert");
+    if (old) old.remove();
+    var modal = document.createElement("div");
+    modal.className = "modal-overlay visible";
+    modal.id = "modal-gen-cert";
+    modal.style.zIndex = "110";
+    modal.innerHTML = '<div class="modal-editar" role="dialog" style="max-width:420px;">' +
+      '<h2 style="margin:0 0 16px;">Generar certificaci\u00f3n</h2>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">' +
+        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Desde</label><input type="date" id="gc-desde" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);box-sizing:border-box;"></div>' +
+        '<div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:4px;">Hasta</label><input type="date" id="gc-hasta" style="width:100%;padding:8px;border:1px solid var(--color-border);border-radius:var(--radius-md);box-sizing:border-box;"></div></div>' +
+      '<div id="gc-preview" style="padding:10px;background:#f8f9fa;border-radius:6px;margin-bottom:12px;font-size:12px;color:#666;">Selecciona fechas para ver vista previa</div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+        '<button class="secondary" onclick="document.getElementById(\'modal-gen-cert\').remove()">Cancelar</button>' +
+        '<button class="primary" style="width:auto;" id="gc-btn-generar">Generar</button>' +
+      '</div></div>';
+    modal.addEventListener("click", function (e) { if (e.target === modal) modal.remove(); });
+    document.body.appendChild(modal);
+    function preview() {
+      var desde = document.getElementById("gc-desde").value;
+      var hasta = document.getElementById("gc-hasta").value;
+      var el = document.getElementById("gc-preview");
+      if (!desde || !hasta) { el.textContent = "Selecciona fechas"; return; }
+      fetch("/api/proyectos/" + proyId + "/dashboard").then(function(r){return r.json();}).then(function(d) {
+        var partes = (d.partes || []).filter(function(pt) { return pt.fecha >= desde && pt.fecha <= hasta; });
+        var hincas = 0, horas = 0;
+        partes.forEach(function(pt) { hincas += (pt.hincas_realizadas||0); horas += (pt.horas_admin||0); });
+        el.innerHTML = '<b>' + partes.length + ' partes</b> en rango<br>Hincas: <b>' + hincas + '</b> | Horas admin: <b>' + horas + '</b>';
+      });
+    }
+    document.getElementById("gc-desde").addEventListener("change", preview);
+    document.getElementById("gc-hasta").addEventListener("change", preview);
+    document.getElementById("gc-btn-generar").addEventListener("click", function() {
+      var desde = document.getElementById("gc-desde").value;
+      var hasta = document.getElementById("gc-hasta").value;
+      if (!desde || !hasta) { mostrarToast("Selecciona fechas", "error"); return; }
+      fetch("/api/proyectos/" + proyId + "/certificaciones", {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({fecha_desde: desde, fecha_hasta: hasta})
+      }).then(function(r){return r.json();}).then(function(d) {
+        if (d.error) { mostrarToast(d.error, "error"); return; }
+        document.getElementById("modal-gen-cert").remove();
+        mostrarToast("Certificaci\u00f3n generada.", "success");
+        proyectoDashboard(proyId);
+      }).catch(function() { mostrarToast("Error", "error"); });
+    });
   };
 
   // ── OCR send/save (used by unified modal) ──
