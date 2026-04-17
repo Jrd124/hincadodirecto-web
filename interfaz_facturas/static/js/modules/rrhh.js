@@ -1595,24 +1595,22 @@ function _rrhhHECalLoad(periodo) {
           var c = _proyColor(sk.pid); var sc = _proyShortMap[sk.pid] || "???";
           var opacity = _heCalFiltro && String(sk.pid) !== String(_heCalFiltro) ? "opacity:0.2;" : "";
           var gcStart = sk.start + 1; var gcEnd = sk.end + 2;
-          var icons = ''; var skTotal = 0; var skHoras = 0; var skPend = 0;
+          var icons = ''; var skTotal = 0; var skHoras = 0;
           sk.cells.forEach(function(sc2) {
             var horas = sc2.he ? sc2.he.horas : 0;
             var imp = sc2.he ? (sc2.he.importe || 0) : 0;
-            var notas = sc2.he ? (sc2.he.notas || "") : "";
             total += imp; skTotal += imp; skHoras += horas;
             var icon = "";
             if (horas > 0) {
               icon = '<span style="font-size:11px;font-weight:500;color:#2C2C2A;">' + horas + 'h</span>';
-            } else if (notas && notas.match(/vacaciones|enfermedad|baja|normal|otro/i)) {
-              icon = '<span style="font-size:10px;color:#aaa;">\u2715</span>';
-            } else { skPend++; }
+            } else {
+              icon = '<span style="font-size:10px;color:#ccc;">\u2715</span>';
+            }
             icons += '<span style="flex:1;text-align:center;cursor:pointer;min-height:16px;display:flex;align-items:center;justify-content:center;" onclick="event.stopPropagation();_rrhhHECellClick('+emp.id+',\''+sc2.di.fecha+'\',\''+periodo+'\',\''+nombre.replace(/'/g,"\\'")+'\')">' + icon + '</span>';
           });
           var pNombre = sk.proy ? (sk.proy.nombre||"") : "";
           var rangeLabel = sk.cells[0].di.num + (sk.cells.length > 1 ? " - " + sk.cells[sk.cells.length-1].di.num : "");
           var ttip = pNombre + " \u00b7 " + rangeLabel + " \u00b7 " + skHoras + "h = " + skTotal + " \u20ac";
-          if (skPend > 0) ttip += " \u00b7 \u26a0 " + skPend + " d\u00eda(s) sin registro";
           h += '<div style="grid-column:'+gcStart+'/'+gcEnd+';grid-row:1;display:flex;flex-direction:column;align-items:stretch;justify-content:center;background:'+c.bg+';border-left:3px solid '+c.border+';border-radius:4px;margin:2px 1px;padding:1px 2px;z-index:1;'+opacity+'" title="'+ttip.replace(/"/g,'&quot;')+'">' +
             '<div style="font-size:10px;font-weight:500;color:'+c.text+';text-align:center;line-height:1.2;">'+sc+'</div>' +
             '<div style="display:flex;align-items:center;flex:1;">'+icons+'</div></div>';
@@ -1622,21 +1620,16 @@ function _rrhhHECalLoad(periodo) {
         h += '<div style="padding:3px 6px;text-align:right;font-weight:600;font-size:0.75rem;display:flex;align-items:center;justify-content:end;border-bottom:1px solid #f1f1f1;">'+(total > 0 ? fmtEur(total) : '\u2014')+'</div>';
       });
 
-      // Pendientes row
-      h += '<div style="position:sticky;left:0;z-index:2;background:#fff;padding:3px 6px;font-weight:600;font-size:0.72rem;display:flex;align-items:center;border-top:2px solid #E5E5E5;color:#A32D2D;">\u26a0 Pendientes</div>';
+      // Totals row
+      h += '<div style="position:sticky;left:0;z-index:2;background:#fff;padding:3px 6px;font-weight:700;font-size:0.72rem;display:flex;align-items:center;border-top:2px solid #E5E5E5;">Total horas</div>';
+      var grandTotal = 0;
       for (var pj = 0; pj < nDias; pj++) {
-        var pdi = dayInfos[pj]; var cnt = 0; var pNames = [];
-        if (!pdi.noLab) {
-          emps.forEach(function(emp) {
-            var kk = emp.id+"_"+pdi.fecha;
-            if (proyMap[kk] && proyMap[kk].id && !heMap[kk]) { cnt++; pNames.push(((emp.nombre||"")+" "+(emp.apellidos||"")).trim()); }
-          });
-        }
-        var pendBg = cnt > 0 ? "background:#FCEBEB;" : "";
-        var pendC = cnt > 0 ? '<span style="font-size:13px;font-weight:500;color:#A32D2D;cursor:pointer;" title="'+pNames.join(', ').replace(/"/g,'&quot;')+'" onclick="alert(\''+pNames.join('\\n').replace(/'/g,"\\'")+'\')">'+cnt+'</span>' : '';
-        h += '<div style="text-align:center;height:28px;display:flex;align-items:center;justify-content:center;border-top:2px solid #E5E5E5;'+pendBg+(pdi.noLab?'background:#EEECEA;':'')+'">'+pendC+'</div>';
+        var pdi = dayInfos[pj]; var dayH = 0;
+        emps.forEach(function(emp) { var he = heMap[emp.id+"_"+pdi.fecha]; if (he && he.horas > 0) dayH += he.horas; });
+        grandTotal += dayH * precioHora;
+        h += '<div style="text-align:center;font-weight:600;font-size:0.75rem;display:flex;align-items:center;justify-content:center;border-top:2px solid #E5E5E5;'+(pdi.noLab?'background:#EEECEA;':'')+'">'+(dayH > 0 ? dayH+'h' : '')+'</div>';
       }
-      h += '<div style="border-top:2px solid #E5E5E5;"></div>';
+      h += '<div style="padding:3px 6px;text-align:right;font-weight:700;font-size:0.75rem;display:flex;align-items:center;justify-content:end;border-top:2px solid #E5E5E5;">'+fmtEur(grandTotal)+'</div>';
 
       h += '</div>';
       grid.innerHTML = h;
