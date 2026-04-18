@@ -295,3 +295,109 @@ def api_vehiculo_update(vid):
         return jsonify({"ok": True})
     finally:
         conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  COMBUSTIBLE V2 — New schema endpoints
+# ═══════════════════════════════════════════════════════════════════════════
+
+@moeve_bp.post("/api/combustible/importar-moeve")
+def api_combustible_importar_moeve():
+    """Import Moeve XLSX file."""
+    from core.combustible_db import importar_excel_moeve
+    import os
+    from config import DATOS_DIR
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+    f = request.files["file"]
+    if not f.filename.endswith((".xlsx", ".xls")):
+        return jsonify({"error": "Solo se aceptan archivos Excel (.xlsx)"}), 400
+
+    upload_dir = DATOS_DIR / "subidas" / "combustible" / "moeve"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    filepath = upload_dir / f.filename
+    f.save(str(filepath))
+
+    try:
+        stats = importar_excel_moeve(str(filepath))
+        return jsonify(stats)
+    except Exception as e:
+        logger.exception("Error importing Moeve XLSX")
+        return jsonify({"error": str(e)}), 500
+
+
+@moeve_bp.get("/api/combustible/vehiculos")
+def api_combustible_vehiculos():
+    from core.combustible_db import init_combustible_db
+    init_combustible_db()
+    conn = get_conn()
+    try:
+        rows = conn.execute("SELECT * FROM vehiculos ORDER BY matricula").fetchall()
+        return jsonify({"vehiculos": [dict(r) for r in rows]})
+    finally:
+        conn.close()
+
+
+@moeve_bp.get("/api/combustible/estaciones")
+def api_combustible_estaciones():
+    from core.combustible_db import init_combustible_db
+    init_combustible_db()
+    conn = get_conn()
+    try:
+        rows = conn.execute("SELECT * FROM estaciones_servicio ORDER BY nombre").fetchall()
+        return jsonify({"estaciones": [dict(r) for r in rows]})
+    finally:
+        conn.close()
+
+
+@moeve_bp.get("/api/combustible/tarjetas")
+def api_combustible_tarjetas():
+    from core.combustible_db import init_combustible_db
+    init_combustible_db()
+    conn = get_conn()
+    try:
+        rows = conn.execute("SELECT * FROM tarjetas_combustible ORDER BY pan").fetchall()
+        return jsonify({"tarjetas": [dict(r) for r in rows]})
+    finally:
+        conn.close()
+
+
+@moeve_bp.get("/api/combustible/transacciones-v2")
+def api_combustible_transacciones_v2():
+    from core.combustible_db import init_combustible_db
+    init_combustible_db()
+    conn = get_conn()
+    try:
+        periodo = request.args.get("periodo", "")
+        where = "WHERE 1=1"
+        params = []
+        if periodo:
+            where += " AND ct.fecha_operacion LIKE ?"
+            params.append(periodo + "%")
+        rows = conn.execute(f"""
+            SELECT ct.*, e.nombre as estacion_nombre, v.matricula as vehiculo_matricula
+            FROM combustible_transacciones ct
+            LEFT JOIN estaciones_servicio e ON e.id = ct.estacion_id
+            LEFT JOIN vehiculos v ON v.id = ct.vehiculo_id
+            {where} ORDER BY ct.fecha_operacion DESC LIMIT 500
+        """, params).fetchall()
+        total = conn.execute(f"SELECT COUNT(*), COALESCE(SUM(ct.importe_final),0), COALESCE(SUM(ct.litros),0) FROM combustible_transacciones ct {where}", params).fetchone()
+        return jsonify({
+            "transacciones": [dict(r) for r in rows],
+            "total_count": total[0],
+            "total_importe": round(total[1], 2),
+            "total_litros": round(total[2], 1),
+        })
+    finally:
+        conn.close()
+
+
+@moeve_bp.post("/api/combustible/migrar-legacy")
+def api_combustible_migrar_legacy():
+    from core.combustible_db import migrar_datos_legacy
+    try:
+        result = migrar_datos_legacy()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
