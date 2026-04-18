@@ -124,7 +124,7 @@ def get_or_create_vehiculo(conn, matricula):
     row = conn.execute("SELECT id FROM vehiculos WHERE REPLACE(REPLACE(matricula,'-',''),' ','') = ?", (mat,)).fetchone()
     if row:
         return row[0], False
-    conn.execute("INSERT INTO vehiculos (matricula, tipo, created_at) VALUES (?, 'desconocido', datetime('now'))", (matricula.strip(),))
+    conn.execute("INSERT INTO vehiculos (matricula, tipo, activa, created_at) VALUES (?, 'otro', 1, datetime('now'))", (matricula.strip(),))
     return conn.execute("SELECT last_insert_rowid()").fetchone()[0], True
 
 
