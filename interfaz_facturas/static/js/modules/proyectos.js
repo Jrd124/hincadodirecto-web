@@ -1259,108 +1259,140 @@
     var hoy = new Date().toISOString().slice(0, 10);
     var existing = document.getElementById("modal-asignar-recurso");
     if (existing) existing.remove();
-    var modal = document.createElement("div");
-    modal.className = "modal-overlay visible";
-    modal.id = "modal-asignar-recurso";
-    modal.style.zIndex = "110";
-    var _lbl = "font-size:11px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;color:#888780;";
-    modal.innerHTML = '<div class="modal-editar" role="dialog" style="max-width:640px;border-radius:12px;padding:0;box-shadow:0 20px 50px rgba(0,0,0,0.15);border:0.5px solid #E5E5E5;">' +
-      // A: Header
-      '<div style="display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:0.5px solid #E5E5E5;">' +
-        '<div><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:2px;">PLANIFICADOR</div><h2 style="margin:0;font-size:18px;font-weight:500;">Asignar equipo a proyecto</h2></div>' +
-        '<button onclick="document.getElementById(\'modal-asignar-recurso\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#999;padding:4px;">\u00d7</button></div>' +
-      '<div style="padding:20px 24px;max-height:70vh;overflow-y:auto;">' +
-      // B: Tipo + Recurso
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">' +
-        '<div><label style="' + _lbl + '">Tipo recurso</label>' +
-          '<select id="ar-tipo" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;font-size:13px;">' +
-          '<option value="empleado">\uD83D\uDC77 Empleado</option><option value="maquina">\uD83C\uDFD7\uFE0F M\u00e1quina</option></select></div>' +
-        '<div id="ar-funcion-wrap" style=""><label style="' + _lbl + '">Funci\u00f3n hoy</label>' +
-          '<select id="ar-funcion" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;font-size:13px;">' +
-          '<option value="">Puesto habitual</option><option value="operador">Operador</option><option value="ayudante">Ayudante</option></select></div></div>' +
-      '<div style="margin-bottom:14px;"><label style="' + _lbl + '">Recurso</label>' +
-        '<select id="ar-recurso" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;font-size:13px;"><option>Cargando...</option></select></div>' +
-      // C: Fechas
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">' +
-        '<div><label style="' + _lbl + '">Desde</label><input type="date" id="ar-desde" value="' + hoy + '" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;box-sizing:border-box;font-size:13px;"></div>' +
-        '<div><label style="' + _lbl + '">Hasta</label><input type="date" id="ar-hasta" value="' + hoy + '" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;box-sizing:border-box;font-size:13px;"></div></div>' +
-      // F: Resumen
-      '<div id="ar-resumen" style="padding:10px 14px;background:#F0F7FF;border-radius:8px;font-size:12px;color:#1E40AF;margin-bottom:14px;">Selecciona recurso y fechas</div>' +
-      '</div>' +
-      // G: Botones
-      '<div style="display:flex;gap:8px;justify-content:flex-end;padding:14px 24px;border-top:0.5px solid #E5E5E5;">' +
-        '<button style="padding:8px 18px;border:1px solid #E5E5E5;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;" onclick="document.getElementById(\'modal-asignar-recurso\').remove()">Cancelar</button>' +
-        '<button style="padding:8px 18px;border:none;border-radius:8px;background:#1D9E75;color:#fff;font-weight:500;cursor:pointer;font-size:13px;" id="ar-btn-guardar">Asignar equipo</button>' +
-      '</div></div>';
-    modal.addEventListener("click", function (e) { if (e.target === modal) modal.remove(); });
-    document.body.appendChild(modal);
+    var _L = "font-size:11px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;";
 
-    function cargarDisponibles() {
-      var tipo = document.getElementById("ar-tipo").value;
-      var fecha = document.getElementById("ar-desde").value || hoy;
-      fetch("/api/recursos/disponibles?fecha=" + fecha + "&tipo=" + tipo)
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          var sel = document.getElementById("ar-recurso");
-          sel.innerHTML = "";
-          (data.recursos || []).forEach(function (r) {
-            var opt = document.createElement("option");
-            opt.value = r.id + "|" + r.nombre;
-            var label = r.nombre + (r.detalle ? " \u00b7 " + r.detalle : "");
-            if (r.estado === "baja") label += " \u26d4 Baja";
-            opt.textContent = label;
-            if (r.estado === "baja" || r.estado === "averia") { opt.disabled = true; opt.style = "color:#999;"; }
-            sel.appendChild(opt);
-          });
-          if (!sel.options.length) sel.innerHTML = '<option>No hay disponibles</option>';
-          updateResumen();
+    // Fetch data in parallel
+    Promise.all([
+      fetch("/api/recursos/disponibles?fecha=" + hoy + "&tipo=empleado").then(function(r){return r.json();}),
+      fetch("/api/recursos/disponibles?fecha=" + hoy + "&tipo=maquina").then(function(r){return r.json();}),
+    ]).then(function (results) {
+      var emps = results[0].recursos || [];
+      var maqs = results[1].recursos || [];
+
+      // Build employee rows
+      var empHtml = '';
+      emps.forEach(function(e) {
+        var initials = ((e.nombre || "?")[0] + ((e.nombre || "").split(" ")[1] || "")[0] || "").toUpperCase();
+        var isBaja = e.estado === "baja";
+        var puesto = e.puesto || e.detalle || "";
+        var puestoLabel = puesto === "ayudante" ? "Ayudante" : "Operador";
+        var avatarBg = isBaja ? "#FCEBEB" : (puesto === "ayudante" ? "#EAF3DE" : "#E6F1FB");
+        var avatarCol = isBaja ? "#A32D2D" : (puesto === "ayudante" ? "#27500A" : "#185FA5");
+        var pillBg = isBaja ? "#FCEBEB" : (puesto === "ayudante" ? "#EAF3DE" : "#E6F1FB");
+        var pillCol = isBaja ? "#A32D2D" : (puesto === "ayudante" ? "#27500A" : "#042C53");
+        var bajaStyle = isBaja ? "opacity:0.55;background:repeating-linear-gradient(45deg,#FCEBEB,#FCEBEB 4px,white 4px,white 8px);cursor:not-allowed;" : "";
+        var nameStyle = isBaja ? "text-decoration:line-through;" : "";
+        var sub = isBaja ? '<span style="color:#A32D2D;">De baja</span>' : (e.detalle || "");
+        var coste = e.coste_dia ? " \u00b7 " + Number(e.coste_dia).toFixed(0) + " \u20ac/d" : "";
+
+        empHtml += '<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:' + (isBaja ? 'not-allowed' : 'pointer') + ';transition:background 0.15s;' + bajaStyle + '" ' + (!isBaja ? 'onmouseover="this.style.background=\'#F5F7FA\'" onmouseout="this.style.background=\'transparent\'"' : '') + '>' +
+          '<input type="checkbox" name="emp" value="' + e.id + '|' + (e.nombre||"") + '"' + (isBaja ? ' disabled' : '') + ' style="margin:0;" onchange="_arUpdateResumen()">' +
+          '<div style="width:28px;height:28px;border-radius:50%;background:' + avatarBg + ';color:' + avatarCol + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex-shrink:0;">' + initials + '</div>' +
+          '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:500;' + nameStyle + '">' + (e.nombre||"") + '</div><div style="font-size:11px;color:#888780;">' + sub + coste + '</div></div>' +
+          '<span style="background:' + pillBg + ';color:' + pillCol + ';font-size:10px;padding:2px 8px;border-radius:999px;">' + (isBaja ? "Baja" : puestoLabel) + '</span>' +
+          (!isBaja ? '<select name="fn-' + e.id + '" style="padding:3px 6px;font-size:11px;border:0.5px solid #E5E5E5;border-radius:4px;background:white;"><option value="">Habitual</option><option value="operador">Op.</option><option value="ayudante">Ay.</option></select>' : '') +
+          '</label>';
+      });
+
+      // Build machine cards
+      var maqHtml = '';
+      maqs.forEach(function(m) {
+        var isAveria = m.estado === "averia" || m.estado === "taller";
+        var estadoPill = isAveria ? '<span style="background:#FCEBEB;color:#A32D2D;font-size:10px;padding:2px 6px;border-radius:999px;">Aver\u00eda</span>' :
+          '<span style="background:#E1F5EE;color:#0F6E56;font-size:10px;padding:2px 6px;border-radius:999px;">OK</span>';
+        maqHtml += '<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:' + (isAveria ? 'not-allowed' : 'pointer') + ';' + (isAveria ? 'opacity:0.55;' : '') + 'transition:background 0.15s;" ' + (!isAveria ? 'onmouseover="this.style.background=\'#F5F7FA\'" onmouseout="this.style.background=\'transparent\'"' : '') + '>' +
+          '<input type="checkbox" name="maq" value="' + m.id + '|' + (m.nombre||"") + '"' + (isAveria ? ' disabled' : '') + ' style="margin:0;" onchange="_arUpdateResumen()">' +
+          '<span style="font-size:14px;">\uD83C\uDFD7\uFE0F</span>' +
+          '<div style="flex:1;"><div style="font-size:13px;font-weight:500;">' + (m.nombre||"") + '</div><div style="font-size:11px;color:#888780;">' + (m.detalle||"") + '</div></div>' +
+          estadoPill + '</label>';
+      });
+
+      var modal = document.createElement("div");
+      modal.id = "modal-asignar-recurso";
+      modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;";
+      modal.innerHTML = '<div style="background:white;border-radius:12px;width:640px;max-width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,0.15);">' +
+        // Header
+        '<div style="padding:20px 24px;border-bottom:0.5px solid #E5E5E5;display:flex;justify-content:space-between;align-items:flex-start;">' +
+          '<div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Planificador</div><div style="font-size:18px;font-weight:500;">Asignar equipo a proyecto</div></div>' +
+          '<button onclick="document.getElementById(\'modal-asignar-recurso\').remove()" style="background:none;border:none;font-size:20px;color:#888780;cursor:pointer;padding:0;">\u00d7</button></div>' +
+        '<div style="padding:20px 24px;">' +
+        // Fechas
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">' +
+          '<div><div style="' + _L + '">Desde</div><input type="date" id="ar-desde" value="' + hoy + '" onchange="_arUpdateResumen()" style="width:100%;padding:8px 12px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;box-sizing:border-box;"></div>' +
+          '<div><div style="' + _L + '">Hasta</div><input type="date" id="ar-hasta" value="' + hoy + '" onchange="_arUpdateResumen()" style="width:100%;padding:8px 12px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;box-sizing:border-box;"></div></div>' +
+        // Empleados
+        '<div style="margin-bottom:20px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;"><div style="' + _L + 'margin-bottom:0;">Empleados (' + emps.length + ')</div>' +
+          '<button onclick="_arSelAll(\'emp\')" style="background:none;border:none;font-size:11px;color:#185FA5;cursor:pointer;">Seleccionar todos</button></div>' +
+          '<div style="display:flex;flex-direction:column;gap:4px;max-height:240px;overflow-y:auto;border:0.5px solid #E5E5E5;border-radius:8px;padding:6px;">' + empHtml + '</div></div>' +
+        // Máquinas
+        '<div style="margin-bottom:20px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;"><div style="' + _L + 'margin-bottom:0;">M\u00e1quinas (' + maqs.length + ')</div>' +
+          '<button onclick="_arSelAll(\'maq\')" style="background:none;border:none;font-size:11px;color:#185FA5;cursor:pointer;">Seleccionar todas</button></div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;border:0.5px solid #E5E5E5;border-radius:8px;padding:6px;">' + maqHtml + '</div></div>' +
+        // Resumen
+        '<div style="padding:12px 14px;background:#EEF4FA;border-radius:8px;font-size:12px;">' +
+          '<div style="display:flex;justify-content:space-between;"><span style="color:#888780;">Seleccionados:</span><span style="font-weight:500;" id="ar-resumen-count">0 empleados + 0 m\u00e1quinas \u00b7 1 d\u00eda</span></div>' +
+          '<div style="display:flex;justify-content:space-between;margin-top:4px;"><span style="color:#888780;">Coste estimado:</span><span style="font-weight:500;color:#0F6E56;" id="ar-resumen-coste">0 \u20ac</span></div></div>' +
+        '</div>' +
+        // Footer
+        '<div style="padding:14px 24px;border-top:0.5px solid #E5E5E5;display:flex;justify-content:flex-end;gap:10px;">' +
+          '<button onclick="document.getElementById(\'modal-asignar-recurso\').remove()" style="padding:8px 18px;font-size:13px;background:white;border:0.5px solid #D3D1C7;border-radius:6px;cursor:pointer;">Cancelar</button>' +
+          '<button id="ar-btn-guardar" style="padding:8px 18px;font-size:13px;background:#1D9E75;border:none;color:white;border-radius:6px;font-weight:500;cursor:pointer;">Asignar equipo</button></div>' +
+      '</div>';
+      modal.addEventListener("click", function (e) { if (e.target === modal) modal.remove(); });
+      document.body.appendChild(modal);
+      _arUpdateResumen();
+
+      // Save handler
+      document.getElementById("ar-btn-guardar").addEventListener("click", function () {
+        var desde = document.getElementById("ar-desde").value;
+        var hasta = document.getElementById("ar-hasta").value || desde;
+        if (!desde) return;
+        var checks = modal.querySelectorAll("input[name=emp]:checked, input[name=maq]:checked");
+        if (!checks.length) { mostrarToast("Selecciona al menos un recurso", "error"); return; }
+        var promises = [];
+        checks.forEach(function(cb) {
+          var parts = cb.value.split("|");
+          var tipo = cb.name === "emp" ? "empleado" : "maquina";
+          var payload = { recurso_tipo: tipo, recurso_id: parseInt(parts[0]), recurso_nombre: parts[1], fecha: desde, fecha_hasta: hasta };
+          if (tipo === "empleado") {
+            var fnSel = modal.querySelector("select[name=fn-" + parts[0] + "]");
+            if (fnSel && fnSel.value) payload.funcion_dia = fnSel.value;
+          }
+          promises.push(fetch("/api/proyectos/" + proyectoId + "/asignaciones", {
+            method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload)
+          }));
         });
-    }
-    function toggleFuncionWrap() {
-      var fw = document.getElementById("ar-funcion-wrap");
-      if (fw) fw.style.display = document.getElementById("ar-tipo").value === "empleado" ? "" : "none";
-    }
-    function updateResumen() {
-      var desde = document.getElementById("ar-desde").value;
-      var hasta = document.getElementById("ar-hasta").value || desde;
-      var dias = 1;
-      if (desde && hasta) {
-        var d1 = new Date(desde), d2 = new Date(hasta);
-        dias = Math.max(1, Math.round((d2 - d1) / 86400000) + 1);
-      }
-      var el = document.getElementById("ar-resumen");
-      if (el) el.textContent = "Rango: " + dias + " d\u00eda(s) \u00b7 " + document.getElementById("ar-tipo").value;
-    }
-    cargarDisponibles();
-    toggleFuncionWrap();
-    document.getElementById("ar-tipo").addEventListener("change", function () { cargarDisponibles(); toggleFuncionWrap(); updateResumen(); });
-    document.getElementById("ar-desde").addEventListener("change", function() { cargarDisponibles(); updateResumen(); });
-    document.getElementById("ar-hasta").addEventListener("change", updateResumen);
-
-    document.getElementById("ar-btn-guardar").addEventListener("click", function () {
-      var tipo = document.getElementById("ar-tipo").value;
-      var val = (document.getElementById("ar-recurso").value || "").split("|");
-      var rid = parseInt(val[0]);
-      var nombre = val[1] || "";
-      var desde = document.getElementById("ar-desde").value;
-      var hasta = document.getElementById("ar-hasta").value;
-      if (!rid || !nombre || !desde) return;
-      var funcion = (document.getElementById("ar-funcion") || {}).value || null;
-      var payload = { recurso_tipo: tipo, recurso_id: rid, recurso_nombre: nombre, fecha: desde, fecha_hasta: hasta };
-      if (funcion && tipo === "empleado") payload.funcion_dia = funcion;
-      fetch("/api/proyectos/" + proyectoId + "/asignaciones", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      }).then(function (r) { return r.json(); })
-        .then(function (data) {
-          if (data.error) { mostrarToast(data.error, "error"); return; }
-          document.getElementById("modal-asignar-recurso").remove();
-          mostrarToast("Recurso asignado.", "success");
+        Promise.all(promises).then(function() {
+          modal.remove();
+          mostrarToast(checks.length + " recurso(s) asignado(s).", "success");
           _renderRecursosCalendario(proyectoId);
-        })
-        .catch(function () { mostrarToast("Error.", "error"); });
+        }).catch(function() { mostrarToast("Error.", "error"); });
+      });
     });
+  };
+
+  window._arSelAll = function(tipo) {
+    var modal = document.getElementById("modal-asignar-recurso");
+    if (!modal) return;
+    modal.querySelectorAll("input[name=" + tipo + "]:not(:disabled)").forEach(function(cb) { cb.checked = true; });
+    _arUpdateResumen();
+  };
+
+  window._arUpdateResumen = function() {
+    var modal = document.getElementById("modal-asignar-recurso");
+    if (!modal) return;
+    var empCount = modal.querySelectorAll("input[name=emp]:checked").length;
+    var maqCount = modal.querySelectorAll("input[name=maq]:checked").length;
+    var desde = (document.getElementById("ar-desde") || {}).value || "";
+    var hasta = (document.getElementById("ar-hasta") || {}).value || desde;
+    var dias = 1;
+    if (desde && hasta) { dias = Math.max(1, Math.round((new Date(hasta) - new Date(desde)) / 86400000) + 1); }
+    var countEl = document.getElementById("ar-resumen-count");
+    if (countEl) countEl.textContent = empCount + " empleados + " + maqCount + " m\u00e1quinas \u00b7 " + dias + " d\u00eda(s)";
+    var costeEl = document.getElementById("ar-resumen-coste");
+    if (costeEl) costeEl.textContent = (empCount * 120 * dias) + " \u20ac (aprox)"; // rough estimate
   };
 
   window.desasignarRecurso = function (proyectoId, tipo, recursoId, nombre) {
