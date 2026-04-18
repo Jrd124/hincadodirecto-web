@@ -25,6 +25,12 @@ function _gasoilFmtNum(n) {
 // ═══ Dashboard ═══════════════════════════════════════════════════════════════
 
 function _gasoilCargarDashboard() {
+  // Check for archived legacy data
+  fetch("/api/combustible/archivo-legacy").then(function(r){return r.json();}).then(function(d) {
+    var el = document.getElementById("gasoil-archivo-aviso");
+    if (el && d.count > 0) { el.style.display = ""; document.getElementById("gasoil-archivo-count").textContent = d.count; }
+  }).catch(function(){});
+
   fetch("/api/moeve/resumen")
     .then(function (r) { return r.json(); })
     .then(function (d) {
@@ -250,9 +256,45 @@ function _gasoilCargarVehiculos() {
     .catch(function () { tbody.innerHTML = '<tr><td colspan="7" style="color:#dc3545;">Error</td></tr>'; });
 }
 
-// ═══ Expose ��════════════════════════════════════════════════════════════════
+// ═══ Import Moeve XLSX ═══════════════════════════════════════════════════════
+
+function _gasoilImportarMoeve(input) {
+  if (!input.files || !input.files[0]) return;
+  var file = input.files[0];
+  var status = document.getElementById("gasoil-import-status");
+  status.style.display = "";
+  status.style.background = "#EFF6FF";
+  status.style.color = "#1E40AF";
+  status.textContent = "\u23f3 Importando " + file.name + "...";
+
+  var fd = new FormData();
+  fd.append("file", file);
+  fetch("/api/combustible/importar-moeve", { method: "POST", body: fd })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.error) {
+        status.style.background = "#FEF2F2"; status.style.color = "#dc2626";
+        status.textContent = "\u274c Error: " + d.error;
+      } else {
+        status.style.background = "#F0FDF4"; status.style.color = "#166534";
+        status.textContent = "\u2705 " + d.creados + " transacciones creadas, " + d.duplicados + " duplicadas, " + d.errores + " errores. " +
+          (d.vehiculos_nuevos.length ? d.vehiculos_nuevos.length + " veh\u00edculos nuevos. " : "") +
+          (d.estaciones_nuevas.length ? d.estaciones_nuevas.length + " estaciones nuevas." : "");
+        _gasoilCargarDashboard(); // Refresh
+      }
+      input.value = ""; // Reset file input
+    })
+    .catch(function(err) {
+      status.style.background = "#FEF2F2"; status.style.color = "#dc2626";
+      status.textContent = "\u274c Error: " + err.message;
+      input.value = "";
+    });
+}
+
+// ═══ Expose ═══════════════════════════════════════════════════════════════════
 
 window._gasoilOnPanelShow = _gasoilOnPanelShow;
+window._gasoilImportarMoeve = _gasoilImportarMoeve;
 window._gasoilFiltrar = _gasoilFiltrar;
 window._gasoilPagNext = _gasoilPagNext;
 window._gasoilPagPrev = _gasoilPagPrev;

@@ -1698,6 +1698,21 @@
 
       <!-- ═══ GASOIL / MOEVE ════════════════════════════════════════════ -->
       <div id="panel-gasoil-inicio" class="panel-gasoil">
+        <!-- Import card -->
+        <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:250px;">
+            <div id="gasoil-archivo-aviso" style="padding:10px 14px;background:#FFFBEB;border-radius:8px;font-size:12px;color:#854F0B;display:none;">
+              &#x1F4C1; <span id="gasoil-archivo-count">0</span> registros del sistema antiguo archivados. Se recargar&aacute;n al subir los Excels de Moeve y Solred.
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <label style="padding:8px 16px;background:#2563eb;color:#fff;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;">
+              &#x1F4E4; Importar Moeve (.xlsx)
+              <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="_gasoilImportarMoeve(this)">
+            </label>
+          </div>
+        </div>
+        <div id="gasoil-import-status" style="display:none;margin-bottom:12px;padding:10px 14px;background:#F0FDF4;border-radius:8px;font-size:12px;color:#166534;"></div>
         <!-- KPIs -->
         <div id="gasoil-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:16px;">
           <div class="tes-card tes-card-blue"><span class="tes-label">Total gastado</span><span class="tes-valor" id="gasoil-kpi-total">--</span></div>
