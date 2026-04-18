@@ -392,11 +392,19 @@ def resumen():
         capacidad_maq = total_maq * dias_lab - averia_dias
         ocupacion = round(asig_maq_mes / capacidad_maq * 100) if capacidad_maq > 0 else 0
 
+        maq_activas_mes = total_maq - (averia_dias // max(dias_lab, 1))  # approximate active machines
+
         return jsonify({
             "emp_hoy": emp_hoy, "emp_total": total_emp,
             "maq_hoy": maq_hoy, "maq_averia": maq_averia, "maq_total": total_maq,
             "proy_activos": proy_activos,
             "ocupacion": ocupacion,
+            "ocupacion_detalle": {
+                "dias_asignados": asig_maq_mes,
+                "dias_disponibles": capacidad_maq,
+                "dias_averia": averia_dias,
+                "dias_laborables": dias_lab,
+            },
         })
     finally:
         conn.close()

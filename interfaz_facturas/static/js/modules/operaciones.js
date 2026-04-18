@@ -165,7 +165,15 @@ function _fetchCuadrante() {
       var kpiAveria = document.getElementById("oper-kpi-maq-averia");
       if (kpiAveria) kpiAveria.textContent = (d.maq_averia || 0) + " / " + d.maq_total;
       document.getElementById("oper-kpi-proy").textContent = d.proy_activos;
-      document.getElementById("oper-kpi-ocup").textContent = d.ocupacion + "%";
+      var ocEl = document.getElementById("oper-kpi-ocup");
+      ocEl.textContent = d.ocupacion + "%";
+      var od = d.ocupacion_detalle || {};
+      if (od.dias_asignados != null) {
+        ocEl.title = od.dias_asignados + " asignadas / " + od.dias_disponibles + " efectivas (" + od.dias_averia + " avería)";
+        var sub = ocEl.parentNode.querySelector(".tes-sub");
+        if (!sub) { sub = document.createElement("span"); sub.className = "tes-sub"; sub.style.cssText = "display:block;font-size:10px;color:#888;margin-top:2px;"; ocEl.parentNode.appendChild(sub); }
+        sub.textContent = od.dias_asignados + " / " + od.dias_disponibles + " m\u00b7d\u00eda";
+      }
     })
     .catch(function (err) { console.error("Operaciones resumen error:", err); });
 }

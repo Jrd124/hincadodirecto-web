@@ -596,7 +596,7 @@ def api_rrhh_dietas_calendario(periodo):
       d += timedelta(days=1)
 
     emps = [dict(r) for r in conn.execute(
-      "SELECT id, nombre, apellidos FROM empleados WHERE estado='activo' ORDER BY apellidos, nombre"
+      "SELECT id, nombre, apellidos FROM empleados WHERE estado IN ('activo','baja','vacaciones') ORDER BY apellidos, nombre"
     ).fetchall()]
 
     # Get dietas_diarias for this month + calculate importe from tarifas
@@ -650,7 +650,7 @@ def api_rrhh_dietas_calendario(periodo):
 
     # Build puesto map for employees
     emp_puestos = {}
-    for e in conn.execute("SELECT id, puesto FROM empleados WHERE estado='activo'").fetchall():
+    for e in conn.execute("SELECT id, puesto FROM empleados WHERE estado IN ('activo','baja','vacaciones')").fetchall():
       emp_puestos[e["id"]] = e["puesto"] or None
 
     # Build effective function map: funcion_dia > puesto habitual
@@ -958,7 +958,7 @@ def api_rrhh_horas_extras_calendario(periodo):
       d += timedelta(days=1)
 
     emps = [dict(r) for r in conn.execute(
-      "SELECT id, nombre, apellidos FROM empleados WHERE estado='activo' ORDER BY apellidos, nombre"
+      "SELECT id, nombre, apellidos FROM empleados WHERE estado IN ('activo','baja','vacaciones') ORDER BY apellidos, nombre"
     ).fetchall()]
 
     # Horas extras
@@ -1027,7 +1027,7 @@ def api_rrhh_horas_extras_resumen(anio, mes):
   try:
     periodo = f"{anio}-{mes:02d}"
     emps = [dict(r) for r in conn.execute(
-      "SELECT id, nombre, apellidos FROM empleados WHERE estado='activo' ORDER BY apellidos, nombre"
+      "SELECT id, nombre, apellidos FROM empleados WHERE estado IN ('activo','baja','vacaciones') ORDER BY apellidos, nombre"
     ).fetchall()]
     lineas = []
     t_horas = 0; t_importe = 0; t_acum = 0; t_dias = 0
@@ -1176,7 +1176,7 @@ def api_rrhh_vacaciones_calendario(periodo):
 
     emps = [dict(r) for r in conn.execute(
       "SELECT id, nombre, apellidos, fecha_alta, dias_vacaciones_anuales "
-      "FROM empleados WHERE estado='activo' ORDER BY apellidos, nombre"
+      "FROM empleados WHERE estado IN ('activo','baja','vacaciones') ORDER BY apellidos, nombre"
     ).fetchall()]
 
     vac = {}
@@ -1266,7 +1266,7 @@ def api_rrhh_vacaciones_resumen(anio):
     ref = hoy if hoy.year == anio else date(anio, 12, 31)
     emps = [dict(r) for r in conn.execute(
       "SELECT id, nombre, apellidos, fecha_alta, dias_vacaciones_anuales "
-      "FROM empleados WHERE estado='activo' ORDER BY apellidos, nombre"
+      "FROM empleados WHERE estado IN ('activo','baja','vacaciones') ORDER BY apellidos, nombre"
     ).fetchall()]
 
     # Count vacation days per employee this year (only working days)

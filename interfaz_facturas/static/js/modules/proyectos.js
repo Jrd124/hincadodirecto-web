@@ -1263,28 +1263,34 @@
     modal.className = "modal-overlay visible";
     modal.id = "modal-asignar-recurso";
     modal.style.zIndex = "110";
-    modal.innerHTML = '<div class="modal-editar" role="dialog" style="max-width:480px;border-radius:12px;padding:20px;">' +
-      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">' +
-        '<span style="font-size:20px;">\uD83D\uDC77</span>' +
-        '<div><h2 style="margin:0;font-size:1.1rem;">Asignar recurso</h2><div style="font-size:11px;color:#888;">Proyecto #' + proyectoId + '</div></div></div>' +
-      '<div style="display:grid;gap:14px;">' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-          '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.3px;color:#666;">Tipo</label>' +
-            '<select id="ar-tipo" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;font-size:13px;">' +
-            '<option value="empleado">\uD83D\uDC77 Empleado</option><option value="maquina">\uD83C\uDFD7\uFE0F M\u00e1quina</option></select></div>' +
-          '<div id="ar-funcion-wrap" style="display:none;"><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.3px;color:#666;">Funci\u00f3n</label>' +
-            '<select id="ar-funcion" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;font-size:13px;">' +
-            '<option value="">Puesto habitual</option><option value="operador">Operador</option><option value="ayudante">Ayudante</option></select></div>' +
-        '</div>' +
-        '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.3px;color:#666;">Recurso</label>' +
-          '<select id="ar-recurso" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;font-size:13px;"><option>Cargando...</option></select></div>' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-          '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.3px;color:#666;">Desde</label><input type="date" id="ar-desde" value="' + hoy + '" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;box-sizing:border-box;font-size:13px;"></div>' +
-          '<div><label style="font-size:11px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.3px;color:#666;">Hasta</label><input type="date" id="ar-hasta" value="' + hoy + '" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;box-sizing:border-box;font-size:13px;"></div></div>' +
+    var _lbl = "font-size:11px;font-weight:600;display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;color:#888780;";
+    modal.innerHTML = '<div class="modal-editar" role="dialog" style="max-width:640px;border-radius:12px;padding:0;box-shadow:0 20px 50px rgba(0,0,0,0.15);border:0.5px solid #E5E5E5;">' +
+      // A: Header
+      '<div style="display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:0.5px solid #E5E5E5;">' +
+        '<div><div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#888;margin-bottom:2px;">PLANIFICADOR</div><h2 style="margin:0;font-size:18px;font-weight:500;">Asignar equipo a proyecto</h2></div>' +
+        '<button onclick="document.getElementById(\'modal-asignar-recurso\').remove()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#999;padding:4px;">\u00d7</button></div>' +
+      '<div style="padding:20px 24px;max-height:70vh;overflow-y:auto;">' +
+      // B: Tipo + Recurso
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">' +
+        '<div><label style="' + _lbl + '">Tipo recurso</label>' +
+          '<select id="ar-tipo" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;font-size:13px;">' +
+          '<option value="empleado">\uD83D\uDC77 Empleado</option><option value="maquina">\uD83C\uDFD7\uFE0F M\u00e1quina</option></select></div>' +
+        '<div id="ar-funcion-wrap" style=""><label style="' + _lbl + '">Funci\u00f3n hoy</label>' +
+          '<select id="ar-funcion" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;font-size:13px;">' +
+          '<option value="">Puesto habitual</option><option value="operador">Operador</option><option value="ayudante">Ayudante</option></select></div></div>' +
+      '<div style="margin-bottom:14px;"><label style="' + _lbl + '">Recurso</label>' +
+        '<select id="ar-recurso" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;font-size:13px;"><option>Cargando...</option></select></div>' +
+      // C: Fechas
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">' +
+        '<div><label style="' + _lbl + '">Desde</label><input type="date" id="ar-desde" value="' + hoy + '" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;box-sizing:border-box;font-size:13px;"></div>' +
+        '<div><label style="' + _lbl + '">Hasta</label><input type="date" id="ar-hasta" value="' + hoy + '" style="width:100%;padding:8px;border:1px solid #E5E5E5;border-radius:8px;box-sizing:border-box;font-size:13px;"></div></div>' +
+      // F: Resumen
+      '<div id="ar-resumen" style="padding:10px 14px;background:#F0F7FF;border-radius:8px;font-size:12px;color:#1E40AF;margin-bottom:14px;">Selecciona recurso y fechas</div>' +
       '</div>' +
-      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;padding-top:14px;border-top:1px solid #f1f1f1;">' +
-        '<button class="secondary" style="border-radius:8px;" onclick="document.getElementById(\'modal-asignar-recurso\').remove()">Cancelar</button>' +
-        '<button class="primary" style="width:auto;border-radius:8px;" id="ar-btn-guardar">Asignar</button>' +
+      // G: Botones
+      '<div style="display:flex;gap:8px;justify-content:flex-end;padding:14px 24px;border-top:0.5px solid #E5E5E5;">' +
+        '<button style="padding:8px 18px;border:1px solid #E5E5E5;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;" onclick="document.getElementById(\'modal-asignar-recurso\').remove()">Cancelar</button>' +
+        '<button style="padding:8px 18px;border:none;border-radius:8px;background:#1D9E75;color:#fff;font-weight:500;cursor:pointer;font-size:13px;" id="ar-btn-guardar">Asignar equipo</button>' +
       '</div></div>';
     modal.addEventListener("click", function (e) { if (e.target === modal) modal.remove(); });
     document.body.appendChild(modal);
@@ -1300,20 +1306,36 @@
           (data.recursos || []).forEach(function (r) {
             var opt = document.createElement("option");
             opt.value = r.id + "|" + r.nombre;
-            opt.textContent = r.nombre + (r.detalle ? " (" + r.detalle + ")" : "");
+            var label = r.nombre + (r.detalle ? " \u00b7 " + r.detalle : "");
+            if (r.estado === "baja") label += " \u26d4 Baja";
+            opt.textContent = label;
+            if (r.estado === "baja" || r.estado === "averia") { opt.disabled = true; opt.style = "color:#999;"; }
             sel.appendChild(opt);
           });
           if (!sel.options.length) sel.innerHTML = '<option>No hay disponibles</option>';
+          updateResumen();
         });
     }
     function toggleFuncionWrap() {
       var fw = document.getElementById("ar-funcion-wrap");
       if (fw) fw.style.display = document.getElementById("ar-tipo").value === "empleado" ? "" : "none";
     }
+    function updateResumen() {
+      var desde = document.getElementById("ar-desde").value;
+      var hasta = document.getElementById("ar-hasta").value || desde;
+      var dias = 1;
+      if (desde && hasta) {
+        var d1 = new Date(desde), d2 = new Date(hasta);
+        dias = Math.max(1, Math.round((d2 - d1) / 86400000) + 1);
+      }
+      var el = document.getElementById("ar-resumen");
+      if (el) el.textContent = "Rango: " + dias + " d\u00eda(s) \u00b7 " + document.getElementById("ar-tipo").value;
+    }
     cargarDisponibles();
     toggleFuncionWrap();
-    document.getElementById("ar-tipo").addEventListener("change", function () { cargarDisponibles(); toggleFuncionWrap(); });
-    document.getElementById("ar-desde").addEventListener("change", cargarDisponibles);
+    document.getElementById("ar-tipo").addEventListener("change", function () { cargarDisponibles(); toggleFuncionWrap(); updateResumen(); });
+    document.getElementById("ar-desde").addEventListener("change", function() { cargarDisponibles(); updateResumen(); });
+    document.getElementById("ar-hasta").addEventListener("change", updateResumen);
 
     document.getElementById("ar-btn-guardar").addEventListener("click", function () {
       var tipo = document.getElementById("ar-tipo").value;
