@@ -169,10 +169,10 @@ function _fetchCuadrante() {
       ocEl.textContent = d.ocupacion + "%";
       var od = d.ocupacion_detalle || {};
       if (od.dias_asignados != null) {
-        ocEl.title = od.dias_asignados + " asignadas / " + od.dias_disponibles + " efectivas (" + od.dias_averia + " avería)";
+        ocEl.title = od.dias_asignados + " asignadas / " + od.capacidad_total + " disponibles (" + od.maquinas + " m\u00e1q \u00d7 " + od.dias_laborables + " d\u00edas" + (od.dias_averia ? ", " + od.dias_averia + " aver\u00eda" : "") + ")";
         var sub = ocEl.parentNode.querySelector(".tes-sub");
         if (!sub) { sub = document.createElement("span"); sub.className = "tes-sub"; sub.style.cssText = "display:block;font-size:10px;color:#888;margin-top:2px;"; ocEl.parentNode.appendChild(sub); }
-        sub.textContent = od.dias_asignados + " / " + od.dias_disponibles + " m\u00b7d\u00eda";
+        sub.textContent = od.dias_asignados + " / " + od.capacidad_total + " m\u00b7d\u00eda";
       }
     })
     .catch(function (err) { console.error("Operaciones resumen error:", err); });

@@ -380,7 +380,7 @@ def resumen():
             "SELECT COUNT(*) FROM proyectos WHERE estado IN ('vivo','en_curso','adjudicado')"
         ).fetchone()[0]
 
-        # Ocupación máquinas: excluir averías del numerador y denominador
+        # Ocupación máquinas: numerador = asignadas produciendo, denominador = capacidad total
         asig_maq_mes = conn.execute(
             "SELECT COUNT(*) FROM proyecto_asignaciones WHERE recurso_tipo='maquina' "
             "AND fecha >= ? AND fecha <= ? AND estado != 'averia'", (fecha_ini, fecha_fin),
@@ -389,10 +389,8 @@ def resumen():
             "SELECT COUNT(*) FROM proyecto_asignaciones WHERE recurso_tipo='maquina' "
             "AND fecha >= ? AND fecha <= ? AND estado = 'averia'", (fecha_ini, fecha_fin),
         ).fetchone()[0]
-        capacidad_maq = total_maq * dias_lab - averia_dias
-        ocupacion = round(asig_maq_mes / capacidad_maq * 100) if capacidad_maq > 0 else 0
-
-        maq_activas_mes = total_maq - (averia_dias // max(dias_lab, 1))  # approximate active machines
+        capacidad_total = total_maq * dias_lab
+        ocupacion = round(asig_maq_mes / capacidad_total * 100) if capacidad_total > 0 else 0
 
         return jsonify({
             "emp_hoy": emp_hoy, "emp_total": total_emp,
@@ -401,9 +399,10 @@ def resumen():
             "ocupacion": ocupacion,
             "ocupacion_detalle": {
                 "dias_asignados": asig_maq_mes,
-                "dias_disponibles": capacidad_maq,
+                "capacidad_total": capacidad_total,
                 "dias_averia": averia_dias,
                 "dias_laborables": dias_lab,
+                "maquinas": total_maq,
             },
         })
     finally:
