@@ -1345,30 +1345,9 @@
       </div>
 
       <!-- Modal: Asignación masiva -->
+      <!-- Modal masivo: rendered dynamically by _abrirModalMasivo() in operaciones.js -->
       <div id="modal-oper-masivo-overlay" class="modal-overlay" aria-hidden="true">
-        <div class="modal-editar" role="dialog" style="max-width:500px;">
-          <h2 style="margin:0 0 16px;font-size:18px;">Asignar equipo a proyecto</h2>
-          <div style="margin-bottom:12px;">
-            <label style="font-size:12px;font-weight:600;">Proyecto</label>
-            <select id="oper-masivo-proyecto" class="form-select" style="font-size:13px;width:100%;"></select>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-            <div><label style="font-size:12px;">Desde</label><input type="date" id="oper-masivo-desde" class="form-input" style="font-size:13px;"></div>
-            <div><label style="font-size:12px;">Hasta</label><input type="date" id="oper-masivo-hasta" class="form-input" style="font-size:13px;"></div>
-          </div>
-          <div style="margin-bottom:12px;">
-            <label style="font-size:12px;font-weight:600;">Empleados</label>
-            <div id="oper-masivo-empleados" style="max-height:150px;overflow-y:auto;border:1px solid var(--color-border);border-radius:6px;padding:8px;display:flex;flex-wrap:wrap;gap:6px;"></div>
-          </div>
-          <div style="margin-bottom:12px;">
-            <label style="font-size:12px;font-weight:600;">M&aacute;quinas</label>
-            <div id="oper-masivo-maquinas" style="max-height:100px;overflow-y:auto;border:1px solid var(--color-border);border-radius:6px;padding:8px;display:flex;flex-wrap:wrap;gap:6px;"></div>
-          </div>
-          <div style="display:flex;justify-content:flex-end;gap:8px;">
-            <button type="button" class="secondary" id="oper-masivo-cerrar">Cancelar</button>
-            <button type="button" class="primary" id="oper-masivo-confirmar">Asignar</button>
-          </div>
-        </div>
+        <div id="modal-oper-masivo-content" style="background:white;border-radius:12px;width:640px;max-width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,0.15);"></div>
       </div>
 
       <!-- ===== DASHBOARD RRHH ===== -->

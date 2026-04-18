@@ -703,36 +703,96 @@ window._asignarRango = function (tipo, rid, proyId, desde, hasta) {
 function _abrirModalMasivo() {
   if (!_operData) return;
   var overlay = document.getElementById("modal-oper-masivo-overlay");
+  var container = document.getElementById("modal-oper-masivo-content");
+  var hoy = new Date().toISOString().slice(0, 10);
+  var finMes = new Date(_operAnio, _operMes, 0).toISOString().slice(0, 10);
+  var _L = "font-size:11px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;";
 
-  // Populate proyectos
-  var sel = document.getElementById("oper-masivo-proyecto");
-  sel.innerHTML = '<option value="">Seleccionar proyecto...</option>';
-  _operData.proyectos.forEach(function (p) {
-    sel.innerHTML += '<option value="' + p.id + '">' + p.nombre + '</option>';
+  // Proyecto options
+  var proyOpts = '<option value="">Seleccionar proyecto...</option>';
+  _operData.proyectos.forEach(function(p) { proyOpts += '<option value="' + p.id + '">' + p.nombre + '</option>'; });
+
+  // Employee rows with avatars
+  var empHtml = '';
+  _operData.empleados.forEach(function(e) {
+    var initials = ((e.nombre||"?")[0] + ((e.apellidos||"")[0] || "")).toUpperCase();
+    var isBaja = e.estado === "baja";
+    var puesto = e.puesto || "";
+    var avatarBg = isBaja ? "#FCEBEB" : (puesto === "ayudante" ? "#EAF3DE" : "#E6F1FB");
+    var avatarCol = isBaja ? "#A32D2D" : (puesto === "ayudante" ? "#27500A" : "#185FA5");
+    var pillLabel = isBaja ? "Baja" : (puesto === "ayudante" ? "Ayudante" : "Operador");
+    var pillBg = isBaja ? "#FCEBEB" : (puesto === "ayudante" ? "#EAF3DE" : "#E6F1FB");
+    var pillCol = isBaja ? "#A32D2D" : (puesto === "ayudante" ? "#27500A" : "#042C53");
+    var bajaStyle = isBaja ? "opacity:0.55;background:repeating-linear-gradient(45deg,#FCEBEB,#FCEBEB 4px,white 4px,white 8px);cursor:not-allowed;" : "";
+    var nameStyle = isBaja ? "text-decoration:line-through;" : "";
+    var nombre = (e.nombre||"") + (e.apellidos ? " " + e.apellidos.split(" ")[0] : "");
+    empHtml += '<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;' + bajaStyle + 'cursor:' + (isBaja?'not-allowed':'pointer') + ';transition:background 0.15s;" ' + (!isBaja ? 'onmouseover="this.style.background=\'#F5F7FA\'" onmouseout="this.style.background=\'transparent\'"' : '') + '>' +
+      '<input type="checkbox" name="oper-m-emp" value="' + e.id + '"' + (isBaja ? ' disabled' : '') + ' style="margin:0;" onchange="_operMasivoResumen()">' +
+      '<div style="width:28px;height:28px;border-radius:50%;background:' + avatarBg + ';color:' + avatarCol + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex-shrink:0;">' + initials + '</div>' +
+      '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:500;' + nameStyle + '">' + nombre + '</div></div>' +
+      '<span style="background:' + pillBg + ';color:' + pillCol + ';font-size:10px;padding:2px 8px;border-radius:999px;">' + pillLabel + '</span>' +
+      (!isBaja ? '<select name="oper-m-fn-' + e.id + '" style="padding:3px 6px;font-size:11px;border:0.5px solid #E5E5E5;border-radius:4px;"><option value="">Hab.</option><option value="operador">Op.</option><option value="ayudante">Ay.</option></select>' : '') +
+      '</label>';
   });
 
-  // Default dates: this month range
-  var hoy = new Date();
-  document.getElementById("oper-masivo-desde").value = hoy.toISOString().slice(0, 10);
-  var finMes = new Date(_operAnio, _operMes, 0);
-  document.getElementById("oper-masivo-hasta").value = finMes.toISOString().slice(0, 10);
-
-  // Checkboxes empleados
-  var empDiv = document.getElementById("oper-masivo-empleados");
-  empDiv.innerHTML = "";
-  _operData.empleados.forEach(function (e) {
-    empDiv.innerHTML += '<label style="display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap;"><input type="checkbox" value="' + e.id + '"> ' + e.nombre + '</label>';
+  // Machine cards
+  var maqHtml = '';
+  _operData.maquinas.forEach(function(m) {
+    var isDown = m.estado === "averia" || m.estado === "taller";
+    maqHtml += '<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:' + (isDown?'not-allowed':'pointer') + ';' + (isDown?'opacity:0.55;':'') + 'transition:background 0.15s;" ' + (!isDown ? 'onmouseover="this.style.background=\'#F5F7FA\'" onmouseout="this.style.background=\'transparent\'"' : '') + '>' +
+      '<input type="checkbox" name="oper-m-maq" value="' + m.id + '"' + (isDown ? ' disabled' : '') + ' style="margin:0;" onchange="_operMasivoResumen()">' +
+      '<span style="font-size:14px;">\uD83C\uDFD7\uFE0F</span>' +
+      '<div style="flex:1;"><div style="font-size:13px;font-weight:500;">' + m.nombre + '</div><div style="font-size:11px;color:#888780;">' + (m.modelo||"") + '</div></div>' +
+      '<span style="background:' + (isDown ? '#FCEBEB' : '#E1F5EE') + ';color:' + (isDown ? '#A32D2D' : '#0F6E56') + ';font-size:10px;padding:2px 6px;border-radius:999px;">' + (isDown ? 'Aver\u00eda' : 'OK') + '</span></label>';
   });
 
-  // Checkboxes maquinas
-  var maqDiv = document.getElementById("oper-masivo-maquinas");
-  maqDiv.innerHTML = "";
-  _operData.maquinas.forEach(function (m) {
-    maqDiv.innerHTML += '<label style="display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap;"><input type="checkbox" value="' + m.id + '"> ' + m.nombre + '</label>';
-  });
+  container.innerHTML =
+    // Header
+    '<div style="padding:20px 24px;border-bottom:0.5px solid #E5E5E5;display:flex;justify-content:space-between;align-items:flex-start;">' +
+      '<div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Planificador</div><div style="font-size:18px;font-weight:500;">Asignar equipo a proyecto</div></div>' +
+      '<button id="oper-masivo-cerrar" style="background:none;border:none;font-size:20px;color:#888780;cursor:pointer;padding:0;">\u00d7</button></div>' +
+    '<div style="padding:20px 24px;">' +
+    // Proyecto
+    '<div style="margin-bottom:18px;"><div style="' + _L + '">Proyecto</div>' +
+      '<select id="oper-masivo-proyecto" style="width:100%;padding:10px 12px;font-size:13px;border:0.5px solid #E5E5E5;border-radius:6px;">' + proyOpts + '</select></div>' +
+    // Fechas
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">' +
+      '<div><div style="' + _L + '">Desde</div><input type="date" id="oper-masivo-desde" value="' + hoy + '" onchange="_operMasivoResumen()" style="width:100%;padding:8px 12px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;box-sizing:border-box;"></div>' +
+      '<div><div style="' + _L + '">Hasta</div><input type="date" id="oper-masivo-hasta" value="' + finMes + '" onchange="_operMasivoResumen()" style="width:100%;padding:8px 12px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;box-sizing:border-box;"></div></div>' +
+    // Empleados
+    '<div style="margin-bottom:20px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;"><div style="' + _L + 'margin-bottom:0;">Empleados (' + _operData.empleados.length + ')</div>' +
+      '<button onclick="document.querySelectorAll(\'input[name=oper-m-emp]:not(:disabled)\').forEach(function(c){c.checked=true;});_operMasivoResumen();" style="background:none;border:none;font-size:11px;color:#185FA5;cursor:pointer;">Seleccionar todos</button></div>' +
+      '<div style="display:flex;flex-direction:column;gap:4px;max-height:240px;overflow-y:auto;border:0.5px solid #E5E5E5;border-radius:8px;padding:6px;">' + empHtml + '</div></div>' +
+    // Máquinas
+    '<div style="margin-bottom:20px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;"><div style="' + _L + 'margin-bottom:0;">M\u00e1quinas (' + _operData.maquinas.length + ')</div>' +
+      '<button onclick="document.querySelectorAll(\'input[name=oper-m-maq]:not(:disabled)\').forEach(function(c){c.checked=true;});_operMasivoResumen();" style="background:none;border:none;font-size:11px;color:#185FA5;cursor:pointer;">Seleccionar todas</button></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;border:0.5px solid #E5E5E5;border-radius:8px;padding:6px;">' + maqHtml + '</div></div>' +
+    // Resumen
+    '<div style="padding:12px 14px;background:#EEF4FA;border-radius:8px;font-size:12px;">' +
+      '<div style="display:flex;justify-content:space-between;"><span style="color:#888780;">Seleccionados:</span><span style="font-weight:500;" id="oper-masivo-resumen-count">0 empleados + 0 m\u00e1quinas</span></div></div>' +
+    '</div>' +
+    // Footer
+    '<div style="padding:14px 24px;border-top:0.5px solid #E5E5E5;display:flex;justify-content:flex-end;gap:10px;">' +
+      '<button id="oper-masivo-cerrar2" style="padding:8px 18px;font-size:13px;background:white;border:0.5px solid #D3D1C7;border-radius:6px;cursor:pointer;">Cancelar</button>' +
+      '<button id="oper-masivo-confirmar" style="padding:8px 18px;font-size:13px;background:#1D9E75;border:none;color:white;border-radius:6px;font-weight:500;cursor:pointer;">Asignar equipo</button></div>';
+
+  // Re-bind close buttons
+  document.getElementById("oper-masivo-cerrar").addEventListener("click", function() { overlay.classList.remove("visible"); });
+  document.getElementById("oper-masivo-cerrar2").addEventListener("click", function() { overlay.classList.remove("visible"); });
+  document.getElementById("oper-masivo-confirmar").addEventListener("click", _ejecutarAsignacionMasiva);
 
   overlay.classList.add("visible");
+  _operMasivoResumen();
 }
+
+window._operMasivoResumen = function() {
+  var empC = document.querySelectorAll("input[name=oper-m-emp]:checked").length;
+  var maqC = document.querySelectorAll("input[name=oper-m-maq]:checked").length;
+  var el = document.getElementById("oper-masivo-resumen-count");
+  if (el) el.textContent = empC + " empleados + " + maqC + " m\u00e1quinas";
+};
 
 function _ejecutarAsignacionMasiva() {
   var proyId = document.getElementById("oper-masivo-proyecto").value;
@@ -743,10 +803,13 @@ function _ejecutarAsignacionMasiva() {
   if (!desde || !hasta) { alert("Selecciona fechas"); return; }
 
   var recursos = [];
-  document.querySelectorAll("#oper-masivo-empleados input:checked").forEach(function (cb) {
-    recursos.push({ tipo: "empleado", id: parseInt(cb.value) });
+  document.querySelectorAll("input[name=oper-m-emp]:checked").forEach(function (cb) {
+    var fnSel = document.querySelector("select[name=oper-m-fn-" + cb.value + "]");
+    var r = { tipo: "empleado", id: parseInt(cb.value) };
+    if (fnSel && fnSel.value) r.funcion_dia = fnSel.value;
+    recursos.push(r);
   });
-  document.querySelectorAll("#oper-masivo-maquinas input:checked").forEach(function (cb) {
+  document.querySelectorAll("input[name=oper-m-maq]:checked").forEach(function (cb) {
     recursos.push({ tipo: "maquina", id: parseInt(cb.value) });
   });
   if (!recursos.length) { alert("Selecciona al menos un recurso"); return; }
