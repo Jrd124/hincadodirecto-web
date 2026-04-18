@@ -60,10 +60,7 @@ def init_combustible_db():
             )
         """)
 
-        # Backup old table if it has the old schema
-        old_cols = {r[1] for r in conn.execute("PRAGMA table_info(combustible_transacciones)").fetchall()}
-        if "origen" in old_cols and "proveedor" not in old_cols:
-            conn.execute("ALTER TABLE combustible_transacciones RENAME TO combustible_transacciones_old_backup")
+        # Old table already archived as combustible_transacciones_archivo_20260419
 
         # New transactions table
         conn.execute("""
@@ -259,53 +256,13 @@ def importar_excel_moeve(filepath):
     return stats
 
 
-def migrar_datos_legacy():
-    """Migrate old combustible_transacciones_old_backup to new schema."""
-    init_combustible_db()
+def get_archivo_legacy_count():
+    """Returns count of archived legacy records."""
     conn = get_conn()
     try:
-        # Check if backup exists
         tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
-        if "combustible_transacciones_old_backup" not in tables:
-            return {"migrados": 0, "mensaje": "No hay datos legacy para migrar"}
-
-        rows = conn.execute("SELECT * FROM combustible_transacciones_old_backup").fetchall()
-        migrados = 0
-        for r in rows:
-            try:
-                rd = dict(r)
-                fecha = rd.get("fecha") or ""
-                hora = rd.get("hora") or ""
-                fecha_op = f"{fecha} {hora}".strip() if fecha else None
-                if not fecha_op:
-                    continue
-
-                matricula = rd.get("matricula")
-                vehiculo_id, _ = get_or_create_vehiculo(conn, matricula) if matricula else (None, False)
-                estacion = rd.get("estacion") or ""
-                estacion_id, _ = get_or_create_estacion(conn, estacion) if estacion else (None, False)
-
-                conn.execute("""
-                    INSERT OR IGNORE INTO combustible_transacciones (
-                        proveedor, fuente_archivo, fecha_operacion, numero_operacion,
-                        matricula_raw, vehiculo_id, estacion_raw, estacion_id, pais,
-                        concepto_raw, tipo_producto, litros, importe_final,
-                        iva_pct, numero_factura_raw, proyecto_id
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                """, (
-                    "legacy", "migracion_legacy", fecha_op, rd.get("operacion") or str(rd.get("id", "")),
-                    matricula, vehiculo_id, estacion, estacion_id, rd.get("pais") or "ES",
-                    rd.get("concepto") or "", "diesel",
-                    rd.get("litros") or 0, rd.get("importe") or 0,
-                    rd.get("iva_porcentaje"), rd.get("factura"),
-                    rd.get("proyecto_id"),
-                ))
-                if conn.total_changes:
-                    migrados += 1
-            except Exception:
-                pass
-
-        conn.commit()
-        return {"migrados": migrados}
+        if "combustible_transacciones_archivo_20260419" in tables:
+            return conn.execute("SELECT COUNT(*) FROM combustible_transacciones_archivo_20260419").fetchone()[0]
+        return 0
     finally:
         conn.close()

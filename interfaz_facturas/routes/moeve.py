@@ -393,11 +393,7 @@ def api_combustible_transacciones_v2():
         conn.close()
 
 
-@moeve_bp.post("/api/combustible/migrar-legacy")
-def api_combustible_migrar_legacy():
-    from core.combustible_db import migrar_datos_legacy
-    try:
-        result = migrar_datos_legacy()
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+@moeve_bp.get("/api/combustible/archivo-legacy")
+def api_combustible_archivo_legacy():
+    from core.combustible_db import get_archivo_legacy_count
+    return jsonify({"count": get_archivo_legacy_count()})
