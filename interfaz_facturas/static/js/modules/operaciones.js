@@ -712,28 +712,44 @@ function _abrirModalMasivo() {
   var proyOpts = '<option value="">Seleccionar proyecto...</option>';
   _operData.proyectos.forEach(function(p) { proyOpts += '<option value="' + p.id + '">' + p.nombre + '</option>'; });
 
-  // Employee rows with avatars
-  var empHtml = '';
-  _operData.empleados.forEach(function(e) {
+  // Employee rows grouped by function
+  function _empRow(e) {
     var initials = ((e.nombre||"?")[0] + ((e.apellidos||"")[0] || "")).toUpperCase();
     var isBaja = e.estado === "baja";
     var puesto = e.puesto || "";
     var avatarBg = isBaja ? "#FCEBEB" : (puesto === "ayudante" ? "#EAF3DE" : "#E6F1FB");
     var avatarCol = isBaja ? "#A32D2D" : (puesto === "ayudante" ? "#27500A" : "#185FA5");
-    var pillLabel = isBaja ? "Baja" : (puesto === "ayudante" ? "Ayudante" : "Operador");
     var pillBg = isBaja ? "#FCEBEB" : (puesto === "ayudante" ? "#EAF3DE" : "#E6F1FB");
     var pillCol = isBaja ? "#A32D2D" : (puesto === "ayudante" ? "#27500A" : "#042C53");
+    var pillLabel = isBaja ? "Baja" : (puesto === "ayudante" ? "Ay." : "Op.");
     var bajaStyle = isBaja ? "opacity:0.55;background:repeating-linear-gradient(45deg,#FCEBEB,#FCEBEB 4px,white 4px,white 8px);cursor:not-allowed;" : "";
     var nameStyle = isBaja ? "text-decoration:line-through;" : "";
     var nombre = (e.nombre||"") + (e.apellidos ? " " + e.apellidos.split(" ")[0] : "");
-    empHtml += '<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;' + bajaStyle + 'cursor:' + (isBaja?'not-allowed':'pointer') + ';transition:background 0.15s;" ' + (!isBaja ? 'onmouseover="this.style.background=\'#F5F7FA\'" onmouseout="this.style.background=\'transparent\'"' : '') + '>' +
+    return '<label style="display:grid;grid-template-columns:20px 28px 1fr auto auto;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;' + bajaStyle + 'cursor:' + (isBaja?'not-allowed':'pointer') + ';" ' + (!isBaja ? 'onmouseover="this.style.background=\'#F5F7FA\'" onmouseout="this.style.background=\'transparent\'"' : '') + '>' +
       '<input type="checkbox" name="oper-m-emp" value="' + e.id + '"' + (isBaja ? ' disabled' : '') + ' style="margin:0;" onchange="_operMasivoResumen()">' +
-      '<div style="width:28px;height:28px;border-radius:50%;background:' + avatarBg + ';color:' + avatarCol + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex-shrink:0;">' + initials + '</div>' +
-      '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:500;' + nameStyle + '">' + nombre + '</div></div>' +
-      '<span style="background:' + pillBg + ';color:' + pillCol + ';font-size:10px;padding:2px 8px;border-radius:999px;">' + pillLabel + '</span>' +
-      (!isBaja ? '<select name="oper-m-fn-' + e.id + '" style="padding:3px 6px;font-size:11px;border:0.5px solid #E5E5E5;border-radius:4px;"><option value="">Hab.</option><option value="operador">Op.</option><option value="ayudante">Ay.</option></select>' : '') +
+      '<div style="width:28px;height:28px;border-radius:50%;background:' + avatarBg + ';color:' + avatarCol + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;">' + initials + '</div>' +
+      '<div style="min-width:0;overflow:hidden;"><div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' + nameStyle + '">' + nombre + '</div></div>' +
+      '<span style="background:' + pillBg + ';color:' + pillCol + ';font-size:10px;padding:2px 6px;border-radius:999px;white-space:nowrap;flex-shrink:0;">' + pillLabel + '</span>' +
+      (!isBaja ? '<select name="oper-m-fn-' + e.id + '" style="padding:2px 4px;font-size:10px;border:0.5px solid #E5E5E5;border-radius:4px;flex-shrink:0;width:52px;"><option value="">Hab.</option><option value="operador">Op.</option><option value="ayudante">Ay.</option></select>' : '<div style="width:52px;"></div>') +
       '</label>';
-  });
+  }
+  var operadores = _operData.empleados.filter(function(e) { return (e.puesto||"") !== "ayudante" && e.estado !== "baja"; });
+  var ayudantes = _operData.empleados.filter(function(e) { return (e.puesto||"") === "ayudante" && e.estado !== "baja"; });
+  var enBaja = _operData.empleados.filter(function(e) { return e.estado === "baja"; });
+  var _grpH = "font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;padding:6px 10px 2px;";
+  var empHtml = '';
+  if (operadores.length) {
+    empHtml += '<div style="' + _grpH + '">Operadores (' + operadores.length + ')</div>';
+    operadores.forEach(function(e) { empHtml += _empRow(e); });
+  }
+  if (ayudantes.length) {
+    empHtml += '<div style="' + _grpH + 'margin-top:6px;">Ayudantes (' + ayudantes.length + ')</div>';
+    ayudantes.forEach(function(e) { empHtml += _empRow(e); });
+  }
+  if (enBaja.length) {
+    empHtml += '<div style="' + _grpH + 'margin-top:6px;color:#A32D2D;">En baja (' + enBaja.length + ')</div>';
+    enBaja.forEach(function(e) { empHtml += _empRow(e); });
+  }
 
   // Machine cards
   var maqHtml = '';
