@@ -174,45 +174,99 @@ _TIPO_PRODUCTO_MAP = {
 
 def importar_excel_moeve(filepath):
     """Import Moeve XLSX. Idempotent via UNIQUE constraint. Returns stats dict."""
+    import logging
     import pandas as pd
+    logger = logging.getLogger("erp")
 
     init_combustible_db()
     df = pd.read_excel(filepath, sheet_name="data")
-    stats = {"creados": 0, "duplicados": 0, "errores": 0, "vehiculos_nuevos": [], "estaciones_nuevas": []}
+    # Normalize column names: strip whitespace
+    df.columns = [str(c).strip() for c in df.columns]
+    logger.info("Moeve import: %d rows from %s. Columns: %s", len(df), os.path.basename(filepath), list(df.columns))
+
+    stats = {"creados": 0, "duplicados": 0, "errores": 0, "errores_detalle": [], "vehiculos_nuevos": [], "estaciones_nuevas": []}
     archivo = os.path.basename(filepath)
+
+    # Find column names flexibly
+    def _col(df, *candidates):
+        for c in candidates:
+            if c in df.columns:
+                return c
+            for dc in df.columns:
+                if dc.lower().replace(" ", "") == c.lower().replace(" ", ""):
+                    return dc
+        return None
+
+    col_date = _col(df, "Date and time", "Date  and time", "Date and Time")
+    col_card = _col(df, "Card")
+    col_reg = _col(df, "Registratio", "Registration")
+    col_loc = _col(df, "Location")
+    col_country = _col(df, "Country")
+    col_concept = _col(df, "Concept")
+    col_opno = _col(df, "Operation No.", "Operation No", "OperationNo.")
+    col_bill = _col(df, "Bill")
+    col_liters = _col(df, "Liters")
+    col_transac = _col(df, "Transac")
+    col_tax = _col(df, "% TAX", "%TAX")
+    col_currency = _col(df, "Currency")
+    col_discount = _col(df, "Discount")
+
+    logger.info("Moeve columns mapped: date=%s opno=%s reg=%s concept=%s", col_date, col_opno, col_reg, col_concept)
 
     conn = get_conn()
     try:
         for idx, row in df.iterrows():
             try:
                 # Parse fecha
-                fecha_raw = row.get("Date and time") or row.get("Date  and time")
-                if pd.isna(fecha_raw):
+                fecha_raw = row[col_date] if col_date else None
+                if fecha_raw is None or (isinstance(fecha_raw, float) and pd.isna(fecha_raw)):
                     stats["errores"] += 1
                     continue
-                if isinstance(fecha_raw, str):
-                    fecha = pd.to_datetime(fecha_raw, format="%d/%m/%Y %H:%M:%S", dayfirst=True).strftime("%Y-%m-%d %H:%M:%S")
-                else:
-                    fecha = pd.to_datetime(fecha_raw).strftime("%Y-%m-%d %H:%M:%S")
+                try:
+                    if isinstance(fecha_raw, str):
+                        fecha = pd.to_datetime(fecha_raw, dayfirst=True).strftime("%Y-%m-%d %H:%M:%S")
+                    else:
+                        fecha = pd.to_datetime(fecha_raw).strftime("%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    stats["errores"] += 1
+                    continue
 
-                reg = str(row.get("Registratio") or row.get("Registration") or "").strip()
-                matricula = reg if reg and reg != "-" else None
-                pan = str(row.get("Card") or "").strip()
-                estacion_nombre = str(row.get("Location") or "").strip()
-                pais_raw = str(row.get("Country") or "").strip().upper()
+                reg = str(row[col_reg] if col_reg else "").strip() if col_reg else ""
+                matricula = reg if reg and reg != "-" and reg != "nan" else None
+                pan = str(row[col_card] if col_card else "").strip()
+                if pan == "nan": pan = ""
+                estacion_nombre = str(row[col_loc] if col_loc else "").strip()
+                if estacion_nombre == "nan": estacion_nombre = ""
+                pais_raw = str(row[col_country] if col_country else "").strip().upper()
                 pais = "PT" if "PORTUGAL" in pais_raw else "ES"
-                concepto = str(row.get("Concept") or "").strip()
-                operation_no = str(row.get("Operation No.") or row.get("Operation No") or "").strip()
-                factura = str(row.get("Bill") or "").strip()
+                concepto = str(row[col_concept] if col_concept else "").strip()
+                if concepto == "nan": concepto = ""
+
+                # Operation number — critical for dedup
+                opno_raw = row[col_opno] if col_opno else None
+                if opno_raw is None or (isinstance(opno_raw, float) and pd.isna(opno_raw)):
+                    operation_no = f"row_{idx}"  # fallback: use row index
+                else:
+                    operation_no = str(int(opno_raw) if isinstance(opno_raw, float) and opno_raw == int(opno_raw) else opno_raw).strip()
+
+                factura = str(row[col_bill] if col_bill else "").strip()
+                if factura == "nan": factura = ""
 
                 tipo_producto = _TIPO_PRODUCTO_MAP.get(concepto, "otros")
 
-                litros = float(row.get("Liters") or 0) if not pd.isna(row.get("Liters")) else 0
-                transac = float(row.get("Transac") or 0) if not pd.isna(row.get("Transac")) else 0
-                iva = float(row.get("% TAX") or 0) if not pd.isna(row.get("% TAX")) else 0
-                moneda = str(row.get("Currency") or "EUR")[:10]
-                descuento_raw = row.get("Discount")
-                descuento = float(descuento_raw) if descuento_raw and str(descuento_raw).strip() not in ("-", "", "nan") else 0
+                def _safe_float(v):
+                    if v is None: return 0.0
+                    if isinstance(v, (int, float)) and not pd.isna(v): return float(v)
+                    try: return float(str(v).replace(",", "."))
+                    except (ValueError, TypeError): return 0.0
+
+                litros = _safe_float(row[col_liters] if col_liters else 0)
+                transac = _safe_float(row[col_transac] if col_transac else 0)
+                iva = _safe_float(row[col_tax] if col_tax else 0)
+                moneda = str(row[col_currency] if col_currency else "EUR")[:10]
+                if moneda == "nan": moneda = "EUR"
+                descuento_raw = row[col_discount] if col_discount else None
+                descuento = _safe_float(descuento_raw) if descuento_raw is not None and str(descuento_raw).strip() not in ("-", "", "nan") else 0
 
                 # Get or create related entities
                 vehiculo_id, v_new = get_or_create_vehiculo(conn, matricula)
@@ -252,8 +306,12 @@ def importar_excel_moeve(filepath):
 
             except Exception as e:
                 stats["errores"] += 1
+                err_msg = f"Fila {idx}: {e}"
+                stats["errores_detalle"].append(err_msg)
+                logger.warning("Moeve import error: %s", err_msg)
 
         conn.commit()
+        logger.info("Moeve import done: %d created, %d dupes, %d errors", stats["creados"], stats["duplicados"], stats["errores"])
 
         # Deduplicate vehicle/station lists
         stats["vehiculos_nuevos"] = list(set(stats["vehiculos_nuevos"]))

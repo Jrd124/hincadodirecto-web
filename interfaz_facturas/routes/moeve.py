@@ -321,6 +321,9 @@ def api_combustible_importar_moeve():
 
     try:
         stats = importar_excel_moeve(str(filepath))
+        # Limit error details to first 10 for response
+        if stats.get("errores_detalle"):
+            stats["errores_detalle"] = stats["errores_detalle"][:10]
         return jsonify(stats)
     except Exception as e:
         logger.exception("Error importing Moeve XLSX")
