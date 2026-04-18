@@ -167,46 +167,46 @@ def api_asignar_transaccion(tid):
 @moeve_bp.get("/api/moeve/resumen")
 def api_resumen():
     _ensure()
+    from core.combustible_db import init_combustible_db
+    init_combustible_db()
     conn = get_conn()
     try:
-        total = conn.execute("SELECT COUNT(*), SUM(importe), SUM(litros) FROM combustible_transacciones").fetchone()
+        total = conn.execute("SELECT COUNT(*), COALESCE(SUM(importe_final),0), COALESCE(SUM(litros),0) FROM combustible_transacciones").fetchone()
         imputadas = conn.execute("SELECT COUNT(*) FROM combustible_transacciones WHERE proyecto_id IS NOT NULL").fetchone()[0]
-        estaciones_total = conn.execute("SELECT COUNT(*) FROM moeve_estaciones_geo").fetchone()[0]
-        estaciones_geo = conn.execute("SELECT COUNT(*) FROM moeve_estaciones_geo WHERE latitud IS NOT NULL").fetchone()[0]
+        try:
+            estaciones_total = conn.execute("SELECT COUNT(*) FROM estaciones_servicio").fetchone()[0]
+            estaciones_geo = conn.execute("SELECT COUNT(*) FROM estaciones_servicio WHERE latitud IS NOT NULL AND geocoded=1").fetchone()[0]
+        except Exception:
+            estaciones_total = 0; estaciones_geo = 0
 
-        # By concept
         por_concepto = [dict(r) for r in conn.execute(
-            "SELECT concepto, COUNT(*) as n, ROUND(SUM(importe),2) as total, ROUND(SUM(litros),2) as litros "
-            "FROM combustible_transacciones GROUP BY concepto ORDER BY SUM(importe) DESC"
+            "SELECT concepto_raw as concepto, COUNT(*) as n, ROUND(SUM(importe_final),2) as total, ROUND(SUM(litros),2) as litros "
+            "FROM combustible_transacciones GROUP BY concepto_raw ORDER BY SUM(importe_final) DESC"
         ).fetchall()]
 
-        # By vehicle
         por_vehiculo = [dict(r) for r in conn.execute(
-            "SELECT matricula, COUNT(*) as n, ROUND(SUM(importe),2) as total, ROUND(SUM(litros),2) as litros, "
-            "MAX(fecha) as ultimo "
-            "FROM combustible_transacciones WHERE matricula != '' GROUP BY matricula ORDER BY SUM(importe) DESC"
+            "SELECT matricula_raw as matricula, COUNT(*) as n, ROUND(SUM(importe_final),2) as total, ROUND(SUM(litros),2) as litros, "
+            "MAX(fecha_operacion) as ultimo "
+            "FROM combustible_transacciones WHERE matricula_raw IS NOT NULL AND matricula_raw != '' GROUP BY matricula_raw ORDER BY SUM(importe_final) DESC"
         ).fetchall()]
 
-        # By project
         por_proyecto = [dict(r) for r in conn.execute(
-            "SELECT p.nombre, p.codigo, COUNT(*) as n, ROUND(SUM(ct.importe),2) as total "
+            "SELECT p.nombre, p.codigo, COUNT(*) as n, ROUND(SUM(ct.importe_final),2) as total "
             "FROM combustible_transacciones ct JOIN proyectos p ON p.id = ct.proyecto_id "
-            "GROUP BY ct.proyecto_id ORDER BY SUM(ct.importe) DESC"
+            "GROUP BY ct.proyecto_id ORDER BY SUM(ct.importe_final) DESC"
         ).fetchall()]
 
-        # Monthly
         mensual = [dict(r) for r in conn.execute(
-            "SELECT SUBSTR(fecha,1,7) as mes, ROUND(SUM(importe),2) as total, "
-            "ROUND(SUM(CASE WHEN concepto IN ('DIESEL STAR','DIESEL OPTIMA','GASOLEO') THEN importe ELSE 0 END),2) as diesel, "
-            "ROUND(SUM(CASE WHEN concepto IN ('SIN PLOMO','OPTIMA 95','OPTIMA 98','GNA. SEM PB 95') THEN importe ELSE 0 END),2) as gasolina, "
-            "ROUND(SUM(CASE WHEN concepto='AUTOPISTAS DE PEAJE' THEN importe ELSE 0 END),2) as peajes, "
-            "ROUND(SUM(CASE WHEN concepto NOT IN ('DIESEL STAR','DIESEL OPTIMA','GASOLEO','SIN PLOMO','OPTIMA 95','OPTIMA 98','GNA. SEM PB 95','AUTOPISTAS DE PEAJE','APORTACION COMERCIAL') THEN importe ELSE 0 END),2) as otros "
-            "FROM combustible_transacciones WHERE concepto != 'APORTACION COMERCIAL' "
-            "GROUP BY SUBSTR(fecha,1,7) ORDER BY mes"
+            "SELECT SUBSTR(fecha_operacion,1,7) as mes, ROUND(SUM(importe_final),2) as total, "
+            "ROUND(SUM(CASE WHEN tipo_producto='diesel' THEN importe_final ELSE 0 END),2) as diesel, "
+            "ROUND(SUM(CASE WHEN tipo_producto='gasolina' THEN importe_final ELSE 0 END),2) as gasolina, "
+            "ROUND(SUM(CASE WHEN tipo_producto='peaje' THEN importe_final ELSE 0 END),2) as peajes, "
+            "ROUND(SUM(CASE WHEN tipo_producto NOT IN ('diesel','gasolina','peaje','descuento') THEN importe_final ELSE 0 END),2) as otros "
+            "FROM combustible_transacciones WHERE tipo_producto != 'descuento' "
+            "GROUP BY SUBSTR(fecha_operacion,1,7) ORDER BY mes"
         ).fetchall()]
 
-        # Date range
-        rango = conn.execute("SELECT MIN(fecha), MAX(fecha) FROM combustible_transacciones").fetchone()
+        rango = conn.execute("SELECT MIN(fecha_operacion), MAX(fecha_operacion) FROM combustible_transacciones").fetchone()
 
         return jsonify({
             "total_transacciones": total[0] or 0,

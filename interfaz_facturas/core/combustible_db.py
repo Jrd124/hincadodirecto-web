@@ -60,7 +60,16 @@ def init_combustible_db():
             )
         """)
 
-        # Old table already archived as combustible_transacciones_archivo_20260419
+        # Archive old table if it has old schema (origen column = old, proveedor = new)
+        ct_cols = {r[1] for r in conn.execute("PRAGMA table_info(combustible_transacciones)").fetchall()}
+        if "origen" in ct_cols and "proveedor" not in ct_cols:
+            # Old schema still active — rename to archive
+            arch_name = "combustible_transacciones_archivo_20260419"
+            existing_arch = conn.execute("SELECT name FROM sqlite_master WHERE name=?", (arch_name,)).fetchone()
+            if not existing_arch:
+                conn.execute(f"ALTER TABLE combustible_transacciones RENAME TO {arch_name}")
+            else:
+                conn.execute("DROP TABLE combustible_transacciones")
 
         # New transactions table
         conn.execute("""
