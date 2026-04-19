@@ -93,7 +93,7 @@ function _gasoilInitTx() {
     document.getElementById("gasoil-tx-hasta").value = hoy.toISOString().slice(0, 10);
 
     // Load matriculas for filter
-    fetch("/api/moeve/vehiculos")
+    fetch("/api/combustible/vehiculos")
       .then(function (r) { return r.json(); })
       .then(function (d) {
         var sel = document.getElementById("gasoil-tx-matricula");
@@ -191,41 +191,59 @@ function _gasoilPagPrev() { _gasoilTxOffset = Math.max(0, _gasoilTxOffset - _gas
 
 function _gasoilCargarEstaciones() {
   var tbody = document.getElementById("gasoil-tbody-estaciones");
-  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;">Cargando...</td></tr>';
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;">Cargando...</td></tr>';
 
-  fetch("/api/moeve/estaciones")
+  fetch("/api/combustible/estaciones")
     .then(function (r) { return r.json(); })
     .then(function (d) {
       var ests = d.estaciones || [];
-      if (!ests.length) { tbody.innerHTML = '<tr><td colspan="6">Sin estaciones</td></tr>'; return; }
+      var pendientes = d.pendientes_geo || 0;
+      // Update geocode button
+      var geoBtn = document.getElementById("gasoil-btn-geocodificar");
+      if (geoBtn) geoBtn.textContent = "\uD83C\uDF0D Geocodificar pendientes (" + pendientes + ")";
+      if (!ests.length) { tbody.innerHTML = '<tr><td colspan="8">Sin estaciones</td></tr>'; return; }
       var html = "";
       ests.forEach(function (e) {
-        var geo = e.latitud ? '<span style="color:#22c55e;font-weight:600;">OK</span>' : '<span style="color:#ef4444;">Pendiente</span>';
-        var coords = e.latitud ? e.latitud.toFixed(4) + ", " + e.longitud.toFixed(4) : "-";
+        var geoIcon = e.geocoded === 1 ? '\u2705' : (e.geocoded === 2 ? '\u274c' : '\u23f3');
+        var coords = e.latitud ? e.latitud.toFixed(4) + ", " + e.longitud.toFixed(4) : "\u2014";
+        var pais = e.pais === "PT" ? "\uD83C\uDDF5\uD83C\uDDF9" : "\uD83C\uDDEA\uD83C\uDDF8";
         html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
-          '<td style="padding:6px 8px;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (e.estacion || '') + '">' + (e.estacion || '') + '</td>' +
-          '<td style="padding:6px 6px;">' + (e.localidad_extraida || '-') + '</td>' +
-          '<td style="padding:6px 6px;font-size:0.78rem;">' + coords + '</td>' +
-          '<td style="padding:6px 6px;text-align:right;">' + (e.frecuencia || 0) + '</td>' +
-          '<td style="padding:6px 6px;">' + (e.ultimo_uso || '-') + '</td>' +
-          '<td style="padding:6px 6px;">' + geo + '</td>' +
+          '<td style="padding:6px 8px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (e.nombre||'') + '">' + (e.nombre || '') + '</td>' +
+          '<td style="padding:6px 4px;font-size:0.78rem;">' + (e.marca || '\u2014') + '</td>' +
+          '<td style="padding:6px 4px;text-align:center;">' + pais + '</td>' +
+          '<td style="padding:6px 4px;font-size:0.78rem;">' + (e.municipio || '\u2014') + '</td>' +
+          '<td style="padding:6px 4px;font-size:0.78rem;">' + (e.provincia || '\u2014') + '</td>' +
+          '<td style="padding:6px 4px;font-size:0.78rem;">' + coords + '</td>' +
+          '<td style="padding:6px 4px;text-align:right;">' + (e.transacciones || 0) + '</td>' +
+          '<td style="padding:6px 4px;text-align:center;">' + geoIcon + '</td>' +
           '</tr>';
       });
       tbody.innerHTML = html;
     })
-    .catch(function () { tbody.innerHTML = '<tr><td colspan="6" style="color:#dc3545;">Error</td></tr>'; });
+    .catch(function () { tbody.innerHTML = '<tr><td colspan="8" style="color:#dc3545;">Error</td></tr>'; });
 }
 
 function _gasoilGeocodificar() {
-  if (!confirm("Geocodificar estaciones pendientes? Puede tardar varios minutos (1 seg por estaci\u00f3n).")) return;
-  fetch("/api/moeve/geocodificar", { method: "POST" })
-    .then(function (r) { return r.json(); })
-    .then(function (d) {
-      if (d.error) { alert("Error: " + d.error); return; }
-      alert("Geocodificaci\u00f3n: " + d.ok + " OK, " + d.fail + " fallidas de " + d.total + " pendientes");
-      _gasoilCargarEstaciones();
-    })
-    .catch(function (e) { alert("Error: " + e.message); });
+  var btn = document.getElementById("gasoil-btn-geocodificar");
+  var status = document.getElementById("gasoil-geo-status");
+  if (status) { status.style.display = ""; status.textContent = "\u23f3 Geocodificando lote..."; }
+  function _lote() {
+    fetch("/api/combustible/geocodificar-estaciones?limit=30", { method: "POST" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.error) { if (status) status.textContent = "\u274c " + d.error; return; }
+        if (status) status.textContent = "\u2705 Lote: " + d.geocoded + " OK, " + d.fallidas + " fallidas. " + d.restantes + " restantes.";
+        _gasoilCargarEstaciones();
+        if (d.restantes > 0) {
+          setTimeout(_lote, 2000); // next batch after 2s
+        } else {
+          if (status) status.textContent = "\u2705 Geocodificaci\u00f3n completa.";
+        }
+      })
+      .catch(function (e) { if (status) status.textContent = "\u274c Error: " + e.message; });
+  }
+  _lote();
 }
 
 // ═══ Vehículos ══════════════════════════════════════════════════════════════
@@ -234,7 +252,7 @@ function _gasoilCargarVehiculos() {
   var tbody = document.getElementById("gasoil-tbody-vehiculos-detail");
   tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;">Cargando...</td></tr>';
 
-  fetch("/api/moeve/vehiculos")
+  fetch("/api/combustible/vehiculos")
     .then(function (r) { return r.json(); })
     .then(function (d) {
       var vehs = d.vehiculos || [];

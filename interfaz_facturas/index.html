@@ -1795,21 +1795,26 @@
       </div>
 
       <div id="panel-gasoil-estaciones" class="panel-gasoil">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
           <h4 style="margin:0;font-size:0.95rem;font-weight:700;">Estaciones de servicio</h4>
-          <button onclick="_gasoilGeocodificar()" class="btn-small" style="background:#DCFCE7;color:#166534;border:1px solid #86EFAC;">Geocodificar pendientes</button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span id="gasoil-geo-status" style="font-size:12px;color:#666;display:none;"></span>
+            <button id="gasoil-btn-geocodificar" onclick="_gasoilGeocodificar()" class="btn-small" style="background:#DCFCE7;color:#166534;border:1px solid #86EFAC;">&#x1F30D; Geocodificar pendientes</button>
+          </div>
         </div>
         <div class="card" style="overflow-x:auto;padding:0;">
           <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
             <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
-              <th style="padding:7px 8px;font-weight:700;">Estaci&oacute;n</th>
-              <th style="padding:7px 6px;font-weight:700;">Localidad</th>
-              <th style="padding:7px 6px;font-weight:700;">Lat/Lon</th>
-              <th style="padding:7px 6px;font-weight:700;text-align:right;">Frecuencia</th>
-              <th style="padding:7px 6px;font-weight:700;">&Uacute;ltimo uso</th>
-              <th style="padding:7px 6px;font-weight:700;">Estado</th>
+              <th style="padding:7px 8px;font-weight:700;">Nombre</th>
+              <th style="padding:7px 4px;font-weight:700;">Marca</th>
+              <th style="padding:7px 4px;font-weight:700;text-align:center;">Pa&iacute;s</th>
+              <th style="padding:7px 4px;font-weight:700;">Municipio</th>
+              <th style="padding:7px 4px;font-weight:700;">Provincia</th>
+              <th style="padding:7px 4px;font-weight:700;">Coordenadas</th>
+              <th style="padding:7px 4px;font-weight:700;text-align:right;">Transacc.</th>
+              <th style="padding:7px 4px;font-weight:700;text-align:center;">Geo</th>
             </tr></thead>
-            <tbody id="gasoil-tbody-estaciones"><tr><td colspan="6" style="text-align:center;padding:2rem;">Cargando...</td></tr></tbody>
+            <tbody id="gasoil-tbody-estaciones"><tr><td colspan="8" style="text-align:center;padding:2rem;">Cargando...</td></tr></tbody>
           </table>
         </div>
       </div>
