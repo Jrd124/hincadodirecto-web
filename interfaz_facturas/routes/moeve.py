@@ -369,14 +369,33 @@ def api_combustible_vehiculos():
         conn.close()
 
 
+@moeve_bp.post("/api/combustible/geocodificar-estaciones")
+def api_combustible_geocodificar():
+    """Geocode pending gas stations in batches."""
+    from core.combustible_geocoding import geocodificar_pendientes
+    limit = request.args.get("limit", 30, type=int)
+    try:
+        stats = geocodificar_pendientes(limit=limit)
+        return jsonify(stats)
+    except Exception as e:
+        logger.exception("Error geocoding")
+        return jsonify({"error": str(e)}), 500
+
+
 @moeve_bp.get("/api/combustible/estaciones")
 def api_combustible_estaciones():
     from core.combustible_db import init_combustible_db
     init_combustible_db()
     conn = get_conn()
     try:
-        rows = conn.execute("SELECT * FROM estaciones_servicio ORDER BY nombre").fetchall()
-        return jsonify({"estaciones": [dict(r) for r in rows]})
+        rows = conn.execute("""
+            SELECT es.*, COUNT(ct.id) as transacciones
+            FROM estaciones_servicio es
+            LEFT JOIN combustible_transacciones ct ON ct.estacion_id = es.id
+            GROUP BY es.id ORDER BY es.nombre
+        """).fetchall()
+        pendientes = conn.execute("SELECT COUNT(*) FROM estaciones_servicio WHERE geocoded=0").fetchone()[0]
+        return jsonify({"estaciones": [dict(r) for r in rows], "pendientes_geo": pendientes})
     finally:
         conn.close()
 

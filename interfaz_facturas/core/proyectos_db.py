@@ -279,6 +279,11 @@ def init_proyectos_db() -> None:
         for col_name, col_type in _new_cols:
             if col_name not in existing:
                 conn.execute(f"ALTER TABLE proyectos ADD COLUMN {col_name} {col_type}")
+        # Location fields
+        if "direccion" not in existing:
+            conn.execute("ALTER TABLE proyectos ADD COLUMN direccion TEXT")
+        if "municipio" not in existing:
+            conn.execute("ALTER TABLE proyectos ADD COLUMN municipio TEXT")
 
     _initialized = True
 
@@ -602,7 +607,7 @@ def crear_proyecto(data: dict) -> dict:
             INSERT INTO proyectos (nombre, codigo, empresa_id, cliente_tercero_id, oportunidad_id,
                 presupuesto_id,
                 estado, tipo_trabajo, modalidad_facturacion, nombre_parque, ubicacion_texto,
-                ubicacion_lat, ubicacion_lon, provincia, mw_parque, hincas_estimadas,
+                ubicacion_lat, ubicacion_lon, provincia, direccion, municipio, mw_parque, hincas_estimadas,
                 precio_unitario_hinca, precio_hora_maquina, precio_hora_ayudante, precio_jornada,
                 importe_presupuestado, fecha_inicio_estimada, fecha_fin_estimada, notas,
                 tipo_actividad, hinca_cantidad, hinca_precio_prod_operador, hinca_precio_prod_ayudante,
@@ -610,7 +615,7 @@ def crear_proyecto(data: dict) -> dict:
                 perforacion_cantidad, perforacion_precio_prod_operador, perforacion_precio_prod_ayudante,
                 perforacion_precio_admin_operador, perforacion_precio_admin_ayudante,
                 created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             (data.get("nombre") or "").strip(),
             codigo,
@@ -626,6 +631,8 @@ def crear_proyecto(data: dict) -> dict:
             data.get("ubicacion_lat") or None,
             data.get("ubicacion_lon") or None,
             (data.get("provincia") or "").strip() or None,
+            (data.get("direccion") or "").strip() or None,
+            (data.get("municipio") or "").strip() or None,
             data.get("mw_parque") or None,
             data.get("hincas_estimadas") or None,
             data.get("precio_unitario_hinca") or None,
@@ -681,7 +688,7 @@ def actualizar_proyecto(proyecto_id: int, data: dict) -> dict | None:
             UPDATE proyectos SET nombre=?, codigo=?, cliente_tercero_id=?, oportunidad_id=?,
                 presupuesto_id=?,
                 estado=?, tipo_trabajo=?, modalidad_facturacion=?, nombre_parque=?, ubicacion_texto=?,
-                ubicacion_lat=?, ubicacion_lon=?, provincia=?, mw_parque=?, hincas_estimadas=?,
+                ubicacion_lat=?, ubicacion_lon=?, provincia=?, direccion=?, municipio=?, mw_parque=?, hincas_estimadas=?,
                 precio_unitario_hinca=?, precio_hora_maquina=?, precio_hora_ayudante=?, precio_jornada=?,
                 importe_presupuestado=?, fecha_inicio_estimada=?, fecha_fin_estimada=?,
                 fecha_inicio_real=?, fecha_fin_real=?, notas=?,
@@ -705,6 +712,8 @@ def actualizar_proyecto(proyecto_id: int, data: dict) -> dict | None:
             data.get("ubicacion_lat") or None,
             data.get("ubicacion_lon") or None,
             (data.get("provincia") or "").strip() or None,
+            (data.get("direccion") or "").strip() or None,
+            (data.get("municipio") or "").strip() or None,
             data.get("mw_parque") or None,
             data.get("hincas_estimadas") or None,
             data.get("precio_unitario_hinca") or None,
