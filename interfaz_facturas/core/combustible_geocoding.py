@@ -46,46 +46,42 @@ def geocodificar_estacion(nombre, pais="ES"):
     country_code = "pt" if pais == "PT" else "es"
     busqueda = _normalizar_busqueda(nombre, pais)
 
-    queries = [
-        f"gasolinera {busqueda}",
-        f"estación de servicio {busqueda}",
-        busqueda,
-    ]
+    # Single query — less aggressive on Nominatim rate limits
+    q = f"gasolinera {busqueda}" if country_code == "es" else f"posto combustivel {busqueda}"
+    try:
+        resp = requests.get(NOMINATIM_URL, params={
+            "q": q,
+            "format": "json",
+            "countrycodes": country_code,
+            "limit": 1,
+            "addressdetails": 1,
+        }, headers={"User-Agent": USER_AGENT}, timeout=10)
 
-    for q in queries:
-        try:
-            resp = requests.get(NOMINATIM_URL, params={
-                "q": q,
-                "format": "json",
-                "countrycodes": country_code,
-                "limit": 1,
-                "addressdetails": 1,
-            }, headers={"User-Agent": USER_AGENT}, timeout=10)
-
-            if resp.ok:
-                data = resp.json()
-                if data:
-                    result = data[0]
-                    addr = result.get("address", {})
-                    lat = float(result["lat"])
-                    lon = float(result["lon"])
-                    municipio = (
-                        addr.get("city") or addr.get("town")
-                        or addr.get("village") or addr.get("municipality")
-                    )
-                    provincia = addr.get("state") or addr.get("province")
-                    logger.info("Geocoded '%s' → %s,%s (%s, %s)", busqueda, lat, lon, municipio, provincia)
-                    return lat, lon, municipio, provincia
-
-            time.sleep(1.1)
-        except Exception as e:
-            logger.warning("Geocoding error for '%s': %s", busqueda, e)
+        if resp.ok:
+            data = resp.json()
+            if data:
+                result = data[0]
+                addr = result.get("address", {})
+                lat = float(result["lat"])
+                lon = float(result["lon"])
+                municipio = (
+                    addr.get("city") or addr.get("town")
+                    or addr.get("village") or addr.get("municipality")
+                )
+                provincia = addr.get("state") or addr.get("province")
+                logger.info("Geocoded '%s' → %s,%s (%s, %s)", busqueda, lat, lon, municipio, provincia)
+                return lat, lon, municipio, provincia
+        elif resp.status_code == 429:
+            logger.warning("Nominatim rate limited (429). Sleeping 5s...")
+            time.sleep(5)
+    except Exception as e:
+        logger.warning("Geocoding error for '%s': %s", busqueda, e)
 
     return None, None, None, None
 
 
-def geocodificar_pendientes(limit=30):
-    """Process stations with geocoded=0. Returns stats dict."""
+def geocodificar_pendientes(limit=10):
+    """Process stations with geocoded=0. Small batches to avoid timeout."""
     conn = get_conn()
     try:
         pendientes = conn.execute(
@@ -96,26 +92,29 @@ def geocodificar_pendientes(limit=30):
         stats = {"total": len(pendientes), "geocoded": 0, "fallidas": 0, "restantes": 0}
 
         for est in pendientes:
-            lat, lon, municipio, provincia = geocodificar_estacion(est["nombre"], est["pais"] or "ES")
+            try:
+                logger.info("Geocoding station %d: %s", est["id"], est["nombre"])
+                lat, lon, municipio, provincia = geocodificar_estacion(est["nombre"], est["pais"] or "ES")
 
-            if lat is not None:
-                conn.execute("""
-                    UPDATE estaciones_servicio
-                    SET latitud=?, longitud=?, municipio=?, provincia=?,
-                        geocoded=1
-                    WHERE id=?
-                """, (lat, lon, municipio, provincia, est["id"]))
-                stats["geocoded"] += 1
-            else:
-                conn.execute(
-                    "UPDATE estaciones_servicio SET geocoded=2 WHERE id=?",
-                    (est["id"],),
-                )
+                if lat is not None:
+                    conn.execute("""
+                        UPDATE estaciones_servicio
+                        SET latitud=?, longitud=?, municipio=?, provincia=?,
+                            geocoded=1
+                        WHERE id=?
+                    """, (lat, lon, municipio, provincia, est["id"]))
+                    stats["geocoded"] += 1
+                else:
+                    conn.execute(
+                        "UPDATE estaciones_servicio SET geocoded=2 WHERE id=?",
+                        (est["id"],),
+                    )
+                    stats["fallidas"] += 1
+
+                conn.commit()  # commit after each station
+            except Exception as e:
+                logger.warning("Error geocoding station %d: %s", est["id"], e)
                 stats["fallidas"] += 1
-
-            time.sleep(1.1)
-
-        conn.commit()
 
         # Count remaining
         stats["restantes"] = conn.execute(

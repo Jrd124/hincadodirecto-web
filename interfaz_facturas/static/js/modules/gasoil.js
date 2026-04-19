@@ -225,23 +225,35 @@ function _gasoilCargarEstaciones() {
 }
 
 function _gasoilGeocodificar() {
-  var btn = document.getElementById("gasoil-btn-geocodificar");
   var status = document.getElementById("gasoil-geo-status");
   if (status) { status.style.display = ""; status.textContent = "\u23f3 Geocodificando lote..."; }
+  var retries = 0;
   function _lote() {
-    fetch("/api/combustible/geocodificar-estaciones?limit=30", { method: "POST" })
-      .then(function (r) { return r.json(); })
+    fetch("/api/combustible/geocodificar-estaciones?limit=10", { method: "POST" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
       .then(function (d) {
+        retries = 0;
         if (d.error) { if (status) status.textContent = "\u274c " + d.error; return; }
         if (status) status.textContent = "\u2705 Lote: " + d.geocoded + " OK, " + d.fallidas + " fallidas. " + d.restantes + " restantes.";
         _gasoilCargarEstaciones();
         if (d.restantes > 0) {
-          setTimeout(_lote, 2000); // next batch after 2s
+          setTimeout(_lote, 3000);
         } else {
           if (status) status.textContent = "\u2705 Geocodificaci\u00f3n completa.";
         }
       })
-      .catch(function (e) { if (status) status.textContent = "\u274c Error: " + e.message; });
+      .catch(function (e) {
+        retries++;
+        if (retries <= 2) {
+          if (status) status.textContent = "\u26a0 Error en lote, reintentando en 5s... (" + e.message + ")";
+          setTimeout(_lote, 5000);
+        } else {
+          if (status) status.textContent = "\u274c Error tras 3 intentos: " + e.message;
+        }
+      });
   }
   _lote();
 }

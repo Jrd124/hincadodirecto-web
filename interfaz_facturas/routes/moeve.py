@@ -371,15 +371,15 @@ def api_combustible_vehiculos():
 
 @moeve_bp.post("/api/combustible/geocodificar-estaciones")
 def api_combustible_geocodificar():
-    """Geocode pending gas stations in batches."""
+    """Geocode pending gas stations in small batches (default 10, max 20)."""
     from core.combustible_geocoding import geocodificar_pendientes
-    limit = request.args.get("limit", 30, type=int)
+    limit = min(request.args.get("limit", 10, type=int), 20)
     try:
         stats = geocodificar_pendientes(limit=limit)
         return jsonify(stats)
     except Exception as e:
-        logger.exception("Error geocoding")
-        return jsonify({"error": str(e)}), 500
+        logger.exception("Error geocoding stations")
+        return jsonify({"error": str(e), "tipo": type(e).__name__}), 500
 
 
 @moeve_bp.get("/api/combustible/estaciones")
