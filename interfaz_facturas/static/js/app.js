@@ -632,6 +632,9 @@ document.getElementById("nav-operaciones-modulo").addEventListener("click", (e) 
 });
 document.getElementById("nav-gasoil-modulo").addEventListener("click", (e) => {
   e.preventDefault();
+  // Toggle sidebar children
+  var gc = document.getElementById("sidebar-children-gasoil");
+  if (gc) { gc.classList.toggle("open"); e.currentTarget.classList.toggle("expanded"); }
   activarModulo("gasoil");
   if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("inicio");
 });
@@ -934,7 +937,7 @@ if (navCae) navCae.addEventListener("click", function (e) {
   }
 
   // Expand/collapse groups (accordion: collapse others at top level)
-  var topLevelGroups = ["finanzas", "proyectos", "rrhh", "presupuestos", "crm", "cae", "maquinaria"];
+  var topLevelGroups = ["finanzas", "proyectos", "rrhh", "presupuestos", "crm", "cae", "maquinaria", "gasoil", "operaciones"];
 
   function toggleGroup(el) {
     var group = el.getAttribute("data-group");
