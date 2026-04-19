@@ -330,6 +330,33 @@ def api_combustible_importar_moeve():
         return jsonify({"error": str(e)}), 500
 
 
+@moeve_bp.post("/api/combustible/importar-solred")
+def api_combustible_importar_solred():
+    """Import Solred PDF invoice."""
+    from core.combustible_db import importar_pdf_solred
+    from config import DATOS_DIR
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+    f = request.files["file"]
+    if not f.filename.endswith(".pdf"):
+        return jsonify({"error": "Solo se aceptan archivos PDF (.pdf)"}), 400
+
+    upload_dir = DATOS_DIR / "subidas" / "combustible" / "solred"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    filepath = upload_dir / f.filename
+    f.save(str(filepath))
+
+    try:
+        stats = importar_pdf_solred(str(filepath))
+        if stats.get("errores_detalle"):
+            stats["errores_detalle"] = stats["errores_detalle"][:10]
+        return jsonify(stats)
+    except Exception as e:
+        logger.exception("Error importing Solred PDF")
+        return jsonify({"error": str(e)}), 500
+
+
 @moeve_bp.get("/api/combustible/vehiculos")
 def api_combustible_vehiculos():
     from core.combustible_db import init_combustible_db

@@ -333,3 +333,241 @@ def get_archivo_legacy_count():
         return 0
     finally:
         conn.close()
+
+
+# ── Solred PDF parser ─────────────────────────────────────────────────────
+
+import re as _re
+import logging as _logging
+_solred_logger = _logging.getLogger("erp")
+
+_SOLRED_TIPO_MAP = {}
+for _k in ("DIESEL E+ NEOTECH (L)", "DIESEL E+ NEO", "DIESEL E+", "GASOLEO", "DIESEL"):
+    _SOLRED_TIPO_MAP[_k.upper()] = "diesel"
+for _k in ("EFITEC 95 N (L)", "EFITEC 98 N (L)", "GASOLINA", "SIN PLOMO"):
+    _SOLRED_TIPO_MAP[_k.upper()] = "gasolina"
+for _k in ("ADBLUE",):
+    _SOLRED_TIPO_MAP[_k.upper()] = "adblue"
+
+_SOLRED_CONCEPTOS = [
+    "DIESEL E+ NEOTECH (L)", "DIESEL E+ NEO", "DIESEL E+",
+    "EFITEC 95 N (L)", "EFITEC 98 N (L)", "ADBLUE",
+]
+
+
+def _solred_to_float(v):
+    if v is None or v == "":
+        return None
+    s = str(v).replace("%", "").strip()
+    # Spanish format: 1.234,56 → remove dots, comma to period
+    if "," in s:
+        s = s.replace(".", "").replace(",", ".")
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _solred_tipo_producto(concepto):
+    c = (concepto or "").upper().strip()
+    for k, v in _SOLRED_TIPO_MAP.items():
+        if k in c:
+            return v
+    return "otros"
+
+
+def _parse_row_solred(row, is_new_format):
+    """Parse a table row when pdfplumber separates columns properly."""
+    try:
+        ref = str(row[0] or "").strip()
+        if not ref or not ref.replace(".", "").isdigit():
+            return None
+        fecha_hora = str(row[1] or "").strip()
+        m = _re.match(r"(\d{2}/\d{2})\s*(\d{2}:\d{2})", fecha_hora)
+        if not m:
+            return None
+        concepto = str(row[2] or "").strip()
+        establecimiento = str(row[3] or "").strip()
+        if is_new_format:
+            litros = _solred_to_float(row[5]) if len(row) > 5 else None
+            precio = _solred_to_float(row[7]) if len(row) > 7 else None
+            importe_op = _solred_to_float(row[10]) if len(row) > 10 else None
+            bonif = _solred_to_float(row[13]) if len(row) > 13 else 0
+            importe_total = _solred_to_float(row[14]) if len(row) > 14 else None
+        else:
+            litros = _solred_to_float(row[5]) if len(row) > 5 else None
+            precio = _solred_to_float(row[6]) if len(row) > 6 else None
+            importe_op = _solred_to_float(row[7]) if len(row) > 7 else None
+            bonif = _solred_to_float(row[10]) if len(row) > 10 else 0
+            importe_total = _solred_to_float(row[11]) if len(row) > 11 else None
+        return {
+            "ref": ref, "fecha_dia": m.group(1), "hora": m.group(2),
+            "concepto": concepto, "establecimiento": establecimiento,
+            "litros": litros, "precio": precio,
+            "importe_operacion": importe_op or importe_total,
+            "bonificacion": bonif or 0, "importe_total": importe_total or importe_op,
+        }
+    except Exception as e:
+        _solred_logger.warning("_parse_row_solred error: %s row=%s", e, row)
+        return None
+
+
+def _parse_linea_solred(line):
+    """Parse a text line when pdfplumber merges rows with newlines."""
+    line = (line or "").strip()
+    if not line:
+        return None
+    parts = line.split()
+    if not parts or not parts[0].replace(".", "").isdigit():
+        return None
+    ref = parts[0]
+    m = _re.search(r"(\d{2}/\d{2})\s*(\d{2}:\d{2})", line)
+    if not m:
+        return None
+    after = line[m.end():].strip()
+    # Extract all decimal numbers from the end
+    nums = _re.findall(r"-?\d[\d.]*,\d+", after)
+    if len(nums) < 3:
+        return None
+    importe_total = _solred_to_float(nums[-1])
+    bonif = _solred_to_float(nums[-2]) if len(nums) >= 4 else 0
+    litros = _solred_to_float(nums[0])
+    precio = _solred_to_float(nums[1]) if len(nums) >= 2 else None
+    # Text before first number = concepto + establecimiento
+    first_num_pos = after.find(nums[0]) if nums else len(after)
+    texto = after[:first_num_pos].strip()
+    concepto = texto
+    establecimiento = ""
+    for c in _SOLRED_CONCEPTOS:
+        if texto.upper().startswith(c.upper()):
+            concepto = c
+            establecimiento = texto[len(c):].strip()
+            break
+    return {
+        "ref": ref, "fecha_dia": m.group(1), "hora": m.group(2),
+        "concepto": concepto, "establecimiento": establecimiento,
+        "litros": litros, "precio": precio,
+        "importe_operacion": importe_total, "bonificacion": bonif or 0,
+        "importe_total": importe_total,
+    }
+
+
+def importar_pdf_solred(filepath):
+    """Import Solred PDF invoice. Idempotent. Returns stats dict."""
+    import pdfplumber
+
+    init_combustible_db()
+    stats = {"creados": 0, "duplicados": 0, "errores": 0, "estaciones_nuevas": [], "errores_detalle": []}
+    archivo = os.path.basename(filepath)
+
+    conn = get_conn()
+    try:
+        with pdfplumber.open(filepath) as pdf:
+            all_text = "\n".join((p.extract_text() or "") for p in pdf.pages)
+
+            # Factura number
+            m_fac = _re.search(r"N[uú]m\.?\s*Factura\s+([A-Z0-9]+)", all_text)
+            numero_factura = m_fac.group(1) if m_fac else None
+
+            # Year from periodo
+            m_per = _re.search(r"(\d{2}/\d{2}/(\d{4}))\s+AL\s+\d{2}/\d{2}/\d{4}", all_text)
+            anio = int(m_per.group(2)) if m_per else None
+            if not anio:
+                m_yr = _re.search(r"20\d{2}", archivo)
+                anio = int(m_yr.group()) if m_yr else 2026
+
+            # Tarjeta suffix
+            m_tar = _re.search(r"\*{4}\s*\*{4}\s*\*{4}\s*(\d{4})", all_text)
+            tarjeta_sufijo = m_tar.group(1) if m_tar else "0000"
+            tarjeta_pan = f"solred-{tarjeta_sufijo}"
+            tarjeta_id = get_or_create_tarjeta(conn, tarjeta_pan, "solred")
+
+            # Extract transactions from tables on all pages
+            txns = []
+            for page in pdf.pages:
+                tables = page.extract_tables()
+                for table in (tables or []):
+                    if not table or len(table) < 2:
+                        continue
+                    header_text = " ".join(str(c or "") for c in table[0]).lower()
+                    if "ref" not in header_text and "fecha" not in header_text:
+                        continue
+                    is_new = "cantidad" in header_text or "precio neto" in header_text
+                    for row in table[1:]:
+                        if not row or not row[0]:
+                            continue
+                        cell0 = str(row[0] or "")
+                        if "\n" in cell0:
+                            for line in cell0.split("\n"):
+                                p = _parse_linea_solred(line)
+                                if p:
+                                    txns.append(p)
+                        else:
+                            p = _parse_row_solred(row, is_new)
+                            if p:
+                                txns.append(p)
+
+                # Also try extracting from raw text (fallback for badly structured tables)
+                page_text = page.extract_text() or ""
+                for line in page_text.split("\n"):
+                    line = line.strip()
+                    if line and line[0].isdigit() and _re.match(r"\d{5,}", line.split()[0] if line.split() else ""):
+                        p = _parse_linea_solred(line)
+                        if p and not any(t["ref"] == p["ref"] for t in txns):
+                            txns.append(p)
+
+            _solred_logger.info("Solred PDF: %d transactions found in %s", len(txns), archivo)
+
+            for t in txns:
+                try:
+                    fecha_str = f"{t['fecha_dia']}/{anio} {t['hora']}"
+                    try:
+                        from datetime import datetime as _dt
+                        fecha_iso = _dt.strptime(fecha_str, "%d/%m/%Y %H:%M").strftime("%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        stats["errores"] += 1
+                        continue
+
+                    estacion = (t.get("establecimiento") or "").strip()
+                    estacion_id, e_new = get_or_create_estacion(conn, estacion, "repsol", "ES") if estacion else (None, False)
+                    if e_new:
+                        stats["estaciones_nuevas"].append(estacion)
+
+                    tipo_prod = _solred_tipo_producto(t["concepto"])
+                    bonif = abs(t.get("bonificacion") or 0)
+
+                    cursor = conn.execute("""
+                        INSERT OR IGNORE INTO combustible_transacciones (
+                            proveedor, fuente_archivo, fecha_operacion, numero_operacion,
+                            tarjeta_pan, tarjeta_id, pais,
+                            estacion_raw, estacion_id,
+                            concepto_raw, tipo_producto,
+                            litros, precio_unitario, importe_operacion, descuento, importe_final,
+                            iva_pct, moneda, numero_factura_raw
+                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        "solred", archivo, fecha_iso, t["ref"],
+                        tarjeta_pan, tarjeta_id, "ES",
+                        estacion, estacion_id,
+                        t["concepto"], tipo_prod,
+                        t.get("litros"), t.get("precio"),
+                        t.get("importe_operacion"), -bonif, t.get("importe_total") or 0,
+                        21.0, "EUR", numero_factura,
+                    ))
+                    if cursor.rowcount > 0:
+                        stats["creados"] += 1
+                    else:
+                        stats["duplicados"] += 1
+                except Exception as e:
+                    stats["errores"] += 1
+                    if len(stats["errores_detalle"]) < 10:
+                        stats["errores_detalle"].append(f"{t.get('ref','?')}: {e}")
+                    _solred_logger.warning("Solred import error: %s", e)
+
+        conn.commit()
+        _solred_logger.info("Solred import done: %d created, %d dupes, %d errors", stats["creados"], stats["duplicados"], stats["errores"])
+    finally:
+        conn.close()
+
+    stats["estaciones_nuevas"] = list(set(stats["estaciones_nuevas"]))
+    return stats

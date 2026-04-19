@@ -291,10 +291,42 @@ function _gasoilImportarMoeve(input) {
     });
 }
 
+function _gasoilImportarSolred(input) {
+  if (!input.files || !input.files[0]) return;
+  var file = input.files[0];
+  var status = document.getElementById("gasoil-import-status");
+  status.style.display = "";
+  status.style.background = "#EFF6FF";
+  status.style.color = "#1E40AF";
+  status.textContent = "\u23f3 Importando Solred " + file.name + "...";
+  var fd = new FormData();
+  fd.append("file", file);
+  fetch("/api/combustible/importar-solred", { method: "POST", body: fd })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.error) {
+        status.style.background = "#FEF2F2"; status.style.color = "#dc2626";
+        status.textContent = "\u274c Error: " + d.error;
+      } else {
+        status.style.background = "#F0FDF4"; status.style.color = "#166534";
+        status.textContent = "\u2705 Solred: " + d.creados + " creadas, " + d.duplicados + " duplicadas, " + d.errores + " errores." +
+          (d.estaciones_nuevas && d.estaciones_nuevas.length ? " " + d.estaciones_nuevas.length + " estaciones nuevas." : "");
+        _gasoilCargarDashboard();
+      }
+      input.value = "";
+    })
+    .catch(function(err) {
+      status.style.background = "#FEF2F2"; status.style.color = "#dc2626";
+      status.textContent = "\u274c Error: " + err.message;
+      input.value = "";
+    });
+}
+
 // ═══ Expose ═══════════════════════════════════════════════════════════════════
 
 window._gasoilOnPanelShow = _gasoilOnPanelShow;
 window._gasoilImportarMoeve = _gasoilImportarMoeve;
+window._gasoilImportarSolred = _gasoilImportarSolred;
 window._gasoilFiltrar = _gasoilFiltrar;
 window._gasoilPagNext = _gasoilPagNext;
 window._gasoilPagPrev = _gasoilPagPrev;
