@@ -220,7 +220,7 @@ function _gasoilCargarEstaciones() {
       });
       tbody.innerHTML = html;
     })
-    .catch(function () { tbody.innerHTML = '<tr><td colspan="8" style="color:#dc3545;">Error</td></tr>'; });
+    .catch(function (err) { console.error("Estaciones load error:", err); tbody.innerHTML = '<tr><td colspan="8" style="color:#dc3545;">Error: ' + err.message + '</td></tr>'; });
 }
 
 function _gasoilGeocodificar() {

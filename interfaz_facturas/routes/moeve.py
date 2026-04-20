@@ -389,13 +389,18 @@ def api_combustible_estaciones():
     conn = get_conn()
     try:
         rows = conn.execute("""
-            SELECT es.*, COUNT(ct.id) as transacciones
+            SELECT es.id, es.nombre, es.nombre_normalizado, es.marca, es.direccion,
+                   es.municipio, es.provincia, es.pais, es.latitud, es.longitud,
+                   es.geocoded, es.notas, COUNT(ct.id) as transacciones
             FROM estaciones_servicio es
             LEFT JOIN combustible_transacciones ct ON ct.estacion_id = es.id
             GROUP BY es.id ORDER BY es.nombre
         """).fetchall()
         pendientes = conn.execute("SELECT COUNT(*) FROM estaciones_servicio WHERE geocoded=0").fetchone()[0]
         return jsonify({"estaciones": [dict(r) for r in rows], "pendientes_geo": pendientes})
+    except Exception as e:
+        logger.exception("Error loading estaciones")
+        return jsonify({"error": str(e), "estaciones": [], "pendientes_geo": 0}), 500
     finally:
         conn.close()
 
