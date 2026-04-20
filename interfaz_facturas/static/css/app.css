@@ -5506,3 +5506,18 @@
   }
   /* Container layout handled by --sidebar-width CSS variable (same as other modules) */
 }
+
+/* ═══ Gasoil tab pills ═══ */
+.gasoil-tab-pill {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  color: #888780;
+  transition: all 0.15s;
+}
+.gasoil-tab-pill:hover { background: #F5F7FA; color: #2C2C2A; }
+.gasoil-tab-pill.active { color: #2C2C2A; border-bottom-color: #1D9E75; }

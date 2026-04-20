@@ -4,12 +4,11 @@ var _gasoilDashLoaded = false;
 var _gasoilTxInit = false;
 var _gasoilTxOffset = 0;
 var _gasoilTxLimit = 200;
+var _gasoilTabActivo = "dashboard";
 
 function _gasoilOnPanelShow(panel) {
-  if (panel === "inicio") _gasoilCargarDashboard();
-  else if (panel === "transacciones") _gasoilInitTx();
-  else if (panel === "estaciones") _gasoilCargarEstaciones();
-  else if (panel === "vehiculos") _gasoilCargarVehiculos();
+  // Called when Operaciones > Gasoil is activated
+  _gasoilCambiarTab(panel || "dashboard");
 }
 
 function _gasoilFmtEur(n) {
@@ -20,6 +19,160 @@ function _gasoilFmtEur(n) {
 function _gasoilFmtNum(n) {
   if (n == null) return "--";
   return n.toLocaleString("es-ES", { maximumFractionDigits: 1 });
+}
+
+// ═══ Tab system ═════════════════════════════════════════════════════════════
+
+function _gasoilCambiarTab(tab) {
+  _gasoilTabActivo = tab;
+  // Update pill active states
+  var pills = document.querySelectorAll(".gasoil-tab-pill");
+  pills.forEach(function(p) {
+    p.classList.toggle("active", p.getAttribute("data-gasoil-tab") === tab);
+  });
+  // Inject HTML for the tab
+  var container = document.getElementById("gasoil-tab-content");
+  if (!container) return;
+
+  if (tab === "dashboard") {
+    container.innerHTML = _gasoilHtmlDashboard();
+    _gasoilCargarDashboard();
+  } else if (tab === "transacciones") {
+    container.innerHTML = _gasoilHtmlTransacciones();
+    _gasoilTxInit = false; // re-init filters each time
+    _gasoilInitTx();
+  } else if (tab === "estaciones") {
+    container.innerHTML = _gasoilHtmlEstaciones();
+    _gasoilCargarEstaciones();
+  } else if (tab === "vehiculos") {
+    container.innerHTML = _gasoilHtmlVehiculos();
+    _gasoilCargarVehiculos();
+  } else if (tab === "imputacion") {
+    container.innerHTML = _gasoilHtmlImputacion();
+  }
+}
+
+// ═══ Tab HTML generators ════════════════════════════════════════════════════
+
+function _gasoilHtmlDashboard() {
+  return '<div id="gasoil-archivo-aviso" style="padding:10px 14px;background:#FFFBEB;border-radius:8px;font-size:12px;color:#854F0B;display:none;margin-bottom:12px;">' +
+    '\uD83D\uDCC1 <span id="gasoil-archivo-count">0</span> registros del sistema antiguo archivados.</div>' +
+    '<div id="gasoil-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:16px;">' +
+      '<div class="tes-card tes-card-blue"><span class="tes-label">Total gastado</span><span class="tes-valor" id="gasoil-kpi-total">--</span></div>' +
+      '<div class="tes-card"><span class="tes-label">Litros totales</span><span class="tes-valor" id="gasoil-kpi-litros">--</span></div>' +
+      '<div class="tes-card"><span class="tes-label">Transacciones</span><span class="tes-valor" id="gasoil-kpi-txns">--</span></div>' +
+      '<div class="tes-card tes-card-green"><span class="tes-label">% Imputado</span><span class="tes-valor" id="gasoil-kpi-pct">--</span></div>' +
+      '<div class="tes-card"><span class="tes-label">Estaciones geo</span><span class="tes-valor" id="gasoil-kpi-geo">--</span></div>' +
+    '</div>' +
+    '<h4 style="margin:0 0 8px;font-size:0.95rem;font-weight:700;">Gasto mensual por tipo</h4>' +
+    '<div class="card" style="overflow-x:auto;padding:0;">' +
+      '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">' +
+        '<thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">' +
+          '<th style="padding:7px 8px;font-weight:700;">Mes</th>' +
+          '<th style="padding:7px 6px;font-weight:700;text-align:right;">Diesel</th>' +
+          '<th style="padding:7px 6px;font-weight:700;text-align:right;">Gasolina</th>' +
+          '<th style="padding:7px 6px;font-weight:700;text-align:right;">Peajes</th>' +
+          '<th style="padding:7px 6px;font-weight:700;text-align:right;">Otros</th>' +
+          '<th style="padding:7px 6px;font-weight:700;text-align:right;">Total</th>' +
+        '</tr></thead>' +
+        '<tbody id="gasoil-tbody-mensual"><tr><td colspan="6" style="text-align:center;padding:2rem;">Cargando...</td></tr></tbody>' +
+      '</table></div>' +
+    '<h4 style="margin:16px 0 8px;font-size:0.95rem;font-weight:700;">Desglose por veh\u00edculo</h4>' +
+    '<div class="card" style="overflow-x:auto;padding:0;">' +
+      '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">' +
+        '<thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">' +
+          '<th style="padding:7px 8px;font-weight:700;">Matr\u00edcula</th>' +
+          '<th style="padding:7px 6px;font-weight:700;">Tipo</th>' +
+          '<th style="padding:7px 6px;font-weight:700;text-align:right;">Gasto total</th>' +
+          '<th style="padding:7px 6px;font-weight:700;text-align:right;">Litros</th>' +
+          '<th style="padding:7px 6px;font-weight:700;text-align:right;">\u00daltimo uso</th>' +
+        '</tr></thead>' +
+        '<tbody id="gasoil-tbody-vehiculos"><tr><td colspan="5" style="text-align:center;padding:2rem;">Cargando...</td></tr></tbody>' +
+      '</table></div>';
+}
+
+function _gasoilHtmlTransacciones() {
+  return '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;margin-bottom:12px;">' +
+    '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">' +
+      '<div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Desde</div><input type="date" id="gasoil-tx-desde" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"></div>' +
+      '<div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Hasta</div><input type="date" id="gasoil-tx-hasta" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"></div>' +
+      '<div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Proveedor</div><select id="gasoil-tx-proveedor" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"><option value="">Todos</option><option value="moeve">Moeve</option><option value="solred">Solred</option></select></div>' +
+      '<div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Tipo</div><select id="gasoil-tx-tipo" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"><option value="">Todos</option><option value="diesel">Diesel</option><option value="gasolina">Gasolina</option><option value="adblue">AdBlue</option><option value="peaje">Peaje</option><option value="otros">Otros</option></select></div>' +
+      '<div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Veh\u00edculo</div><select id="gasoil-tx-matricula" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"><option value="">Todos</option></select></div>' +
+      '<button onclick="_gasoilFiltrar()" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Aplicar</button>' +
+      '<button onclick="document.getElementById(\'gasoil-tx-proveedor\').value=\'\';document.getElementById(\'gasoil-tx-tipo\').value=\'\';document.getElementById(\'gasoil-tx-matricula\').value=\'\';_gasoilFiltrar()" style="padding:6px 14px;background:#fff;color:#666;border:0.5px solid #ccc;border-radius:6px;font-size:13px;cursor:pointer;">Limpiar</button>' +
+    '</div></div>' +
+    '<div id="gasoil-tx-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px;"></div>' +
+    '<div class="card" style="overflow-x:auto;padding:0;">' +
+      '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;">' +
+        '<thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">' +
+          '<th style="padding:6px 6px;font-weight:700;">Fecha</th>' +
+          '<th style="padding:6px 6px;font-weight:700;">Hora</th>' +
+          '<th style="padding:6px 6px;font-weight:700;">Matr\u00edcula</th>' +
+          '<th style="padding:6px 6px;font-weight:700;">Estaci\u00f3n</th>' +
+          '<th style="padding:6px 6px;font-weight:700;">Concepto</th>' +
+          '<th style="padding:6px 6px;font-weight:700;text-align:right;">Litros</th>' +
+          '<th style="padding:6px 6px;font-weight:700;text-align:right;">Importe</th>' +
+          '<th style="padding:6px 6px;font-weight:700;">Proyecto</th>' +
+        '</tr></thead>' +
+        '<tbody id="gasoil-tbody-txns"><tr><td colspan="8" style="text-align:center;padding:2rem;">Usa los filtros para ver transacciones</td></tr></tbody>' +
+      '</table></div>' +
+    '<div id="gasoil-tx-paginacion" style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;font-size:0.85rem;"></div>';
+}
+
+function _gasoilHtmlEstaciones() {
+  return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">' +
+    '<h4 style="margin:0;font-size:0.95rem;font-weight:700;">Estaciones de servicio</h4>' +
+    '<div style="display:flex;gap:8px;align-items:center;">' +
+      '<span id="gasoil-geo-status" style="font-size:12px;color:#666;display:none;"></span>' +
+      '<button id="gasoil-btn-geocodificar" onclick="_gasoilGeocodificar()" class="btn-small" style="background:#DCFCE7;color:#166534;border:1px solid #86EFAC;">\uD83C\uDF0D Geocodificar pendientes</button>' +
+    '</div></div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">' +
+      '<input id="filtro-estacion-busqueda" type="text" placeholder="Buscar nombre..." oninput="_gasoilFiltrarEstaciones()" style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;width:160px;">' +
+      '<select id="filtro-estacion-marca" onchange="_gasoilFiltrarEstaciones()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;"><option value="">Marca</option></select>' +
+      '<select id="filtro-estacion-municipio" onchange="_gasoilFiltrarEstaciones()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;"><option value="">Municipio</option></select>' +
+      '<select id="filtro-estacion-ccaa" onchange="_gasoilFiltrarEstaciones()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;"><option value="">CCAA</option></select>' +
+      '<select id="filtro-estacion-pais" onchange="_gasoilFiltrarEstaciones()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;"><option value="">Pa\u00eds</option><option value="ES">\uD83C\uDDEA\uD83C\uDDF8 Espa\u00f1a</option><option value="PT">\uD83C\uDDF5\uD83C\uDDF9 Portugal</option></select>' +
+      '<select id="filtro-estacion-geo" onchange="_gasoilFiltrarEstaciones()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;"><option value="">Estado Geo</option><option value="1">\u2705 Geocodificada</option><option value="0">\u23F3 Pendiente</option><option value="2">\u274C Fallida</option></select>' +
+    '</div>' +
+    '<div class="card" style="overflow-x:auto;padding:0;">' +
+      '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">' +
+        '<thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">' +
+          '<th style="padding:7px 8px;font-weight:700;">Nombre</th>' +
+          '<th style="padding:7px 4px;font-weight:700;">Marca</th>' +
+          '<th style="padding:7px 4px;font-weight:700;text-align:center;">Pa\u00eds</th>' +
+          '<th style="padding:7px 4px;font-weight:700;">Municipio</th>' +
+          '<th style="padding:7px 4px;font-weight:700;">CCAA</th>' +
+          '<th style="padding:7px 4px;font-weight:700;">Coordenadas</th>' +
+          '<th style="padding:7px 4px;font-weight:700;text-align:right;">Transacc.</th>' +
+          '<th style="padding:7px 4px;font-weight:700;text-align:center;">Geo</th>' +
+        '</tr></thead>' +
+        '<tbody id="gasoil-tbody-estaciones"><tr><td colspan="8" style="text-align:center;padding:2rem;">Cargando...</td></tr></tbody>' +
+      '</table></div>';
+}
+
+function _gasoilHtmlVehiculos() {
+  return '<h4 style="margin:0 0 12px;font-size:0.95rem;font-weight:700;">Veh\u00edculos</h4>' +
+    '<div class="card" style="overflow-x:auto;padding:0;">' +
+      '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">' +
+        '<thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">' +
+          '<th style="padding:7px 8px;font-weight:700;">Matr\u00edcula</th>' +
+          '<th style="padding:7px 6px;font-weight:700;">Tipo</th>' +
+          '<th style="padding:7px 6px;font-weight:700;">Marca</th>' +
+          '<th style="padding:7px 6px;font-weight:700;">Modelo</th>' +
+          '<th style="padding:7px 6px;font-weight:700;">Notas</th>' +
+        '</tr></thead>' +
+        '<tbody id="gasoil-tbody-vehiculos-detail"><tr><td colspan="5" style="text-align:center;padding:2rem;">Cargando...</td></tr></tbody>' +
+      '</table></div>';
+}
+
+function _gasoilHtmlImputacion() {
+  return '<div style="padding:40px;text-align:center;background:#F5F7FA;border-radius:12px;border:1px dashed #D3D1C7;">' +
+    '<div style="font-size:48px;margin-bottom:12px;">\uD83D\uDCCD</div>' +
+    '<h3 style="margin:0 0 8px;">Imputaci\u00f3n a proyectos</h3>' +
+    '<p style="color:#888780;max-width:500px;margin:0 auto;">Sistema de auto-imputaci\u00f3n con validaci\u00f3n. Las transacciones se asignar\u00e1n autom\u00e1ticamente al proyecto m\u00e1s probable (por matr\u00edcula del veh\u00edculo asignado ese d\u00eda, o por geolocalizaci\u00f3n estaci\u00f3n \u2194 proyecto), y t\u00fa confirmar\u00e1s o cambiar\u00e1s las propuestas.</p>' +
+    '<div style="margin-top:16px;"><span style="background:#FAEEDA;color:#854F0B;padding:4px 12px;border-radius:999px;font-size:12px;">\uD83D\uDEA7 Pr\u00f3ximamente</span></div>' +
+  '</div>';
 }
 
 // ═══ Dashboard ═══════════════════════════════════════════════════════════════
@@ -34,47 +187,52 @@ function _gasoilCargarDashboard() {
   fetch("/api/moeve/resumen")
     .then(function (r) { return r.json(); })
     .then(function (d) {
-      document.getElementById("gasoil-kpi-total").textContent = _gasoilFmtEur(d.total_importe);
-      document.getElementById("gasoil-kpi-litros").textContent = _gasoilFmtNum(d.total_litros);
-      document.getElementById("gasoil-kpi-txns").textContent = d.total_transacciones;
-      document.getElementById("gasoil-kpi-pct").textContent = d.pct_imputado + "%";
-      document.getElementById("gasoil-kpi-geo").textContent = d.estaciones_geo + " / " + d.estaciones_total;
+      var el;
+      el = document.getElementById("gasoil-kpi-total"); if (el) el.textContent = _gasoilFmtEur(d.total_importe);
+      el = document.getElementById("gasoil-kpi-litros"); if (el) el.textContent = _gasoilFmtNum(d.total_litros);
+      el = document.getElementById("gasoil-kpi-txns"); if (el) el.textContent = d.total_transacciones;
+      el = document.getElementById("gasoil-kpi-pct"); if (el) el.textContent = d.pct_imputado + "%";
+      el = document.getElementById("gasoil-kpi-geo"); if (el) el.textContent = d.estaciones_geo + " / " + d.estaciones_total;
 
       // Monthly table
       var tbody = document.getElementById("gasoil-tbody-mensual");
-      if (!d.mensual || !d.mensual.length) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;">Sin datos</td></tr>';
-      } else {
-        var html = "";
-        d.mensual.forEach(function (m) {
-          html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
-            '<td style="padding:6px 8px;font-weight:500;">' + m.mes + '</td>' +
-            '<td style="padding:6px 6px;text-align:right;">' + _gasoilFmtEur(m.diesel) + '</td>' +
-            '<td style="padding:6px 6px;text-align:right;">' + _gasoilFmtEur(m.gasolina) + '</td>' +
-            '<td style="padding:6px 6px;text-align:right;">' + _gasoilFmtEur(m.peajes) + '</td>' +
-            '<td style="padding:6px 6px;text-align:right;">' + _gasoilFmtEur(m.otros) + '</td>' +
-            '<td style="padding:6px 6px;text-align:right;font-weight:600;">' + _gasoilFmtEur(m.total) + '</td>' +
-            '</tr>';
-        });
-        tbody.innerHTML = html;
+      if (tbody) {
+        if (!d.mensual || !d.mensual.length) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem;">Sin datos</td></tr>';
+        } else {
+          var html = "";
+          d.mensual.forEach(function (m) {
+            html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
+              '<td style="padding:6px 8px;font-weight:500;">' + m.mes + '</td>' +
+              '<td style="padding:6px 6px;text-align:right;">' + _gasoilFmtEur(m.diesel) + '</td>' +
+              '<td style="padding:6px 6px;text-align:right;">' + _gasoilFmtEur(m.gasolina) + '</td>' +
+              '<td style="padding:6px 6px;text-align:right;">' + _gasoilFmtEur(m.peajes) + '</td>' +
+              '<td style="padding:6px 6px;text-align:right;">' + _gasoilFmtEur(m.otros) + '</td>' +
+              '<td style="padding:6px 6px;text-align:right;font-weight:600;">' + _gasoilFmtEur(m.total) + '</td>' +
+              '</tr>';
+          });
+          tbody.innerHTML = html;
+        }
       }
 
       // Vehicles table
       var vbody = document.getElementById("gasoil-tbody-vehiculos");
-      if (!d.por_vehiculo || !d.por_vehiculo.length) {
-        vbody.innerHTML = '<tr><td colspan="5">Sin datos</td></tr>';
-      } else {
-        var html2 = "";
-        d.por_vehiculo.forEach(function (v) {
-          html2 += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
-            '<td style="padding:6px 8px;font-weight:600;">' + v.matricula + '</td>' +
-            '<td style="padding:6px 6px;">-</td>' +
-            '<td style="padding:6px 6px;text-align:right;">' + _gasoilFmtEur(v.total) + '</td>' +
-            '<td style="padding:6px 6px;text-align:right;">' + _gasoilFmtNum(v.litros) + '</td>' +
-            '<td style="padding:6px 6px;text-align:right;">' + (v.ultimo || '-') + '</td>' +
-            '</tr>';
-        });
-        vbody.innerHTML = html2;
+      if (vbody) {
+        if (!d.por_vehiculo || !d.por_vehiculo.length) {
+          vbody.innerHTML = '<tr><td colspan="5">Sin datos</td></tr>';
+        } else {
+          var html2 = "";
+          d.por_vehiculo.forEach(function (v) {
+            html2 += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
+              '<td style="padding:6px 8px;font-weight:600;">' + v.matricula + '</td>' +
+              '<td style="padding:6px 6px;">-</td>' +
+              '<td style="padding:6px 6px;text-align:right;">' + _gasoilFmtEur(v.total) + '</td>' +
+              '<td style="padding:6px 6px;text-align:right;">' + _gasoilFmtNum(v.litros) + '</td>' +
+              '<td style="padding:6px 6px;text-align:right;">' + (v.ultimo || '-') + '</td>' +
+              '</tr>';
+          });
+          vbody.innerHTML = html2;
+        }
       }
     })
     .catch(function () {});
@@ -84,42 +242,28 @@ function _gasoilCargarDashboard() {
 // ═══ Transacciones ═══════════════════════════════════════════════════════════
 
 function _gasoilInitTx() {
-  if (!_gasoilTxInit) {
-    _gasoilTxInit = true;
-    // Set default dates: last 3 months
-    var hoy = new Date();
-    var hace3m = new Date(hoy.getFullYear(), hoy.getMonth() - 3, 1);
-    document.getElementById("gasoil-tx-desde").value = hace3m.toISOString().slice(0, 10);
-    document.getElementById("gasoil-tx-hasta").value = hoy.toISOString().slice(0, 10);
+  _gasoilTxInit = true;
+  // Set default dates: last 3 months
+  var hoy = new Date();
+  var hace3m = new Date(hoy.getFullYear(), hoy.getMonth() - 3, 1);
+  var desdeEl = document.getElementById("gasoil-tx-desde");
+  var hastaEl = document.getElementById("gasoil-tx-hasta");
+  if (desdeEl) desdeEl.value = hace3m.toISOString().slice(0, 10);
+  if (hastaEl) hastaEl.value = hoy.toISOString().slice(0, 10);
 
-    // Load matriculas for filter
-    fetch("/api/combustible/vehiculos")
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        var sel = document.getElementById("gasoil-tx-matricula");
+  // Load matriculas for filter
+  fetch("/api/combustible/vehiculos")
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var sel = document.getElementById("gasoil-tx-matricula");
+      if (sel) {
         (d.vehiculos || []).forEach(function (v) {
           sel.innerHTML += '<option value="' + v.matricula + '">' + v.matricula + '</option>';
         });
-      });
-
-    // Import handler
-    document.getElementById("gasoil-import-file").addEventListener("change", function () {
-      if (!this.files.length) return;
-      var fd = new FormData();
-      fd.append("archivo", this.files[0]);
-      fetch("/api/moeve/importar", { method: "POST", body: fd })
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-          if (d.error) { alert("Error: " + d.error); return; }
-          alert("Importaci\u00f3n: " + d.insertados + " registros, " + d.pares_neteados + " descuentos neteados, " + d.vehiculos_creados + " veh\u00edculos, " + d.estaciones_creadas + " estaciones");
-          _gasoilFiltrar();
-        })
-        .catch(function (e) { alert("Error: " + e.message); });
-      this.value = "";
+      }
     });
 
-    _gasoilFiltrar();
-  }
+  _gasoilFiltrar();
 }
 
 function _gasoilFiltrar() {
@@ -142,6 +286,7 @@ function _gasoilCargarTx() {
   if (matricula) params += "&vehiculo_id=" + matricula;
 
   var tbody = document.getElementById("gasoil-tbody-txns");
+  if (!tbody) return;
   tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;">Cargando...</td></tr>';
 
   fetch("/api/combustible/transacciones-v2?" + params)
@@ -158,7 +303,6 @@ function _gasoilCargarTx() {
         kh += '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:10px;color:#888;text-transform:uppercase;">Importe total</div><div style="font-size:20px;font-weight:500;">' + _gasoilFmtEur(d.total_importe) + '</div></div>';
         kh += '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:10px;color:#888;text-transform:uppercase;">Litros totales</div><div style="font-size:20px;font-weight:500;">' + _gasoilFmtNum(d.total_litros) + ' L</div></div>';
         kh += '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:10px;color:#888;text-transform:uppercase;">Estaciones</div><div style="font-size:20px;font-weight:500;">' + (d.estaciones_usadas || 0) + '</div></div>';
-        // Per-type mini cards
         ["diesel","gasolina","adblue","peaje","otros"].forEach(function(tp) {
           var k = kt[tp]; if (!k || !k.importe) return;
           var icons = {diesel:"\uD83D\uDEE2\uFE0F",gasolina:"\u26FD",adblue:"\uD83E\uDDEA",peaje:"\uD83D\uDEE3\uFE0F",otros:"\uD83D\uDCE6"};
@@ -169,7 +313,8 @@ function _gasoilCargarTx() {
 
       if (!txns.length) {
         tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-secondary);">Sin transacciones</td></tr>';
-        document.getElementById("gasoil-tx-paginacion").innerHTML = "";
+        var pagEl = document.getElementById("gasoil-tx-paginacion");
+        if (pagEl) pagEl.innerHTML = "";
         return;
       }
 
@@ -193,15 +338,17 @@ function _gasoilCargarTx() {
 
       // Paginación
       var pagDiv = document.getElementById("gasoil-tx-paginacion");
-      var desde_n = _gasoilTxOffset + 1;
-      var hasta_n = Math.min(_gasoilTxOffset + txns.length, total);
-      pagDiv.innerHTML = '<span>' + desde_n + '-' + hasta_n + ' de ' + total + '</span>' +
-        '<div style="display:flex;gap:6px;">' +
-        (_gasoilTxOffset > 0 ? '<button class="btn-small" onclick="_gasoilPagPrev()">Anterior</button>' : '') +
-        (_gasoilTxOffset + _gasoilTxLimit < total ? '<button class="btn-small" onclick="_gasoilPagNext()">Siguiente</button>' : '') +
-        '</div>';
+      if (pagDiv) {
+        var desde_n = _gasoilTxOffset + 1;
+        var hasta_n = Math.min(_gasoilTxOffset + txns.length, total);
+        pagDiv.innerHTML = '<span>' + desde_n + '-' + hasta_n + ' de ' + total + '</span>' +
+          '<div style="display:flex;gap:6px;">' +
+          (_gasoilTxOffset > 0 ? '<button class="btn-small" onclick="_gasoilPagPrev()">Anterior</button>' : '') +
+          (_gasoilTxOffset + _gasoilTxLimit < total ? '<button class="btn-small" onclick="_gasoilPagNext()">Siguiente</button>' : '') +
+          '</div>';
+      }
     })
-    .catch(function () { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:#dc3545;">Error al cargar</td></tr>'; });
+    .catch(function () { if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:#dc3545;">Error al cargar</td></tr>'; });
 }
 
 function _gasoilPagNext() { _gasoilTxOffset += _gasoilTxLimit; _gasoilCargarTx(); }
@@ -230,7 +377,7 @@ function _gasoilCargarEstaciones() {
       // Render with current filters
       _gasoilFiltrarEstaciones();
     })
-    .catch(function (err) { console.error("Estaciones load error:", err); tbody.innerHTML = '<tr><td colspan="8" style="color:#dc3545;">Error: ' + err.message + '</td></tr>'; });
+    .catch(function (err) { console.error("Estaciones load error:", err); if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="color:#dc3545;">Error: ' + err.message + '</td></tr>'; });
 }
 
 function _gasoilPoblarFiltrosEstaciones(ests) {
@@ -340,13 +487,14 @@ function _gasoilGeocodificar() {
 
 function _gasoilCargarVehiculos() {
   var tbody = document.getElementById("gasoil-tbody-vehiculos-detail");
-  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;">Cargando...</td></tr>';
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;">Cargando...</td></tr>';
 
   fetch("/api/combustible/vehiculos")
     .then(function (r) { return r.json(); })
     .then(function (d) {
       var vehs = d.vehiculos || [];
-      if (!vehs.length) { tbody.innerHTML = '<tr><td colspan="7">Sin veh\u00edculos</td></tr>'; return; }
+      if (!vehs.length) { tbody.innerHTML = '<tr><td colspan="5">Sin veh\u00edculos</td></tr>'; return; }
       var html = "";
       vehs.forEach(function (v) {
         var alqPill = '';
@@ -372,7 +520,7 @@ function _gasoilCargarVehiculos() {
       });
       tbody.innerHTML = html;
     })
-    .catch(function () { tbody.innerHTML = '<tr><td colspan="7" style="color:#dc3545;">Error</td></tr>'; });
+    .catch(function () { tbody.innerHTML = '<tr><td colspan="5" style="color:#dc3545;">Error</td></tr>'; });
 }
 
 // ═══ Import Moeve XLSX ═══════════════════════════════════════════════════════
@@ -381,16 +529,19 @@ function _gasoilImportarMoeve(input) {
   if (!input.files || !input.files[0]) return;
   var file = input.files[0];
   var status = document.getElementById("gasoil-import-status");
-  status.style.display = "";
-  status.style.background = "#EFF6FF";
-  status.style.color = "#1E40AF";
-  status.textContent = "\u23f3 Importando " + file.name + "...";
+  if (status) {
+    status.style.display = "";
+    status.style.background = "#EFF6FF";
+    status.style.color = "#1E40AF";
+    status.textContent = "\u23f3 Importando " + file.name + "...";
+  }
 
   var fd = new FormData();
   fd.append("file", file);
   fetch("/api/combustible/importar-moeve", { method: "POST", body: fd })
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      if (!status) return;
       if (d.error) {
         status.style.background = "#FEF2F2"; status.style.color = "#dc2626";
         status.textContent = "\u274c Error: " + d.error;
@@ -399,13 +550,15 @@ function _gasoilImportarMoeve(input) {
         status.textContent = "\u2705 " + d.creados + " transacciones creadas, " + d.duplicados + " duplicadas, " + d.errores + " errores. " +
           (d.vehiculos_nuevos.length ? d.vehiculos_nuevos.length + " veh\u00edculos nuevos. " : "") +
           (d.estaciones_nuevas.length ? d.estaciones_nuevas.length + " estaciones nuevas." : "");
-        _gasoilCargarDashboard(); // Refresh
+        _gasoilCambiarTab(_gasoilTabActivo); // Refresh current tab
       }
-      input.value = ""; // Reset file input
+      input.value = "";
     })
     .catch(function(err) {
-      status.style.background = "#FEF2F2"; status.style.color = "#dc2626";
-      status.textContent = "\u274c Error: " + err.message;
+      if (status) {
+        status.style.background = "#FEF2F2"; status.style.color = "#dc2626";
+        status.textContent = "\u274c Error: " + err.message;
+      }
       input.value = "";
     });
 }
@@ -414,15 +567,18 @@ function _gasoilImportarSolred(input) {
   if (!input.files || !input.files[0]) return;
   var file = input.files[0];
   var status = document.getElementById("gasoil-import-status");
-  status.style.display = "";
-  status.style.background = "#EFF6FF";
-  status.style.color = "#1E40AF";
-  status.textContent = "\u23f3 Importando Solred " + file.name + "...";
+  if (status) {
+    status.style.display = "";
+    status.style.background = "#EFF6FF";
+    status.style.color = "#1E40AF";
+    status.textContent = "\u23f3 Importando Solred " + file.name + "...";
+  }
   var fd = new FormData();
   fd.append("file", file);
   fetch("/api/combustible/importar-solred", { method: "POST", body: fd })
     .then(function(r) { return r.json(); })
     .then(function(d) {
+      if (!status) return;
       if (d.error) {
         status.style.background = "#FEF2F2"; status.style.color = "#dc2626";
         status.textContent = "\u274c Error: " + d.error;
@@ -430,18 +586,18 @@ function _gasoilImportarSolred(input) {
         status.style.background = "#F0FDF4"; status.style.color = "#166534";
         status.textContent = "\u2705 Solred: " + d.creados + " creadas, " + d.duplicados + " duplicadas, " + d.errores + " errores." +
           (d.estaciones_nuevas && d.estaciones_nuevas.length ? " " + d.estaciones_nuevas.length + " estaciones nuevas." : "");
-        _gasoilCargarDashboard();
+        _gasoilCambiarTab(_gasoilTabActivo);
       }
       input.value = "";
     })
     .catch(function(err) {
-      status.style.background = "#FEF2F2"; status.style.color = "#dc2626";
-      status.textContent = "\u274c Error: " + err.message;
+      if (status) {
+        status.style.background = "#FEF2F2"; status.style.color = "#dc2626";
+        status.textContent = "\u274c Error: " + err.message;
+      }
       input.value = "";
     });
 }
-
-// ═══ Expose ═══════════════════════════════════════════════════════════════════
 
 // ═══ Vehicle edit modal ═══════════════════════════════════════════════════
 
@@ -587,6 +743,7 @@ function _gasoilEditarEstacion(eid) {
 // ═══ Expose ═══════════════════════════════════════════════════════════════════
 
 window._gasoilOnPanelShow = _gasoilOnPanelShow;
+window._gasoilCambiarTab = _gasoilCambiarTab;
 window._gasoilImportarMoeve = _gasoilImportarMoeve;
 window._gasoilImportarSolred = _gasoilImportarSolred;
 window._gasoilEditarVehiculo = _gasoilEditarVehiculo;

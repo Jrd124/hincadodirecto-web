@@ -44,10 +44,10 @@ const MODULOS = {
     defecto: "inicio",
   },
   gasoil: {
-    linkId: "nav-gasoil-modulo",
-    submenuId: "sidebar-children-gasoil",
-    paneles: { inicio: "panel-gasoil-inicio", transacciones: "panel-gasoil-transacciones", estaciones: "panel-gasoil-estaciones", vehiculos: "panel-gasoil-vehiculos" },
-    subNavLinks: { dashboard: "nav-gasoil-dashboard", transacciones: "nav-gasoil-transacciones", estaciones: "nav-gasoil-estaciones", vehiculos: "nav-gasoil-vehiculos" },
+    linkId: "nav-operaciones-gasoil",
+    submenuId: "sidebar-children-operaciones",
+    paneles: { inicio: "panel-gasoil" },
+    subNavLinks: {},
     defecto: "inicio",
   },
   proyectos: {
@@ -630,29 +630,7 @@ document.getElementById("nav-operaciones-modulo").addEventListener("click", (e) 
   e.preventDefault();
   activarModulo("operaciones");
 });
-document.getElementById("nav-gasoil-modulo").addEventListener("click", (e) => {
-  e.preventDefault();
-  activarModulo("gasoil");
-  if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("inicio");
-});
-document.getElementById("nav-gasoil-transacciones").addEventListener("click", (e) => {
-  e.preventDefault();
-  activarModulo("gasoil");
-  activarSubpanel("gasoil", "transacciones");
-  if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("transacciones");
-});
-document.getElementById("nav-gasoil-estaciones").addEventListener("click", (e) => {
-  e.preventDefault();
-  activarModulo("gasoil");
-  activarSubpanel("gasoil", "estaciones");
-  if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("estaciones");
-});
-document.getElementById("nav-gasoil-vehiculos").addEventListener("click", (e) => {
-  e.preventDefault();
-  activarModulo("gasoil");
-  activarSubpanel("gasoil", "vehiculos");
-  if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("vehiculos");
-});
+// Gasoil is now accessed via Operaciones > Gasoil (single panel with internal tabs)
 document.getElementById("nav-rrhh-modulo").addEventListener("click", (e) => {
   e.preventDefault();
   rrhhSubpanel = "inicio";
@@ -748,6 +726,13 @@ document.getElementById("nav-clientes-listado").addEventListener("click", (e) =>
 ["transporte","onboarding"].forEach(function(sp) {
   var el = document.getElementById("nav-operaciones-" + sp);
   if (el) el.addEventListener("click", function(e) { e.preventDefault(); activarSubpanel("operaciones", sp); });
+});
+// Gasoil sub-item under Operaciones
+var navGasoil = document.getElementById("nav-operaciones-gasoil");
+if (navGasoil) navGasoil.addEventListener("click", function(e) {
+  e.preventDefault();
+  activarModulo("gasoil");
+  if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("dashboard");
 });
 
 ["equipo","nominas","verificador","dietas","horasextras","vacaciones","adelantos","ss","irpf","costeproyecto"].forEach(function(sp) {
@@ -932,7 +917,7 @@ if (navCae) navCae.addEventListener("click", function (e) {
   }
 
   // Expand/collapse groups (accordion: collapse others at top level)
-  var topLevelGroups = ["finanzas", "proyectos", "rrhh", "presupuestos", "crm", "cae", "maquinaria", "gasoil", "operaciones"];
+  var topLevelGroups = ["finanzas", "proyectos", "rrhh", "presupuestos", "crm", "cae", "maquinaria", "operaciones"];
 
   function toggleGroup(el) {
     var group = el.getAttribute("data-group");
@@ -1068,16 +1053,14 @@ if (navCae) navCae.addEventListener("click", function (e) {
         var ll = document.getElementById("nav-maquinaria-listado");
         if (ll) ll.classList.add("activo");
       }
-    } else if (moduloActivo === "operaciones") {
+    } else if (moduloActivo === "operaciones" || moduloActivo === "gasoil" || moduloActivo === "alojamiento") {
       var opm = document.getElementById("nav-operaciones-modulo");
       if (opm) { opm.classList.add("activo"); opm.classList.add("expanded"); }
       var opc = document.getElementById("sidebar-children-operaciones");
       if (opc) opc.classList.add("open");
-    } else if (moduloActivo === "gasoil") {
-      var gam = document.getElementById("nav-gasoil-modulo");
-      if (gam) { gam.classList.add("activo"); gam.classList.add("expanded"); }
-      var gac = document.getElementById("sidebar-children-gasoil");
-      if (gac) gac.classList.add("open");
+      // Highlight active sub-link
+      var subId = moduloActivo === "gasoil" ? "nav-operaciones-gasoil" : moduloActivo === "alojamiento" ? "nav-operaciones-alojamiento" : null;
+      if (subId) { var sl = document.getElementById(subId); if (sl) sl.classList.add("activo"); }
     }
 
     // Close sidebar on mobile after nav
