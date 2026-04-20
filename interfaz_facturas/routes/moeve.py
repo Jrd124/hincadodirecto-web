@@ -434,6 +434,37 @@ def api_combustible_vehiculo_update(vid):
         conn.close()
 
 
+@moeve_bp.get("/api/combustible/vehiculos/<int:vid>/asignaciones")
+def api_combustible_vehiculo_asignaciones(vid):
+    from core.combustible_db import init_combustible_db
+    init_combustible_db()
+    conn = get_conn()
+    try:
+        rows = conn.execute("SELECT * FROM vehiculos_asignaciones WHERE vehiculo_id=? ORDER BY fecha_inicio DESC", (vid,)).fetchall()
+        return jsonify({"asignaciones": [dict(r) for r in rows]})
+    finally:
+        conn.close()
+
+
+@moeve_bp.post("/api/combustible/vehiculos/<int:vid>/asignaciones")
+def api_combustible_vehiculo_asignacion_create(vid):
+    from core.combustible_db import init_combustible_db
+    init_combustible_db()
+    data = request.get_json(silent=True) or {}
+    conn = get_conn()
+    try:
+        # Close current assignment
+        conn.execute("UPDATE vehiculos_asignaciones SET fecha_fin=? WHERE vehiculo_id=? AND fecha_fin IS NULL", (data.get("fecha_inicio"), vid))
+        conn.execute(
+            "INSERT INTO vehiculos_asignaciones (vehiculo_id, fecha_inicio, base, responsable_id, responsable_nombre, notas) VALUES (?,?,?,?,?,?)",
+            (vid, data["fecha_inicio"], data["base"], data.get("responsable_id"), data.get("responsable_nombre"), data.get("notas", "")),
+        )
+        conn.commit()
+        return jsonify({"ok": True})
+    finally:
+        conn.close()
+
+
 @moeve_bp.put("/api/combustible/estaciones/<int:eid>")
 def api_combustible_estacion_update(eid):
     from core.combustible_db import init_combustible_db
@@ -483,25 +514,56 @@ def api_combustible_transacciones_v2():
     init_combustible_db()
     conn = get_conn()
     try:
-        periodo = request.args.get("periodo", "")
         where = "WHERE 1=1"
         params = []
+        desde = request.args.get("desde", "")
+        hasta = request.args.get("hasta", "")
+        periodo = request.args.get("periodo", "")
+        proveedor = request.args.get("proveedor", "")
+        tipo_producto = request.args.get("tipo_producto", "")
+        vehiculo_id = request.args.get("vehiculo_id", "")
+        limit = request.args.get("limit", 50, type=int)
+        offset = request.args.get("offset", 0, type=int)
+
+        if desde:
+            where += " AND ct.fecha_operacion >= ?"; params.append(desde)
+        if hasta:
+            where += " AND ct.fecha_operacion <= ?"; params.append(hasta + " 23:59:59")
         if periodo:
-            where += " AND ct.fecha_operacion LIKE ?"
-            params.append(periodo + "%")
+            where += " AND ct.fecha_operacion LIKE ?"; params.append(periodo + "%")
+        if proveedor:
+            where += " AND ct.proveedor = ?"; params.append(proveedor)
+        if tipo_producto:
+            where += " AND ct.tipo_producto = ?"; params.append(tipo_producto)
+        if vehiculo_id:
+            where += " AND ct.vehiculo_id = ?"; params.append(int(vehiculo_id))
+
         rows = conn.execute(f"""
             SELECT ct.*, e.nombre as estacion_nombre, v.matricula as vehiculo_matricula
             FROM combustible_transacciones ct
             LEFT JOIN estaciones_servicio e ON e.id = ct.estacion_id
             LEFT JOIN vehiculos v ON v.id = ct.vehiculo_id
-            {where} ORDER BY ct.fecha_operacion DESC LIMIT 500
-        """, params).fetchall()
+            {where} ORDER BY ct.fecha_operacion DESC LIMIT ? OFFSET ?
+        """, params + [limit, offset]).fetchall()
         total = conn.execute(f"SELECT COUNT(*), COALESCE(SUM(ct.importe_final),0), COALESCE(SUM(ct.litros),0) FROM combustible_transacciones ct {where}", params).fetchone()
+        # KPIs by tipo_producto
+        kpis_tipo = {}
+        for r in conn.execute(f"""
+            SELECT ct.tipo_producto, COUNT(*) as n, COALESCE(SUM(ct.importe_final),0) as importe,
+                   COALESCE(SUM(ct.litros),0) as litros
+            FROM combustible_transacciones ct {where}
+            GROUP BY ct.tipo_producto
+        """, params).fetchall():
+            tp = r["tipo_producto"] or "otros"
+            kpis_tipo[tp] = {"n": r["n"], "importe": round(r["importe"], 2), "litros": round(r["litros"], 1)}
+        estaciones_usadas = conn.execute(f"SELECT COUNT(DISTINCT ct.estacion_id) FROM combustible_transacciones ct {where}", params).fetchone()[0]
         return jsonify({
             "transacciones": [dict(r) for r in rows],
             "total_count": total[0],
             "total_importe": round(total[1], 2),
             "total_litros": round(total[2], 1),
+            "estaciones_usadas": estaciones_usadas,
+            "kpis_tipo": kpis_tipo,
         })
     finally:
         conn.close()

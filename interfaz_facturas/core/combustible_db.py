@@ -36,6 +36,23 @@ def init_combustible_db():
         if "proveedor_alquiler" not in v_cols:
             conn.execute("ALTER TABLE vehiculos ADD COLUMN proveedor_alquiler TEXT")
 
+        # Vehiculos asignaciones (base + responsable historico)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS vehiculos_asignaciones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                vehiculo_id INTEGER NOT NULL,
+                fecha_inicio TEXT NOT NULL,
+                fecha_fin TEXT,
+                base TEXT NOT NULL,
+                responsable_id INTEGER,
+                responsable_nombre TEXT,
+                notas TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (vehiculo_id) REFERENCES vehiculos(id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_veh_asig_vehiculo ON vehiculos_asignaciones(vehiculo_id)")
+
         # Tarjetas de combustible
         conn.execute("""
             CREATE TABLE IF NOT EXISTS tarjetas_combustible (

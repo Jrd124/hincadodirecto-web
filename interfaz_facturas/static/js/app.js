@@ -628,20 +628,15 @@ document.getElementById("nav-proyectos-modulo").addEventListener("click", (e) =>
 });
 document.getElementById("nav-operaciones-modulo").addEventListener("click", (e) => {
   e.preventDefault();
+  var oc = document.getElementById("sidebar-children-operaciones");
+  if (oc) { oc.classList.toggle("open"); e.currentTarget.classList.toggle("expanded"); }
   activarModulo("operaciones");
 });
 document.getElementById("nav-gasoil-modulo").addEventListener("click", (e) => {
   e.preventDefault();
-  // Toggle sidebar children
   var gc = document.getElementById("sidebar-children-gasoil");
   if (gc) { gc.classList.toggle("open"); e.currentTarget.classList.toggle("expanded"); }
   activarModulo("gasoil");
-  if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("inicio");
-});
-document.getElementById("nav-gasoil-dashboard").addEventListener("click", (e) => {
-  e.preventDefault();
-  activarModulo("gasoil");
-  activarSubpanel("gasoil", "inicio");
   if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("inicio");
 });
 document.getElementById("nav-gasoil-transacciones").addEventListener("click", (e) => {
