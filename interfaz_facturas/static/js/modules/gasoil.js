@@ -353,13 +353,13 @@ function _gasoilCargarVehiculos() {
         if (v.es_alquiler) {
           var hoy = new Date().toISOString().slice(0,10);
           if (v.fecha_alquiler_fin && v.fecha_alquiler_fin < hoy) {
-            alqPill = ' <span style="background:#FCEBEB;color:#A32D2D;font-size:9px;padding:1px 5px;border-radius:999px;">EXPIRADO</span>';
+            alqPill = ' <span class="pill-alquiler" style="background:#FCEBEB;color:#A32D2D;font-size:10px;font-weight:500;padding:2px 8px;border-radius:999px;">EXPIRADO</span>';
           } else if (v.fecha_alquiler_fin) {
             var diasFin = Math.round((new Date(v.fecha_alquiler_fin) - new Date()) / 86400000);
-            if (diasFin <= 30) alqPill = ' <span style="background:#FEF3C7;color:#92400E;font-size:9px;padding:1px 5px;border-radius:999px;">EXPIRA ' + diasFin + 'd</span>';
-            else alqPill = ' <span style="background:#FAEEDA;color:#854F0B;font-size:9px;padding:1px 5px;border-radius:999px;">\uD83C\uDFF7 Alquiler</span>';
+            if (diasFin <= 30) alqPill = ' <span class="pill-alquiler" style="background:#FEDCBE;color:#A04400;font-size:10px;font-weight:500;padding:2px 8px;border-radius:999px;">EXPIRA ' + diasFin + 'd</span>';
+            else alqPill = ' <span class="pill-alquiler" style="background:#FAEEDA;color:#854F0B;font-size:10px;font-weight:500;padding:2px 8px;border-radius:999px;">\uD83C\uDFF7 ALQUILER</span>';
           } else {
-            alqPill = ' <span style="background:#FAEEDA;color:#854F0B;font-size:9px;padding:1px 5px;border-radius:999px;">\uD83C\uDFF7 Alquiler</span>';
+            alqPill = ' <span class="pill-alquiler" style="background:#FAEEDA;color:#854F0B;font-size:10px;font-weight:500;padding:2px 8px;border-radius:999px;">\uD83C\uDFF7 ALQUILER</span>';
           }
         }
         html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_gasoilEditarVehiculo(' + v.id + ')">' +
