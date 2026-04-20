@@ -640,21 +640,25 @@ document.getElementById("nav-gasoil-modulo").addEventListener("click", (e) => {
 });
 document.getElementById("nav-gasoil-dashboard").addEventListener("click", (e) => {
   e.preventDefault();
+  activarModulo("gasoil");
   activarSubpanel("gasoil", "inicio");
   if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("inicio");
 });
 document.getElementById("nav-gasoil-transacciones").addEventListener("click", (e) => {
   e.preventDefault();
+  activarModulo("gasoil");
   activarSubpanel("gasoil", "transacciones");
   if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("transacciones");
 });
 document.getElementById("nav-gasoil-estaciones").addEventListener("click", (e) => {
   e.preventDefault();
+  activarModulo("gasoil");
   activarSubpanel("gasoil", "estaciones");
   if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("estaciones");
 });
 document.getElementById("nav-gasoil-vehiculos").addEventListener("click", (e) => {
   e.preventDefault();
+  activarModulo("gasoil");
   activarSubpanel("gasoil", "vehiculos");
   if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("vehiculos");
 });
