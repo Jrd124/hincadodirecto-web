@@ -424,20 +424,12 @@ function restaurarDesdeHash() {
       activarModulo("proyectos");
     }
   } else if (mod === "gasoil") {
-    if (partes.length >= 2) {
-      var sp = partes[1];
-      var gpMap = { dashboard: "inicio", transacciones: "transacciones", estaciones: "estaciones", vehiculos: "vehiculos" };
-      if (gpMap[sp]) {
-        activarModulo("gasoil");
-        activarSubpanel("gasoil", gpMap[sp]);
-        if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow(gpMap[sp]);
-      } else {
-        activarModulo("gasoil");
-      }
-    } else {
-      activarModulo("gasoil");
-      if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("inicio");
-    }
+    activarModulo("gasoil");
+    var gasoilTab = (partes.length >= 2) ? partes[1] : "dashboard";
+    if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow(gasoilTab);
+  } else if (mod === "alojamiento") {
+    activarModulo("alojamiento");
+    if (typeof window._alojamientoInit === "function") window._alojamientoInit();
   } else if (mod === "rrhh") {
     if (partes.length >= 2) {
       var sp = partes[1];
@@ -482,8 +474,8 @@ function _ocultarPanelesModulo(nombreModulo) {
 
 function activarModulo(nombre) {
   moduloActivo = nombre;
-  // GLOBAL: hide every content-panel first (prevents stale panels from overlapping)
-  document.querySelectorAll('.content-panel').forEach(function(p) { p.classList.remove('visible'); });
+  // GLOBAL: hide every panel (id starts with "panel-") to prevent stale overlaps
+  document.querySelectorAll('[id^="panel-"]').forEach(function(p) { p.classList.remove('visible'); });
   // Then iterate MODULOS for link/submenu state + per-module panel hide
   Object.keys(MODULOS).forEach((k) => {
     const m = MODULOS[k];
