@@ -1757,25 +1757,20 @@
       </div>
 
       <div id="panel-gasoil-transacciones" class="panel-gasoil">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            <input type="date" id="gasoil-tx-desde" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;">
-            <span style="font-size:0.85rem;">a</span>
-            <input type="date" id="gasoil-tx-hasta" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;">
-            <select id="gasoil-tx-matricula" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;">
-              <option value="">Todos veh&iacute;culos</option>
-            </select>
-            <select id="gasoil-tx-estado" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;">
-              <option value="">Todos</option>
-              <option value="1">Sin asignar</option>
-            </select>
-            <button onclick="_gasoilFiltrar()" class="btn-small">Filtrar</button>
+        <!-- Filtros rediseñados -->
+        <div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;margin-bottom:12px;">
+          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+            <div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Desde</div><input type="date" id="gasoil-tx-desde" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"></div>
+            <div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Hasta</div><input type="date" id="gasoil-tx-hasta" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"></div>
+            <div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Proveedor</div><select id="gasoil-tx-proveedor" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"><option value="">Todos</option><option value="moeve">Moeve</option><option value="solred">Solred</option></select></div>
+            <div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Tipo</div><select id="gasoil-tx-tipo" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"><option value="">Todos</option><option value="diesel">Diesel</option><option value="gasolina">Gasolina</option><option value="adblue">AdBlue</option><option value="peaje">Peaje</option><option value="otros">Otros</option></select></div>
+            <div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Veh&iacute;culo</div><select id="gasoil-tx-matricula" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"><option value="">Todos</option></select></div>
+            <button onclick="_gasoilFiltrar()" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Aplicar</button>
+            <button onclick="document.getElementById('gasoil-tx-proveedor').value='';document.getElementById('gasoil-tx-tipo').value='';document.getElementById('gasoil-tx-matricula').value='';_gasoilFiltrar()" style="padding:6px 14px;background:#fff;color:#666;border:0.5px solid #ccc;border-radius:6px;font-size:13px;cursor:pointer;">Limpiar</button>
           </div>
-          <label style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#EFF6FF;color:#1E40AF;border:1px solid #93C5FD;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600;">
-            Importar Excel
-            <input type="file" id="gasoil-import-file" accept=".xlsx,.xls" style="display:none;">
-          </label>
         </div>
+        <!-- KPIs del filtro -->
+        <div id="gasoil-tx-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px;"></div>
         <div class="card" style="overflow-x:auto;padding:0;">
           <table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
             <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
