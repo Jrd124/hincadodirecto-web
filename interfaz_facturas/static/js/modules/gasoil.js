@@ -205,7 +205,7 @@ function _gasoilCargarEstaciones() {
       var html = "";
       ests.forEach(function (e) {
         var geoIcon = e.geocoded === 1 ? '\u2705' : (e.geocoded === 2 ? '\u274c' : '\u23f3');
-        var coords = e.latitud ? e.latitud.toFixed(4) + ", " + e.longitud.toFixed(4) : "\u2014";
+        var coords = (e.latitud != null && e.longitud != null) ? Number(e.latitud).toFixed(4) + ", " + Number(e.longitud).toFixed(4) : "\u2014";
         var pais = e.pais === "PT" ? "\uD83C\uDDF5\uD83C\uDDF9" : "\uD83C\uDDEA\uD83C\uDDF8";
         html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_gasoilEditarEstacion(' + e.id + ')">' +
           '<td style="padding:6px 8px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (e.nombre||'') + '">' + (e.nombre || '') + '</td>' +

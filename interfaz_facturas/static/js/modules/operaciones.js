@@ -92,12 +92,9 @@ function _initOperaciones() {
     _aplicarResaltadoProyecto();
   });
 
-  // Mass assign modal
-  document.getElementById("oper-btn-masivo").addEventListener("click", _abrirModalMasivo);
-  document.getElementById("oper-masivo-cerrar").addEventListener("click", function () {
-    document.getElementById("modal-oper-masivo-overlay").classList.remove("visible");
-  });
-  document.getElementById("oper-masivo-confirmar").addEventListener("click", _ejecutarAsignacionMasiva);
+  // Mass assign modal — buttons are now dynamic (created in _abrirModalMasivo)
+  var btnMasivo = document.getElementById("oper-btn-masivo");
+  if (btnMasivo) btnMasivo.addEventListener("click", _abrirModalMasivo);
 
   // Delegate clicks on cuadrante
   document.getElementById("oper-cuadrante").addEventListener("click", function (e) {
