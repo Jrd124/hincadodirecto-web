@@ -50,6 +50,13 @@ const MODULOS = {
     subNavLinks: {},
     defecto: "inicio",
   },
+  alojamiento: {
+    linkId: "nav-operaciones-alojamiento",
+    submenuId: "sidebar-children-operaciones",
+    paneles: { inicio: "panel-operaciones-alojamiento" },
+    subNavLinks: {},
+    defecto: "inicio",
+  },
   proyectos: {
     linkId: "nav-proyectos-modulo",
     submenuId: "submenu-proyectos",
@@ -733,6 +740,13 @@ if (navGasoil) navGasoil.addEventListener("click", function(e) {
   e.preventDefault();
   activarModulo("gasoil");
   if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("dashboard");
+});
+// Alojamiento sub-item under Operaciones
+var navAloj = document.getElementById("nav-operaciones-alojamiento");
+if (navAloj) navAloj.addEventListener("click", function(e) {
+  e.preventDefault();
+  activarModulo("alojamiento");
+  if (typeof window._alojamientoInit === "function") window._alojamientoInit();
 });
 
 ["equipo","nominas","verificador","dietas","horasextras","vacaciones","adelantos","ss","irpf","costeproyecto"].forEach(function(sp) {

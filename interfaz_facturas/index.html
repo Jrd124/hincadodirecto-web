@@ -1720,6 +1720,28 @@
         </div>
       </div>
 
+      <div id="panel-operaciones-alojamiento" class="panel-operaciones content-panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <h2 style="margin:0;font-size:1.15rem;font-weight:700;">&#x1F3E8; Alojamiento</h2>
+          <button onclick="_alojNuevaEstancia()" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">+ Nueva estancia</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;border-bottom:1px solid #E5E5E5;padding-bottom:0;">
+          <button class="aloj-tab active" data-aloj-tab="estancias" onclick="_alojCambiarTab('estancias')" style="padding:8px 16px;font-size:13px;font-weight:500;background:transparent;border:none;border-bottom:3px solid #1D9E75;cursor:pointer;color:#2C2C2A;">Estancias</button>
+          <button class="aloj-tab" data-aloj-tab="hoteles" onclick="_alojCambiarTab('hoteles')" style="padding:8px 16px;font-size:13px;font-weight:500;background:transparent;border:none;border-bottom:3px solid transparent;cursor:pointer;color:#888780;">Hist&oacute;rico de hoteles</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;" id="aloj-filtros">
+          <select id="aloj-filtro-proyecto" onchange="_alojCargarEstancias()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;">
+            <option value="">Proyecto</option>
+          </select>
+          <input type="date" id="aloj-filtro-desde" onchange="_alojCargarEstancias()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;">
+          <input type="date" id="aloj-filtro-hasta" onchange="_alojCargarEstancias()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;">
+          <input type="text" id="aloj-filtro-hotel" placeholder="Hotel..." oninput="_alojFiltrarLocal()" style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;width:140px;">
+        </div>
+        <div id="aloj-content">
+          <p style="color:#94a3b8;padding:40px;text-align:center;">Cargando...</p>
+        </div>
+      </div>
+
       <!-- ═══ IMPUESTOS ═══════════════════════════════════════════════════ -->
       <div id="panel-impuestos-inicio" class="content-panel">
         <div style="max-width:1100px;margin:0 auto;padding:24px 20px;">
@@ -3999,9 +4021,10 @@
     <script src="/static/js/modules/eeff.js?v=1"></script>
     <script src="/static/js/modules/albaranes.js?v=1"></script>
     <script src="/static/js/modules/seguros.js?v=1"></script>
-    <script src="/static/js/modules/operaciones.js?v=3"></script>
-    <script src="/static/js/modules/gasoil.js?v=3"></script>
-    <script src="/static/js/app.js?v=33"></script>
+    <script src="/static/js/modules/operaciones.js?v=4"></script>
+    <script src="/static/js/modules/gasoil.js?v=4"></script>
+    <script src="/static/js/modules/alojamiento.js?v=1"></script>
+    <script src="/static/js/app.js?v=34"></script>
     <!-- React desactivado temporalmente — reactivar cuando se resuelva el bug de visibilidad CSS
     <script type="module" src="/static/js/react-app.js"></script>
     <script type="module" src="/static/js/react/DashboardDirector.js"></script>

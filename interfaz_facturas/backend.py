@@ -5305,6 +5305,9 @@ app.register_blueprint(operaciones_routes_bp)
 from routes.moeve import moeve_bp
 app.register_blueprint(moeve_bp)
 
+from routes.alojamiento import alojamiento_bp
+app.register_blueprint(alojamiento_bp)
+
 logger.info("ERP arrancado — blueprints registrados")
 
 
