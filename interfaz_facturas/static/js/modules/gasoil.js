@@ -209,6 +209,8 @@ function _gasoilPagPrev() { _gasoilTxOffset = Math.max(0, _gasoilTxOffset - _gas
 
 // ═══ Estaciones ═════════════════════════════════════════════════════════════
 
+var _gasoilEstacionesData = [];
+
 function _gasoilCargarEstaciones() {
   var tbody = document.getElementById("gasoil-tbody-estaciones");
   if (!tbody) return;
@@ -218,30 +220,86 @@ function _gasoilCargarEstaciones() {
     .then(function (r) { return r.json(); })
     .then(function (d) {
       var ests = d.estaciones || [];
+      _gasoilEstacionesData = ests;
       var pendientes = d.pendientes_geo || 0;
       // Update geocode button
       var geoBtn = document.getElementById("gasoil-btn-geocodificar");
       if (geoBtn) geoBtn.textContent = "\uD83C\uDF0D Geocodificar pendientes (" + pendientes + ")";
-      if (!ests.length) { tbody.innerHTML = '<tr><td colspan="8">Sin estaciones</td></tr>'; return; }
-      var html = "";
-      ests.forEach(function (e) {
-        var geoIcon = e.geocoded === 1 ? '\u2705' : (e.geocoded === 2 ? '\u274c' : '\u23f3');
-        var coords = (e.latitud != null && e.longitud != null) ? Number(e.latitud).toFixed(4) + ", " + Number(e.longitud).toFixed(4) : "\u2014";
-        var pais = e.pais === "PT" ? "\uD83C\uDDF5\uD83C\uDDF9" : "\uD83C\uDDEA\uD83C\uDDF8";
-        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_gasoilEditarEstacion(' + e.id + ')">' +
-          '<td style="padding:6px 8px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (e.nombre||'') + '">' + (e.nombre || '') + '</td>' +
-          '<td style="padding:6px 4px;font-size:0.78rem;">' + (e.marca || '\u2014') + '</td>' +
-          '<td style="padding:6px 4px;text-align:center;">' + pais + '</td>' +
-          '<td style="padding:6px 4px;font-size:0.78rem;">' + (e.municipio || '\u2014') + '</td>' +
-          '<td style="padding:6px 4px;font-size:0.78rem;">' + (e.provincia || '\u2014') + '</td>' +
-          '<td style="padding:6px 4px;font-size:0.78rem;">' + coords + '</td>' +
-          '<td style="padding:6px 4px;text-align:right;">' + (e.transacciones || 0) + '</td>' +
-          '<td style="padding:6px 4px;text-align:center;">' + geoIcon + '</td>' +
-          '</tr>';
-      });
-      tbody.innerHTML = html;
+      // Populate filter dropdowns
+      _gasoilPoblarFiltrosEstaciones(ests);
+      // Render with current filters
+      _gasoilFiltrarEstaciones();
     })
     .catch(function (err) { console.error("Estaciones load error:", err); tbody.innerHTML = '<tr><td colspan="8" style="color:#dc3545;">Error: ' + err.message + '</td></tr>'; });
+}
+
+function _gasoilPoblarFiltrosEstaciones(ests) {
+  var marcas = {}, municipios = {}, ccaas = {};
+  ests.forEach(function (e) {
+    if (e.marca) marcas[e.marca] = 1;
+    if (e.municipio) municipios[e.municipio] = 1;
+    if (e.provincia) ccaas[e.provincia] = 1;
+  });
+  var selMarca = document.getElementById("filtro-estacion-marca");
+  var selMuni = document.getElementById("filtro-estacion-municipio");
+  var selCcaa = document.getElementById("filtro-estacion-ccaa");
+  if (selMarca) {
+    var vm = selMarca.value;
+    selMarca.innerHTML = '<option value="">Marca</option>' + Object.keys(marcas).sort().map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('');
+    selMarca.value = vm;
+  }
+  if (selMuni) {
+    var vmu = selMuni.value;
+    selMuni.innerHTML = '<option value="">Municipio</option>' + Object.keys(municipios).sort().map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('');
+    selMuni.value = vmu;
+  }
+  if (selCcaa) {
+    var vc = selCcaa.value;
+    selCcaa.innerHTML = '<option value="">CCAA</option>' + Object.keys(ccaas).sort().map(function(m){ return '<option value="'+m+'">'+m+'</option>'; }).join('');
+    selCcaa.value = vc;
+  }
+}
+
+function _gasoilFiltrarEstaciones() {
+  var tbody = document.getElementById("gasoil-tbody-estaciones");
+  if (!tbody) return;
+  var ests = _gasoilEstacionesData;
+  var fBusq = (document.getElementById("filtro-estacion-busqueda") || {}).value || "";
+  var fMarca = (document.getElementById("filtro-estacion-marca") || {}).value || "";
+  var fMuni = (document.getElementById("filtro-estacion-municipio") || {}).value || "";
+  var fCcaa = (document.getElementById("filtro-estacion-ccaa") || {}).value || "";
+  var fPais = (document.getElementById("filtro-estacion-pais") || {}).value || "";
+  var fGeo = (document.getElementById("filtro-estacion-geo") || {}).value || "";
+
+  var busqLow = fBusq.toLowerCase();
+  var filtered = ests.filter(function (e) {
+    if (fBusq && (e.nombre || '').toLowerCase().indexOf(busqLow) === -1) return false;
+    if (fMarca && e.marca !== fMarca) return false;
+    if (fMuni && e.municipio !== fMuni) return false;
+    if (fCcaa && e.provincia !== fCcaa) return false;
+    if (fPais && e.pais !== fPais) return false;
+    if (fGeo !== "" && String(e.geocoded) !== fGeo) return false;
+    return true;
+  });
+
+  if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:1.5rem;color:#64748b;">Sin resultados</td></tr>'; return; }
+  var html = "";
+  filtered.forEach(function (e) {
+    var geoIcon = e.geocoded === 1 ? '\u2705' : (e.geocoded === 2 ? '\u274c' : '\u23f3');
+    var coords = (e.latitud != null && e.longitud != null) ? Number(e.latitud).toFixed(4) + ", " + Number(e.longitud).toFixed(4) : "\u2014";
+    var pais = e.pais === "PT" ? "\uD83C\uDDF5\uD83C\uDDF9" : "\uD83C\uDDEA\uD83C\uDDF8";
+    html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_gasoilEditarEstacion(' + e.id + ')">' +
+      '<td style="padding:6px 8px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (e.nombre||'') + '">' + (e.nombre || '') + '</td>' +
+      '<td style="padding:6px 4px;font-size:0.78rem;">' + (e.marca || '\u2014') + '</td>' +
+      '<td style="padding:6px 4px;text-align:center;">' + pais + '</td>' +
+      '<td style="padding:6px 4px;font-size:0.78rem;">' + (e.municipio || '\u2014') + '</td>' +
+      '<td style="padding:6px 4px;font-size:0.78rem;">' + (e.provincia || '\u2014') + '</td>' +
+      '<td style="padding:6px 4px;font-size:0.78rem;">' + coords + '</td>' +
+      '<td style="padding:6px 4px;text-align:right;">' + (e.transacciones || 0) + '</td>' +
+      '<td style="padding:6px 4px;text-align:center;">' + geoIcon + '</td>' +
+      '</tr>';
+  });
+  tbody.innerHTML = html;
 }
 
 function _gasoilGeocodificar() {

@@ -1797,6 +1797,29 @@
             <button id="gasoil-btn-geocodificar" onclick="_gasoilGeocodificar()" class="btn-small" style="background:#DCFCE7;color:#166534;border:1px solid #86EFAC;">&#x1F30D; Geocodificar pendientes</button>
           </div>
         </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">
+          <input id="filtro-estacion-busqueda" type="text" placeholder="Buscar nombre..." oninput="_gasoilFiltrarEstaciones()" style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;width:160px;">
+          <select id="filtro-estacion-marca" onchange="_gasoilFiltrarEstaciones()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;">
+            <option value="">Marca</option>
+          </select>
+          <select id="filtro-estacion-municipio" onchange="_gasoilFiltrarEstaciones()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;">
+            <option value="">Municipio</option>
+          </select>
+          <select id="filtro-estacion-ccaa" onchange="_gasoilFiltrarEstaciones()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;">
+            <option value="">CCAA</option>
+          </select>
+          <select id="filtro-estacion-pais" onchange="_gasoilFiltrarEstaciones()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;">
+            <option value="">Pa&iacute;s</option>
+            <option value="ES">&#x1F1EA;&#x1F1F8; Espa&ntilde;a</option>
+            <option value="PT">&#x1F1F5;&#x1F1F9; Portugal</option>
+          </select>
+          <select id="filtro-estacion-geo" onchange="_gasoilFiltrarEstaciones()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;">
+            <option value="">Estado Geo</option>
+            <option value="1">&#x2705; Geocodificada</option>
+            <option value="0">&#x23F3; Pendiente</option>
+            <option value="2">&#x274C; Fallida</option>
+          </select>
+        </div>
         <div class="card" style="overflow-x:auto;padding:0;">
           <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
             <thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">
