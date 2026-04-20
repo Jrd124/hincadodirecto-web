@@ -452,7 +452,7 @@ function _gasoilEditarVehiculo(vid) {
     var old = document.getElementById("modal-gasoil-edit"); if (old) old.remove();
     var m = document.createElement("div"); m.id = "modal-gasoil-edit";
     m.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:1000;display:flex;align-items:center;justify-content:center;";
-    m.innerHTML = '<div style="background:#fff;border-radius:12px;width:440px;max-width:95%;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,0.15);">' +
+    m.innerHTML = '<div style="background:#fff;border-radius:12px;width:520px;max-width:95%;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,0.15);max-height:90vh;overflow-y:auto;">' +
       '<h3 style="margin:0 0 14px;">Editar veh\u00edculo ' + v.matricula + '</h3>' +
       '<div style="display:grid;gap:10px;">' +
         '<div><label style="font-size:11px;color:#888;">Tipo</label><select id="gv-tipo" style="width:100%;padding:6px;border:1px solid #E5E5E5;border-radius:6px;"><option value="pickup">Pickup</option><option value="furgoneta">Furgoneta</option><option value="camion">Cami\u00f3n</option><option value="remolque">Remolque</option><option value="turismo">Turismo</option><option value="otro">Otro</option></select></div>' +
@@ -464,6 +464,16 @@ function _gasoilEditarVehiculo(vid) {
             '<div><label style="font-size:10px;color:#888;">Proveedor</label><input id="gv-prov-alq" style="width:100%;padding:4px;border:1px solid #E5E5E5;border-radius:4px;box-sizing:border-box;font-size:12px;"></div>' +
             '<div><label style="font-size:10px;color:#888;">Inicio</label><input type="date" id="gv-alq-inicio" style="width:100%;padding:4px;border:1px solid #E5E5E5;border-radius:4px;box-sizing:border-box;font-size:12px;"></div>' +
             '<div><label style="font-size:10px;color:#888;">Fin</label><input type="date" id="gv-alq-fin" style="width:100%;padding:4px;border:1px solid #E5E5E5;border-radius:4px;box-sizing:border-box;font-size:12px;"></div></div></div>' +
+        '<hr style="border:none;border-top:1px solid #E5E5E5;margin:6px 0;">' +
+        '<div style="background:#F8FAFC;border-radius:8px;padding:10px;">' +
+          '<h4 style="margin:0 0 8px;font-size:12px;font-weight:700;color:#475569;">Base / Responsable (vehiculos_asignaciones)</h4>' +
+          '<div id="gv-asignaciones-list" style="font-size:12px;color:#64748b;">Cargando historial...</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;">' +
+            '<div><label style="font-size:10px;color:#888;">Base</label><input id="gv-asig-base" placeholder="Ej: Madrid" style="width:100%;padding:4px;border:1px solid #E5E5E5;border-radius:4px;box-sizing:border-box;font-size:12px;"></div>' +
+            '<div><label style="font-size:10px;color:#888;">Responsable</label><input id="gv-asig-resp" placeholder="Nombre" style="width:100%;padding:4px;border:1px solid #E5E5E5;border-radius:4px;box-sizing:border-box;font-size:12px;"></div>' +
+            '<div><label style="font-size:10px;color:#888;">Desde</label><input type="date" id="gv-asig-desde" style="width:100%;padding:4px;border:1px solid #E5E5E5;border-radius:4px;box-sizing:border-box;font-size:12px;"></div></div>' +
+          '<button id="gv-asig-add" style="margin-top:6px;padding:4px 10px;font-size:11px;border:1px solid #2563eb;border-radius:4px;background:#EFF6FF;color:#2563eb;cursor:pointer;">+ Asignar base/responsable</button>' +
+        '</div>' +
       '</div>' +
       '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">' +
         '<button onclick="document.getElementById(\'modal-gasoil-edit\').remove()" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Cancelar</button>' +
@@ -479,6 +489,19 @@ function _gasoilEditarVehiculo(vid) {
     document.getElementById("gv-prov-alq").value = v.proveedor_alquiler || "";
     document.getElementById("gv-alq-inicio").value = v.fecha_alquiler_inicio || "";
     document.getElementById("gv-alq-fin").value = v.fecha_alquiler_fin || "";
+    // Load vehiculos_asignaciones history
+    _gasoilCargarAsignacionesVehiculo(vid);
+    // Add base/responsable button — posts to vehiculos_asignaciones
+    document.getElementById("gv-asig-add").addEventListener("click", function() {
+      var base = document.getElementById("gv-asig-base").value;
+      var resp = document.getElementById("gv-asig-resp").value;
+      var desde = document.getElementById("gv-asig-desde").value;
+      if (!base && !resp) return;
+      fetch("/api/combustible/vehiculos/" + vid + "/asignaciones", {
+        method: "POST", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({base: base, responsable_nombre: resp, fecha_inicio: desde || new Date().toISOString().slice(0,10)})
+      }).then(function() { _gasoilCargarAsignacionesVehiculo(vid); });
+    });
     document.getElementById("gv-save").addEventListener("click", function() {
       var isAlq = document.getElementById("gv-alquiler").checked;
       fetch("/api/combustible/vehiculos/" + vid, {
@@ -487,6 +510,31 @@ function _gasoilEditarVehiculo(vid) {
       }).then(function() { m.remove(); _gasoilCargarVehiculos(); });
     });
   });
+}
+
+// Fetch and render vehiculos_asignaciones history for a vehicle
+function _gasoilCargarAsignacionesVehiculo(vid) {
+  var container = document.getElementById("gv-asignaciones-list");
+  if (!container) return;
+  fetch("/api/combustible/vehiculos/" + vid + "/asignaciones")
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var asigs = d.asignaciones || []; // vehiculos_asignaciones rows
+      if (!asigs.length) { container.innerHTML = '<span style="color:#94a3b8;font-size:11px;">Sin historial de vehiculos_asignaciones</span>'; return; }
+      var html = '<table style="width:100%;font-size:11px;border-collapse:collapse;">' +
+        '<tr style="color:#64748b;"><th style="text-align:left;padding:2px 4px;">Base</th><th style="text-align:left;padding:2px 4px;">Responsable</th><th style="padding:2px 4px;">Desde</th><th style="padding:2px 4px;">Hasta</th></tr>';
+      asigs.forEach(function(a) {
+        var activa = !a.fecha_fin;
+        html += '<tr style="' + (activa ? 'background:#F0FDF4;' : '') + '">' +
+          '<td style="padding:2px 4px;">' + (a.base || '\u2014') + (activa ? ' \u2705' : '') + '</td>' +
+          '<td style="padding:2px 4px;">' + (a.responsable_nombre || '\u2014') + '</td>' +
+          '<td style="padding:2px 4px;text-align:center;">' + (a.fecha_inicio || '\u2014') + '</td>' +
+          '<td style="padding:2px 4px;text-align:center;">' + (a.fecha_fin || 'Activa') + '</td></tr>';
+      });
+      html += '</table>';
+      container.innerHTML = html;
+    })
+    .catch(function() { container.innerHTML = '<span style="color:#dc3545;font-size:11px;">Error cargando vehiculos_asignaciones</span>'; });
 }
 
 // ═══ Station edit modal ══════════════════════════════════════════════════
@@ -544,6 +592,7 @@ window._gasoilImportarSolred = _gasoilImportarSolred;
 window._gasoilEditarVehiculo = _gasoilEditarVehiculo;
 window._gasoilEditarEstacion = _gasoilEditarEstacion;
 window._gasoilFiltrar = _gasoilFiltrar;
+window._gasoilFiltrarEstaciones = _gasoilFiltrarEstaciones;
 window._gasoilPagNext = _gasoilPagNext;
 window._gasoilPagPrev = _gasoilPagPrev;
 window._gasoilGeocodificar = _gasoilGeocodificar;
