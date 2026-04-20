@@ -45,14 +45,14 @@ const MODULOS = {
   },
   gasoil: {
     linkId: "nav-operaciones-gasoil",
-    submenuId: "sidebar-children-operaciones",
+    submenuId: null,
     paneles: { inicio: "panel-gasoil" },
     subNavLinks: {},
     defecto: "inicio",
   },
   alojamiento: {
     linkId: "nav-operaciones-alojamiento",
-    submenuId: "sidebar-children-operaciones",
+    submenuId: null,
     paneles: { inicio: "panel-operaciones-alojamiento" },
     subNavLinks: {},
     defecto: "inicio",
@@ -482,7 +482,9 @@ function _ocultarPanelesModulo(nombreModulo) {
 
 function activarModulo(nombre) {
   moduloActivo = nombre;
-  // Hide ALL panels of ALL modules (including the target module)
+  // GLOBAL: hide every content-panel first (prevents stale panels from overlapping)
+  document.querySelectorAll('.content-panel').forEach(function(p) { p.classList.remove('visible'); });
+  // Then iterate MODULOS for link/submenu state + per-module panel hide
   Object.keys(MODULOS).forEach((k) => {
     const m = MODULOS[k];
     const activo = k === nombre;
