@@ -400,6 +400,66 @@ def api_combustible_estaciones():
         conn.close()
 
 
+@moeve_bp.put("/api/combustible/vehiculos/<int:vid>")
+def api_combustible_vehiculo_update(vid):
+    from core.combustible_db import init_combustible_db
+    init_combustible_db()
+    data = request.get_json(silent=True) or {}
+    conn = get_conn()
+    try:
+        campos = []
+        params = []
+        for f in ("tipo", "marca", "modelo", "notas", "proveedor_alquiler", "fecha_alquiler_inicio", "fecha_alquiler_fin"):
+            if f in data:
+                campos.append(f"{f}=?")
+                params.append(data[f])
+        if "empleado_asignado_id" in data:
+            campos.append("empleado_asignado_id=?")
+            params.append(data["empleado_asignado_id"] or None)
+        if "es_alquiler" in data:
+            campos.append("es_alquiler=?")
+            params.append(1 if data["es_alquiler"] else 0)
+        if not campos:
+            return jsonify({"error": "No fields to update"}), 400
+        params.append(vid)
+        conn.execute(f"UPDATE vehiculos SET {', '.join(campos)} WHERE id=?", params)
+        conn.commit()
+        return jsonify({"ok": True})
+    finally:
+        conn.close()
+
+
+@moeve_bp.put("/api/combustible/estaciones/<int:eid>")
+def api_combustible_estacion_update(eid):
+    from core.combustible_db import init_combustible_db
+    init_combustible_db()
+    data = request.get_json(silent=True) or {}
+    conn = get_conn()
+    try:
+        campos = []
+        params = []
+        for f in ("nombre", "marca", "direccion", "municipio", "provincia", "pais", "notas"):
+            if f in data:
+                campos.append(f"{f}=?")
+                params.append(data[f])
+        if "latitud" in data:
+            campos.append("latitud=?")
+            params.append(float(data["latitud"]) if data["latitud"] else None)
+        if "longitud" in data:
+            campos.append("longitud=?")
+            params.append(float(data["longitud"]) if data["longitud"] else None)
+        if "latitud" in data or "longitud" in data:
+            campos.append("geocoded=1")
+        if not campos:
+            return jsonify({"error": "No fields to update"}), 400
+        params.append(eid)
+        conn.execute(f"UPDATE estaciones_servicio SET {', '.join(campos)} WHERE id=?", params)
+        conn.commit()
+        return jsonify({"ok": True})
+    finally:
+        conn.close()
+
+
 @moeve_bp.get("/api/combustible/tarjetas")
 def api_combustible_tarjetas():
     from core.combustible_db import init_combustible_db

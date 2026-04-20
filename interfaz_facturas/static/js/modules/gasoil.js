@@ -140,11 +140,11 @@ function _gasoilCargarTx() {
   var tbody = document.getElementById("gasoil-tbody-txns");
   tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;">Cargando...</td></tr>';
 
-  fetch("/api/moeve/transacciones?" + params)
+  fetch("/api/combustible/transacciones-v2?" + params)
     .then(function (r) { return r.json(); })
     .then(function (d) {
       var txns = d.transacciones || [];
-      var total = d.total || 0;
+      var total = d.total_count || 0;
 
       if (!txns.length) {
         tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-secondary);">Sin transacciones</td></tr>';
@@ -154,18 +154,17 @@ function _gasoilCargarTx() {
 
       var html = "";
       txns.forEach(function (t) {
-        var confColor = t.imputacion_confianza === "alta" ? "#22c55e" : t.imputacion_confianza === "media" ? "#f59e0b" : "#ef4444";
-        var proyLabel = t.proyecto_nombre ? '<span style="color:' + confColor + ';" title="' + (t.imputacion_notas || '') + '">' + (t.proyecto_codigo || '') + '</span>' : '<span style="color:#9ca3af;">-</span>';
-        var estCorta = (t.estacion || "").length > 25 ? (t.estacion || "").substring(0, 25) + "\u2026" : (t.estacion || "-");
+        var proyLabel = t.proyecto_id ? '<span style="color:#22c55e;">' + (t.proyecto_id || '') + '</span>' : '<span style="color:#9ca3af;">-</span>';
+        var estCorta = (t.estacion_raw || t.estacion_nombre || "").length > 25 ? (t.estacion_raw || t.estacion_nombre || "").substring(0, 25) + "\u2026" : (t.estacion_raw || t.estacion_nombre || "-");
 
         html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
-          '<td style="padding:5px 6px;">' + (t.fecha || '') + '</td>' +
-          '<td style="padding:5px 6px;">' + (t.hora || '').substring(0, 5) + '</td>' +
-          '<td style="padding:5px 6px;font-weight:500;">' + (t.matricula || '-') + '</td>' +
-          '<td style="padding:5px 6px;" title="' + (t.estacion || '') + '">' + estCorta + '</td>' +
-          '<td style="padding:5px 6px;">' + (t.concepto || '') + '</td>' +
+          '<td style="padding:5px 6px;">' + (t.fecha_operacion || '').substring(0, 10) + '</td>' +
+          '<td style="padding:5px 6px;">' + (t.fecha_operacion || '').substring(11, 16) + '</td>' +
+          '<td style="padding:5px 6px;font-weight:500;">' + (t.matricula_raw || t.vehiculo_matricula || '-') + '</td>' +
+          '<td style="padding:5px 6px;" title="' + (t.estacion_raw || '') + '">' + estCorta + '</td>' +
+          '<td style="padding:5px 6px;">' + (t.concepto_raw || '') + '</td>' +
           '<td style="padding:5px 6px;text-align:right;">' + (t.litros ? t.litros.toFixed(1) : '-') + '</td>' +
-          '<td style="padding:5px 6px;text-align:right;font-weight:500;">' + _gasoilFmtEur(t.importe) + '</td>' +
+          '<td style="padding:5px 6px;text-align:right;font-weight:500;">' + _gasoilFmtEur(t.importe_final) + '</td>' +
           '<td style="padding:5px 6px;">' + proyLabel + '</td>' +
           '</tr>';
       });
@@ -208,7 +207,7 @@ function _gasoilCargarEstaciones() {
         var geoIcon = e.geocoded === 1 ? '\u2705' : (e.geocoded === 2 ? '\u274c' : '\u23f3');
         var coords = e.latitud ? e.latitud.toFixed(4) + ", " + e.longitud.toFixed(4) : "\u2014";
         var pais = e.pais === "PT" ? "\uD83C\uDDF5\uD83C\uDDF9" : "\uD83C\uDDEA\uD83C\uDDF8";
-        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
+        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_gasoilEditarEstacion(' + e.id + ')">' +
           '<td style="padding:6px 8px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (e.nombre||'') + '">' + (e.nombre || '') + '</td>' +
           '<td style="padding:6px 4px;font-size:0.78rem;">' + (e.marca || '\u2014') + '</td>' +
           '<td style="padding:6px 4px;text-align:center;">' + pais + '</td>' +
@@ -271,14 +270,13 @@ function _gasoilCargarVehiculos() {
       if (!vehs.length) { tbody.innerHTML = '<tr><td colspan="7">Sin veh\u00edculos</td></tr>'; return; }
       var html = "";
       vehs.forEach(function (v) {
-        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
-          '<td style="padding:6px 8px;font-weight:600;">' + (v.matricula || '') + '</td>' +
+        var alqPill = v.es_alquiler ? ' <span style="background:#FAEEDA;color:#854F0B;font-size:9px;padding:1px 5px;border-radius:999px;">Alquiler</span>' : '';
+        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);cursor:pointer;" onclick="_gasoilEditarVehiculo(' + v.id + ')">' +
+          '<td style="padding:6px 8px;font-weight:600;">' + (v.matricula || '') + alqPill + '</td>' +
           '<td style="padding:6px 6px;">' + (v.tipo || '-') + '</td>' +
-          '<td style="padding:6px 6px;">' + (v.descripcion || '-') + '</td>' +
-          '<td style="padding:6px 6px;text-align:right;">' + _gasoilFmtEur(v.gasto_total) + '</td>' +
-          '<td style="padding:6px 6px;text-align:right;">' + _gasoilFmtNum(v.litros_total) + '</td>' +
-          '<td style="padding:6px 6px;text-align:right;">' + (v.num_transacciones || 0) + '</td>' +
-          '<td style="padding:6px 6px;">' + (v.ultimo_uso || '-') + '</td>' +
+          '<td style="padding:6px 6px;">' + (v.marca || '-') + '</td>' +
+          '<td style="padding:6px 6px;">' + (v.modelo || '-') + '</td>' +
+          '<td style="padding:6px 6px;">' + (v.notas || '-') + '</td>' +
           '</tr>';
       });
       tbody.innerHTML = html;
@@ -354,9 +352,96 @@ function _gasoilImportarSolred(input) {
 
 // ═══ Expose ═══════════════════════════════════════════════════════════════════
 
+// ═══ Vehicle edit modal ═══════════════════════════════════════════════════
+
+function _gasoilEditarVehiculo(vid) {
+  fetch("/api/combustible/vehiculos").then(function(r){return r.json();}).then(function(d) {
+    var v = (d.vehiculos||[]).find(function(x){return x.id===vid;});
+    if (!v) return;
+    var old = document.getElementById("modal-gasoil-edit"); if (old) old.remove();
+    var m = document.createElement("div"); m.id = "modal-gasoil-edit";
+    m.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:1000;display:flex;align-items:center;justify-content:center;";
+    m.innerHTML = '<div style="background:#fff;border-radius:12px;width:440px;max-width:95%;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,0.15);">' +
+      '<h3 style="margin:0 0 14px;">Editar veh\u00edculo ' + v.matricula + '</h3>' +
+      '<div style="display:grid;gap:10px;">' +
+        '<div><label style="font-size:11px;color:#888;">Tipo</label><select id="gv-tipo" style="width:100%;padding:6px;border:1px solid #E5E5E5;border-radius:6px;"><option value="pickup">Pickup</option><option value="furgoneta">Furgoneta</option><option value="camion">Cami\u00f3n</option><option value="remolque">Remolque</option><option value="turismo">Turismo</option><option value="otro">Otro</option></select></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><label style="font-size:11px;color:#888;">Marca</label><input id="gv-marca" style="width:100%;padding:6px;border:1px solid #E5E5E5;border-radius:6px;box-sizing:border-box;"></div><div><label style="font-size:11px;color:#888;">Modelo</label><input id="gv-modelo" style="width:100%;padding:6px;border:1px solid #E5E5E5;border-radius:6px;box-sizing:border-box;"></div></div>' +
+        '<div><label style="font-size:11px;color:#888;">Notas</label><input id="gv-notas" style="width:100%;padding:6px;border:1px solid #E5E5E5;border-radius:6px;box-sizing:border-box;"></div>' +
+        '<label style="display:flex;gap:6px;align-items:center;font-size:12px;"><input type="checkbox" id="gv-alquiler"> Es veh\u00edculo de alquiler</label>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">' +
+        '<button onclick="document.getElementById(\'modal-gasoil-edit\').remove()" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Cancelar</button>' +
+        '<button id="gv-save" style="padding:6px 14px;border:none;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;">Guardar</button></div></div>';
+    m.addEventListener("click", function(e) { if (e.target === m) m.remove(); });
+    document.body.appendChild(m);
+    document.getElementById("gv-tipo").value = v.tipo || "otro";
+    document.getElementById("gv-marca").value = v.marca || "";
+    document.getElementById("gv-modelo").value = v.modelo || "";
+    document.getElementById("gv-notas").value = v.notas || "";
+    document.getElementById("gv-alquiler").checked = !!v.es_alquiler;
+    document.getElementById("gv-save").addEventListener("click", function() {
+      fetch("/api/combustible/vehiculos/" + vid, {
+        method: "PUT", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({tipo: document.getElementById("gv-tipo").value, marca: document.getElementById("gv-marca").value, modelo: document.getElementById("gv-modelo").value, notas: document.getElementById("gv-notas").value, es_alquiler: document.getElementById("gv-alquiler").checked})
+      }).then(function() { m.remove(); _gasoilCargarVehiculos(); });
+    });
+  });
+}
+
+// ═══ Station edit modal ══════════════════════════════════════════════════
+
+function _gasoilEditarEstacion(eid) {
+  fetch("/api/combustible/estaciones").then(function(r){return r.json();}).then(function(d) {
+    var e = (d.estaciones||[]).find(function(x){return x.id===eid;});
+    if (!e) return;
+    var old = document.getElementById("modal-gasoil-edit"); if (old) old.remove();
+    var m = document.createElement("div"); m.id = "modal-gasoil-edit";
+    m.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:1000;display:flex;align-items:center;justify-content:center;";
+    var mapHtml = e.latitud ? '<iframe src="https://www.openstreetmap.org/export/embed.html?bbox=' + (e.longitud-0.01) + '%2C' + (e.latitud-0.01) + '%2C' + (e.longitud+0.01) + '%2C' + (e.latitud+0.01) + '&layer=mapnik&marker=' + e.latitud + '%2C' + e.longitud + '" style="width:100%;height:200px;border:1px solid #E5E5E5;border-radius:6px;"></iframe>' : '';
+    m.innerHTML = '<div style="background:#fff;border-radius:12px;width:500px;max-width:95%;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,0.15);max-height:90vh;overflow-y:auto;">' +
+      '<h3 style="margin:0 0 14px;">Editar estaci\u00f3n</h3>' +
+      '<div style="display:grid;gap:10px;">' +
+        '<div><label style="font-size:11px;color:#888;">Nombre</label><input id="ge-nombre" style="width:100%;padding:6px;border:1px solid #E5E5E5;border-radius:6px;box-sizing:border-box;"></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+          '<div><label style="font-size:11px;color:#888;">Marca</label><select id="ge-marca" style="width:100%;padding:6px;border:1px solid #E5E5E5;border-radius:6px;"><option value="cepsa">Cepsa</option><option value="moeve">Moeve</option><option value="repsol">Repsol</option><option value="galp">Galp</option><option value="">Otra</option></select></div>' +
+          '<div><label style="font-size:11px;color:#888;">Pa\u00eds</label><select id="ge-pais" style="width:100%;padding:6px;border:1px solid #E5E5E5;border-radius:6px;"><option value="ES">Espa\u00f1a</option><option value="PT">Portugal</option></select></div></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+          '<div><label style="font-size:11px;color:#888;">Municipio</label><input id="ge-municipio" style="width:100%;padding:6px;border:1px solid #E5E5E5;border-radius:6px;box-sizing:border-box;"></div>' +
+          '<div><label style="font-size:11px;color:#888;">Provincia</label><input id="ge-provincia" style="width:100%;padding:6px;border:1px solid #E5E5E5;border-radius:6px;box-sizing:border-box;"></div></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+          '<div><label style="font-size:11px;color:#888;">Latitud</label><input id="ge-lat" type="number" step="0.000001" style="width:100%;padding:6px;border:1px solid #E5E5E5;border-radius:6px;box-sizing:border-box;"></div>' +
+          '<div><label style="font-size:11px;color:#888;">Longitud</label><input id="ge-lon" type="number" step="0.000001" style="width:100%;padding:6px;border:1px solid #E5E5E5;border-radius:6px;box-sizing:border-box;"></div></div>' +
+        '<a href="https://www.google.com/maps/search/' + encodeURIComponent((e.nombre||'') + ' ' + (e.municipio||'') + ' ' + (e.provincia||'')) + '" target="_blank" style="font-size:12px;color:#2563eb;">\uD83D\uDD17 Abrir en Google Maps</a>' +
+        mapHtml +
+      '</div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">' +
+        '<button onclick="document.getElementById(\'modal-gasoil-edit\').remove()" style="padding:6px 14px;border:1px solid #ccc;border-radius:6px;background:#fff;cursor:pointer;">Cancelar</button>' +
+        '<button id="ge-save" style="padding:6px 14px;border:none;border-radius:6px;background:#2563eb;color:#fff;cursor:pointer;">Guardar</button></div></div>';
+    m.addEventListener("click", function(ev) { if (ev.target === m) m.remove(); });
+    document.body.appendChild(m);
+    document.getElementById("ge-nombre").value = e.nombre || "";
+    document.getElementById("ge-marca").value = e.marca || "";
+    document.getElementById("ge-pais").value = e.pais || "ES";
+    document.getElementById("ge-municipio").value = e.municipio || "";
+    document.getElementById("ge-provincia").value = e.provincia || "";
+    document.getElementById("ge-lat").value = e.latitud || "";
+    document.getElementById("ge-lon").value = e.longitud || "";
+    document.getElementById("ge-save").addEventListener("click", function() {
+      fetch("/api/combustible/estaciones/" + eid, {
+        method: "PUT", headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({nombre: document.getElementById("ge-nombre").value, marca: document.getElementById("ge-marca").value, pais: document.getElementById("ge-pais").value, municipio: document.getElementById("ge-municipio").value, provincia: document.getElementById("ge-provincia").value, latitud: document.getElementById("ge-lat").value || null, longitud: document.getElementById("ge-lon").value || null})
+      }).then(function() { m.remove(); _gasoilCargarEstaciones(); });
+    });
+  });
+}
+
+// ═══ Expose ═══════════════════════════════════════════════════════════════════
+
 window._gasoilOnPanelShow = _gasoilOnPanelShow;
 window._gasoilImportarMoeve = _gasoilImportarMoeve;
 window._gasoilImportarSolred = _gasoilImportarSolred;
+window._gasoilEditarVehiculo = _gasoilEditarVehiculo;
+window._gasoilEditarEstacion = _gasoilEditarEstacion;
 window._gasoilFiltrar = _gasoilFiltrar;
 window._gasoilPagNext = _gasoilPagNext;
 window._gasoilPagPrev = _gasoilPagPrev;
