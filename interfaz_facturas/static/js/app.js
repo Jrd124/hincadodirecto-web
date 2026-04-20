@@ -628,14 +628,10 @@ document.getElementById("nav-proyectos-modulo").addEventListener("click", (e) =>
 });
 document.getElementById("nav-operaciones-modulo").addEventListener("click", (e) => {
   e.preventDefault();
-  var oc = document.getElementById("sidebar-children-operaciones");
-  if (oc) { oc.classList.toggle("open"); e.currentTarget.classList.toggle("expanded"); }
   activarModulo("operaciones");
 });
 document.getElementById("nav-gasoil-modulo").addEventListener("click", (e) => {
   e.preventDefault();
-  var gc = document.getElementById("sidebar-children-gasoil");
-  if (gc) { gc.classList.toggle("open"); e.currentTarget.classList.toggle("expanded"); }
   activarModulo("gasoil");
   if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("inicio");
 });
@@ -1072,6 +1068,16 @@ if (navCae) navCae.addEventListener("click", function (e) {
         var ll = document.getElementById("nav-maquinaria-listado");
         if (ll) ll.classList.add("activo");
       }
+    } else if (moduloActivo === "operaciones") {
+      var opm = document.getElementById("nav-operaciones-modulo");
+      if (opm) { opm.classList.add("activo"); opm.classList.add("expanded"); }
+      var opc = document.getElementById("sidebar-children-operaciones");
+      if (opc) opc.classList.add("open");
+    } else if (moduloActivo === "gasoil") {
+      var gam = document.getElementById("nav-gasoil-modulo");
+      if (gam) { gam.classList.add("activo"); gam.classList.add("expanded"); }
+      var gac = document.getElementById("sidebar-children-gasoil");
+      if (gac) gac.classList.add("open");
     }
 
     // Close sidebar on mobile after nav
