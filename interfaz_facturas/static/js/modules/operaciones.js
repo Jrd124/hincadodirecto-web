@@ -164,6 +164,8 @@ function _fetchCuadrante() {
       document.getElementById("oper-kpi-maq").textContent = d.maq_hoy + " / " + d.maq_total;
       var kpiAveria = document.getElementById("oper-kpi-maq-averia");
       if (kpiAveria) kpiAveria.textContent = (d.maq_averia || 0) + " / " + d.maq_total;
+      var kpiVeh = document.getElementById("oper-kpi-veh");
+      if (kpiVeh) kpiVeh.textContent = (d.veh_hoy || 0) + " / " + (d.veh_total || 0);
       document.getElementById("oper-kpi-proy").textContent = d.proy_activos;
       var ocEl = document.getElementById("oper-kpi-ocup");
       ocEl.textContent = d.ocupacion + "%";
@@ -240,8 +242,13 @@ function _renderCuadrante() {
     html += _renderFila("empleado", emp.id, emp.nombre + (emp.apellidos ? " " + emp.apellidos.split(" ")[0] : ""), emp.puesto || "", dias, d.asignaciones, proyMap, "ayudantes");
   });
 
-  // 4. Vehículos (empty placeholder)
-  html += _renderGrupoHeader("vehiculos", "Veh\u00edculos", 0, colSpan);
+  // 4. Vehículos
+  var vehs = d.vehiculos || [];
+  html += _renderGrupoHeader("vehiculos", "\uD83D\uDE97 Veh\u00edculos", vehs.length, colSpan);
+  vehs.forEach(function (v) {
+    var sub = (v.tipo || "otro") + (v.es_alquiler ? " \u00b7 alquiler" : "");
+    html += _renderFila("vehiculo", v.id, v.matricula + (v.marca ? " " + v.marca : ""), sub, dias, d.asignaciones, proyMap, "vehiculos");
+  });
 
   // 5. Otros (if any)
   if (otros.length) {
@@ -785,6 +792,24 @@ function _abrirModalMasivo() {
       '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;"><div style="' + _L + 'margin-bottom:0;">M\u00e1quinas (' + _operData.maquinas.length + ')</div>' +
       '<button onclick="document.querySelectorAll(\'input[name=oper-m-maq]:not(:disabled)\').forEach(function(c){c.checked=true;});_operMasivoResumen();" style="background:none;border:none;font-size:11px;color:#185FA5;cursor:pointer;">Seleccionar todas</button></div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;border:0.5px solid #E5E5E5;border-radius:8px;padding:6px;">' + maqHtml + '</div></div>' +
+    // Vehículos
+    (function() {
+      var vehs = _operData.vehiculos || [];
+      if (!vehs.length) return '';
+      var vHtml = '';
+      vehs.forEach(function(v) {
+        var pill = v.es_alquiler ? '<span style="background:#FAEEDA;color:#854F0B;font-size:9px;padding:1px 5px;border-radius:999px;">Alquiler</span>' : '';
+        vHtml += '<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background=\'#F5F7FA\'" onmouseout="this.style.background=\'transparent\'">' +
+          '<input type="checkbox" name="oper-m-veh" value="' + v.id + '" style="margin:0;" onchange="_operMasivoResumen()">' +
+          '<span style="font-size:14px;">\uD83D\uDE97</span>' +
+          '<div style="flex:1;"><div style="font-size:13px;font-weight:500;">' + v.matricula + '</div><div style="font-size:11px;color:#888780;">' + (v.tipo||'otro') + (v.marca ? ' \u00b7 ' + v.marca : '') + '</div></div>' +
+          pill + '</label>';
+      });
+      return '<div style="margin-bottom:20px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;"><div style="' + _L + 'margin-bottom:0;">Veh\u00edculos (' + vehs.length + ')</div>' +
+        '<button onclick="document.querySelectorAll(\'input[name=oper-m-veh]:not(:disabled)\').forEach(function(c){c.checked=true;});_operMasivoResumen();" style="background:none;border:none;font-size:11px;color:#185FA5;cursor:pointer;">Seleccionar todos</button></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;border:0.5px solid #E5E5E5;border-radius:8px;padding:6px;">' + vHtml + '</div></div>';
+    })() +
     // Resumen
     '<div style="padding:12px 14px;background:#EEF4FA;border-radius:8px;font-size:12px;">' +
       '<div style="display:flex;justify-content:space-between;"><span style="color:#888780;">Seleccionados:</span><span style="font-weight:500;" id="oper-masivo-resumen-count">0 empleados + 0 m\u00e1quinas</span></div></div>' +
@@ -806,8 +831,9 @@ function _abrirModalMasivo() {
 window._operMasivoResumen = function() {
   var empC = document.querySelectorAll("input[name=oper-m-emp]:checked").length;
   var maqC = document.querySelectorAll("input[name=oper-m-maq]:checked").length;
+  var vehC = document.querySelectorAll("input[name=oper-m-veh]:checked").length;
   var el = document.getElementById("oper-masivo-resumen-count");
-  if (el) el.textContent = empC + " empleados + " + maqC + " m\u00e1quinas";
+  if (el) el.textContent = empC + " empleados + " + maqC + " m\u00e1quinas" + (vehC ? " + " + vehC + " veh\u00edculos" : "");
 };
 
 function _ejecutarAsignacionMasiva() {
@@ -827,6 +853,9 @@ function _ejecutarAsignacionMasiva() {
   });
   document.querySelectorAll("input[name=oper-m-maq]:checked").forEach(function (cb) {
     recursos.push({ tipo: "maquina", id: parseInt(cb.value) });
+  });
+  document.querySelectorAll("input[name=oper-m-veh]:checked").forEach(function (cb) {
+    recursos.push({ tipo: "vehiculo", id: parseInt(cb.value) });
   });
   if (!recursos.length) { alert("Selecciona al menos un recurso"); return; }
 

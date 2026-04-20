@@ -114,6 +114,14 @@ def cuadrante():
             "SELECT id, nombre, modelo, estado FROM maquinas WHERE activa = 1 ORDER BY nombre"
         ).fetchall()]
 
+        # Vehículos activos
+        try:
+            vehiculos = [dict(r) for r in conn.execute(
+                "SELECT id, matricula, tipo, marca, modelo, es_alquiler, empleado_asignado_id FROM vehiculos WHERE activa = 1 ORDER BY matricula"
+            ).fetchall()]
+        except Exception:
+            vehiculos = []
+
         # Proyectos activos (para paleta de colores y asignación)
         proyectos = [dict(r) for r in conn.execute(
             "SELECT id, nombre, codigo, estado FROM proyectos WHERE estado IN ('vivo','en_curso','adjudicado') ORDER BY nombre"
@@ -161,6 +169,7 @@ def cuadrante():
             "dias": dias,
             "empleados": empleados,
             "maquinas": maquinas,
+            "vehiculos": vehiculos,
             "proyectos": proyectos,
             "asignaciones": asignaciones,
             "vacaciones": list(vacaciones),
@@ -376,6 +385,15 @@ def resumen():
             "WHERE recurso_tipo = 'maquina' AND fecha = ? AND estado = 'averia'", (hoy,)
         ).fetchone()[0]
 
+        veh_hoy = conn.execute(
+            "SELECT COUNT(DISTINCT recurso_id) FROM proyecto_asignaciones "
+            "WHERE recurso_tipo = 'vehiculo' AND fecha = ?", (hoy,)
+        ).fetchone()[0]
+        try:
+            total_veh = conn.execute("SELECT COUNT(*) FROM vehiculos WHERE activa = 1").fetchone()[0]
+        except Exception:
+            total_veh = 0
+
         proy_activos = conn.execute(
             "SELECT COUNT(*) FROM proyectos WHERE estado IN ('vivo','en_curso','adjudicado')"
         ).fetchone()[0]
@@ -395,6 +413,7 @@ def resumen():
         return jsonify({
             "emp_hoy": emp_hoy, "emp_total": total_emp,
             "maq_hoy": maq_hoy, "maq_averia": maq_averia, "maq_total": total_maq,
+            "veh_hoy": veh_hoy, "veh_total": total_veh,
             "proy_activos": proy_activos,
             "ocupacion": ocupacion,
             "ocupacion_detalle": {

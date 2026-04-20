@@ -27,6 +27,14 @@ def init_combustible_db():
             conn.execute("ALTER TABLE vehiculos ADD COLUMN empleado_asignado_id INTEGER")
         if "activa" not in v_cols:
             conn.execute("ALTER TABLE vehiculos ADD COLUMN activa INTEGER DEFAULT 1")
+        if "es_alquiler" not in v_cols:
+            conn.execute("ALTER TABLE vehiculos ADD COLUMN es_alquiler INTEGER DEFAULT 0")
+        if "fecha_alquiler_inicio" not in v_cols:
+            conn.execute("ALTER TABLE vehiculos ADD COLUMN fecha_alquiler_inicio TEXT")
+        if "fecha_alquiler_fin" not in v_cols:
+            conn.execute("ALTER TABLE vehiculos ADD COLUMN fecha_alquiler_fin TEXT")
+        if "proveedor_alquiler" not in v_cols:
+            conn.execute("ALTER TABLE vehiculos ADD COLUMN proveedor_alquiler TEXT")
 
         # Tarjetas de combustible
         conn.execute("""

@@ -1438,6 +1438,14 @@ def recursos_disponibles(fecha: str, recurso_tipo: str = "") -> list[dict]:
                 if r["id"] not in ocu_maq:
                     result.append({"tipo": "maquina", "id": r["id"], "nombre": r["nombre"], "detalle": r["modelo"] or ""})
 
+        if not recurso_tipo or recurso_tipo == "vehiculo":
+            try:
+                for r in conn.execute("SELECT id, matricula, tipo, marca FROM vehiculos WHERE activa=1 ORDER BY matricula").fetchall():
+                    if r["id"] not in ocu_veh:
+                        result.append({"tipo": "vehiculo", "id": r["id"], "nombre": r["matricula"], "detalle": (r["tipo"] or "") + (" " + r["marca"] if r["marca"] else "")})
+            except Exception:
+                pass
+
         return result
     finally:
         conn.close()
