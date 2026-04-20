@@ -38,14 +38,14 @@ const MODULOS = {
   },
   operaciones: {
     linkId: "nav-operaciones-modulo",
-    submenuId: "submenu-operaciones",
+    submenuId: "sidebar-children-operaciones",
     paneles: { inicio: "panel-operaciones-inicio", transporte: "panel-operaciones-transporte", onboarding: "panel-operaciones-onboarding" },
     subNavLinks: { transporte: "nav-operaciones-transporte", onboarding: "nav-operaciones-onboarding" },
     defecto: "inicio",
   },
   gasoil: {
     linkId: "nav-gasoil-modulo",
-    submenuId: "submenu-gasoil",
+    submenuId: "sidebar-children-gasoil",
     paneles: { inicio: "panel-gasoil-inicio", transacciones: "panel-gasoil-transacciones", estaciones: "panel-gasoil-estaciones", vehiculos: "panel-gasoil-vehiculos" },
     subNavLinks: { dashboard: "nav-gasoil-dashboard", transacciones: "nav-gasoil-transacciones", estaciones: "nav-gasoil-estaciones", vehiculos: "nav-gasoil-vehiculos" },
     defecto: "inicio",
