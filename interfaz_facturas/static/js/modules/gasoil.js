@@ -126,6 +126,7 @@ function _gasoilHtmlEstaciones() {
     '<div style="display:flex;gap:8px;align-items:center;">' +
       '<span id="gasoil-geo-status" style="font-size:12px;color:#666;display:none;"></span>' +
       '<button id="gasoil-btn-geocodificar" onclick="_gasoilGeocodificar()" class="btn-small" style="background:#DCFCE7;color:#166534;border:1px solid #86EFAC;">\uD83C\uDF0D Geocodificar pendientes</button>' +
+      '<button onclick="_gasoilGeoCompleto()" class="btn-small" style="background:#EFF6FF;color:#1E40AF;border:1px solid #93C5FD;">\uD83D\uDD04 Geocodificaci\u00f3n completa</button>' +
     '</div></div>' +
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">' +
       '<input id="filtro-estacion-busqueda" type="text" placeholder="Buscar nombre..." oninput="_gasoilFiltrarEstaciones()" style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;width:160px;">' +
@@ -483,6 +484,29 @@ function _gasoilGeocodificar() {
   _lote();
 }
 
+function _gasoilGeoCompleto() {
+  var status = document.getElementById("gasoil-geo-status");
+  if (status) { status.style.display = ""; status.textContent = "\u23f3 Ejecutando geocodificaci\u00f3n completa (puede tardar varios minutos)..."; }
+  fetch("/api/combustible/geocodificar-completo", { method: "POST" })
+    .then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    })
+    .then(function (d) {
+      if (d.error) { if (status) status.textContent = "\u274c " + d.error; return; }
+      var res = d.resumen || {};
+      var msg = "\u2705 Completo: " + (d.manual || 0) + " manual, " + (d.nominatim || 0) + " Nominatim, " +
+        (d.fallidas || 0) + " irrecuperables, " + (d.corregidos_fp || 0) + " FP corregidos, " +
+        (d.peajes_marcados || 0) + " peajes. Resumen: ";
+      Object.keys(res).forEach(function(k) { msg += "geo=" + k + ":" + res[k] + " "; });
+      if (status) status.textContent = msg;
+      _gasoilCargarEstaciones();
+    })
+    .catch(function (e) {
+      if (status) status.textContent = "\u274c Error: " + e.message;
+    });
+}
+
 // ═══ Vehículos ══════════════════════════════════════════════════════════════
 
 function _gasoilCargarVehiculos() {
@@ -753,5 +777,6 @@ window._gasoilFiltrarEstaciones = _gasoilFiltrarEstaciones;
 window._gasoilPagNext = _gasoilPagNext;
 window._gasoilPagPrev = _gasoilPagPrev;
 window._gasoilGeocodificar = _gasoilGeocodificar;
+window._gasoilGeoCompleto = _gasoilGeoCompleto;
 window._gasoilCargarEstaciones = _gasoilCargarEstaciones;
 window._gasoilCargarVehiculos = _gasoilCargarVehiculos;

@@ -382,6 +382,18 @@ def api_combustible_geocodificar():
         return jsonify({"error": str(e), "tipo": type(e).__name__}), 500
 
 
+@moeve_bp.post("/api/combustible/geocodificar-completo")
+def api_combustible_geocodificar_completo():
+    """Full geocoding: fix false positives + clean names + retry all."""
+    from core.combustible_geocoding import geocodificar_completo
+    try:
+        stats = geocodificar_completo()
+        return jsonify(stats)
+    except Exception as e:
+        logger.exception("Error in full geocoding")
+        return jsonify({"error": str(e), "tipo": type(e).__name__}), 500
+
+
 @moeve_bp.get("/api/combustible/estaciones")
 def api_combustible_estaciones():
     from core.combustible_db import init_combustible_db
