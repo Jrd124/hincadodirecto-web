@@ -585,3 +585,67 @@ def api_combustible_transacciones_v2():
 def api_combustible_archivo_legacy():
     from core.combustible_db import get_archivo_legacy_count
     return jsonify({"count": get_archivo_legacy_count()})
+
+
+# ═══ Imputación a proyectos ══════════════════════════════════════════════════
+
+@moeve_bp.post("/api/combustible/imputacion/ejecutar")
+def api_imputacion_ejecutar():
+    from core.combustible_imputacion import ejecutar_auto_imputacion
+    data = request.get_json(silent=True) or {}
+    solo = data.get("solo_pendientes", True)
+    try:
+        stats = ejecutar_auto_imputacion(solo_pendientes=solo)
+        return jsonify(stats)
+    except Exception as e:
+        logger.exception("Error imputacion")
+        return jsonify({"error": str(e)}), 500
+
+
+@moeve_bp.get("/api/combustible/imputacion/resumen")
+def api_imputacion_resumen():
+    from core.combustible_imputacion import resumen_imputacion
+    return jsonify(resumen_imputacion())
+
+
+@moeve_bp.get("/api/combustible/imputacion/pendientes")
+def api_imputacion_pendientes():
+    from core.combustible_imputacion import listar_pendientes_revision
+    limit = min(request.args.get("limit", 50, type=int), 200)
+    offset = request.args.get("offset", 0, type=int)
+    return jsonify(listar_pendientes_revision(limit, offset))
+
+
+@moeve_bp.get("/api/combustible/imputacion/sin-asignar")
+def api_imputacion_sin_asignar():
+    from core.combustible_imputacion import listar_sin_asignar
+    return jsonify(listar_sin_asignar(
+        limit=min(request.args.get("limit", 50, type=int), 200),
+        offset=request.args.get("offset", 0, type=int),
+        matricula=request.args.get("matricula"),
+        mes=request.args.get("mes"),
+    ))
+
+
+@moeve_bp.post("/api/combustible/imputacion/resolver")
+def api_imputacion_resolver():
+    from core.combustible_imputacion import resolver_propuesta
+    data = request.get_json(force=True)
+    resolver_propuesta(data['transaccion_id'], data['accion'], data.get('proyecto_id'))
+    return jsonify({"ok": True})
+
+
+@moeve_bp.post("/api/combustible/imputacion/asignar-bulk")
+def api_imputacion_asignar_bulk():
+    from core.combustible_imputacion import asignar_bulk
+    data = request.get_json(force=True)
+    n = asignar_bulk(data['transaccion_ids'], data['proyecto_id'])
+    return jsonify({"ok": True, "asignadas": n})
+
+
+@moeve_bp.post("/api/combustible/imputacion/confirmar-alta-confianza")
+def api_imputacion_confirmar_alta():
+    from core.combustible_imputacion import confirmar_alta_confianza
+    data = request.get_json(silent=True) or {}
+    n = confirmar_alta_confianza(data.get("umbral", 0.8))
+    return jsonify({"ok": True, "confirmadas": n})

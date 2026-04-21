@@ -49,6 +49,7 @@ function _gasoilCambiarTab(tab) {
     _gasoilCargarVehiculos();
   } else if (tab === "imputacion") {
     container.innerHTML = _gasoilHtmlImputacion();
+    _impCargarResumen();
   }
 }
 
@@ -168,12 +169,170 @@ function _gasoilHtmlVehiculos() {
 }
 
 function _gasoilHtmlImputacion() {
-  return '<div style="padding:40px;text-align:center;background:#F5F7FA;border-radius:12px;border:1px dashed #D3D1C7;">' +
-    '<div style="font-size:48px;margin-bottom:12px;">\uD83D\uDCCD</div>' +
-    '<h3 style="margin:0 0 8px;">Imputaci\u00f3n a proyectos</h3>' +
-    '<p style="color:#888780;max-width:500px;margin:0 auto;">Sistema de auto-imputaci\u00f3n con validaci\u00f3n. Las transacciones se asignar\u00e1n autom\u00e1ticamente al proyecto m\u00e1s probable (por matr\u00edcula del veh\u00edculo asignado ese d\u00eda, o por geolocalizaci\u00f3n estaci\u00f3n \u2194 proyecto), y t\u00fa confirmar\u00e1s o cambiar\u00e1s las propuestas.</p>' +
-    '<div style="margin-top:16px;"><span style="background:#FAEEDA;color:#854F0B;padding:4px 12px;border-radius:999px;font-size:12px;">\uD83D\uDEA7 Pr\u00f3ximamente</span></div>' +
-  '</div>';
+  return '<div id="imp-resumen" style="margin-bottom:16px;"></div>' +
+    '<div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;">' +
+      '<button onclick="_impEjecutar()" style="padding:8px 18px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">\uD83D\uDD04 Ejecutar auto-imputaci\u00f3n</button>' +
+      '<label style="font-size:12px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="imp-reprocesar"> Reprocesar todas</label>' +
+      '<button onclick="_impConfirmarAlta()" style="padding:6px 14px;background:#DCFCE7;color:#166534;border:1px solid #86EFAC;border-radius:6px;font-size:12px;cursor:pointer;">\u2705 Confirmar &gt;80%</button>' +
+      '<span id="imp-status" style="font-size:12px;color:#666;"></span>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;margin-bottom:12px;border-bottom:1px solid #E5E5E5;padding-bottom:0;">' +
+      '<button class="imp-subtab active" data-imp-tab="revisar" onclick="_impCambiarVista(\'revisar\')" style="padding:8px 16px;font-size:13px;font-weight:500;background:transparent;border:none;border-bottom:3px solid #1D9E75;cursor:pointer;color:#2C2C2A;">\uD83D\uDD0D Por revisar (<span id="imp-count-revisar">0</span>)</button>' +
+      '<button class="imp-subtab" data-imp-tab="sinasignar" onclick="_impCambiarVista(\'sinasignar\')" style="padding:8px 16px;font-size:13px;font-weight:500;background:transparent;border:none;border-bottom:3px solid transparent;cursor:pointer;color:#888780;">\u2753 Sin asignar (<span id="imp-count-sin">0</span>)</button>' +
+    '</div>' +
+    '<div id="imp-content"><p style="color:#94a3b8;padding:20px;text-align:center;">Cargando...</p></div>';
+}
+
+var _impVistaActiva = "revisar";
+
+function _impCargarResumen() {
+  fetch("/api/combustible/imputacion/resumen").then(function(r){return r.json();}).then(function(d) {
+    var el = document.getElementById("imp-resumen");
+    if (!el) return;
+    var pct = d.pct_imputado || 0;
+    var barColor = pct > 70 ? '#22c55e' : pct > 40 ? '#eab308' : '#ef4444';
+    el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">' +
+      '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:10px;color:#888;text-transform:uppercase;">Total</div><div style="font-size:22px;font-weight:600;">' + (d.total || 0) + '</div></div>' +
+      '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:10px;color:#888;text-transform:uppercase;">\u2705 Imputadas</div><div style="font-size:22px;font-weight:600;color:#16a34a;">' + (d.imputadas || 0) + '</div>' +
+        '<div style="height:4px;background:#e5e7eb;border-radius:2px;margin-top:4px;"><div style="height:4px;background:'+barColor+';border-radius:2px;width:'+pct+'%;"></div></div>' +
+        '<div style="font-size:10px;color:#888;">' + pct + '%</div></div>' +
+      '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:10px;color:#888;text-transform:uppercase;">\uD83D\uDD0D Revisar</div><div style="font-size:22px;font-weight:600;color:#eab308;">' + (d.pendientes_revisar || 0) + '</div></div>' +
+      '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:10px;color:#888;text-transform:uppercase;">\u2753 Sin asignar</div><div style="font-size:22px;font-weight:600;color:#ef4444;">' + (d.sin_asignar || 0) + '</div></div>' +
+      '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:10px;color:#888;text-transform:uppercase;">Matr\u00edcula</div><div style="font-size:18px;font-weight:500;">' + (d.imputadas_matricula || 0) + '</div></div>' +
+      '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:10px;color:#888;text-transform:uppercase;">Geo</div><div style="font-size:18px;font-weight:500;">' + (d.imputadas_geo || 0) + '</div></div>' +
+    '</div>';
+    if (d.excluidos) {
+      el.innerHTML += '<div style="font-size:11px;color:#888;margin-top:6px;">Excluidos: ' + (d.excluidos.peajes_count||0) + ' peajes (' + _gasoilFmtEur(d.excluidos.peajes_eur) + ') + ' + (d.excluidos.descuentos_count||0) + ' descuentos (' + _gasoilFmtEur(d.excluidos.descuentos_eur) + ')</div>';
+    }
+    var cr = document.getElementById("imp-count-revisar"); if (cr) cr.textContent = d.pendientes_revisar || 0;
+    var cs = document.getElementById("imp-count-sin"); if (cs) cs.textContent = d.sin_asignar || 0;
+    _impCambiarVista(_impVistaActiva);
+  }).catch(function(){});
+}
+
+function _impEjecutar() {
+  var status = document.getElementById("imp-status");
+  if (status) status.textContent = "\u23F3 Ejecutando...";
+  var repro = document.getElementById("imp-reprocesar");
+  fetch("/api/combustible/imputacion/ejecutar", {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({solo_pendientes: !(repro && repro.checked)})
+  }).then(function(r){return r.json();}).then(function(d) {
+    if (d.error) { if (status) status.textContent = "\u274C " + d.error; return; }
+    if (status) status.textContent = "\u2705 " + (d.imputadas_matricula||0) + " matr, " + (d.imputadas_geo||0) + " geo, " + (d.propuestas_revisar||0) + " revisar, " + (d.sin_match||0) + " sin match";
+    _impCargarResumen();
+  }).catch(function(e) { if (status) status.textContent = "\u274C " + e.message; });
+}
+
+function _impConfirmarAlta() {
+  fetch("/api/combustible/imputacion/confirmar-alta-confianza", {method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"})
+    .then(function(r){return r.json();}).then(function(d) {
+      var status = document.getElementById("imp-status");
+      if (status) status.textContent = "\u2705 " + (d.confirmadas||0) + " confirmadas autom\u00e1ticamente";
+      _impCargarResumen();
+    });
+}
+
+function _impCambiarVista(tab) {
+  _impVistaActiva = tab;
+  document.querySelectorAll(".imp-subtab").forEach(function(t) {
+    var act = t.getAttribute("data-imp-tab") === tab;
+    t.style.borderBottomColor = act ? "#1D9E75" : "transparent";
+    t.style.color = act ? "#2C2C2A" : "#888780";
+    t.classList.toggle("active", act);
+  });
+  if (tab === "revisar") _impCargarPendientes();
+  else _impCargarSinAsignar();
+}
+
+function _impCargarPendientes() {
+  var el = document.getElementById("imp-content");
+  if (!el) return;
+  el.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">Cargando...</p>';
+  fetch("/api/combustible/imputacion/pendientes?limit=50").then(function(r){return r.json();}).then(function(d) {
+    var txns = d.transacciones || [];
+    if (!txns.length) { el.innerHTML = '<p style="color:#94a3b8;padding:30px;text-align:center;">Sin propuestas pendientes de revisi\u00f3n</p>'; return; }
+    var html = '<div class="card" style="overflow-x:auto;padding:0;"><table style="width:100%;border-collapse:collapse;font-size:0.8rem;">' +
+      '<thead><tr style="background:#f8f9fa;"><th style="padding:6px;">Fecha</th><th style="padding:6px;">Matr.</th><th style="padding:6px;">Estaci\u00f3n</th><th style="padding:6px;">Concepto</th><th style="padding:6px;text-align:right;">Litros</th><th style="padding:6px;text-align:right;">Importe</th><th style="padding:6px;">Proyecto propuesto</th><th style="padding:6px;text-align:center;">Conf.</th><th style="padding:6px;text-align:center;">Acciones</th></tr></thead><tbody>';
+    txns.forEach(function(t) {
+      var conf = Math.round((t.proyecto_confianza || 0) * 100);
+      var confColor = conf >= 80 ? '#16a34a' : conf >= 60 ? '#ca8a04' : '#dc2626';
+      var proyPill = t.proy_codigo ? '<span style="background:#EFF6FF;color:#1E40AF;padding:2px 8px;border-radius:999px;font-size:10px;">' + t.proy_codigo + '</span> ' + (t.proy_nombre||'') : '<span style="color:#888;">\u2014</span>';
+      html += '<tr style="border-bottom:1px solid #e9ecef;">' +
+        '<td style="padding:5px 6px;">' + (t.fecha_operacion||'').substring(0,10) + '</td>' +
+        '<td style="padding:5px 6px;font-weight:500;">' + (t.matricula_raw||'-') + '</td>' +
+        '<td style="padding:5px 6px;font-size:0.75rem;">' + (t.estacion_nombre||'-') + '</td>' +
+        '<td style="padding:5px 6px;">' + (t.concepto_raw||'') + '</td>' +
+        '<td style="padding:5px 6px;text-align:right;">' + (t.litros ? t.litros.toFixed(1) : '-') + '</td>' +
+        '<td style="padding:5px 6px;text-align:right;font-weight:500;">' + _gasoilFmtEur(t.importe_final) + '</td>' +
+        '<td style="padding:5px 6px;">' + proyPill + '</td>' +
+        '<td style="padding:5px 6px;text-align:center;"><span style="color:'+confColor+';font-weight:600;">' + conf + '%</span></td>' +
+        '<td style="padding:5px 6px;text-align:center;white-space:nowrap;">' +
+          '<button onclick="_impResolver('+t.id+',\'confirmar\')" style="background:none;border:none;cursor:pointer;font-size:14px;" title="Confirmar">\u2705</button>' +
+          '<button onclick="_impResolver('+t.id+',\'sin_proyecto\')" style="background:none;border:none;cursor:pointer;font-size:14px;" title="Sin proyecto">\u274C</button>' +
+        '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+    if (d.total > 50) html += '<div style="font-size:12px;color:#888;margin-top:8px;">Mostrando 50 de ' + d.total + '</div>';
+    el.innerHTML = html;
+  }).catch(function(e) { el.innerHTML = '<p style="color:#dc3545;">Error: ' + e.message + '</p>'; });
+}
+
+function _impCargarSinAsignar() {
+  var el = document.getElementById("imp-content");
+  if (!el) return;
+  el.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">Cargando...</p>';
+  fetch("/api/combustible/imputacion/sin-asignar?limit=50").then(function(r){return r.json();}).then(function(d) {
+    var txns = d.transacciones || [];
+    if (!txns.length) { el.innerHTML = '<p style="color:#94a3b8;padding:30px;text-align:center;">Todas las transacciones est\u00e1n asignadas o en revisi\u00f3n</p>'; return; }
+    var html = '<div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;">' +
+      '<select id="imp-bulk-proy" style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;"><option value="">Proyecto...</option></select>' +
+      '<button onclick="_impAsignarBulk()" style="padding:4px 12px;background:#2563eb;color:#fff;border:none;border-radius:4px;font-size:12px;cursor:pointer;">Asignar seleccionados</button>' +
+    '</div>';
+    html += '<div class="card" style="overflow-x:auto;padding:0;"><table style="width:100%;border-collapse:collapse;font-size:0.8rem;">' +
+      '<thead><tr style="background:#f8f9fa;"><th style="padding:6px;"><input type="checkbox" id="imp-check-all" onchange="document.querySelectorAll(\'.imp-check\').forEach(function(c){c.checked=document.getElementById(\'imp-check-all\').checked})"></th><th style="padding:6px;">Fecha</th><th style="padding:6px;">Matr.</th><th style="padding:6px;">Estaci\u00f3n</th><th style="padding:6px;">Concepto</th><th style="padding:6px;text-align:right;">Litros</th><th style="padding:6px;text-align:right;">Importe</th></tr></thead><tbody>';
+    txns.forEach(function(t) {
+      html += '<tr style="border-bottom:1px solid #e9ecef;">' +
+        '<td style="padding:5px 6px;"><input type="checkbox" class="imp-check" value="'+t.id+'"></td>' +
+        '<td style="padding:5px 6px;">' + (t.fecha_operacion||'').substring(0,10) + '</td>' +
+        '<td style="padding:5px 6px;font-weight:500;">' + (t.matricula_raw||'-') + '</td>' +
+        '<td style="padding:5px 6px;font-size:0.75rem;">' + (t.estacion_nombre||'-') + '</td>' +
+        '<td style="padding:5px 6px;">' + (t.concepto_raw||'') + '</td>' +
+        '<td style="padding:5px 6px;text-align:right;">' + (t.litros ? t.litros.toFixed(1) : '-') + '</td>' +
+        '<td style="padding:5px 6px;text-align:right;font-weight:500;">' + _gasoilFmtEur(t.importe_final) + '</td>' +
+        '</tr>';
+    });
+    html += '</tbody></table></div>';
+    if (d.total > 50) html += '<div style="font-size:12px;color:#888;margin-top:8px;">Mostrando 50 de ' + d.total + '</div>';
+    el.innerHTML = html;
+    // Populate project dropdown
+    fetch("/api/proyectos/lista?estado=vivo").then(function(r){return r.json();}).then(function(pd) {
+      var sel = document.getElementById("imp-bulk-proy");
+      if (!sel) return;
+      (pd.proyectos || pd || []).forEach(function(p) {
+        sel.innerHTML += '<option value="'+p.id+'">'+(p.codigo||'')+' '+(p.nombre||'')+'</option>';
+      });
+    }).catch(function(){});
+  }).catch(function(e) { el.innerHTML = '<p style="color:#dc3545;">Error: ' + e.message + '</p>'; });
+}
+
+function _impResolver(txId, accion) {
+  fetch("/api/combustible/imputacion/resolver", {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({transaccion_id: txId, accion: accion})
+  }).then(function() { _impCargarResumen(); });
+}
+
+function _impAsignarBulk() {
+  var proyId = (document.getElementById("imp-bulk-proy")||{}).value;
+  if (!proyId) { alert("Selecciona un proyecto"); return; }
+  var ids = [];
+  document.querySelectorAll(".imp-check:checked").forEach(function(c) { ids.push(parseInt(c.value)); });
+  if (!ids.length) { alert("Selecciona transacciones"); return; }
+  fetch("/api/combustible/imputacion/asignar-bulk", {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({transaccion_ids: ids, proyecto_id: parseInt(proyId)})
+  }).then(function() { _impCargarResumen(); });
 }
 
 // ═══ Dashboard ═══════════════════════════════════════════════════════════════
@@ -780,3 +939,9 @@ window._gasoilGeocodificar = _gasoilGeocodificar;
 window._gasoilGeoCompleto = _gasoilGeoCompleto;
 window._gasoilCargarEstaciones = _gasoilCargarEstaciones;
 window._gasoilCargarVehiculos = _gasoilCargarVehiculos;
+window._impCargarResumen = _impCargarResumen;
+window._impEjecutar = _impEjecutar;
+window._impConfirmarAlta = _impConfirmarAlta;
+window._impCambiarVista = _impCambiarVista;
+window._impResolver = _impResolver;
+window._impAsignarBulk = _impAsignarBulk;
