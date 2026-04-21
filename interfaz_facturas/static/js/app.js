@@ -300,11 +300,11 @@ function cargarDashboardDirector() {
       var h = '';
       lista.forEach(function (c) {
         if (c.dias_restantes === 0) {
-          h += '<div style="padding:5px 0;border-bottom:1px solid #f1f1f1;">\uD83C\uDF88 <span style="color:#16a34a;font-weight:600;">Hoy</span> \u00b7 ' + c.nombre + ' \u00b7 cumple ' + c.edad_cumplira + '</div>';
+          h += '<div style="padding:5px 0;border-bottom:1px solid #f1f1f1;">\uD83C\uDF88 <span style="color:#16a34a;font-weight:600;">Hoy (' + (c.dia_semana || '') + ')</span> \u00b7 ' + c.nombre + ' \u00b7 cumple ' + c.edad_cumplira + '</div>';
         } else {
           var fp = c.fecha_cumple.split("-");
           var meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
-          var label = parseInt(fp[2]) + " " + meses[parseInt(fp[1])-1];
+          var label = parseInt(fp[2]) + " " + meses[parseInt(fp[1])-1] + ' ' + (c.dia_semana || '');
           h += '<div style="padding:5px 0;border-bottom:1px solid #f1f1f1;"><span style="color:#888;">' + label + ' (' + c.dias_restantes + 'd)</span> \u00b7 ' + c.nombre + ' \u00b7 ' + c.edad_cumplira + '</div>';
         }
       });

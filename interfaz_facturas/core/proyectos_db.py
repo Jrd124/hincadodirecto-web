@@ -337,8 +337,8 @@ _PROY_SELECT = """
         ) AS nombre_cliente,
         pres.referencia AS presupuesto_ref,
         oport.nombre AS oportunidad_nombre,
-        CASE WHEN p.hincas_estimadas > 0
-             THEN ROUND(p.hincas_realizadas * 100.0 / p.hincas_estimadas, 1)
+        CASE WHEN COALESCE(p.hinca_cantidad, p.hincas_estimadas, 0) > 0
+             THEN ROUND(p.hincas_realizadas * 100.0 / COALESCE(p.hinca_cantidad, p.hincas_estimadas), 1)
              ELSE 0 END AS progreso,
         CASE WHEN p.fecha_inicio_real IS NOT NULL
              THEN CAST(julianday('now') - julianday(p.fecha_inicio_real) AS INTEGER)
@@ -1020,7 +1020,7 @@ def dashboard_landing() -> dict:
             fac = _safe_float(pv.get("importe_facturado"))
             cos = _safe_float(pv.get("importe_costes"))
             m_pct = round((fac - cos) / fac * 100, 1) if fac > 0 else 0
-            hincas_est = pv.get("hincas_estimadas") or 0
+            hincas_est = pv.get("hinca_cantidad") or pv.get("hincas_estimadas") or 0
             hincas_real = pv.get("hincas_realizadas") or 0
             avance = round(hincas_real / hincas_est * 100, 1) if hincas_est > 0 else 0
             if m_pct < 15 or (avance < 50 and hincas_est > 0):
@@ -1068,7 +1068,7 @@ def dashboard_landing() -> dict:
             cos = _safe_float(pv.get("importe_costes"))
             pres = _safe_float(pv.get("importe_presupuestado"))
             m_pct = round((fac - cos) / fac * 100, 1) if fac > 0 else 0
-            hincas_est = pv.get("hincas_estimadas") or 0
+            hincas_est = pv.get("hinca_cantidad") or pv.get("hincas_estimadas") or 0
             hincas_real = pv.get("hincas_realizadas") or 0
             avance = round(hincas_real / hincas_est * 100, 1) if hincas_est > 0 else 0
 
@@ -1129,7 +1129,7 @@ def dashboard_landing() -> dict:
         mejor_dia = max(actual_arr) if actual_arr else 0
 
         # Objetivo diario: total hincas estimadas de vivos / meses restantes estimados / dias laborables
-        total_obj = sum(pv.get("hincas_estimadas") or 0 for pv in proy_vivos)
+        total_obj = sum(pv.get("hinca_cantidad") or pv.get("hincas_estimadas") or 0 for pv in proy_vivos)
         obj_diario = round(total_obj / max(dias_en_mes * 6, 1), 1)  # rough: 6 months avg
 
         produccion_mes = {

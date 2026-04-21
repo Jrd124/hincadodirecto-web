@@ -173,7 +173,7 @@ def api_dashboard_director():
       # Lista proyectos vivos
       vivos = conn.execute(
         "SELECT p.id, p.nombre, p.codigo, p.provincia, p.ubicacion_texto,"
-        " p.hincas_estimadas, p.hincas_realizadas,"
+        " COALESCE(p.hinca_cantidad, p.hincas_estimadas, 0) as hincas_estimadas, p.hincas_realizadas,"
         " t.nombre_canonico as cliente"
         " FROM proyectos p LEFT JOIN terceros t ON p.cliente_tercero_id = t.id"
         " WHERE p.estado = 'vivo' ORDER BY p.nombre"

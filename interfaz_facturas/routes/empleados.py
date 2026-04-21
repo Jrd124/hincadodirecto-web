@@ -899,11 +899,13 @@ def api_cumpleanos_proximos():
           cumple = fn.replace(year=hoy.year + 1, day=28)
       dias = (cumple - hoy).days
       if dias <= 15:
+        _DIAS_SEMANA = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo']
         resultado.append({
           "empleado_id": e["id"],
           "nombre": ((e["nombre"] or "") + " " + (e["apellidos"] or "")).strip(),
           "fecha_nacimiento": e["fecha_nacimiento"],
           "fecha_cumple": cumple.isoformat(),
+          "dia_semana": _DIAS_SEMANA[cumple.weekday()],
           "dias_restantes": dias,
           "edad_cumplira": cumple.year - fn.year,
         })
