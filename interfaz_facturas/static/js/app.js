@@ -211,6 +211,11 @@ function cargarDashboardDirector() {
       _setDir("dir-pendiente-pago-n", f.pendiente_pago_texto || (f.pendiente_pago_count + " facturas"));
       _setDir("dir-maquinas", m.asignadas + " / " + m.total + " asignadas");
       _setDir("dir-maquinas-rev", m.revisiones_pendientes + " revisiones pendientes");
+      var cb = data.combustible || {};
+      _setDir("dir-combustible-mes", _fmtEur(cb.importe_mes));
+      var varStr = cb.variacion_pct > 0 ? ' <span style="color:#dc2626;">\u2191' + cb.variacion_pct + '%</span>' : cb.variacion_pct < 0 ? ' <span style="color:#16a34a;">\u2193' + Math.abs(cb.variacion_pct) + '%</span>' : '';
+      var cbSub = document.getElementById("dir-combustible-sub");
+      if (cbSub) cbSub.innerHTML = (cb.litros_mes || 0) + " L \u00b7 " + (cb.repostajes_mes || 0) + " repostajes" + varStr;
 
       // — Obras activas —
       var tbody = document.getElementById("dir-tbody-obras");

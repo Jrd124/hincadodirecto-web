@@ -549,6 +549,9 @@ def api_combustible_transacciones_v2():
             where += " AND ct.tipo_producto = ?"; params.append(tipo_producto)
         if vehiculo_id:
             where += " AND ct.vehiculo_id = ?"; params.append(int(vehiculo_id))
+        proyecto_id = request.args.get("proyecto_id", "")
+        if proyecto_id:
+            where += " AND ct.proyecto_id = ?"; params.append(int(proyecto_id))
 
         rows = conn.execute(f"""
             SELECT ct.*, e.nombre as estacion_nombre, v.matricula as vehiculo_matricula

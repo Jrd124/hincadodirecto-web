@@ -100,6 +100,7 @@ function _gasoilHtmlTransacciones() {
       '<div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Proveedor</div><select id="gasoil-tx-proveedor" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"><option value="">Todos</option><option value="moeve">Moeve</option><option value="solred">Solred</option></select></div>' +
       '<div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Tipo</div><select id="gasoil-tx-tipo" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"><option value="">Todos</option><option value="diesel">Diesel</option><option value="gasolina">Gasolina</option><option value="adblue">AdBlue</option><option value="peaje">Peaje</option><option value="otros">Otros</option></select></div>' +
       '<div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Veh\u00edculo</div><select id="gasoil-tx-matricula" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"><option value="">Todos</option></select></div>' +
+      '<div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Proyecto</div><select id="gasoil-tx-proyecto" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;max-width:180px;"><option value="">Todos</option></select></div>' +
       '<button onclick="_gasoilFiltrar()" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Aplicar</button>' +
       '<button onclick="document.getElementById(\'gasoil-tx-proveedor\').value=\'\';document.getElementById(\'gasoil-tx-tipo\').value=\'\';document.getElementById(\'gasoil-tx-matricula\').value=\'\';_gasoilFiltrar()" style="padding:6px 14px;background:#fff;color:#666;border:0.5px solid #ccc;border-radius:6px;font-size:13px;cursor:pointer;">Limpiar</button>' +
     '</div></div>' +
@@ -423,6 +424,18 @@ function _gasoilInitTx() {
       }
     });
 
+  // Load projects for filter
+  fetch("/api/proyectos/lista?estado=vivo")
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var sel = document.getElementById("gasoil-tx-proyecto");
+      if (sel) {
+        (d.proyectos || d || []).forEach(function (p) {
+          sel.innerHTML += '<option value="' + p.id + '">' + (p.codigo || '') + ' ' + (p.nombre || '') + '</option>';
+        });
+      }
+    }).catch(function(){});
+
   _gasoilFiltrar();
 }
 
@@ -438,12 +451,15 @@ function _gasoilCargarTx() {
   var tipo = (document.getElementById("gasoil-tx-tipo") || {}).value || "";
   var matricula = (document.getElementById("gasoil-tx-matricula") || {}).value || "";
 
+  var proyectoId = (document.getElementById("gasoil-tx-proyecto") || {}).value || "";
+
   var params = "limit=" + _gasoilTxLimit + "&offset=" + _gasoilTxOffset;
   if (desde) params += "&desde=" + desde;
   if (hasta) params += "&hasta=" + hasta;
   if (proveedor) params += "&proveedor=" + proveedor;
   if (tipo) params += "&tipo_producto=" + tipo;
   if (matricula) params += "&vehiculo_id=" + matricula;
+  if (proyectoId) params += "&proyecto_id=" + proyectoId;
 
   var tbody = document.getElementById("gasoil-tbody-txns");
   if (!tbody) return;

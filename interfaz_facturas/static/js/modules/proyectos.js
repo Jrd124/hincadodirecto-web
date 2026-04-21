@@ -427,12 +427,19 @@
         var dc = p.desglose_costes || {};
         var dcTotal = Object.values(dc).reduce(function(a,b){return a+b;}, 0) || 1;
         tabResumen += '<div class="card" style="padding:14px;"><h4 style="margin:0 0 10px;font-size:0.88rem;font-weight:700;">Desglose de costes</h4>';
+        var catLabels = {personal:"Personal",gasoil:"\u26FD Combustible",transporte:"Transporte",hoteles:"Hoteles",otros:"Otros"};
         ["personal","gasoil","transporte","hoteles","otros"].forEach(function(cat) {
           var val = dc[cat] || 0;
+          if (val === 0) return;
           var pct = Math.round(val / dcTotal * 100);
           var colors = {personal:"#3B82F6",gasoil:"#f59e0b",transporte:"#10B981",hoteles:"#8B5CF6",otros:"#6B7280"};
-          tabResumen += '<div style="margin-bottom:6px;"><div style="display:flex;justify-content:space-between;font-size:0.78rem;"><span>' + cat.charAt(0).toUpperCase() + cat.slice(1) + '</span><span style="font-weight:600;">' + _dashFmtEur(val) + ' (' + pct + '%)</span></div>' +
-            '<div style="height:6px;background:#E5E7EB;border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + (colors[cat]||"#888") + ';border-radius:3px;"></div></div></div>';
+          tabResumen += '<div style="margin-bottom:6px;"><div style="display:flex;justify-content:space-between;font-size:0.78rem;"><span>' + (catLabels[cat]||cat) + '</span><span style="font-weight:600;">' + _dashFmtEur(val) + ' (' + pct + '%)</span></div>' +
+            '<div style="height:6px;background:#E5E7EB;border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + (colors[cat]||"#888") + ';border-radius:3px;"></div></div>';
+          if (cat === "gasoil" && p.combustible_detalle) {
+            var cd = p.combustible_detalle;
+            tabResumen += '<div style="font-size:0.7rem;color:#888;margin-top:2px;">' + cd.repostajes + ' repostajes \u00b7 ' + (cd.litros||0).toLocaleString("es-ES",{maximumFractionDigits:0}) + ' L (' + _dashFmtEur(cd.diesel) + ' diesel, ' + _dashFmtEur(cd.gasolina) + ' gasolina)</div>';
+          }
+          tabResumen += '</div>';
         });
         tabResumen += '</div>';
 

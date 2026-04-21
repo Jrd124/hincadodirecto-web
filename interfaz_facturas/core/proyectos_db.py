@@ -1666,6 +1666,25 @@ def calcular_dashboard_v2(proyecto_id: int) -> dict | None:
         except Exception:
             pass
         desglose["personal"] = round(dietas_proy + he_proy + prorrata, 2)
+
+        # Combustible from imputated fuel transactions
+        comb = conn2.execute("""
+            SELECT COALESCE(SUM(importe_final),0) as total,
+                   COALESCE(SUM(CASE WHEN tipo_producto='diesel' THEN importe_final ELSE 0 END),0) as diesel,
+                   COALESCE(SUM(CASE WHEN tipo_producto='gasolina' THEN importe_final ELSE 0 END),0) as gasolina,
+                   COALESCE(SUM(litros),0) as litros,
+                   COUNT(*) as repostajes
+            FROM combustible_transacciones
+            WHERE proyecto_id = ? AND COALESCE(tipo_producto,'') NOT IN ('descuento','peaje')
+        """, (proyecto_id,)).fetchone()
+        comb_total = comb["total"] or 0
+        if comb_total > 0:
+            desglose["gasoil"] = desglose.get("gasoil", 0) + comb_total
+            data["combustible_detalle"] = {
+                "total": round(comb_total, 2), "diesel": round(comb["diesel"], 2),
+                "gasolina": round(comb["gasolina"], 2), "litros": round(comb["litros"], 1),
+                "repostajes": comb["repostajes"],
+            }
     except Exception:
         pass
     finally:
