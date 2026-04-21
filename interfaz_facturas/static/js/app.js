@@ -485,7 +485,7 @@ function activarModulo(nombre) {
     p.classList.remove('visible');
     p.style.display = 'none';
   });
-  // Then iterate MODULOS for link/submenu state
+  // Then iterate MODULOS for link/submenu state + hide registered panels (catches non-panel-* ids like seccion-inicio)
   Object.keys(MODULOS).forEach((k) => {
     const m = MODULOS[k];
     const activo = k === nombre;
@@ -497,6 +497,10 @@ function activarModulo(nombre) {
       const sub = document.getElementById(m.submenuId);
       if (sub) sub.classList.toggle("visible", activo);
     }
+    Object.values(m.paneles).forEach(function(pid) {
+      var p = document.getElementById(pid);
+      if (p) { p.classList.remove('visible'); p.style.display = 'none'; }
+    });
   });
   const mod = MODULOS[nombre];
   if (mod.defecto && mod.paneles[mod.defecto]) {
