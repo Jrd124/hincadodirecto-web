@@ -337,8 +337,8 @@ _PROY_SELECT = """
         ) AS nombre_cliente,
         pres.referencia AS presupuesto_ref,
         oport.nombre AS oportunidad_nombre,
-        CASE WHEN COALESCE(p.hinca_cantidad, p.hincas_estimadas, 0) > 0
-             THEN ROUND(p.hincas_realizadas * 100.0 / COALESCE(p.hinca_cantidad, p.hincas_estimadas), 1)
+        CASE WHEN COALESCE(NULLIF(p.hinca_cantidad,0), p.hincas_estimadas, 0) > 0
+             THEN ROUND(p.hincas_realizadas * 100.0 / COALESCE(NULLIF(p.hinca_cantidad,0), p.hincas_estimadas), 1)
              ELSE 0 END AS progreso,
         CASE WHEN p.fecha_inicio_real IS NOT NULL
              THEN CAST(julianday('now') - julianday(p.fecha_inicio_real) AS INTEGER)
@@ -982,7 +982,7 @@ def dashboard_landing() -> dict:
         margenes = []
         proy_vivos = [dict(r) for r in conn.execute("""
             SELECT p.id, p.nombre, p.codigo, p.estado, p.tipo_actividad, p.modalidad_facturacion,
-                   COALESCE(p.hinca_cantidad, p.hincas_estimadas) as hincas_estimadas, p.hincas_realizadas, p.perforacion_cantidad,
+                   COALESCE(NULLIF(p.hinca_cantidad,0), p.hincas_estimadas) as hincas_estimadas, p.hincas_realizadas, p.perforacion_cantidad,
                    p.importe_presupuestado, p.importe_facturado, p.importe_costes,
                    p.fecha_inicio_estimada, p.fecha_fin_estimada, p.fecha_inicio_real, p.fecha_fin_real,
                    p.ubicacion_lat, p.ubicacion_lon, p.provincia,
