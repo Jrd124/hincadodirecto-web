@@ -468,15 +468,24 @@ function _ocultarPanelesModulo(nombreModulo) {
   if (!m) return;
   Object.values(m.paneles).forEach(function (pid) {
     var p = document.getElementById(pid);
-    if (p) p.classList.remove("visible");
+    if (p) { p.classList.remove("visible"); p.style.display = 'none'; }
   });
+}
+
+// Helper: show a panel by id (clear inline display + add .visible)
+function _mostrarPanel(id) {
+  var p = document.getElementById(id);
+  if (p) { p.style.display = ''; p.classList.add('visible'); }
 }
 
 function activarModulo(nombre) {
   moduloActivo = nombre;
-  // GLOBAL: hide every panel (id starts with "panel-") to prevent stale overlaps
-  document.querySelectorAll('[id^="panel-"]').forEach(function(p) { p.classList.remove('visible'); });
-  // Then iterate MODULOS for link/submenu state + per-module panel hide
+  // GLOBAL: hide every panel — inline display:none guarantees it regardless of CSS classes
+  document.querySelectorAll('[id^="panel-"]').forEach(function(p) {
+    p.classList.remove('visible');
+    p.style.display = 'none';
+  });
+  // Then iterate MODULOS for link/submenu state
   Object.keys(MODULOS).forEach((k) => {
     const m = MODULOS[k];
     const activo = k === nombre;
@@ -488,14 +497,11 @@ function activarModulo(nombre) {
       const sub = document.getElementById(m.submenuId);
       if (sub) sub.classList.toggle("visible", activo);
     }
-    Object.values(m.paneles).forEach((pid) => {
-      const p = document.getElementById(pid);
-      if (p) p.classList.remove("visible");
-    });
   });
   const mod = MODULOS[nombre];
   if (mod.defecto && mod.paneles[mod.defecto]) {
-    document.getElementById(mod.paneles[mod.defecto]).classList.add("visible");
+    var panelActivo = document.getElementById(mod.paneles[mod.defecto]);
+    if (panelActivo) { panelActivo.style.display = ''; panelActivo.classList.add("visible"); }
     Object.keys(mod.subNavLinks).forEach((k) => {
       const lid = mod.subNavLinks[k];
       if (lid) {
@@ -563,7 +569,7 @@ function activarFinanzasChild(child) {
   // Show the requested child panel
   if (child === "proveedores") {
     proveedoresSubpanel = "facturas";
-    document.getElementById("panel-facturas").classList.add("visible");
+    _mostrarPanel("panel-facturas");
     document.getElementById("nav-facturas").classList.add("activo");
     // React desactivado temporalmente — usar siempre vanilla
     var _vanillaPanel = document.getElementById("panel-facturas-vanilla");
@@ -575,19 +581,19 @@ function activarFinanzasChild(child) {
     }
   } else if (child === "clientes") {
     clientesSubpanel = "clientes_facturas";
-    document.getElementById("panel-clientes-facturas").classList.add("visible");
+    _mostrarPanel("panel-clientes-facturas");
     document.getElementById("nav-clientes-facturas").classList.add("activo");
   } else if (child === "control_calidad") {
-    document.getElementById("panel-control-calidad-inicio").classList.add("visible");
+    _mostrarPanel("panel-control-calidad-inicio");
   } else if (child === "bancos") {
-    document.getElementById("panel-bancos-inicio").classList.add("visible");
+    _mostrarPanel("panel-bancos-inicio");
   } else if (child === "tesoreria") {
-    document.getElementById("panel-tesoreria-inicio").classList.add("visible");
+    _mostrarPanel("panel-tesoreria-inicio");
   } else if (child === "eeff") {
-    document.getElementById("panel-eeff-inicio").classList.add("visible");
+    _mostrarPanel("panel-eeff-inicio");
     if (typeof cargarEEFF === "function") cargarEEFF();
   } else if (child === "albaranes") {
-    document.getElementById("panel-albaranes-inicio").classList.add("visible");
+    _mostrarPanel("panel-albaranes-inicio");
     if (typeof cargarAlbaranes === "function") cargarAlbaranes();
   }
   actualizarHash();
@@ -603,9 +609,15 @@ function activarSubpanel(modulo, subpanel) {
   else if (modulo === "presupuestos") presupuestosSubpanel = subpanel;
   else if (modulo === "cae") caeSubpanel = subpanel;
   Object.keys(mod.paneles).forEach((k) => {
-    document.getElementById(mod.paneles[k]).classList.toggle("visible", k === subpanel);
+    var el = document.getElementById(mod.paneles[k]);
+    if (el) {
+      var show = k === subpanel;
+      el.classList.toggle("visible", show);
+      el.style.display = show ? '' : 'none';
+    }
     if (mod.subNavLinks[k]) {
-      document.getElementById(mod.subNavLinks[k]).classList.toggle("activo", k === subpanel);
+      var nav = document.getElementById(mod.subNavLinks[k]);
+      if (nav) nav.classList.toggle("activo", k === subpanel);
     }
   });
   actualizarHash();
@@ -821,33 +833,21 @@ if (navMaqListado) navMaqListado.addEventListener("click", function (e) {
   e.preventDefault();
   activarModulo("maquinaria");
   // Hide detalle, show list
-  var det = document.getElementById("panel-maquinaria-detalle");
-  if (det) det.classList.remove("visible");
-  var lst = document.getElementById("panel-maquinaria");
-  if (lst) lst.classList.add("visible");
+  _mostrarPanel("panel-maquinaria");
   if (typeof cargarMaquinaria === "function") cargarMaquinaria();
 });
 var navMaqMant = document.getElementById("nav-maquinaria-mantenimiento");
 if (navMaqMant) navMaqMant.addEventListener("click", function (e) {
   e.preventDefault();
   activarModulo("maquinaria");
-  // Hide detalle, show list panel (dashboard renders into maquinaria-content)
-  var det = document.getElementById("panel-maquinaria-detalle");
-  if (det) det.classList.remove("visible");
-  var lst = document.getElementById("panel-maquinaria");
-  if (lst) lst.classList.add("visible");
+  _mostrarPanel("panel-maquinaria");
   if (typeof cargarDashboardMantenimiento === "function") cargarDashboardMantenimiento();
 });
 var navMaqRepuestos = document.getElementById("nav-maquinaria-repuestos");
 if (navMaqRepuestos) navMaqRepuestos.addEventListener("click", function (e) {
   e.preventDefault();
   activarModulo("maquinaria");
-  var det = document.getElementById("panel-maquinaria-detalle");
-  if (det) det.classList.remove("visible");
-  var lst = document.getElementById("panel-maquinaria");
-  if (lst) lst.classList.remove("visible");
-  var rep = document.getElementById("panel-maquinaria-repuestos");
-  if (rep) rep.classList.add("visible");
+  _mostrarPanel("panel-maquinaria-repuestos");
   if (typeof cargarMaquinariaFase2b === "function") cargarMaquinariaFase2b();
 });
 
