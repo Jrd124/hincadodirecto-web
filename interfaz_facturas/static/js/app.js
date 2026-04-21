@@ -39,22 +39,8 @@ const MODULOS = {
   operaciones: {
     linkId: "nav-operaciones-modulo",
     submenuId: "sidebar-children-operaciones",
-    paneles: { inicio: "panel-operaciones-inicio", transporte: "panel-operaciones-transporte", onboarding: "panel-operaciones-onboarding" },
-    subNavLinks: { transporte: "nav-operaciones-transporte", onboarding: "nav-operaciones-onboarding" },
-    defecto: "inicio",
-  },
-  gasoil: {
-    linkId: "nav-operaciones-gasoil",
-    submenuId: null,
-    paneles: { inicio: "panel-gasoil" },
-    subNavLinks: {},
-    defecto: "inicio",
-  },
-  alojamiento: {
-    linkId: "nav-operaciones-alojamiento",
-    submenuId: null,
-    paneles: { inicio: "panel-operaciones-alojamiento" },
-    subNavLinks: {},
+    paneles: { inicio: "panel-operaciones-inicio", transporte: "panel-operaciones-transporte", onboarding: "panel-operaciones-onboarding", gasoil: "panel-operaciones-gasoil", alojamiento: "panel-operaciones-alojamiento" },
+    subNavLinks: { transporte: "nav-operaciones-transporte", onboarding: "nav-operaciones-onboarding", gasoil: "nav-operaciones-gasoil", alojamiento: "nav-operaciones-alojamiento" },
     defecto: "inicio",
   },
   proyectos: {
@@ -157,6 +143,7 @@ let rrhhSubpanel = "equipo";
 let crmSubpanel = "inicio";
 let presupuestosSubpanel = "todos";
 let caeSubpanel = "inicio";
+let operacionesSubpanel = "inicio";
 
 var _hashUpdateInProgress = false;
 function actualizarHash() {
@@ -166,6 +153,8 @@ function actualizarHash() {
     partes.push(finanzasChild);
     if (finanzasChild === "proveedores") partes.push(proveedoresSubpanel);
     else if (finanzasChild === "clientes") partes.push(clientesSubpanel);
+  } else if (moduloActivo === "operaciones" && operacionesSubpanel !== "inicio") {
+    partes.push(operacionesSubpanel);
   } else if (moduloActivo === "proyectos" && proyectosSubpanel !== "inicio") {
     partes.push(proyectosSubpanel);
   } else if (moduloActivo === "rrhh" && rrhhSubpanel !== "inicio") {
@@ -405,8 +394,13 @@ function restaurarDesdeHash() {
     }
   } else if (mod === "operaciones") {
     activarModulo("operaciones");
-    if (partes.length >= 2 && ["transporte","onboarding"].indexOf(partes[1]) >= 0) {
+    if (partes.length >= 2 && ["transporte","onboarding","gasoil","alojamiento"].indexOf(partes[1]) >= 0) {
       activarSubpanel("operaciones", partes[1]);
+      if (partes[1] === "gasoil") {
+        var gasoilTab = (partes.length >= 3) ? partes[2] : "dashboard";
+        if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow(gasoilTab);
+      }
+      if (partes[1] === "alojamiento" && typeof window._alojamientoInit === "function") window._alojamientoInit();
     }
   } else if (mod === "proyectos") {
     if (partes.length >= 2) {
@@ -424,11 +418,15 @@ function restaurarDesdeHash() {
       activarModulo("proyectos");
     }
   } else if (mod === "gasoil") {
-    activarModulo("gasoil");
+    // Legacy hash redirect — gasoil is now under operaciones
+    activarModulo("operaciones");
+    activarSubpanel("operaciones", "gasoil");
     var gasoilTab = (partes.length >= 2) ? partes[1] : "dashboard";
     if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow(gasoilTab);
   } else if (mod === "alojamiento") {
-    activarModulo("alojamiento");
+    // Legacy hash redirect
+    activarModulo("operaciones");
+    activarSubpanel("operaciones", "alojamiento");
     if (typeof window._alojamientoInit === "function") window._alojamientoInit();
   } else if (mod === "rrhh") {
     if (partes.length >= 2) {
@@ -607,6 +605,7 @@ function activarSubpanel(modulo, subpanel) {
   const mod = MODULOS[modulo];
   if (modulo === "proveedores") proveedoresSubpanel = subpanel;
   else if (modulo === "clientes") clientesSubpanel = subpanel;
+  else if (modulo === "operaciones") operacionesSubpanel = subpanel;
   else if (modulo === "proyectos") proyectosSubpanel = subpanel;
   else if (modulo === "rrhh") rrhhSubpanel = subpanel;
   else if (modulo === "crm") crmSubpanel = subpanel;
@@ -645,9 +644,9 @@ document.getElementById("nav-proyectos-modulo").addEventListener("click", (e) =>
 });
 document.getElementById("nav-operaciones-modulo").addEventListener("click", (e) => {
   e.preventDefault();
+  operacionesSubpanel = "inicio";
   activarModulo("operaciones");
 });
-// Gasoil is now accessed via Operaciones > Gasoil (single panel with internal tabs)
 document.getElementById("nav-rrhh-modulo").addEventListener("click", (e) => {
   e.preventDefault();
   rrhhSubpanel = "inicio";
@@ -740,23 +739,15 @@ document.getElementById("nav-clientes-listado").addEventListener("click", (e) =>
   var el = document.getElementById("nav-proyectos-" + sp);
   if (el) el.addEventListener("click", function(e) { e.preventDefault(); activarSubpanel("proyectos", sp); });
 });
-["transporte","onboarding"].forEach(function(sp) {
+["transporte","onboarding","gasoil","alojamiento"].forEach(function(sp) {
   var el = document.getElementById("nav-operaciones-" + sp);
-  if (el) el.addEventListener("click", function(e) { e.preventDefault(); activarSubpanel("operaciones", sp); });
-});
-// Gasoil sub-item under Operaciones
-var navGasoil = document.getElementById("nav-operaciones-gasoil");
-if (navGasoil) navGasoil.addEventListener("click", function(e) {
-  e.preventDefault();
-  activarModulo("gasoil");
-  if (typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("dashboard");
-});
-// Alojamiento sub-item under Operaciones
-var navAloj = document.getElementById("nav-operaciones-alojamiento");
-if (navAloj) navAloj.addEventListener("click", function(e) {
-  e.preventDefault();
-  activarModulo("alojamiento");
-  if (typeof window._alojamientoInit === "function") window._alojamientoInit();
+  if (el) el.addEventListener("click", function(e) {
+    e.preventDefault();
+    activarModulo("operaciones");
+    activarSubpanel("operaciones", sp);
+    if (sp === "gasoil" && typeof window._gasoilOnPanelShow === "function") window._gasoilOnPanelShow("dashboard");
+    if (sp === "alojamiento" && typeof window._alojamientoInit === "function") window._alojamientoInit();
+  });
 });
 
 ["equipo","nominas","verificador","dietas","horasextras","vacaciones","adelantos","ss","irpf","costeproyecto"].forEach(function(sp) {
@@ -1065,14 +1056,16 @@ if (navCae) navCae.addEventListener("click", function (e) {
         var ll = document.getElementById("nav-maquinaria-listado");
         if (ll) ll.classList.add("activo");
       }
-    } else if (moduloActivo === "operaciones" || moduloActivo === "gasoil" || moduloActivo === "alojamiento") {
+    } else if (moduloActivo === "operaciones") {
       var opm = document.getElementById("nav-operaciones-modulo");
       if (opm) { opm.classList.add("activo"); opm.classList.add("expanded"); }
       var opc = document.getElementById("sidebar-children-operaciones");
       if (opc) opc.classList.add("open");
       // Highlight active sub-link
-      var subId = moduloActivo === "gasoil" ? "nav-operaciones-gasoil" : moduloActivo === "alojamiento" ? "nav-operaciones-alojamiento" : null;
-      if (subId) { var sl = document.getElementById(subId); if (sl) sl.classList.add("activo"); }
+      if (operacionesSubpanel !== "inicio") {
+        var opSub = document.getElementById("nav-operaciones-" + operacionesSubpanel);
+        if (opSub) opSub.classList.add("activo");
+      }
     }
 
     // Close sidebar on mobile after nav
