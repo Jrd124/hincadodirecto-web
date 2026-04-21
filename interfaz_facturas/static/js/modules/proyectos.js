@@ -1933,6 +1933,13 @@
     document.getElementById("proy-perf-prod-ay").value = p ? p.perforacion_precio_prod_ayudante || "" : "";
     document.getElementById("proy-perf-admin-op").value = p ? p.perforacion_precio_admin_operador || "" : "";
     document.getElementById("proy-perf-admin-ay").value = p ? p.perforacion_precio_admin_ayudante || "" : "";
+    // Localización
+    document.getElementById("proy-edit-direccion").value = p ? p.direccion || "" : "";
+    document.getElementById("proy-edit-municipio").value = p ? p.municipio || "" : "";
+    document.getElementById("proy-edit-provincia-loc").value = p ? p.provincia || "" : "";
+    document.getElementById("proy-edit-lat").value = p ? p.ubicacion_lat || "" : "";
+    document.getElementById("proy-edit-lon").value = p ? p.ubicacion_lon || "" : "";
+    _proyActualizarGmapsLink();
     _proyToggleActividad();
     _proyCalcResumen();
     // Load clientes
@@ -1999,6 +2006,10 @@
       fecha_inicio_estimada: document.getElementById("proy-fecha-inicio").value || null,
       fecha_fin_estimada: document.getElementById("proy-fecha-fin").value || null,
       notas: document.getElementById("proy-notas").value,
+      direccion: document.getElementById("proy-edit-direccion").value || null,
+      municipio: document.getElementById("proy-edit-municipio").value || null,
+      ubicacion_lat: document.getElementById("proy-edit-lat").value ? parseFloat(document.getElementById("proy-edit-lat").value) : null,
+      ubicacion_lon: document.getElementById("proy-edit-lon").value ? parseFloat(document.getElementById("proy-edit-lon").value) : null,
     };
     var esCotizadoNuevo = !id && body.estado === "cotizado";
     var url = id ? "/api/proyectos/" + id : (esCotizadoNuevo ? "/api/proyectos/cotizado" : "/api/proyectos");
@@ -2730,4 +2741,35 @@ window._proyCalcResumen = function () {
   }
   var resEl = document.getElementById("proy-resumen-pricing");
   if (resEl) resEl.innerHTML = html || '<span style="color:#888;">Introduce cantidades y precios para ver el resumen</span>';
+};
+
+// ── Localización helpers ──
+function _proyActualizarGmapsLink() {
+  var dir = (document.getElementById("proy-edit-direccion") || {}).value || "";
+  var mun = (document.getElementById("proy-edit-municipio") || {}).value || "";
+  var prov = (document.getElementById("proy-edit-provincia-loc") || {}).value || "";
+  var q = [dir, mun, prov].filter(Boolean).join(" ");
+  var link = document.getElementById("proy-link-gmaps");
+  if (link) link.href = q ? "https://www.google.com/maps/search/" + encodeURIComponent(q) : "#";
+}
+window._proyActualizarGmapsLink = _proyActualizarGmapsLink;
+
+window._proyBuscarCoords = function () {
+  var dir = (document.getElementById("proy-edit-direccion") || {}).value || "";
+  var mun = (document.getElementById("proy-edit-municipio") || {}).value || "";
+  var prov = (document.getElementById("proy-edit-provincia-loc") || {}).value || "";
+  var q = [dir, mun, prov].filter(Boolean).join(", ");
+  if (!q) { if (typeof mostrarToast === "function") mostrarToast("Introduce direcci\u00f3n, municipio o provincia.", "error"); return; }
+  fetch("https://nominatim.openstreetmap.org/search?q=" + encodeURIComponent(q) + "&format=json&countrycodes=es,pt&limit=1", { headers: { "User-Agent": "HincadoDirectoERP/1.0" } })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data && data.length > 0) {
+        document.getElementById("proy-edit-lat").value = parseFloat(data[0].lat).toFixed(6);
+        document.getElementById("proy-edit-lon").value = parseFloat(data[0].lon).toFixed(6);
+        if (typeof mostrarToast === "function") mostrarToast("Coordenadas encontradas: " + data[0].display_name, "success");
+      } else {
+        if (typeof mostrarToast === "function") mostrarToast("No encontrado. Usa Google Maps para copiar coordenadas.", "error");
+      }
+    })
+    .catch(function () { if (typeof mostrarToast === "function") mostrarToast("Error al buscar coordenadas.", "error"); });
 };
