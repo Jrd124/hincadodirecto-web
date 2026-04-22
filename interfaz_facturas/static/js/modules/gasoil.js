@@ -93,16 +93,21 @@ function _gasoilHtmlDashboard() {
 }
 
 function _gasoilHtmlTransacciones() {
+  var _lbl = 'style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;"';
+  var _sel = 'style="padding:6px 10px 6px 8px;border:0.5px solid #D1D5DB;border-radius:6px;font-size:13px;min-width:120px;background:#fff;appearance:none;-webkit-appearance:none;background-image:url(\'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22><path fill=%22%23666%22 d=%22M3 5l3 3 3-3%22/></svg>\');background-repeat:no-repeat;background-position:right 8px center;padding-right:26px;"';
+  var _inp = 'style="padding:6px 8px;border:0.5px solid #D1D5DB;border-radius:6px;font-size:13px;min-width:120px;"';
   return '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;margin-bottom:12px;">' +
     '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">' +
-      '<div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Desde</div><input type="date" id="gasoil-tx-desde" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"></div>' +
-      '<div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Hasta</div><input type="date" id="gasoil-tx-hasta" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"></div>' +
-      '<div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Proveedor</div><select id="gasoil-tx-proveedor" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"><option value="">Todos</option><option value="moeve">Moeve</option><option value="solred">Solred</option></select></div>' +
-      '<div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Tipo</div><select id="gasoil-tx-tipo" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"><option value="">Todos</option><option value="diesel">Diesel</option><option value="gasolina">Gasolina</option><option value="adblue">AdBlue</option><option value="peaje">Peaje</option><option value="otros">Otros</option></select></div>' +
-      '<div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Veh\u00edculo</div><select id="gasoil-tx-matricula" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;"><option value="">Todos</option></select></div>' +
-      '<div><div style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Proyecto</div><select id="gasoil-tx-proyecto" style="padding:6px 8px;border:0.5px solid #E5E5E5;border-radius:6px;font-size:13px;max-width:180px;"><option value="">Todos</option></select></div>' +
-      '<button onclick="_gasoilFiltrar()" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Aplicar</button>' +
-      '<button onclick="document.getElementById(\'gasoil-tx-proveedor\').value=\'\';document.getElementById(\'gasoil-tx-tipo\').value=\'\';document.getElementById(\'gasoil-tx-matricula\').value=\'\';_gasoilFiltrar()" style="padding:6px 14px;background:#fff;color:#666;border:0.5px solid #ccc;border-radius:6px;font-size:13px;cursor:pointer;">Limpiar</button>' +
+      '<div><div '+_lbl+'>Desde</div><input type="date" id="gasoil-tx-desde" '+_inp+'></div>' +
+      '<div><div '+_lbl+'>Hasta</div><input type="date" id="gasoil-tx-hasta" '+_inp+'></div>' +
+      '<div><div '+_lbl+'>Proveedor</div><select id="gasoil-tx-proveedor" '+_sel+'><option value="">Todos</option><option value="moeve">Moeve</option><option value="solred">Solred</option></select></div>' +
+      '<div><div '+_lbl+'>Tipo</div><select id="gasoil-tx-tipo" '+_sel+'><option value="">Todos</option><option value="diesel">Diesel</option><option value="gasolina">Gasolina</option><option value="adblue">AdBlue</option><option value="peaje">Peaje</option><option value="otros">Otros</option></select></div>' +
+      '<div><div '+_lbl+'>Veh\u00edculo</div><select id="gasoil-tx-matricula" '+_sel+'><option value="">Todos</option></select></div>' +
+      '<div><div '+_lbl+'>Proyecto</div><select id="gasoil-tx-proyecto" '+_sel+' style="padding:6px 10px 6px 8px;border:0.5px solid #D1D5DB;border-radius:6px;font-size:13px;min-width:180px;max-width:220px;background:#fff;appearance:none;-webkit-appearance:none;background-image:url(\'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22><path fill=%22%23666%22 d=%22M3 5l3 3 3-3%22/></svg>\');background-repeat:no-repeat;background-position:right 8px center;padding-right:26px;"><option value="">Todos</option></select></div>' +
+      '<div style="margin-left:auto;display:flex;gap:8px;">' +
+        '<button onclick="_gasoilFiltrar()" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Aplicar</button>' +
+        '<button onclick="document.getElementById(\'gasoil-tx-proveedor\').value=\'\';document.getElementById(\'gasoil-tx-tipo\').value=\'\';document.getElementById(\'gasoil-tx-matricula\').value=\'\';document.getElementById(\'gasoil-tx-proyecto\').value=\'\';_gasoilFiltrar()" style="padding:6px 14px;background:#fff;color:#666;border:0.5px solid #ccc;border-radius:6px;font-size:13px;cursor:pointer;">Limpiar</button>' +
+      '</div>' +
     '</div></div>' +
     '<div id="gasoil-tx-kpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px;"></div>' +
     '<div class="card" style="overflow-x:auto;padding:0;">' +
@@ -123,6 +128,9 @@ function _gasoilHtmlTransacciones() {
 }
 
 function _gasoilHtmlEstaciones() {
+  var _lbl = 'style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;"';
+  var _sel = 'style="padding:6px 10px 6px 8px;border:0.5px solid #D1D5DB;border-radius:6px;font-size:13px;min-width:120px;background:#fff;appearance:none;-webkit-appearance:none;background-image:url(\'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22><path fill=%22%23666%22 d=%22M3 5l3 3 3-3%22/></svg>\');background-repeat:no-repeat;background-position:right 8px center;padding-right:26px;"';
+  var _inp = 'style="padding:6px 8px;border:0.5px solid #D1D5DB;border-radius:6px;font-size:13px;min-width:140px;"';
   return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">' +
     '<h4 style="margin:0;font-size:0.95rem;font-weight:700;">Estaciones de servicio</h4>' +
     '<div style="display:flex;gap:8px;align-items:center;">' +
@@ -130,13 +138,15 @@ function _gasoilHtmlEstaciones() {
       '<button id="gasoil-btn-geocodificar" onclick="_gasoilGeocodificar()" class="btn-small" style="background:#DCFCE7;color:#166534;border:1px solid #86EFAC;">\uD83C\uDF0D Geocodificar pendientes</button>' +
       '<button onclick="_gasoilGeoCompleto()" class="btn-small" style="background:#EFF6FF;color:#1E40AF;border:1px solid #93C5FD;">\uD83D\uDD04 Geocodificaci\u00f3n completa</button>' +
     '</div></div>' +
-    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">' +
-      '<input id="filtro-estacion-busqueda" type="text" placeholder="Buscar nombre..." oninput="_gasoilFiltrarEstaciones()" style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;width:160px;">' +
-      '<select id="filtro-estacion-marca" onchange="_gasoilFiltrarEstaciones()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;"><option value="">Marca</option></select>' +
-      '<select id="filtro-estacion-municipio" onchange="_gasoilFiltrarEstaciones()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;"><option value="">Municipio</option></select>' +
-      '<select id="filtro-estacion-ccaa" onchange="_gasoilFiltrarEstaciones()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;"><option value="">CCAA</option></select>' +
-      '<select id="filtro-estacion-pais" onchange="_gasoilFiltrarEstaciones()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;"><option value="">Pa\u00eds</option><option value="ES">\uD83C\uDDEA\uD83C\uDDF8 Espa\u00f1a</option><option value="PT">\uD83C\uDDF5\uD83C\uDDF9 Portugal</option></select>' +
-      '<select id="filtro-estacion-geo" onchange="_gasoilFiltrarEstaciones()" style="padding:4px 6px;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;"><option value="">Estado Geo</option><option value="1">\u2705 Geocodificada</option><option value="0">\u23F3 Pendiente</option><option value="2">\u274C Fallida</option></select>' +
+    '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;margin-bottom:12px;">' +
+      '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">' +
+        '<div><div '+_lbl+'>Buscar</div><input id="filtro-estacion-busqueda" type="text" placeholder="Nombre..." oninput="_gasoilFiltrarEstaciones()" '+_inp+'></div>' +
+        '<div><div '+_lbl+'>Marca</div><select id="filtro-estacion-marca" onchange="_gasoilFiltrarEstaciones()" '+_sel+'><option value="">Todas</option></select></div>' +
+        '<div><div '+_lbl+'>Municipio</div><select id="filtro-estacion-municipio" onchange="_gasoilFiltrarEstaciones()" '+_sel+'><option value="">Todos</option></select></div>' +
+        '<div><div '+_lbl+'>CCAA</div><select id="filtro-estacion-ccaa" onchange="_gasoilFiltrarEstaciones()" '+_sel+'><option value="">Todas</option></select></div>' +
+        '<div><div '+_lbl+'>Pa\u00eds</div><select id="filtro-estacion-pais" onchange="_gasoilFiltrarEstaciones()" '+_sel+'><option value="">Todos</option><option value="ES">\uD83C\uDDEA\uD83C\uDDF8 Espa\u00f1a</option><option value="PT">\uD83C\uDDF5\uD83C\uDDF9 Portugal</option></select></div>' +
+        '<div><div '+_lbl+'>Estado Geo</div><select id="filtro-estacion-geo" onchange="_gasoilFiltrarEstaciones()" '+_sel+'><option value="">Todos</option><option value="1">\u2705 OK</option><option value="0">\u23F3 Pendiente</option><option value="2">\u274C Fallida</option></select></div>' +
+      '</div>' +
     '</div>' +
     '<div class="card" style="overflow-x:auto;padding:0;">' +
       '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">' +
@@ -307,7 +317,7 @@ function _impCargarSinAsignar() {
     if (d.total > 50) html += '<div style="font-size:12px;color:#888;margin-top:8px;">Mostrando 50 de ' + d.total + '</div>';
     el.innerHTML = html;
     // Populate project dropdown
-    fetch("/api/proyectos/lista?estado=vivo").then(function(r){return r.json();}).then(function(pd) {
+    fetch("/api/proyectos").then(function(r){return r.json();}).then(function(pd) {
       var sel = document.getElementById("imp-bulk-proy");
       if (!sel) return;
       (pd.proyectos || pd || []).forEach(function(p) {
@@ -425,7 +435,7 @@ function _gasoilInitTx() {
     });
 
   // Load projects for filter
-  fetch("/api/proyectos/lista?estado=vivo")
+  fetch("/api/proyectos")
     .then(function (r) { return r.json(); })
     .then(function (d) {
       var sel = document.getElementById("gasoil-tx-proyecto");
@@ -496,7 +506,7 @@ function _gasoilCargarTx() {
 
       var html = "";
       txns.forEach(function (t) {
-        var proyLabel = t.proyecto_id ? '<span style="color:#22c55e;">' + (t.proyecto_id || '') + '</span>' : '<span style="color:#9ca3af;">-</span>';
+        var proyLabel = t.proyecto_codigo ? '<span style="background:#EFF6FF;color:#1E40AF;padding:1px 6px;border-radius:999px;font-size:10px;">' + t.proyecto_codigo + '</span> ' + (t.proyecto_nombre || '') : (t.proyecto_id ? '<span style="color:#22c55e;">#' + t.proyecto_id + '</span>' : '<span style="color:#9ca3af;">\u2014</span>');
         var estCorta = (t.estacion_raw || t.estacion_nombre || "").length > 25 ? (t.estacion_raw || t.estacion_nombre || "").substring(0, 25) + "\u2026" : (t.estacion_raw || t.estacion_nombre || "-");
 
         html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +

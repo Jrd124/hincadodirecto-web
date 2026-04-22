@@ -554,10 +554,12 @@ def api_combustible_transacciones_v2():
             where += " AND ct.proyecto_id = ?"; params.append(int(proyecto_id))
 
         rows = conn.execute(f"""
-            SELECT ct.*, e.nombre as estacion_nombre, v.matricula as vehiculo_matricula
+            SELECT ct.*, e.nombre as estacion_nombre, v.matricula as vehiculo_matricula,
+                   p.codigo as proyecto_codigo, p.nombre as proyecto_nombre
             FROM combustible_transacciones ct
             LEFT JOIN estaciones_servicio e ON e.id = ct.estacion_id
             LEFT JOIN vehiculos v ON v.id = ct.vehiculo_id
+            LEFT JOIN proyectos p ON p.id = ct.proyecto_id
             {where} ORDER BY ct.fecha_operacion DESC LIMIT ? OFFSET ?
         """, params + [limit, offset]).fetchall()
         total = conn.execute(f"SELECT COUNT(*), COALESCE(SUM(ct.importe_final),0), COALESCE(SUM(ct.litros),0) FROM combustible_transacciones ct {where}", params).fetchone()
