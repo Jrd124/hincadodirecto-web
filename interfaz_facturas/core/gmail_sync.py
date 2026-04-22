@@ -189,6 +189,20 @@ def _after_date_filter(dias_atras: int | None) -> str:
 
 # ── Sync por empresa ───────────────────────────────────────────────────────────
 
+def _listar_threads(service, q: str, max_threads: int) -> list[dict]:
+    """Llama a threads().list() y devuelve la lista de threads (id, snippet)."""
+    try:
+        resp = service.users().threads().list(
+            userId="me",
+            q=q,
+            maxResults=max_threads,
+        ).execute()
+        return resp.get("threads", [])
+    except Exception as exc:
+        logger.error("Error en Gmail threads.list (q=%s...): %s", q[:60], exc)
+        return []
+
+
 def sync_empresa(
     empresa: dict,
     contactos: list[dict],
@@ -198,6 +212,8 @@ def sync_empresa(
 ) -> list[dict]:
     """
     Busca hilos Gmail para una empresa y devuelve lista de metadatos.
+    Busca tanto en recibidos como en enviados para capturar todos los
+    emails intercambiados con los contactos de la empresa.
     No escribe en la BD — eso lo hace el llamador.
 
     Returns:
@@ -212,19 +228,29 @@ def sync_empresa(
         logger.info("Empresa %s sin dominio ni emails de contacto — omitida", empresa.get("nombre"))
         return []
 
-    query += _after_date_filter(dias_atras)
+    date_filter = _after_date_filter(dias_atras)
 
-    try:
-        resp = service.users().threads().list(
-            userId="me",
-            q=query,
-            maxResults=max_threads,
-        ).execute()
-    except Exception as exc:
-        logger.error("Error buscando hilos para empresa %s: %s", empresa.get("nombre"), exc)
-        return []
+    # Búsqueda 1: todo el correo (recibidos + conversaciones con respuesta)
+    threads_recibidos = _listar_threads(service, query + date_filter, max_threads)
 
-    threads_meta = resp.get("threads", [])
+    # Búsqueda 2: carpeta Enviados explícita — captura emails enviados sin respuesta
+    # que solo tienen la etiqueta SENT y no aparecen en la búsqueda general.
+    query_enviados = query + date_filter + " in:sent"
+    threads_enviados = _listar_threads(service, query_enviados, max_threads)
+
+    # Fusionar deduplicando por thread_id
+    seen: set[str] = set()
+    threads_meta: list[dict] = []
+    for t in threads_recibidos + threads_enviados:
+        if t["id"] not in seen:
+            seen.add(t["id"])
+            threads_meta.append(t)
+
+    logger.info(
+        "Empresa '%s': %d recibidos + %d enviados = %d únicos",
+        empresa.get("nombre"),
+        len(threads_recibidos), len(threads_enviados), len(threads_meta),
+    )
     results = []
 
     for t in threads_meta:
@@ -270,10 +296,6 @@ def sync_empresa(
             "num_messages": len(messages),
         })
 
-    logger.info(
-        "Empresa '%s': %d hilo(s) encontrados (query: %s...)",
-        empresa.get("nombre"), len(results), query[:60]
-    )
     return results
 
 
