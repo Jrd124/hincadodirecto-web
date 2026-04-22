@@ -143,6 +143,7 @@ def api_dashboard_director():
     "finanzas": {"facturado_mes": 0, "facturado_año": 0, "pendiente_cobro": 0, "pendiente_cobro_count": 0, "pendiente_pago": 0, "pendiente_pago_count": 0, "cobrado_mes": 0},
     "alertas": [],
     "maquinaria": {"total": 0, "asignadas": 0, "en_taller": 0, "revisiones_pendientes": 0},
+    "combustible": {"importe_mes": 0, "litros_mes": 0, "repostajes_mes": 0, "variacion_pct": 0},
     "actividad_reciente": [],
   }
   try:
@@ -269,6 +270,33 @@ def api_dashboard_director():
       if n_prov_parciales:
         parts_p.append(f"{n_prov_parciales} parcial{'es' if n_prov_parciales != 1 else ''}")
       result["finanzas"]["pendiente_pago_texto"] = " + ".join(parts_p) if parts_p else "0 facturas"
+
+      # ── Combustible mes ──
+      try:
+          from datetime import date
+          mes_actual = hoy.strftime("%Y-%m")
+          mes_anterior = (hoy.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
+          comb_mes = conn.execute("""
+              SELECT COALESCE(SUM(importe_final),0) as importe, COALESCE(SUM(litros),0) as litros, COUNT(*) as n
+              FROM combustible_transacciones
+              WHERE fecha_operacion LIKE ? AND COALESCE(tipo_producto,'') NOT IN ('descuento','peaje')
+          """, (mes_actual + "%",)).fetchone()
+          comb_ant = conn.execute("""
+              SELECT COALESCE(SUM(importe_final),0) as importe
+              FROM combustible_transacciones
+              WHERE fecha_operacion LIKE ? AND COALESCE(tipo_producto,'') NOT IN ('descuento','peaje')
+          """, (mes_anterior + "%",)).fetchone()
+          comb_imp = comb_mes["importe"] if comb_mes else 0
+          comb_ant_imp = comb_ant["importe"] if comb_ant else 0
+          comb_var = round((comb_imp - comb_ant_imp) / comb_ant_imp * 100, 1) if comb_ant_imp > 0 else 0
+          result["combustible"] = {
+              "importe_mes": round(comb_imp, 2),
+              "litros_mes": round(comb_mes["litros"], 0) if comb_mes else 0,
+              "repostajes_mes": comb_mes["n"] if comb_mes else 0,
+              "variacion_pct": comb_var,
+          }
+      except Exception:
+          result["combustible"] = {"importe_mes": 0, "litros_mes": 0, "repostajes_mes": 0, "variacion_pct": 0}
 
       # ── Maquinaria (estado calculado desde Operaciones) ──
       r = conn.execute("SELECT COUNT(*) as total FROM maquinas WHERE activa = 1").fetchone()
@@ -672,6 +700,17 @@ def api_finanzas_dashboard():
     logging.getLogger(__name__).warning("Error en /api/finanzas/dashboard: %s", e)
 
   return jsonify(result)
+
+
+@api_general_bp.get("/api/alertas/partes-pendientes")
+def api_alertas_partes_pendientes():
+  from core.alertas_partes import obtener_partes_pendientes
+  from flask import request
+  return jsonify(obtener_partes_pendientes(
+      proyecto_id=request.args.get("proyecto_id", type=int),
+      desde=request.args.get("desde"),
+      hasta=request.args.get("hasta"),
+  ))
 
 
 @api_general_bp.get("/api/empresas")

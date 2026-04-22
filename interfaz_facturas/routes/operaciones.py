@@ -104,14 +104,17 @@ def cuadrante():
 
     conn = _conn()
     try:
-        # Empleados activos
+        # Empleados que were active during this month (not just currently active)
         empleados = [dict(r) for r in conn.execute(
-            "SELECT id, nombre, apellidos, puesto, estado, fecha_baja_inicio, fecha_baja_fin FROM empleados WHERE estado IN ('activo','baja','vacaciones') ORDER BY estado, nombre"
+            "SELECT id, nombre, apellidos, puesto, estado, fecha_alta, fecha_baja, fecha_baja_inicio, fecha_baja_fin FROM empleados "
+            "WHERE (fecha_alta IS NULL OR fecha_alta <= ?) AND (fecha_baja IS NULL OR fecha_baja >= ?) "
+            "ORDER BY CASE estado WHEN 'activo' THEN 0 WHEN 'baja' THEN 1 WHEN 'vacaciones' THEN 2 ELSE 3 END, nombre",
+            (fecha_fin, fecha_ini),
         ).fetchall()]
 
-        # Máquinas activas
+        # Máquinas activas (with fecha_comision for availability check)
         maquinas = [dict(r) for r in conn.execute(
-            "SELECT id, nombre, modelo, estado FROM maquinas WHERE activa = 1 ORDER BY nombre"
+            "SELECT id, nombre, modelo, estado, fecha_comision FROM maquinas WHERE activa = 1 ORDER BY nombre"
         ).fetchall()]
 
         # Vehículos activos
@@ -224,9 +227,27 @@ def asignar():
         else:
             return jsonify({"error": "fecha o fecha_desde/fecha_hasta requeridos"}), 400
 
+        # Get availability bounds for the resource
+        _disponible_desde = None
+        _disponible_hasta = None
+        if recurso_tipo == "empleado":
+            emp = conn.execute("SELECT fecha_alta, fecha_baja FROM empleados WHERE id=?", (recurso_id,)).fetchone()
+            if emp:
+                _disponible_desde = emp["fecha_alta"] or None
+                _disponible_hasta = emp["fecha_baja"] or None
+        elif recurso_tipo == "maquina":
+            maq = conn.execute("SELECT fecha_comision FROM maquinas WHERE id=?", (recurso_id,)).fetchone()
+            if maq:
+                _disponible_desde = maq["fecha_comision"] or None
+
         ahora = datetime.now().isoformat()
         insertadas = 0
         for f in fechas:
+            # Skip dates outside availability window
+            if _disponible_desde and f < _disponible_desde:
+                continue
+            if _disponible_hasta and f > _disponible_hasta:
+                continue
             try:
                 conn.execute(
                     "INSERT OR REPLACE INTO proyecto_asignaciones "
@@ -398,7 +419,7 @@ def resumen():
             "SELECT COUNT(*) FROM proyectos WHERE estado IN ('vivo','en_curso','adjudicado')"
         ).fetchone()[0]
 
-        # Ocupación máquinas: numerador = asignadas produciendo, denominador = capacidad total
+        # Ocupación máquinas: numerador = asignadas produciendo, denominador = capacidad ajustada
         asig_maq_mes = conn.execute(
             "SELECT COUNT(*) FROM proyecto_asignaciones WHERE recurso_tipo='maquina' "
             "AND fecha >= ? AND fecha <= ? AND estado != 'averia'", (fecha_ini, fecha_fin),
@@ -407,7 +428,28 @@ def resumen():
             "SELECT COUNT(*) FROM proyecto_asignaciones WHERE recurso_tipo='maquina' "
             "AND fecha >= ? AND fecha <= ? AND estado = 'averia'", (fecha_ini, fecha_fin),
         ).fetchone()[0]
-        capacidad_total = total_maq * dias_lab
+
+        # Adjusted capacity: exclude days before fecha_comision for each machine
+        maq_rows = conn.execute("SELECT id, fecha_comision FROM maquinas WHERE activa = 1").fetchall()
+        capacidad_total = 0
+        fi_date = date.fromisoformat(fecha_ini)
+        ff_date = date.fromisoformat(fecha_fin)
+        for mq in maq_rows:
+            fc = mq["fecha_comision"]
+            if fc:
+                fc_date = date.fromisoformat(fc)
+                start = max(fc_date, fi_date)
+            else:
+                start = fi_date
+            if start > ff_date:
+                continue
+            # Count working days for this machine
+            d = start
+            while d <= ff_date:
+                if d.weekday() < 5:
+                    capacidad_total += 1
+                d += timedelta(days=1)
+
         ocupacion = round(asig_maq_mes / capacidad_total * 100) if capacidad_total > 0 else 0
 
         return jsonify({

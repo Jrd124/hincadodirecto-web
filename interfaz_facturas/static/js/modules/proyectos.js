@@ -427,12 +427,19 @@
         var dc = p.desglose_costes || {};
         var dcTotal = Object.values(dc).reduce(function(a,b){return a+b;}, 0) || 1;
         tabResumen += '<div class="card" style="padding:14px;"><h4 style="margin:0 0 10px;font-size:0.88rem;font-weight:700;">Desglose de costes</h4>';
+        var catLabels = {personal:"Personal",gasoil:"\u26FD Combustible",transporte:"Transporte",hoteles:"Hoteles",otros:"Otros"};
         ["personal","gasoil","transporte","hoteles","otros"].forEach(function(cat) {
           var val = dc[cat] || 0;
+          if (val === 0) return;
           var pct = Math.round(val / dcTotal * 100);
           var colors = {personal:"#3B82F6",gasoil:"#f59e0b",transporte:"#10B981",hoteles:"#8B5CF6",otros:"#6B7280"};
-          tabResumen += '<div style="margin-bottom:6px;"><div style="display:flex;justify-content:space-between;font-size:0.78rem;"><span>' + cat.charAt(0).toUpperCase() + cat.slice(1) + '</span><span style="font-weight:600;">' + _dashFmtEur(val) + ' (' + pct + '%)</span></div>' +
-            '<div style="height:6px;background:#E5E7EB;border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + (colors[cat]||"#888") + ';border-radius:3px;"></div></div></div>';
+          tabResumen += '<div style="margin-bottom:6px;"><div style="display:flex;justify-content:space-between;font-size:0.78rem;"><span>' + (catLabels[cat]||cat) + '</span><span style="font-weight:600;">' + _dashFmtEur(val) + ' (' + pct + '%)</span></div>' +
+            '<div style="height:6px;background:#E5E7EB;border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + (colors[cat]||"#888") + ';border-radius:3px;"></div></div>';
+          if (cat === "gasoil" && p.combustible_detalle) {
+            var cd = p.combustible_detalle;
+            tabResumen += '<div style="font-size:0.7rem;color:#888;margin-top:2px;">' + cd.repostajes + ' repostajes \u00b7 ' + (cd.litros||0).toLocaleString("es-ES",{maximumFractionDigits:0}) + ' L (' + _dashFmtEur(cd.diesel) + ' diesel, ' + _dashFmtEur(cd.gasolina) + ' gasolina)</div>';
+          }
+          tabResumen += '</div>';
         });
         tabResumen += '</div>';
 
@@ -486,6 +493,18 @@
 
         // ── TAB: OPERATIVO ──
         var tabOper = '<div id="proy-dash-tab-operativo" class="proy-dash-tab-content" style="display:none;">';
+        // Partes pendientes alert
+        var pp = p.partes_pendientes || [];
+        if (pp.length > 0) {
+          tabOper += '<div style="background:#FEF3C7;border-radius:8px;padding:12px 16px;margin-bottom:12px;">' +
+            '<div style="font-weight:500;color:#92400E;">\u26A0\uFE0F ' + pp.length + ' d\u00edas sin parte de trabajo registrado</div>' +
+            '<div style="font-size:12px;color:#B45309;margin-top:6px;">';
+          pp.slice(0, 10).forEach(function(d) {
+            tabOper += d.dia_semana.substring(0,3) + ' ' + d.fecha.substring(8) + '/' + d.fecha.substring(5,7) + ' (' + d.maquinas.join(', ') + ') \u00b7 ';
+          });
+          if (pp.length > 10) tabOper += '... y ' + (pp.length - 10) + ' m\u00e1s';
+          tabOper += '</div></div>';
+        }
         // Partes table
         tabOper += '<div class="card" style="padding:14px;margin-bottom:16px;"><h4 style="margin:0 0 8px;font-size:0.88rem;font-weight:700;">Partes de trabajo</h4>';
         tabOper += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.8rem;">';
@@ -1939,6 +1958,9 @@
     document.getElementById("proy-edit-provincia-loc").value = p ? p.provincia || "" : "";
     document.getElementById("proy-edit-lat").value = p ? p.ubicacion_lat || "" : "";
     document.getElementById("proy-edit-lon").value = p ? p.ubicacion_lon || "" : "";
+    // Días laborables
+    var diasLab = p ? (p.dias_laborables || "LMXJV") : "LMXJV";
+    document.querySelectorAll(".proy-dia-cb").forEach(function(cb) { cb.checked = diasLab.indexOf(cb.value) >= 0; });
     _proyActualizarGmapsLink();
     _proyToggleActividad();
     _proyCalcResumen();
@@ -2010,6 +2032,7 @@
       municipio: document.getElementById("proy-edit-municipio").value || null,
       ubicacion_lat: document.getElementById("proy-edit-lat").value ? parseFloat(document.getElementById("proy-edit-lat").value) : null,
       ubicacion_lon: document.getElementById("proy-edit-lon").value ? parseFloat(document.getElementById("proy-edit-lon").value) : null,
+      dias_laborables: Array.from(document.querySelectorAll(".proy-dia-cb:checked")).map(function(cb){return cb.value;}).join("") || "LMXJV",
     };
     var esCotizadoNuevo = !id && body.estado === "cotizado";
     var url = id ? "/api/proyectos/" + id : (esCotizadoNuevo ? "/api/proyectos/cotizado" : "/api/proyectos");

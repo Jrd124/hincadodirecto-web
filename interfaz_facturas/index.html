@@ -252,7 +252,14 @@
             <span class="dir-kpi__value" id="dir-maquinas">—</span>
             <span class="dir-kpi__sub" id="dir-maquinas-rev">— revisiones pendientes</span>
           </div>
+          <div class="dir-kpi dir-kpi--gray">
+            <span class="dir-kpi__label">&#x26FD; Combustible mes</span>
+            <span class="dir-kpi__value" id="dir-combustible-mes">—</span>
+            <span class="dir-kpi__sub" id="dir-combustible-sub">— litros · — repostajes</span>
+          </div>
         </div>
+
+        <div id="dir-partes-pendientes" style="display:none;background:#FEF3C7;border-left:4px solid #F59E0B;border-radius:8px;padding:14px 18px;margin-bottom:16px;"></div>
 
         <!-- Fila 3: Obras activas + Alertas -->
         <div class="dir-grid-main">
@@ -1007,6 +1014,20 @@
               <div style="display:flex;gap:8px;">
                 <button type="button" onclick="_proyBuscarCoords()" style="padding:6px 12px;font-size:12px;background:#E6F1FB;color:#185FA5;border:none;border-radius:6px;cursor:pointer;">&#x1F30D; Buscar coordenadas</button>
                 <a id="proy-link-gmaps" href="#" target="_blank" style="padding:6px 12px;font-size:12px;color:#185FA5;text-decoration:none;">&#x1F517; Abrir en Google Maps</a>
+              </div>
+            </div>
+
+            <!-- Días laborables -->
+            <div style="margin-top:16px;padding-top:16px;border-top:0.5px solid #E5E5E5;">
+              <div style="font-size:11px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">&#x1F4C5; D&iacute;as laborables del proyecto</div>
+              <div style="display:flex;gap:8px;">
+                <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:13px;"><input type="checkbox" class="proy-dia-cb" value="L" checked> Lun</label>
+                <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:13px;"><input type="checkbox" class="proy-dia-cb" value="M" checked> Mar</label>
+                <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:13px;"><input type="checkbox" class="proy-dia-cb" value="X" checked> Mi&eacute;</label>
+                <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:13px;"><input type="checkbox" class="proy-dia-cb" value="J" checked> Jue</label>
+                <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:13px;"><input type="checkbox" class="proy-dia-cb" value="V" checked> Vie</label>
+                <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:13px;"><input type="checkbox" class="proy-dia-cb" value="S"> S&aacute;b</label>
+                <label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:13px;"><input type="checkbox" class="proy-dia-cb" value="D"> Dom</label>
               </div>
             </div>
 
@@ -4040,7 +4061,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <script src="/static/js/modules/helpers.js?v=27"></script>
     <script src="/static/js/modules/finanzas.js?v=27"></script>
-    <script src="/static/js/modules/proyectos.js?v=29"></script>
+    <script src="/static/js/modules/proyectos.js?v=31"></script>
     <script src="/static/js/modules/presupuestos.js?v=27"></script>
     <script src="/static/js/modules/crm.js?v=37"></script>
     <script src="/static/js/modules/maquinaria.js?v=32"></script>
@@ -4054,10 +4075,10 @@
     <script src="/static/js/modules/eeff.js?v=1"></script>
     <script src="/static/js/modules/albaranes.js?v=1"></script>
     <script src="/static/js/modules/seguros.js?v=1"></script>
-    <script src="/static/js/modules/operaciones.js?v=4"></script>
-    <script src="/static/js/modules/gasoil.js?v=5"></script>
+    <script src="/static/js/modules/operaciones.js?v=5"></script>
+    <script src="/static/js/modules/gasoil.js?v=9"></script>
     <script src="/static/js/modules/alojamiento.js?v=1"></script>
-    <script src="/static/js/app.js?v=40"></script>
+    <script src="/static/js/app.js?v=42"></script>
     <!-- React desactivado temporalmente — reactivar cuando se resuelva el bug de visibilidad CSS
     <script type="module" src="/static/js/react-app.js"></script>
     <script type="module" src="/static/js/react/DashboardDirector.js"></script>

@@ -492,6 +492,32 @@ def consultar_proyectos(proyecto_nombre: str | None = None, solo_activos: bool =
         conn.close()
 
 
+def consultar_partes_pendientes(proyecto: str | None = None, dias: int = 7) -> str:
+    """Tool: detecta días con máquina asignada pero sin parte registrado."""
+    _init_all()
+    try:
+        from core.alertas_partes import obtener_partes_pendientes
+        desde = (datetime.now() - timedelta(days=dias)).strftime("%Y-%m-%d")
+        resultado = obtener_partes_pendientes(desde=desde)
+        if proyecto:
+            pn = _normalize(proyecto)
+            resultado["por_proyecto"] = [p for p in resultado["por_proyecto"] if pn in _normalize(p["proyecto_nombre"])]
+            resultado["total_pendientes"] = sum(len(p["dias_pendientes"]) for p in resultado["por_proyecto"])
+        if not resultado["total_pendientes"]:
+            return "✅ No hay partes pendientes de registrar en los últimos " + str(dias) + " días."
+        lines = [f"⚠️ {resultado['total_pendientes']} partes pendientes:\n"]
+        for proy in resultado["por_proyecto"]:
+            lines.append(f"📋 {proy['proyecto_codigo']} — {proy['proyecto_nombre']}")
+            for d in proy["dias_pendientes"][:7]:
+                maq = ", ".join(d["maquinas"])
+                lines.append(f"  · {d['dia_semana']} {d['fecha']} — {maq}")
+            if len(proy["dias_pendientes"]) > 7:
+                lines.append(f"  ... y {len(proy['dias_pendientes'])-7} más")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"Error: {e}"
+
+
 def consultar_partes(proyecto_nombre: str | None = None, fecha: str | None = None, dias: int = 7) -> str:
     _init_all()
     conn = get_conn()
@@ -1246,8 +1272,19 @@ _GPT_FUNCTIONS = [
         },
     },
     {
+        "name": "consultar_partes_pendientes",
+        "description": "Detecta días con maquinaria asignada pero sin parte de trabajo registrado. Útil para saber qué partes faltan.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "proyecto": {"type": "string", "description": "Nombre del proyecto (opcional)"},
+                "dias": {"type": "integer", "description": "Últimos N días a revisar (default 7)", "default": 7},
+            },
+        },
+    },
+    {
         "name": "consultar_partes",
-        "description": "Consulta partes de trabajo (hincas diarias, horas, operadores).",
+        "description": "Consulta partes de trabajo registrados (hincas diarias, horas, operadores).",
         "parameters": {
             "type": "object",
             "properties": {
@@ -1423,6 +1460,7 @@ _GPT_FUNCTIONS = [
 _FN_MAP = {
     "consultar_proyectos": consultar_proyectos,
     "consultar_partes": consultar_partes,
+    "consultar_partes_pendientes": consultar_partes_pendientes,
     "consultar_finanzas": consultar_finanzas,
     "consultar_maquinaria": consultar_maquinaria,
     "consultar_alertas": consultar_alertas,
@@ -3005,6 +3043,37 @@ async def recordatorio_partes(context: ContextTypes.DEFAULT_TYPE):
         conn.close()
 
 
+async def check_partes_pendientes_diario(context: ContextTypes.DEFAULT_TYPE):
+    """9:00 L-V: avisar a superadmins de partes pendientes de registrar (últimos 3 días laborables)."""
+    try:
+        from core.alertas_partes import obtener_partes_pendientes
+        hoy = datetime.now().date()
+        dias_check = []
+        d = hoy - timedelta(days=1)
+        while len(dias_check) < 3:
+            if d.weekday() < 5:
+                dias_check.append(d.isoformat())
+            d -= timedelta(days=1)
+        resultado = obtener_partes_pendientes(desde=min(dias_check), hasta=max(dias_check))
+        if resultado["total_pendientes"] > 0:
+            msg = f"⚠️ *Partes pendientes de registrar* ({resultado['total_pendientes']} días)\n\n"
+            for proy in resultado["por_proyecto"]:
+                msg += f"📋 *{proy['proyecto_codigo']}* — {proy['proyecto_nombre']}\n"
+                for dp in proy["dias_pendientes"][:5]:
+                    maq = ", ".join(dp["maquinas"])
+                    msg += f"  · {dp['dia_semana']} {dp['fecha'][8:]}/{dp['fecha'][5:7]} — {maq}\n"
+                if len(proy["dias_pendientes"]) > 5:
+                    msg += f"  · ... y {len(proy['dias_pendientes'])-5} más\n"
+                msg += "\n"
+            for u in listar_usuarios(rol="superadmin"):
+                try:
+                    await context.bot.send_message(chat_id=u["telegram_id"], text=msg, parse_mode="Markdown")
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.warning("Error check_partes_pendientes_diario: %s", e)
+
+
 async def alerta_viernes_firmas(context: ContextTypes.DEFAULT_TYPE):
     """14:00 viernes: avisar de partes sin firmar de la semana."""
     hoy = datetime.now()
@@ -3580,6 +3649,8 @@ def main():
     jq.run_daily(recordatorio_check_semanal, time=time(12, 0), days=(4,))
     # Maquinaria: alerta revisiones pendientes — lunes y jueves 8:00
     jq.run_daily(alerta_mantenimiento_pendiente, time=time(8, 0), days=(0, 3))
+    # Partes pendientes de registrar: 9:15 L-V
+    jq.run_daily(check_partes_pendientes_diario, time=time(9, 15), days=(0, 1, 2, 3, 4))
 
     logger.info("Bot arrancado. Polling...")
     app.run_polling(drop_pending_updates=True)

@@ -284,6 +284,8 @@ def init_proyectos_db() -> None:
             conn.execute("ALTER TABLE proyectos ADD COLUMN direccion TEXT")
         if "municipio" not in existing:
             conn.execute("ALTER TABLE proyectos ADD COLUMN municipio TEXT")
+        if "dias_laborables" not in existing:
+            conn.execute("ALTER TABLE proyectos ADD COLUMN dias_laborables TEXT DEFAULT 'LMXJV'")
 
     _initialized = True
 
@@ -614,8 +616,9 @@ def crear_proyecto(data: dict) -> dict:
                 hinca_precio_admin_operador, hinca_precio_admin_ayudante,
                 perforacion_cantidad, perforacion_precio_prod_operador, perforacion_precio_prod_ayudante,
                 perforacion_precio_admin_operador, perforacion_precio_admin_ayudante,
+                dias_laborables,
                 created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             (data.get("nombre") or "").strip(),
             codigo,
@@ -654,6 +657,7 @@ def crear_proyecto(data: dict) -> dict:
             data.get("perforacion_precio_prod_ayudante") or 0,
             data.get("perforacion_precio_admin_operador") or 0,
             data.get("perforacion_precio_admin_ayudante") or 0,
+            (data.get("dias_laborables") or "LMXJV").strip() or "LMXJV",
             ahora, ahora,
         ))
         new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -696,6 +700,7 @@ def actualizar_proyecto(proyecto_id: int, data: dict) -> dict | None:
                 hinca_precio_admin_operador=?, hinca_precio_admin_ayudante=?,
                 perforacion_cantidad=?, perforacion_precio_prod_operador=?, perforacion_precio_prod_ayudante=?,
                 perforacion_precio_admin_operador=?, perforacion_precio_admin_ayudante=?,
+                dias_laborables=?,
                 updated_at=?
             WHERE id=?
         """, (
@@ -737,6 +742,7 @@ def actualizar_proyecto(proyecto_id: int, data: dict) -> dict | None:
             data.get("perforacion_precio_prod_ayudante") or 0,
             data.get("perforacion_precio_admin_operador") or 0,
             data.get("perforacion_precio_admin_ayudante") or 0,
+            (data.get("dias_laborables") or "LMXJV").strip() or "LMXJV",
             ahora, proyecto_id,
         ))
         if nuevo_estado != estado_anterior:
@@ -1666,14 +1672,44 @@ def calcular_dashboard_v2(proyecto_id: int) -> dict | None:
         except Exception:
             pass
         desglose["personal"] = round(dietas_proy + he_proy + prorrata, 2)
+
+        # Combustible from imputated fuel transactions
+        comb = conn2.execute("""
+            SELECT COALESCE(SUM(importe_final),0) as total,
+                   COALESCE(SUM(CASE WHEN tipo_producto='diesel' THEN importe_final ELSE 0 END),0) as diesel,
+                   COALESCE(SUM(CASE WHEN tipo_producto='gasolina' THEN importe_final ELSE 0 END),0) as gasolina,
+                   COALESCE(SUM(litros),0) as litros,
+                   COUNT(*) as repostajes
+            FROM combustible_transacciones
+            WHERE proyecto_id = ? AND COALESCE(tipo_producto,'') NOT IN ('descuento','peaje')
+        """, (proyecto_id,)).fetchone()
+        comb_total = comb["total"] or 0
+        if comb_total > 0:
+            desglose["gasoil"] = desglose.get("gasoil", 0) + comb_total
+            data["combustible_detalle"] = {
+                "total": round(comb_total, 2), "diesel": round(comb["diesel"], 2),
+                "gasolina": round(comb["gasolina"], 2), "litros": round(comb["litros"], 1),
+                "repostajes": comb["repostajes"],
+            }
     except Exception:
         pass
     finally:
         conn2.close()
     data["desglose_costes"] = {k: round(v, 2) for k, v in desglose.items()}
 
+    # ── Partes pendientes de registrar ──
+    try:
+        from core.alertas_partes import obtener_partes_pendientes
+        from datetime import date as _d, timedelta as _td
+        _pp = obtener_partes_pendientes(proyecto_id=proyecto_id, desde=(_d.today() - _td(days=30)).isoformat())
+        data["partes_pendientes"] = _pp.get("por_proyecto", [{}])[0].get("dias_pendientes", []) if _pp.get("por_proyecto") else []
+    except Exception:
+        data["partes_pendientes"] = []
+
     # ── Alerts ──
     alertas = []
+    if data["partes_pendientes"]:
+        alertas.append({"nivel": "alta", "texto": f"{len(data['partes_pendientes'])} día(s) sin parte de trabajo"})
     if partes_sin_firmar > 0:
         alertas.append({"nivel": "alta", "texto": f"{partes_sin_firmar} parte(s) sin firmar"})
     facturas_pend = [f for f in facturas_cli if (f.get("estado_cobro") or "") in ("pendiente", "parcial")]
