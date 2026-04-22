@@ -252,17 +252,87 @@ function _impCambiarVista(tab) {
     t.style.color = act ? "#2C2C2A" : "#888780";
     t.classList.toggle("active", act);
   });
+  // Clear content so filter bars get re-created for the correct section
+  var impC = document.getElementById("imp-content");
+  if (impC) impC.innerHTML = '';
   if (tab === "revisar") _impCargarPendientes();
   else _impCargarSinAsignar();
+}
+
+// Shared filter bar HTML for imputación sections
+function _impFiltroHtml(prefix, onApply) {
+  var _lbl = 'style="font-size:10px;color:#888780;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;"';
+  var _sel = 'style="padding:6px 10px 6px 8px;border:0.5px solid #D1D5DB;border-radius:6px;font-size:13px;min-width:120px;background:#fff;appearance:none;-webkit-appearance:none;background-image:url(\'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22><path fill=%22%23666%22 d=%22M3 5l3 3 3-3%22/></svg>\');background-repeat:no-repeat;background-position:right 8px center;padding-right:26px;"';
+  var _inp = 'style="padding:6px 8px;border:0.5px solid #D1D5DB;border-radius:6px;font-size:13px;min-width:120px;"';
+  return '<div style="background:#fff;border:0.5px solid #E5E5E5;border-radius:8px;padding:14px;margin-bottom:12px;">' +
+    '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">' +
+      '<div><div '+_lbl+'>Buscar</div><input type="text" id="'+prefix+'-busq" placeholder="Estaci\u00f3n, concepto..." '+_inp+'></div>' +
+      '<div><div '+_lbl+'>Estaci\u00f3n</div><select id="'+prefix+'-est" '+_sel+'><option value="">Todas</option></select></div>' +
+      '<div><div '+_lbl+'>Matr\u00edcula</div><select id="'+prefix+'-mat" '+_sel+'><option value="">Todas</option></select></div>' +
+      '<div><div '+_lbl+'>Desde</div><input type="date" id="'+prefix+'-desde" '+_inp+'></div>' +
+      '<div><div '+_lbl+'>Hasta</div><input type="date" id="'+prefix+'-hasta" '+_inp+'></div>' +
+      '<div style="margin-left:auto;display:flex;gap:8px;">' +
+        '<button onclick="'+onApply+'()" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Aplicar</button>' +
+        '<button onclick="_impLimpiarFiltros(\''+prefix+'\');'+onApply+'()" style="padding:6px 14px;background:#fff;color:#666;border:0.5px solid #ccc;border-radius:6px;font-size:13px;cursor:pointer;">Limpiar</button>' +
+      '</div>' +
+    '</div></div>';
+}
+
+function _impLimpiarFiltros(prefix) {
+  ['busq','est','mat','desde','hasta'].forEach(function(s) {
+    var el = document.getElementById(prefix+'-'+s);
+    if (el) el.value = '';
+  });
+}
+
+function _impGetFiltroParams(prefix) {
+  var p = '';
+  var busq = (document.getElementById(prefix+'-busq')||{}).value||'';
+  var est = (document.getElementById(prefix+'-est')||{}).value||'';
+  var mat = (document.getElementById(prefix+'-mat')||{}).value||'';
+  var desde = (document.getElementById(prefix+'-desde')||{}).value||'';
+  var hasta = (document.getElementById(prefix+'-hasta')||{}).value||'';
+  if (busq) p += '&busqueda=' + encodeURIComponent(busq);
+  if (est) p += '&estacion_id=' + est;
+  if (mat) p += '&matricula=' + encodeURIComponent(mat);
+  if (desde) p += '&desde=' + desde;
+  if (hasta) p += '&hasta=' + hasta;
+  return p;
+}
+
+function _impPoblarFiltroDropdowns(prefix, filtros) {
+  if (!filtros) return;
+  var selEst = document.getElementById(prefix+'-est');
+  if (selEst && filtros.estaciones) {
+    var v = selEst.value;
+    selEst.innerHTML = '<option value="">Todas</option>';
+    filtros.estaciones.forEach(function(e) { selEst.innerHTML += '<option value="'+e.id+'">'+e.nombre+'</option>'; });
+    selEst.value = v;
+  }
+  var selMat = document.getElementById(prefix+'-mat');
+  if (selMat && filtros.matriculas) {
+    var vm = selMat.value;
+    selMat.innerHTML = '<option value="">Todas</option>';
+    filtros.matriculas.forEach(function(m) { selMat.innerHTML += '<option value="'+m+'">'+m+'</option>'; });
+    selMat.value = vm;
+  }
 }
 
 function _impCargarPendientes() {
   var el = document.getElementById("imp-content");
   if (!el) return;
-  el.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">Cargando...</p>';
-  fetch("/api/combustible/imputacion/pendientes?limit=50").then(function(r){return r.json();}).then(function(d) {
+  // Preserve filter bar if exists, only replace table area
+  if (!document.getElementById("imp-rev-busq")) {
+    el.innerHTML = _impFiltroHtml("imp-rev", "_impCargarPendientes") + '<div id="imp-rev-tabla"><p style="color:#94a3b8;padding:20px;text-align:center;">Cargando...</p></div>';
+  }
+  var tabla = document.getElementById("imp-rev-tabla");
+  if (!tabla) return;
+  tabla.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">Cargando...</p>';
+  var params = _impGetFiltroParams("imp-rev");
+  fetch("/api/combustible/imputacion/pendientes?limit=50" + params).then(function(r){return r.json();}).then(function(d) {
+    _impPoblarFiltroDropdowns("imp-rev", d.filtros);
     var txns = d.transacciones || [];
-    if (!txns.length) { el.innerHTML = '<p style="color:#94a3b8;padding:30px;text-align:center;">Sin propuestas pendientes de revisi\u00f3n</p>'; return; }
+    if (!txns.length) { tabla.innerHTML = '<p style="color:#94a3b8;padding:30px;text-align:center;">Sin propuestas pendientes</p>'; return; }
     var html = '<div class="card" style="overflow-x:auto;padding:0;"><table style="width:100%;border-collapse:collapse;font-size:0.8rem;">' +
       '<thead><tr style="background:#f8f9fa;"><th style="padding:6px;">Fecha</th><th style="padding:6px;">Matr.</th><th style="padding:6px;">Estaci\u00f3n</th><th style="padding:6px;">Concepto</th><th style="padding:6px;text-align:right;">Litros</th><th style="padding:6px;text-align:right;">Importe</th><th style="padding:6px;">Proyecto propuesto</th><th style="padding:6px;text-align:center;">Conf.</th><th style="padding:6px;text-align:center;">Acciones</th></tr></thead><tbody>';
     txns.forEach(function(t) {
@@ -284,23 +354,39 @@ function _impCargarPendientes() {
         '</td></tr>';
     });
     html += '</tbody></table></div>';
-    if (d.total > 50) html += '<div style="font-size:12px;color:#888;margin-top:8px;">Mostrando 50 de ' + d.total + '</div>';
-    el.innerHTML = html;
-  }).catch(function(e) { el.innerHTML = '<p style="color:#dc3545;">Error: ' + e.message + '</p>'; });
+    html += '<div style="font-size:12px;color:#888;margin-top:8px;">Mostrando ' + txns.length + ' de ' + d.total + '</div>';
+    tabla.innerHTML = html;
+  }).catch(function(e) { tabla.innerHTML = '<p style="color:#dc3545;">Error: ' + e.message + '</p>'; });
 }
 
 function _impCargarSinAsignar() {
   var el = document.getElementById("imp-content");
   if (!el) return;
-  el.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">Cargando...</p>';
-  fetch("/api/combustible/imputacion/sin-asignar?limit=50").then(function(r){return r.json();}).then(function(d) {
+  if (!document.getElementById("imp-sin-busq")) {
+    el.innerHTML = _impFiltroHtml("imp-sin", "_impCargarSinAsignar") +
+      '<div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;">' +
+        '<select id="imp-bulk-proy" style="padding:6px 10px 6px 8px;border:0.5px solid #D1D5DB;border-radius:6px;font-size:13px;min-width:200px;background:#fff;appearance:none;-webkit-appearance:none;background-image:url(\'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22><path fill=%22%23666%22 d=%22M3 5l3 3 3-3%22/></svg>\');background-repeat:no-repeat;background-position:right 8px center;padding-right:26px;"><option value="">Asignar a proyecto...</option></select>' +
+        '<button onclick="_impAsignarBulk()" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Asignar seleccionados</button>' +
+      '</div>' +
+      '<div id="imp-sin-tabla"><p style="color:#94a3b8;padding:20px;text-align:center;">Cargando...</p></div>';
+    // Populate project dropdown for bulk assign
+    fetch("/api/proyectos").then(function(r){return r.json();}).then(function(pd) {
+      var sel = document.getElementById("imp-bulk-proy");
+      if (!sel) return;
+      (pd.proyectos || pd || []).forEach(function(p) {
+        sel.innerHTML += '<option value="'+p.id+'">'+(p.codigo||'')+' '+(p.nombre||'')+'</option>';
+      });
+    }).catch(function(){});
+  }
+  var tabla = document.getElementById("imp-sin-tabla");
+  if (!tabla) return;
+  tabla.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center;">Cargando...</p>';
+  var params = _impGetFiltroParams("imp-sin");
+  fetch("/api/combustible/imputacion/sin-asignar?limit=50" + params).then(function(r){return r.json();}).then(function(d) {
+    _impPoblarFiltroDropdowns("imp-sin", d.filtros);
     var txns = d.transacciones || [];
-    if (!txns.length) { el.innerHTML = '<p style="color:#94a3b8;padding:30px;text-align:center;">Todas las transacciones est\u00e1n asignadas o en revisi\u00f3n</p>'; return; }
-    var html = '<div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;">' +
-      '<select id="imp-bulk-proy" style="padding:4px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;"><option value="">Proyecto...</option></select>' +
-      '<button onclick="_impAsignarBulk()" style="padding:4px 12px;background:#2563eb;color:#fff;border:none;border-radius:4px;font-size:12px;cursor:pointer;">Asignar seleccionados</button>' +
-    '</div>';
-    html += '<div class="card" style="overflow-x:auto;padding:0;"><table style="width:100%;border-collapse:collapse;font-size:0.8rem;">' +
+    if (!txns.length) { tabla.innerHTML = '<p style="color:#94a3b8;padding:30px;text-align:center;">Todas asignadas o en revisi\u00f3n</p>'; return; }
+    var html = '<div class="card" style="overflow-x:auto;padding:0;"><table style="width:100%;border-collapse:collapse;font-size:0.8rem;">' +
       '<thead><tr style="background:#f8f9fa;"><th style="padding:6px;"><input type="checkbox" id="imp-check-all" onchange="document.querySelectorAll(\'.imp-check\').forEach(function(c){c.checked=document.getElementById(\'imp-check-all\').checked})"></th><th style="padding:6px;">Fecha</th><th style="padding:6px;">Matr.</th><th style="padding:6px;">Estaci\u00f3n</th><th style="padding:6px;">Concepto</th><th style="padding:6px;text-align:right;">Litros</th><th style="padding:6px;text-align:right;">Importe</th></tr></thead><tbody>';
     txns.forEach(function(t) {
       html += '<tr style="border-bottom:1px solid #e9ecef;">' +
@@ -314,17 +400,9 @@ function _impCargarSinAsignar() {
         '</tr>';
     });
     html += '</tbody></table></div>';
-    if (d.total > 50) html += '<div style="font-size:12px;color:#888;margin-top:8px;">Mostrando 50 de ' + d.total + '</div>';
-    el.innerHTML = html;
-    // Populate project dropdown
-    fetch("/api/proyectos").then(function(r){return r.json();}).then(function(pd) {
-      var sel = document.getElementById("imp-bulk-proy");
-      if (!sel) return;
-      (pd.proyectos || pd || []).forEach(function(p) {
-        sel.innerHTML += '<option value="'+p.id+'">'+(p.codigo||'')+' '+(p.nombre||'')+'</option>';
-      });
-    }).catch(function(){});
-  }).catch(function(e) { el.innerHTML = '<p style="color:#dc3545;">Error: ' + e.message + '</p>'; });
+    html += '<div style="font-size:12px;color:#888;margin-top:8px;">Mostrando ' + txns.length + ' de ' + d.total + '</div>';
+    tabla.innerHTML = html;
+  }).catch(function(e) { tabla.innerHTML = '<p style="color:#dc3545;">Error: ' + e.message + '</p>'; });
 }
 
 function _impResolver(txId, accion) {
@@ -971,3 +1049,4 @@ window._impConfirmarAlta = _impConfirmarAlta;
 window._impCambiarVista = _impCambiarVista;
 window._impResolver = _impResolver;
 window._impAsignarBulk = _impAsignarBulk;
+window._impLimpiarFiltros = _impLimpiarFiltros;

@@ -616,9 +616,15 @@ def api_imputacion_resumen():
 @moeve_bp.get("/api/combustible/imputacion/pendientes")
 def api_imputacion_pendientes():
     from core.combustible_imputacion import listar_pendientes_revision
-    limit = min(request.args.get("limit", 50, type=int), 200)
-    offset = request.args.get("offset", 0, type=int)
-    return jsonify(listar_pendientes_revision(limit, offset))
+    return jsonify(listar_pendientes_revision(
+        limit=min(request.args.get("limit", 50, type=int), 200),
+        offset=request.args.get("offset", 0, type=int),
+        busqueda=request.args.get("busqueda") or None,
+        estacion_id=request.args.get("estacion_id") or None,
+        matricula=request.args.get("matricula") or None,
+        desde=request.args.get("desde") or None,
+        hasta=request.args.get("hasta") or None,
+    ))
 
 
 @moeve_bp.get("/api/combustible/imputacion/sin-asignar")
@@ -627,8 +633,11 @@ def api_imputacion_sin_asignar():
     return jsonify(listar_sin_asignar(
         limit=min(request.args.get("limit", 50, type=int), 200),
         offset=request.args.get("offset", 0, type=int),
-        matricula=request.args.get("matricula"),
-        mes=request.args.get("mes"),
+        busqueda=request.args.get("busqueda") or None,
+        estacion_id=request.args.get("estacion_id") or None,
+        matricula=request.args.get("matricula") or None,
+        desde=request.args.get("desde") or None,
+        hasta=request.args.get("hasta") or None,
     ))
 
 

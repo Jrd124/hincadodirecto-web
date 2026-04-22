@@ -155,14 +155,32 @@ def resumen_imputacion():
         conn.close()
 
 
-def listar_pendientes_revision(limit=50, offset=0):
+def listar_pendientes_revision(limit=50, offset=0, busqueda=None, estacion_id=None, matricula=None, desde=None, hasta=None):
     conn = get_conn()
     try:
+        base_where = "WHERE ct.proyecto_revisar=1 AND COALESCE(ct.tipo_producto,'') NOT IN ('descuento','peaje')"
+        params = []
+        if busqueda:
+            base_where += " AND (es.nombre LIKE ? OR ct.concepto_raw LIKE ?)"
+            params += ['%' + busqueda + '%', '%' + busqueda + '%']
+        if estacion_id:
+            base_where += " AND ct.estacion_id=?"
+            params.append(int(estacion_id))
+        if matricula:
+            base_where += " AND ct.matricula_raw=?"
+            params.append(matricula)
+        if desde:
+            base_where += " AND ct.fecha_operacion>=?"
+            params.append(desde)
+        if hasta:
+            base_where += " AND ct.fecha_operacion<=?"
+            params.append(hasta + " 23:59:59")
+
         total = conn.execute(
-            "SELECT COUNT(*) FROM combustible_transacciones WHERE proyecto_revisar=1 AND COALESCE(tipo_producto,'') NOT IN ('descuento','peaje')"
+            f"SELECT COUNT(*) FROM combustible_transacciones ct LEFT JOIN estaciones_servicio es ON ct.estacion_id=es.id {base_where}", params
         ).fetchone()[0]
 
-        rows = conn.execute("""
+        rows = conn.execute(f"""
             SELECT ct.id, ct.fecha_operacion, ct.matricula_raw, ct.importe_final, ct.litros,
                    ct.concepto_raw, ct.tipo_producto, ct.proyecto_id,
                    ct.proyecto_metodo_asig, ct.proyecto_confianza,
@@ -171,11 +189,10 @@ def listar_pendientes_revision(limit=50, offset=0):
             FROM combustible_transacciones ct
             LEFT JOIN estaciones_servicio es ON ct.estacion_id = es.id
             LEFT JOIN proyectos p ON ct.proyecto_id = p.id
-            WHERE ct.proyecto_revisar=1
-              AND COALESCE(ct.tipo_producto,'') NOT IN ('descuento','peaje')
+            {base_where}
             ORDER BY ct.proyecto_confianza DESC, ct.fecha_operacion DESC
             LIMIT ? OFFSET ?
-        """, (limit, offset)).fetchall()
+        """, params + [limit, offset]).fetchall()
 
         # For each, get nearby project alternatives
         proyectos = conn.execute("""
@@ -203,24 +220,47 @@ def listar_pendientes_revision(limit=50, offset=0):
                             break
             result.append(d)
 
-        return {'total': total, 'transacciones': result}
+        # Unique values for filter dropdowns
+        estaciones = conn.execute(
+            "SELECT DISTINCT es.id, es.nombre FROM combustible_transacciones ct JOIN estaciones_servicio es ON ct.estacion_id=es.id WHERE ct.proyecto_revisar=1 AND COALESCE(ct.tipo_producto,'') NOT IN ('descuento','peaje') ORDER BY es.nombre"
+        ).fetchall()
+        matriculas = conn.execute(
+            "SELECT DISTINCT matricula_raw FROM combustible_transacciones WHERE proyecto_revisar=1 AND matricula_raw IS NOT NULL AND COALESCE(tipo_producto,'') NOT IN ('descuento','peaje') ORDER BY matricula_raw"
+        ).fetchall()
+
+        return {
+            'total': total, 'transacciones': result,
+            'filtros': {
+                'estaciones': [{'id': e['id'], 'nombre': e['nombre']} for e in estaciones],
+                'matriculas': [m['matricula_raw'] for m in matriculas],
+            }
+        }
     finally:
         conn.close()
 
 
-def listar_sin_asignar(limit=50, offset=0, matricula=None, mes=None):
+def listar_sin_asignar(limit=50, offset=0, busqueda=None, estacion_id=None, matricula=None, desde=None, hasta=None):
     conn = get_conn()
     try:
         where = "WHERE ct.proyecto_id IS NULL AND COALESCE(ct.proyecto_metodo_asig,'') NOT IN ('descartado') AND ct.proyecto_revisar=0 AND COALESCE(ct.tipo_producto,'') NOT IN ('descuento','peaje')"
         params = []
+        if busqueda:
+            where += " AND (es.nombre LIKE ? OR ct.concepto_raw LIKE ?)"
+            params += ['%' + busqueda + '%', '%' + busqueda + '%']
+        if estacion_id:
+            where += " AND ct.estacion_id=?"
+            params.append(int(estacion_id))
         if matricula:
             where += " AND ct.matricula_raw=?"
             params.append(matricula)
-        if mes:
-            where += " AND ct.fecha_operacion LIKE ?"
-            params.append(mes + '%')
+        if desde:
+            where += " AND ct.fecha_operacion>=?"
+            params.append(desde)
+        if hasta:
+            where += " AND ct.fecha_operacion<=?"
+            params.append(hasta + " 23:59:59")
 
-        total = conn.execute(f"SELECT COUNT(*) FROM combustible_transacciones ct {where}", params).fetchone()[0]
+        total = conn.execute(f"SELECT COUNT(*) FROM combustible_transacciones ct LEFT JOIN estaciones_servicio es ON ct.estacion_id=es.id {where}", params).fetchone()[0]
         rows = conn.execute(f"""
             SELECT ct.id, ct.fecha_operacion, ct.matricula_raw, ct.importe_final, ct.litros,
                    ct.concepto_raw, ct.tipo_producto, es.nombre as estacion_nombre
@@ -231,7 +271,22 @@ def listar_sin_asignar(limit=50, offset=0, matricula=None, mes=None):
             LIMIT ? OFFSET ?
         """, params + [limit, offset]).fetchall()
 
-        return {'total': total, 'transacciones': [dict(r) for r in rows]}
+        # Unique values for filter dropdowns
+        base_sin = "WHERE ct.proyecto_id IS NULL AND COALESCE(ct.proyecto_metodo_asig,'') NOT IN ('descartado') AND ct.proyecto_revisar=0 AND COALESCE(ct.tipo_producto,'') NOT IN ('descuento','peaje')"
+        estaciones = conn.execute(
+            f"SELECT DISTINCT es.id, es.nombre FROM combustible_transacciones ct JOIN estaciones_servicio es ON ct.estacion_id=es.id {base_sin} ORDER BY es.nombre"
+        ).fetchall()
+        matriculas_list = conn.execute(
+            f"SELECT DISTINCT matricula_raw FROM combustible_transacciones ct {base_sin} AND matricula_raw IS NOT NULL ORDER BY matricula_raw"
+        ).fetchall()
+
+        return {
+            'total': total, 'transacciones': [dict(r) for r in rows],
+            'filtros': {
+                'estaciones': [{'id': e['id'], 'nombre': e['nombre']} for e in estaciones],
+                'matriculas': [m['matricula_raw'] for m in matriculas_list],
+            }
+        }
     finally:
         conn.close()
 
