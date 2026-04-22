@@ -1672,6 +1672,12 @@ def calcular_dashboard_v2(proyecto_id: int) -> dict | None:
         except Exception:
             pass
         desglose["personal"] = round(dietas_proy + he_proy + prorrata, 2)
+        data["personal_detalle"] = {
+            "total": round(dietas_proy + he_proy + prorrata, 2),
+            "dietas": round(dietas_proy, 2),
+            "horas_extras": round(he_proy, 2),
+            "nominas_prorrata": round(prorrata, 2),
+        }
 
         # Combustible from imputated fuel transactions
         comb = conn2.execute("""
@@ -1696,6 +1702,15 @@ def calcular_dashboard_v2(proyecto_id: int) -> dict | None:
     finally:
         conn2.close()
     data["desglose_costes"] = {k: round(v, 2) for k, v in desglose.items()}
+
+    # Recalculate total costes including personal + combustible (not just facturas proveedor)
+    total_costes_real = sum(desglose.values())
+    margen_real = total_facturado - total_costes_real
+    margen_pct_real = round(margen_real / total_facturado * 100, 1) if total_facturado > 0 else 0
+    data["financiero"]["costes"] = round(total_costes_real, 2)
+    data["financiero"]["margen"] = round(margen_real, 2)
+    data["financiero"]["margen_pct"] = margen_pct_real
+    data["financiero"]["costes_facturas_prov"] = round(total_costes, 2)
 
     # ── Partes pendientes de registrar ──
     try:

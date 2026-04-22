@@ -427,20 +427,38 @@
         var dc = p.desglose_costes || {};
         var dcTotal = Object.values(dc).reduce(function(a,b){return a+b;}, 0) || 1;
         tabResumen += '<div class="card" style="padding:14px;"><h4 style="margin:0 0 10px;font-size:0.88rem;font-weight:700;">Desglose de costes</h4>';
-        var catLabels = {personal:"Personal",gasoil:"\u26FD Combustible",transporte:"Transporte",hoteles:"Hoteles",otros:"Otros"};
+        var catLabels = {personal:"\uD83D\uDC77 Personal",gasoil:"\u26FD Combustible",transporte:"Transporte",hoteles:"Hoteles",otros:"\uD83D\uDCE6 Otros (fact. prov.)"};
         ["personal","gasoil","transporte","hoteles","otros"].forEach(function(cat) {
           var val = dc[cat] || 0;
           if (val === 0) return;
           var pct = Math.round(val / dcTotal * 100);
           var colors = {personal:"#3B82F6",gasoil:"#f59e0b",transporte:"#10B981",hoteles:"#8B5CF6",otros:"#6B7280"};
-          tabResumen += '<div style="margin-bottom:6px;"><div style="display:flex;justify-content:space-between;font-size:0.78rem;"><span>' + (catLabels[cat]||cat) + '</span><span style="font-weight:600;">' + _dashFmtEur(val) + ' (' + pct + '%)</span></div>' +
+          tabResumen += '<div style="margin-bottom:8px;"><div style="display:flex;justify-content:space-between;font-size:0.78rem;"><span>' + (catLabels[cat]||cat) + '</span><span style="font-weight:600;">' + _dashFmtEur(val) + ' (' + pct + '%)</span></div>' +
             '<div style="height:6px;background:#E5E7EB;border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + (colors[cat]||"#888") + ';border-radius:3px;"></div></div>';
+          if (cat === "personal" && p.personal_detalle) {
+            var pd = p.personal_detalle;
+            var parts = [];
+            if (pd.nominas_prorrata) parts.push('N\u00f3minas ' + _dashFmtEur(pd.nominas_prorrata));
+            if (pd.dietas) parts.push('Dietas ' + _dashFmtEur(pd.dietas));
+            if (pd.horas_extras) parts.push('HE ' + _dashFmtEur(pd.horas_extras));
+            if (parts.length) tabResumen += '<div style="font-size:0.7rem;color:#888;margin-top:2px;">' + parts.join(' \u00b7 ') + '</div>';
+          }
           if (cat === "gasoil" && p.combustible_detalle) {
             var cd = p.combustible_detalle;
             tabResumen += '<div style="font-size:0.7rem;color:#888;margin-top:2px;">' + cd.repostajes + ' repostajes \u00b7 ' + (cd.litros||0).toLocaleString("es-ES",{maximumFractionDigits:0}) + ' L (' + _dashFmtEur(cd.diesel) + ' diesel, ' + _dashFmtEur(cd.gasolina) + ' gasolina)</div>';
           }
           tabResumen += '</div>';
         });
+        // Total + margin summary below breakdown
+        tabResumen += '<div style="border-top:1px solid #E5E7EB;padding-top:8px;margin-top:4px;">';
+        tabResumen += '<div style="display:flex;justify-content:space-between;font-size:0.82rem;font-weight:600;"><span>Total costes</span><span>' + _dashFmtEur(fin.costes) + '</span></div>';
+        if (fin.facturado > 0) {
+          var mc = fin.margen_pct > 30 ? '#22c55e' : (fin.margen_pct > 0 ? '#eab308' : '#dc2626');
+          tabResumen += '<div style="display:flex;justify-content:space-between;font-size:0.82rem;font-weight:600;color:'+mc+';"><span>\uD83D\uDCB0 Margen bruto</span><span>' + _dashFmtEur(fin.margen) + ' (' + fin.margen_pct + '%)</span></div>';
+        } else {
+          tabResumen += '<div style="font-size:0.78rem;color:#888;">Sin facturaci\u00f3n</div>';
+        }
+        tabResumen += '</div>';
         tabResumen += '</div>';
 
         // Right: equipo hoy
