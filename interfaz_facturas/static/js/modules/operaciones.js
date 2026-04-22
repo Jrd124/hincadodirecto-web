@@ -298,21 +298,34 @@ function _renderFila(tipo, id, nombre, subtitulo, dias, asignaciones, proyMap, g
     }
   }
   var _estadoPill = "";
-  if (_empEstado === "baja") _estadoPill = ' <span style="padding:1px 5px;border-radius:9999px;font-size:9px;font-weight:600;background:#FCEBEB;color:#A32D2D;">Baja</span>';
+  if (_empEstado === "exempleado") _estadoPill = ' <span style="padding:1px 5px;border-radius:9999px;font-size:9px;font-weight:600;background:#E5E5E5;color:#666;">Inactivo</span>';
+  else if (_empEstado === "baja") _estadoPill = ' <span style="padding:1px 5px;border-radius:9999px;font-size:9px;font-weight:600;background:#FCEBEB;color:#A32D2D;">Baja</span>';
   else if (_empEstado === "vacaciones") _estadoPill = ' <span style="padding:1px 5px;border-radius:9999px;font-size:9px;font-weight:600;background:#E6F1FB;color:#1E40AF;">Vac.</span>';
-  var _nameStyle = _empEstado === "baja" ? "color:#999;" : "";
+  var _nameStyle = (_empEstado === "baja" || _empEstado === "exempleado") ? "color:#999;" : "";
   html += '<div style="font-weight:500;line-height:1.3;' + _nameStyle + '">' + nombre + _estadoPill + '</div>';
   if (subtitulo) html += '<div style="font-size:10px;color:var(--color-text-secondary);line-height:1.2;">' + subtitulo + '</div>';
   html += '</td>';
 
   var vacSet = (_operData && _operData.vacaciones) || [];
-  // Check if employee is on baja
-  var bajaInicio = null, bajaFin = null;
+  // Check employee baja temporal + fecha_alta/fecha_baja permanente
+  var bajaInicio = null, bajaFin = null, fechaAlta = null, fechaBaja = null;
   if (tipo === "empleado" && _operData && _operData.empleados) {
     for (var _bi = 0; _bi < _operData.empleados.length; _bi++) {
       if (_operData.empleados[_bi].id === id) {
         bajaInicio = _operData.empleados[_bi].fecha_baja_inicio || null;
         bajaFin = _operData.empleados[_bi].fecha_baja_fin || null;
+        fechaAlta = _operData.empleados[_bi].fecha_alta || null;
+        fechaBaja = _operData.empleados[_bi].fecha_baja || null;
+        break;
+      }
+    }
+  }
+  // Check machine fecha_comision
+  var fechaComision = null;
+  if (tipo === "maquina" && _operData && _operData.maquinas) {
+    for (var _mi = 0; _mi < _operData.maquinas.length; _mi++) {
+      if (_operData.maquinas[_mi].id === id) {
+        fechaComision = _operData.maquinas[_mi].fecha_comision || null;
         break;
       }
     }
@@ -323,11 +336,28 @@ function _renderFila(tipo, id, nombre, subtitulo, dias, asignaciones, proyMap, g
     var esHoy = dia.es_hoy;
     var esVac = (tipo === "empleado" && vacSet.indexOf(id + "_" + dia.fecha) >= 0);
     var esBaja = (bajaInicio && dia.fecha >= bajaInicio && (!bajaFin || dia.fecha <= bajaFin));
-    var bgCol = noLab ? '#E5E7EB' : (esBaja ? '' : (esVac && !a ? '#FEF3C7' : (esHoy ? '#F0F7FF' : '')));
-    var bgPattern = esBaja ? 'background:repeating-linear-gradient(45deg,#FCEBEB,#FCEBEB 4px,#fff 4px,#fff 8px);' : '';
-    var cursor = 'pointer';
+    // Unavailable: before fecha_alta or after fecha_baja (employee), before fecha_comision (machine)
+    var noDisponible = false;
+    var noDispMotivo = '';
+    if (tipo === "empleado" && fechaAlta && dia.fecha < fechaAlta) {
+      noDisponible = true; noDispMotivo = 'No dado de alta a\u00fan (alta: ' + fechaAlta + ')';
+    } else if (tipo === "empleado" && fechaBaja && dia.fecha > fechaBaja) {
+      noDisponible = true; noDispMotivo = 'Baja definitiva desde ' + fechaBaja;
+    } else if (tipo === "maquina" && fechaComision && dia.fecha < fechaComision) {
+      noDisponible = true; noDispMotivo = 'No adquirida a\u00fan (alta: ' + fechaComision + ')';
+    }
+    var bgCol = noLab ? '#E5E7EB' : (noDisponible ? '' : (esBaja ? '' : (esVac && !a ? '#FEF3C7' : (esHoy ? '#F0F7FF' : ''))));
+    var bgPattern = '';
+    if (noDisponible && tipo === "maquina") {
+      bgPattern = 'background:repeating-linear-gradient(45deg,#2C2C2A,#2C2C2A 2px,#fff 2px,#fff 6px);opacity:0.25;';
+    } else if (noDisponible) {
+      bgPattern = 'background:repeating-linear-gradient(45deg,#D3D1C7,#D3D1C7 2px,#fff 2px,#fff 6px);opacity:0.35;';
+    } else if (esBaja) {
+      bgPattern = 'background:repeating-linear-gradient(45deg,#FCEBEB,#FCEBEB 4px,#fff 4px,#fff 8px);';
+    }
+    var cursor = noDisponible ? 'not-allowed' : 'pointer';
 
-    var cellTitle = esBaja ? 'title="Baja laboral' + (bajaInicio ? ': ' + bajaInicio + (bajaFin ? ' a ' + bajaFin : '') : '') + '"' : '';
+    var cellTitle = noDisponible ? 'title="' + noDispMotivo + '"' : (esBaja ? 'title="Baja laboral' + (bajaInicio ? ': ' + bajaInicio + (bajaFin ? ' a ' + bajaFin : '') : '') + '"' : '');
     html += '<td data-oper-celda data-tipo="' + tipo + '" data-rid="' + id + '" data-fecha="' + dia.fecha + '" data-col="' + colIdx + '" data-lab="' + (dia.laborable ? 1 : 0) + '" ' + cellTitle + ' style="padding:1px;border-bottom:1px solid var(--color-border);' + (bgPattern || 'background:' + bgCol + ';') + 'cursor:' + cursor + ';">';
 
     if (a && a.estado === "averia") {
