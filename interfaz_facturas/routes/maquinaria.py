@@ -337,14 +337,48 @@ def api_actualizar_incidencia(iid):
   return jsonify(result)
 
 
+@maquinaria_bp.post("/api/maquinaria/incidencias/<int:iid>/updates")
+@login_required
+def api_crear_incidencia_update_admin(iid):
+  """Admin crea una actualización en una incidencia."""
+  data = request.get_json(silent=True) or {}
+  texto = (data.get("texto") or "").strip()
+  if not texto:
+    return jsonify({"error": "El texto es obligatorio"}), 400
+  autor = getattr(current_user, "nombre", "Admin") if current_user.is_authenticated else "Admin"
+  update = maquinaria_db.crear_incidencia_update(iid, texto, autor)
+  return jsonify(update), 201
+
+
+@maquinaria_bp.get("/api/maquinaria/incidencias/<int:iid>/updates")
+def api_listar_incidencia_updates(iid):
+  """Lista las actualizaciones de una incidencia (incluye fotos)."""
+  updates = maquinaria_db.listar_incidencia_updates(iid)
+  return jsonify({"updates": updates})
+
+
 @maquinaria_bp.get("/api/maquinaria/incidencias")
 def api_listar_incidencias():
   maquina_id = request.args.get("maquina_id", type=int)
   estado = request.args.get("estado")
-  desde = request.args.get("desde")          # YYYY-MM-DD — Fase 1B
+  desde = request.args.get("desde")          # YYYY-MM-DD
+  severidad = request.args.get("severidad")
   limit = request.args.get("limit", 50, type=int)
   return jsonify({"incidencias": maquinaria_db.listar_incidencias(
-      maquina_id=maquina_id, estado=estado, desde=desde, limit=limit)})
+      maquina_id=maquina_id, estado=estado, desde=desde,
+      severidad=severidad, limit=limit)})
+
+
+@maquinaria_bp.get("/api/maquinaria/incidencias/stats")
+@login_required
+def api_incidencias_stats():
+  return jsonify(maquinaria_db.stats_incidencias())
+
+
+@maquinaria_bp.get("/api/maquinaria/incidencias/zonas")
+def api_incidencias_zonas():
+  """Devuelve la lista de zonas/sistemas disponibles para clasificar incidencias."""
+  return jsonify({"zonas": [{"value": z, "label": maquinaria_db.ZONAS_LABELS[z]} for z in maquinaria_db.ZONAS_INCIDENCIA]})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -464,8 +498,8 @@ def api_subir_foto():
   entidad_id = request.form.get("entidad_id", type=int)
   if not entidad_tipo or not entidad_id:
     return jsonify({"error": "entidad_tipo y entidad_id son obligatorios"}), 400
-  if entidad_tipo not in ("check", "incidencia", "revision"):
-    return jsonify({"error": "entidad_tipo debe ser check, incidencia o revision"}), 400
+  if entidad_tipo not in ("check", "incidencia", "revision", "inc_update"):
+    return jsonify({"error": "entidad_tipo debe ser check, incidencia, revision o inc_update"}), 400
 
   f = request.files.get("foto")
   if not f or not f.filename:
@@ -489,6 +523,12 @@ def api_listar_fotos(entidad_tipo, entidad_id):
 
 @maquinaria_bp.get("/fotos_maquinaria/<filename>")
 def api_servir_foto(filename):
+  return send_from_directory(_FOTOS_DIR, filename)
+
+
+@maquinaria_bp.get("/api/maquinaria/fotos/file/<filename>")
+def api_servir_foto_alt(filename):
+  """Ruta alternativa para servir fotos (usada por operario y detalle admin)."""
   return send_from_directory(_FOTOS_DIR, filename)
 
 
@@ -551,7 +591,49 @@ def api_operario_incidencia(token):
   data = request.get_json(silent=True) or {}
   data["maquina_id"] = info["maquina_id"]
   data["usuario_id"] = None
+  data["operario_nombre"] = info.get("operario_nombre", "Operario")
   return jsonify(maquinaria_db.crear_incidencia(data)), 201
+
+
+@maquinaria_bp.put("/api/m/<token>/incidencia/<int:inc_id>")
+def api_operario_cerrar_incidencia(token, inc_id):
+  """API pública: operario cierra una incidencia (resolución + foto opcional)."""
+  info = maquinaria_db.validar_token(token)
+  if not info:
+    return jsonify({"error": "Token inválido o expirado"}), 403
+  # Verificar que la incidencia pertenece a la máquina del token
+  maq = maquinaria_db.obtener_maquina(info["maquina_id"])
+  if not maq:
+    return jsonify({"error": "Máquina no encontrada"}), 404
+  inc_ids = [i["id"] for i in maq.get("incidencias", [])]
+  if inc_id not in inc_ids:
+    return jsonify({"error": "Incidencia no pertenece a esta máquina"}), 403
+  data = request.get_json(silent=True) or {}
+  data["estado"] = "cerrada"
+  result = maquinaria_db.actualizar_incidencia(inc_id, data)
+  return jsonify(result)
+
+
+@maquinaria_bp.post("/api/m/<token>/incidencia/<int:inc_id>/update")
+def api_operario_incidencia_update(token, inc_id):
+  """API pública: operario añade una actualización / nota de progreso a una incidencia."""
+  info = maquinaria_db.validar_token(token)
+  if not info:
+    return jsonify({"error": "Token inválido o expirado"}), 403
+  maq = maquinaria_db.obtener_maquina(info["maquina_id"])
+  if not maq:
+    return jsonify({"error": "Máquina no encontrada"}), 404
+  # La incidencia puede estar abierta o cerrada — permitimos actualizar cualquiera
+  all_inc_ids = [i["id"] for i in maq.get("incidencias", [])] + [i["id"] for i in maq.get("incidencias_historial", [])]
+  if inc_id not in all_inc_ids:
+    return jsonify({"error": "Incidencia no pertenece a esta máquina"}), 403
+  data = request.get_json(silent=True) or {}
+  texto = (data.get("texto") or "").strip()
+  if not texto:
+    return jsonify({"error": "El texto de la actualización es obligatorio"}), 400
+  autor = info.get("operario_nombre", "Operario")
+  update = maquinaria_db.crear_incidencia_update(inc_id, texto, autor)
+  return jsonify(update), 201
 
 
 @maquinaria_bp.post("/api/m/<token>/foto")
@@ -604,6 +686,15 @@ def _render_operario_page(token, info, maq, templates):
   operario = info.get("operario_nombre", "Operario")
   incidencias_abiertas = [i for i in maq.get("incidencias", []) if i.get("estado") != "cerrada"]
 
+  # Zonas options para select
+  zonas_options = '<option value="">— Selecciona zona —</option>'
+  for z in maquinaria_db.ZONAS_INCIDENCIA:
+    zonas_options += f'<option value="{z}">{maquinaria_db.ZONAS_LABELS[z]}</option>'
+
+  # JSON de zonas labels para JS
+  import json as _json
+  zonas_labels_json = _json.dumps(maquinaria_db.ZONAS_LABELS)
+
   # Construir items del checklist
   checklist_html = ""
   for t in templates:
@@ -617,17 +708,42 @@ def _render_operario_page(token, info, maq, templates):
         <input type="text" name="nota_{t['id']}" placeholder="Nota (opcional)" class="nota-input">
       </div>"""
 
-  # Incidencias abiertas
+  # Incidencias abiertas — interactive cards
   inc_html = ""
   if incidencias_abiertas:
     for i in incidencias_abiertas:
       sev_color = {"baja": "#22c55e", "media": "#f59e0b", "alta": "#ef4444", "seguridad": "#dc2626"}.get(i.get("severidad", "media"), "#6c757d")
-      inc_html += f"""<div class="inc-item" style="border-left:4px solid {sev_color};">
-        <strong>{i.get('descripcion', '')}</strong>
-        <small>{i.get('fecha', '')} — {i.get('severidad', '').upper()}</small>
+      zona_lbl = maquinaria_db.ZONAS_LABELS.get(i.get("zona", ""), "")
+      zona_badge = f'<span class="badge-zona">{zona_lbl}</span>' if zona_lbl else ""
+      sev_label = (i.get("severidad") or "media").upper()
+      # Fotos count indicator
+      fotos = i.get("fotos", [])
+      fotos_count = f'<span style="font-size:.75rem;color:#6c757d;">&#128247; {len(fotos)}</span>' if fotos else ""
+      # Updates count indicator
+      updates = i.get("updates", [])
+      updates_count = f'<span style="font-size:.75rem;color:#3b82f6;">&#128172; {len(updates)}</span>' if updates else ""
+      # Reporter
+      reporter = i.get("operario_nombre") or i.get("usuario_nombre") or ""
+      reporter_html = f'<span class="inc-reporter">{reporter}</span>' if reporter else ""
+      inc_html += f"""<div class="inc-card" style="border-left:4px solid {sev_color};cursor:pointer;" onclick="verDetalleInc({i['id']})">
+        <div class="inc-card-header">
+          <span class="badge-sev" style="background:{sev_color};">{sev_label}</span>
+          {zona_badge}
+          {fotos_count}
+          {updates_count}
+          <span class="inc-date">{i.get('fecha', '')}</span>
+        </div>
+        <div class="inc-card-desc">{i.get('descripcion', '')[:120]}{'...' if len(i.get('descripcion', '')) > 120 else ''}</div>
+        <div class="inc-card-footer">
+          {reporter_html}
+          <button type="button" class="btn-cerrar-inc" onclick="event.stopPropagation();abrirCerrarInc({i['id']})">Cerrar</button>
+        </div>
       </div>"""
   else:
-    inc_html = '<p style="color:#6c757d;">Sin incidencias abiertas</p>'
+    inc_html = '<p style="color:#6c757d;">Sin incidencias abiertas &#128077;</p>'
+
+  # Serializar incidencias a JSON para el detalle en JS
+  inc_json = _json.dumps(incidencias_abiertas, default=str)
 
   return f"""<!DOCTYPE html>
 <html lang="es"><head>
@@ -683,6 +799,48 @@ def _render_operario_page(token, info, maq, templates):
   .adjunto-remove {{ background: none; border: none; color: #dc3545; font-size: 1.2rem; cursor: pointer; padding: 0 .3rem; font-weight: 700; }}
   .btn-add-more {{ display: none; width: 100%; padding: .5rem; border: 1px dashed #6c757d; border-radius: 6px; background: transparent; color: #6c757d; font-size: .85rem; cursor: pointer; margin-top: .5rem; text-align: center; }}
   .btn-add-more:active {{ background: #f0f0f0; }}
+  /* Interactive incidencia cards */
+  .inc-card {{ background: #fff; border-radius: 8px; padding: .8rem; margin-bottom: .6rem; box-shadow: 0 1px 3px rgba(0,0,0,.06); }}
+  .inc-card-header {{ display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; margin-bottom: .4rem; }}
+  .badge-sev {{ color: #fff; font-size: .7rem; font-weight: 700; padding: .15rem .5rem; border-radius: 4px; text-transform: uppercase; }}
+  .badge-zona {{ background: #e0f2fe; color: #0369a1; font-size: .72rem; font-weight: 600; padding: .15rem .5rem; border-radius: 4px; }}
+  .inc-date {{ font-size: .75rem; color: #6c757d; margin-left: auto; }}
+  .inc-card-desc {{ font-size: .88rem; line-height: 1.4; margin-bottom: .4rem; }}
+  .inc-fotos {{ display: flex; gap: .3rem; margin-bottom: .4rem; flex-wrap: wrap; }}
+  .inc-thumb {{ width: 52px; height: 52px; object-fit: cover; border-radius: 4px; border: 1px solid #e9ecef; }}
+  .inc-fotos-more {{ display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; background: #f0f0f0; border-radius: 4px; font-size: .8rem; color: #6c757d; font-weight: 600; }}
+  .inc-card-footer {{ display: flex; justify-content: space-between; align-items: center; }}
+  .inc-reporter {{ font-size: .75rem; color: #6c757d; }}
+  .btn-cerrar-inc {{ background: #dc3545; color: #fff; border: none; border-radius: 6px; padding: .4rem .8rem; font-size: .8rem; font-weight: 600; cursor: pointer; }}
+  .btn-cerrar-inc:active {{ background: #c82333; }}
+  /* Close incidencia modal */
+  .modal-overlay {{ position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.5); display: none; z-index: 900; align-items: flex-end; justify-content: center; }}
+  .modal-overlay.show {{ display: flex; }}
+  .modal-sheet {{ background: #fff; border-radius: 16px 16px 0 0; padding: 1.5rem 1.2rem; width: 100%; max-width: 600px; max-height: 80vh; overflow-y: auto; animation: slideUp .25s ease; }}
+  @keyframes slideUp {{ from {{ transform: translateY(100%); }} to {{ transform: translateY(0); }} }}
+  .modal-sheet h3 {{ margin-bottom: 1rem; font-size: 1.05rem; color: #1e3a5f; }}
+  .modal-close {{ position: absolute; top: .8rem; right: 1rem; background: none; border: none; font-size: 1.5rem; color: #6c757d; cursor: pointer; }}
+  /* Detail modal extras */
+  .detail-row {{ display: flex; gap: .5rem; margin-bottom: .5rem; font-size: .88rem; }}
+  .detail-label {{ font-weight: 600; color: #6c757d; min-width: 80px; }}
+  .detail-val {{ flex: 1; }}
+  .detail-desc {{ font-size: .92rem; line-height: 1.5; margin: .8rem 0; padding: .8rem; background: #f8f9fa; border-radius: 8px; white-space: pre-wrap; }}
+  .detail-gallery {{ display: flex; gap: .5rem; flex-wrap: wrap; margin: .8rem 0; }}
+  .detail-gallery img, .detail-gallery video {{ width: 100%; max-height: 300px; object-fit: contain; border-radius: 8px; border: 1px solid #e9ecef; cursor: pointer; }}
+  .detail-gallery-item {{ flex: 1 1 calc(50% - .25rem); min-width: 120px; }}
+  /* Lightbox */
+  .lightbox {{ position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.9); display: none; z-index: 1000; align-items: center; justify-content: center; }}
+  .lightbox.show {{ display: flex; }}
+  .lightbox img, .lightbox video {{ max-width: 95%; max-height: 90vh; object-fit: contain; border-radius: 4px; }}
+  .lightbox-close {{ position: absolute; top: 12px; right: 16px; background: none; border: none; color: #fff; font-size: 2rem; cursor: pointer; z-index: 1001; }}
+  /* Tab navigation */
+  .tab-bar {{ display: flex; background: #fff; border-bottom: 2px solid #e9ecef; position: sticky; top: 0; z-index: 50; }}
+  .tab-btn {{ flex: 1; padding: .75rem .5rem; border: none; background: none; font-size: .85rem; font-weight: 600; color: #6c757d; cursor: pointer; position: relative; text-align: center; transition: color .2s; }}
+  .tab-btn.active {{ color: #1e3a5f; }}
+  .tab-btn.active::after {{ content: ''; position: absolute; bottom: -2px; left: 10%; right: 10%; height: 3px; background: #1e3a5f; border-radius: 3px 3px 0 0; }}
+  .tab-btn .tab-badge {{ display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; border-radius: 9px; font-size: .7rem; font-weight: 700; margin-left: 4px; padding: 0 4px; }}
+  .tab-panel {{ display: none; }}
+  .tab-panel.active {{ display: block; }}
 </style></head><body>
 
 <div class="header">
@@ -690,80 +848,159 @@ def _render_operario_page(token, info, maq, templates):
   <div class="sub">{modelo} &middot; Operario: {operario}</div>
 </div>
 
+<!-- Tab bar -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('incidencias')" id="tab-btn-incidencias">
+    &#9888;&#65039; Incidencias <span class="tab-badge" style="background:{('#dc3545' if incidencias_abiertas else '#e9ecef')};color:{('#fff' if incidencias_abiertas else '#6c757d')};">{len(incidencias_abiertas)}</span>
+  </button>
+  <button class="tab-btn" onclick="switchTab('check')" id="tab-btn-check">
+    &#128203; Check
+  </button>
+  <button class="tab-btn" onclick="switchTab('estado')" id="tab-btn-estado">
+    &#128200; Estado
+  </button>
+</div>
+
 <div class="container">
-  <!-- KPIs -->
-  <div class="kpi-row">
-    <div class="kpi"><div class="val">{horometro:.0f}</div><div class="lbl">Horómetro</div></div>
-    <div class="kpi"><div class="val">{len(maq.get('revisiones_pendientes', []))}</div><div class="lbl">Rev. pendientes</div></div>
-    <div class="kpi"><div class="val">{len(incidencias_abiertas)}</div><div class="lbl">Incidencias</div></div>
+
+  <!-- ═══ TAB: Incidencias (default) ═══ -->
+  <div class="tab-panel active" id="tab-incidencias">
+
+    <!-- Reportar incidencia — arriba para acceso rápido -->
+    <div class="card">
+      <h3>Reportar incidencia</h3>
+      <form id="form-inc" onsubmit="return enviarIncidencia(event)">
+        <div class="form-group">
+          <label>Descripci&oacute;n *</label>
+          <textarea id="inc-desc" rows="3" required placeholder="Describe el problema..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Zona / Componente</label>
+          <select id="inc-zona">
+            {zonas_options}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Severidad</label>
+          <select id="inc-sev">
+            <option value="baja">Baja</option>
+            <option value="media" selected>Media</option>
+            <option value="alta">Alta</option>
+            <option value="seguridad">Seguridad (parada)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Foto o v&iacute;deo (opcional)</label>
+          <div class="hint">Adjunta evidencia de la incidencia</div>
+          <div class="file-upload-area" id="area-foto-inc" onclick="document.getElementById('foto-incidencia').click()">
+            <div class="file-upload-icon">&#128247; &#127909;</div>
+            <div class="file-upload-text">Pulsa para adjuntar foto o v&iacute;deo</div>
+            <div id="foto-inc-preview"></div>
+          </div>
+          <input type="file" id="foto-incidencia" accept="image/*,video/*" capture="environment" style="display:none;" onchange="previewFotoInc(this)">
+          <div id="inc-adjuntos-list"></div>
+          <button type="button" class="btn-add-more" id="btn-add-more-inc" style="display:none;" onclick="document.getElementById('foto-incidencia-extra').click()">+ A&ntilde;adir otra foto/v&iacute;deo</button>
+          <input type="file" id="foto-incidencia-extra" accept="image/*,video/*" capture="environment" style="display:none;" onchange="addExtraFotoInc(this)">
+        </div>
+        <button type="submit" class="btn btn-danger" id="btn-inc">Reportar incidencia</button>
+      </form>
+    </div>
+
+    <!-- Incidencias abiertas -->
+    <div class="card">
+      <h3>Abiertas ({len(incidencias_abiertas)})</h3>
+      {inc_html}
+    </div>
+
   </div>
 
-  <!-- Check semanal -->
-  <div class="card">
-    <h3>Check semanal</h3>
-    <form id="form-check" onsubmit="return enviarCheck(event)">
+  <!-- ═══ TAB: Check semanal ═══ -->
+  <div class="tab-panel" id="tab-check">
+    <div class="card">
+      <h3>Check semanal</h3>
+      <form id="form-check" onsubmit="return enviarCheck(event)">
+        <div class="form-group">
+          <label>Hor&oacute;metro actual</label>
+          <div class="hint">&Uacute;ltima medida registrada: <strong>{horometro:.1f} h</strong></div>
+          <input type="number" id="check-horometro" step="0.1" min="{horometro}" value="" placeholder="{horometro}" required>
+          <div id="horo-error" class="field-error"></div>
+        </div>
+        <div class="form-group">
+          <label>Foto del hor&oacute;metro <span class="req">*obligatoria</span></label>
+          <div class="hint">Haz una foto a la pantalla del hor&oacute;metro para verificar las horas</div>
+          <div class="file-upload-area" id="area-foto-horo" onclick="document.getElementById('foto-horometro').click()">
+            <div class="file-upload-icon">&#128247;</div>
+            <div class="file-upload-text">Pulsa para hacer foto</div>
+            <div id="foto-horo-name" class="file-upload-name"></div>
+          </div>
+          <input type="file" id="foto-horometro" accept="image/*" capture="environment" style="display:none;" onchange="previewFotoHoro(this)">
+        </div>
+        {checklist_html}
+        <div class="form-group" style="margin-top:.8rem;">
+          <label>Observaciones generales</label>
+          <textarea id="check-obs" rows="2"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary" id="btn-check">Enviar check semanal</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══ TAB: Estado ═══ -->
+  <div class="tab-panel" id="tab-estado">
+    <div class="kpi-row">
+      <div class="kpi"><div class="val">{horometro:.0f}</div><div class="lbl">Hor&oacute;metro</div></div>
+      <div class="kpi"><div class="val">{len(maq.get('revisiones_pendientes', []))}</div><div class="lbl">Rev. pendientes</div></div>
+      <div class="kpi"><div class="val" style="color:{('#dc3545' if incidencias_abiertas else '#16a34a')};">{len(incidencias_abiertas)}</div><div class="lbl">Incidencias</div></div>
+    </div>
+    <div class="card">
+      <h3>Informaci&oacute;n de la m&aacute;quina</h3>
+      <div style="font-size:.88rem;line-height:1.6;">
+        <div><strong>M&aacute;quina:</strong> {nombre_maq}</div>
+        <div><strong>Modelo:</strong> {modelo}</div>
+        <div><strong>Hor&oacute;metro:</strong> {horometro:.1f} h</div>
+        <div><strong>Revisiones pendientes:</strong> {len(maq.get('revisiones_pendientes', []))}</div>
+        <div><strong>Incidencias abiertas:</strong> {len(incidencias_abiertas)}</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal detalle incidencia -->
+<div id="modal-detalle-inc" class="modal-overlay" onclick="if(event.target===this)cerrarDetalleInc()">
+  <div class="modal-sheet" style="position:relative;" id="detalle-inc-content">
+    <!-- Populated by JS -->
+  </div>
+</div>
+
+<!-- Lightbox para fotos -->
+<div id="lightbox" class="lightbox" onclick="cerrarLightbox()">
+  <button class="lightbox-close" onclick="cerrarLightbox()">&times;</button>
+  <div id="lightbox-content"></div>
+</div>
+
+<!-- Modal cerrar incidencia -->
+<div id="modal-cerrar-inc" class="modal-overlay" onclick="if(event.target===this)cerrarModalInc()">
+  <div class="modal-sheet" style="position:relative;">
+    <button type="button" class="modal-close" onclick="cerrarModalInc()">&times;</button>
+    <h3>Cerrar incidencia</h3>
+    <form id="form-cerrar-inc" onsubmit="return confirmarCerrarInc(event)">
+      <input type="hidden" id="cerrar-inc-id" value="">
       <div class="form-group">
-        <label>Hor&oacute;metro actual</label>
-        <div class="hint">&Uacute;ltima medida registrada: <strong>{horometro:.1f} h</strong></div>
-        <input type="number" id="check-horometro" step="0.1" min="{horometro}" value="" placeholder="{horometro}" required>
-        <div id="horo-error" class="field-error"></div>
+        <label>Resoluci&oacute;n / Qu&eacute; se hizo *</label>
+        <textarea id="cerrar-inc-resolucion" rows="3" required placeholder="Describe la reparaci&oacute;n o soluci&oacute;n aplicada..."></textarea>
       </div>
       <div class="form-group">
-        <label>Foto del hor&oacute;metro <span class="req">*obligatoria</span></label>
-        <div class="hint">Haz una foto a la pantalla del hor&oacute;metro para verificar las horas</div>
-        <div class="file-upload-area" id="area-foto-horo" onclick="document.getElementById('foto-horometro').click()">
+        <label>Foto de la reparaci&oacute;n (opcional)</label>
+        <div class="file-upload-area" id="area-foto-cerrar" onclick="document.getElementById('foto-cerrar-inc').click()">
           <div class="file-upload-icon">&#128247;</div>
-          <div class="file-upload-text">Pulsa para hacer foto</div>
-          <div id="foto-horo-name" class="file-upload-name"></div>
+          <div class="file-upload-text">Pulsa para adjuntar foto</div>
+          <div id="foto-cerrar-preview"></div>
         </div>
-        <input type="file" id="foto-horometro" accept="image/*" capture="environment" style="display:none;" onchange="previewFotoHoro(this)">
+        <input type="file" id="foto-cerrar-inc" accept="image/*" capture="environment" style="display:none;" onchange="previewFotoCerrar(this)">
       </div>
-      {checklist_html}
-      <div class="form-group" style="margin-top:.8rem;">
-        <label>Observaciones generales</label>
-        <textarea id="check-obs" rows="2"></textarea>
-      </div>
-      <button type="submit" class="btn btn-primary" id="btn-check">Enviar check semanal</button>
-    </form>
-  </div>
-
-  <!-- Incidencias abiertas -->
-  <div class="card">
-    <h3>Incidencias abiertas ({len(incidencias_abiertas)})</h3>
-    {inc_html}
-  </div>
-
-  <!-- Reportar incidencia -->
-  <div class="card">
-    <h3>Reportar incidencia</h3>
-    <form id="form-inc" onsubmit="return enviarIncidencia(event)">
-      <div class="form-group">
-        <label>Descripci&oacute;n *</label>
-        <textarea id="inc-desc" rows="3" required></textarea>
-      </div>
-      <div class="form-group">
-        <label>Severidad</label>
-        <select id="inc-sev">
-          <option value="baja">Baja</option>
-          <option value="media" selected>Media</option>
-          <option value="alta">Alta</option>
-          <option value="seguridad">Seguridad (parada)</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Foto o v&iacute;deo (opcional)</label>
-        <div class="hint">Adjunta evidencia de la incidencia</div>
-        <div class="file-upload-area" id="area-foto-inc" onclick="document.getElementById('foto-incidencia').click()">
-          <div class="file-upload-icon">&#128247; &#127909;</div>
-          <div class="file-upload-text">Pulsa para adjuntar foto o v&iacute;deo</div>
-          <div id="foto-inc-preview"></div>
-        </div>
-        <input type="file" id="foto-incidencia" accept="image/*,video/*" capture="environment" style="display:none;" onchange="previewFotoInc(this)">
-        <div id="inc-adjuntos-list"></div>
-        <button type="button" class="btn-add-more" id="btn-add-more-inc" style="display:none;" onclick="document.getElementById('foto-incidencia-extra').click()">+ A&ntilde;adir otra foto/v&iacute;deo</button>
-        <input type="file" id="foto-incidencia-extra" accept="image/*,video/*" capture="environment" style="display:none;" onchange="addExtraFotoInc(this)">
-      </div>
-      <button type="submit" class="btn btn-danger" id="btn-inc">Reportar incidencia</button>
+      <button type="submit" class="btn btn-primary" id="btn-confirmar-cerrar">Cerrar incidencia</button>
+      <button type="button" class="btn" style="background:#e9ecef;color:#495057;margin-top:.5rem;" onclick="cerrarModalInc()">Cancelar</button>
     </form>
   </div>
 </div>
@@ -773,223 +1010,11 @@ def _render_operario_page(token, info, maq, templates):
 <script>
 var TOKEN = "{token}";
 var HORO_MIN = {horometro};
-var incFiles = [];
-
-function toast(msg, ok) {{
-  var t = document.getElementById("toast");
-  t.textContent = msg;
-  t.className = "toast " + (ok ? "ok" : "err");
-  t.style.display = "block";
-  setTimeout(function() {{ t.style.display = "none"; }}, 3500);
-}}
-
-/* ── Validación horómetro ── */
-var horoInput = document.getElementById("check-horometro");
-horoInput.addEventListener("input", function() {{
-  var val = parseFloat(this.value);
-  var errDiv = document.getElementById("horo-error");
-  if (val && val < HORO_MIN) {{
-    errDiv.textContent = "El hor\u00f3metro no puede ser menor a " + HORO_MIN.toFixed(1) + "h. Las horas no van hacia atr\u00e1s.";
-    errDiv.style.display = "block";
-    this.style.borderColor = "#dc3545";
-  }} else {{
-    errDiv.style.display = "none";
-    this.style.borderColor = "#dee2e6";
-  }}
-}});
-
-/* ── Preview foto horómetro ── */
-function previewFotoHoro(input) {{
-  var area = document.getElementById("area-foto-horo");
-  var nameDiv = document.getElementById("foto-horo-name");
-  if (input.files && input.files[0]) {{
-    var file = input.files[0];
-    var reader = new FileReader();
-    reader.onload = function(e) {{
-      area.innerHTML = '<img src="' + e.target.result + '" style="max-width:100%;max-height:200px;border-radius:6px;margin-bottom:.3rem;">' +
-        '<div class="file-upload-name">' + file.name + '</div>' +
-        '<div style="font-size:.75rem;color:#16a34a;font-weight:600;">Foto cargada</div>';
-      area.style.borderColor = "#16a34a";
-    }};
-    reader.readAsDataURL(file);
-  }}
-}}
-
-/* ── Preview foto/vídeo incidencia ── */
-function previewFotoInc(input) {{
-  if (input.files && input.files[0]) {{
-    incFiles.push(input.files[0]);
-    renderIncFiles();
-  }}
-}}
-
-function addExtraFotoInc(input) {{
-  if (input.files && input.files[0]) {{
-    incFiles.push(input.files[0]);
-    renderIncFiles();
-    input.value = "";
-  }}
-}}
-
-function removeIncFile(idx) {{
-  incFiles.splice(idx, 1);
-  renderIncFiles();
-}}
-
-function renderIncFiles() {{
-  var list = document.getElementById("inc-adjuntos-list");
-  var area = document.getElementById("area-foto-inc");
-  var addBtn = document.getElementById("btn-add-more-inc");
-  if (incFiles.length === 0) {{
-    list.innerHTML = "";
-    area.style.display = "block";
-    addBtn.style.display = "none";
-    return;
-  }}
-  area.style.display = "none";
-  addBtn.style.display = "block";
-  var html = "";
-  incFiles.forEach(function(f, i) {{
-    var isVideo = f.type.startsWith("video");
-    var icon = isVideo ? "&#127909;" : "&#128247;";
-    var size = (f.size / 1024).toFixed(0) + " KB";
-    if (f.size > 1048576) size = (f.size / 1048576).toFixed(1) + " MB";
-    html += '<div class="adjunto-item">' +
-      '<span>' + icon + ' ' + f.name + ' <small>(' + size + ')</small></span>' +
-      '<button type="button" onclick="removeIncFile(' + i + ')" class="adjunto-remove">&times;</button></div>';
-  }});
-  list.innerHTML = html;
-}}
-
-/* ── Enviar check ── */
-function enviarCheck(e) {{
-  e.preventDefault();
-  var btn = document.getElementById("btn-check");
-  var horoVal = parseFloat(document.getElementById("check-horometro").value) || 0;
-
-  // Validar horómetro
-  if (horoVal < HORO_MIN) {{
-    toast("El hor\u00f3metro no puede ser menor a " + HORO_MIN.toFixed(1) + "h", false);
-    return false;
-  }}
-
-  // Validar foto horómetro
-  var fotoHoro = document.getElementById("foto-horometro");
-  if (!fotoHoro.files || !fotoHoro.files[0]) {{
-    toast("La foto del hor\u00f3metro es obligatoria", false);
-    document.getElementById("area-foto-horo").style.borderColor = "#dc3545";
-    return false;
-  }}
-
-  btn.disabled = true;
-  btn.textContent = "Enviando...";
-
-  var checklist = {{}};
-  var items = document.querySelectorAll('#form-check input[type="checkbox"]');
-  items.forEach(function(cb) {{
-    var id = cb.name.replace("item_", "");
-    var nota = document.querySelector('input[name="nota_' + id + '"]');
-    checklist[id] = {{ ok: cb.checked, nota: nota ? nota.value : "" }};
-  }});
-
-  var body = {{
-    horometro: horoVal,
-    checklist: checklist,
-    observaciones: document.getElementById("check-obs").value
-  }};
-
-  // 1. Crear el check
-  fetch("/api/m/" + TOKEN + "/check", {{
-    method: "POST",
-    headers: {{ "Content-Type": "application/json" }},
-    body: JSON.stringify(body)
-  }})
-  .then(function(r) {{ return r.json(); }})
-  .then(function(d) {{
-    if (d.error) {{ toast(d.error, false); btn.disabled = false; btn.textContent = "Enviar check semanal"; return; }}
-    // 2. Subir foto del horómetro
-    var formData = new FormData();
-    formData.append("foto", fotoHoro.files[0]);
-    formData.append("entidad_tipo", "check");
-    formData.append("entidad_id", d.id);
-    return fetch("/api/m/" + TOKEN + "/foto", {{
-      method: "POST",
-      body: formData
-    }}).then(function() {{
-      toast("Check enviado correctamente", true);
-      btn.disabled = false;
-      btn.textContent = "Enviar check semanal";
-      // Reset form
-      document.getElementById("form-check").reset();
-      var area = document.getElementById("area-foto-horo");
-      area.innerHTML = '<div class="file-upload-icon">&#128247;</div><div class="file-upload-text">Pulsa para hacer foto</div><div id="foto-horo-name" class="file-upload-name"></div>';
-      area.style.borderColor = "#dee2e6";
-    }});
-  }})
-  .catch(function(err) {{ toast("Error: " + err.message, false); btn.disabled = false; btn.textContent = "Enviar check semanal"; }});
-  return false;
-}}
-
-/* ── Enviar incidencia ── */
-function enviarIncidencia(e) {{
-  e.preventDefault();
-  var btn = document.getElementById("btn-inc");
-  btn.disabled = true;
-  btn.textContent = "Enviando...";
-
-  var body = {{
-    descripcion: document.getElementById("inc-desc").value,
-    severidad: document.getElementById("inc-sev").value
-  }};
-
-  fetch("/api/m/" + TOKEN + "/incidencia", {{
-    method: "POST",
-    headers: {{ "Content-Type": "application/json" }},
-    body: JSON.stringify(body)
-  }})
-  .then(function(r) {{ return r.json(); }})
-  .then(function(d) {{
-    if (d.error) {{ toast(d.error, false); btn.disabled = false; btn.textContent = "Reportar incidencia"; return; }}
-
-    // Subir archivos adjuntos si hay
-    if (incFiles.length === 0) {{
-      toast("Incidencia reportada", true);
-      resetIncForm();
-      return;
-    }}
-
-    var uploads = incFiles.map(function(file) {{
-      var fd = new FormData();
-      fd.append("foto", file);
-      fd.append("entidad_tipo", "incidencia");
-      fd.append("entidad_id", d.id);
-      return fetch("/api/m/" + TOKEN + "/foto", {{ method: "POST", body: fd }});
-    }});
-
-    Promise.all(uploads).then(function() {{
-      toast("Incidencia reportada con " + incFiles.length + " adjunto(s)", true);
-      resetIncForm();
-    }}).catch(function() {{
-      toast("Incidencia creada pero fallo al subir adjuntos", false);
-      resetIncForm();
-    }});
-  }})
-  .catch(function(err) {{ toast("Error: " + err.message, false); btn.disabled = false; btn.textContent = "Reportar incidencia"; }});
-  return false;
-}}
-
-function resetIncForm() {{
-  document.getElementById("form-inc").reset();
-  document.getElementById("btn-inc").disabled = false;
-  document.getElementById("btn-inc").textContent = "Reportar incidencia";
-  incFiles = [];
-  renderIncFiles();
-  var area = document.getElementById("area-foto-inc");
-  area.innerHTML = '<div class="file-upload-icon">&#128247; &#127909;</div><div class="file-upload-text">Pulsa para adjuntar foto o v\u00eddeo</div><div id="foto-inc-preview"></div>';
-  area.style.display = "block";
-}}
+var ZONAS_LABELS = __ZONAS_JSON_PLACEHOLDER__;
+var INC_DATA = __INC_JSON_PLACEHOLDER__;
 </script>
-</body></html>"""
+<script src="/static/js/operario.js"></script>
+</body></html>""".replace("__ZONAS_JSON_PLACEHOLDER__", zonas_labels_json).replace("__INC_JSON_PLACEHOLDER__", inc_json)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

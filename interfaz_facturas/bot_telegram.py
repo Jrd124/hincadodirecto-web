@@ -3413,7 +3413,8 @@ async def incidencia_recibir_foto(update: Update, context: ContextTypes.DEFAULT_
 
 async def _guardar_incidencia(source, context: ContextTypes.DEFAULT_TYPE, foto_path: str | None):
     """Persiste la incidencia y notifica a superadmins."""
-    from core.maquinaria_db import crear_incidencia
+    from core.maquinaria_db import crear_incidencia, guardar_foto
+    import shutil
 
     tid = source.from_user.id if hasattr(source, "from_user") else source.effective_user.id
     usuario = get_usuario(tid)
@@ -3425,8 +3426,19 @@ async def _guardar_incidencia(source, context: ContextTypes.DEFAULT_TYPE, foto_p
         "severidad": datos.get("severidad", "media"),
         "telegram_id": tid,
         "operario_nombre": usuario["nombre"] if usuario else str(tid),
-        "foto_path": foto_path or "",
     })
+
+    # Registrar la foto en maquinaria_fotos si existe
+    if foto_path and os.path.exists(foto_path):
+        try:
+            fotos_dir = Path(_APP_DIR) / "data" / "fotos_maquinaria"
+            fotos_dir.mkdir(parents=True, exist_ok=True)
+            safe_name = f"tg_inc_{inc['id']}_{int(datetime.now().timestamp())}.jpg"
+            dest = fotos_dir / safe_name
+            shutil.copy2(foto_path, str(dest))
+            guardar_foto("incidencia", inc["id"], os.path.basename(foto_path), safe_name)
+        except Exception as e:
+            logger.warning(f"Error registrando foto de incidencia {inc['id']}: {e}")
 
     sev_lbl = _SEVERIDAD_LABELS.get(inc.get("severidad", "media"), "")
     maq = datos.get("maquina_nombre", f"#{datos['maquina_id']}")

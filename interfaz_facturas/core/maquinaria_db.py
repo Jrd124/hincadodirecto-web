@@ -9,6 +9,37 @@ from core.db import conectar as _conectar, now_iso as _now
 
 _initialized = False
 
+# Zonas / sistemas de la máquina para clasificar incidencias
+ZONAS_INCIDENCIA = [
+    "hidraulico",
+    "motor",
+    "bomba_inyeccion",
+    "martillo_percusion",
+    "orugas_rodillos",
+    "reductor",
+    "sistema_electrico",
+    "estructura_chasis",
+    "barrena",
+    "cabina",
+    "refrigeracion",
+    "otro",
+]
+
+ZONAS_LABELS = {
+    "hidraulico": "Hidráulico",
+    "motor": "Motor",
+    "bomba_inyeccion": "Bomba de inyección",
+    "martillo_percusion": "Martillo de percusión",
+    "orugas_rodillos": "Orugas / Rodillos",
+    "reductor": "Reductor",
+    "sistema_electrico": "Sistema eléctrico",
+    "estructura_chasis": "Estructura / Chasis",
+    "barrena": "Barrena",
+    "cabina": "Cabina",
+    "refrigeracion": "Refrigeración",
+    "otro": "Otro",
+}
+
 
 def init_maquinaria_db() -> None:
     global _initialized
@@ -118,7 +149,7 @@ def init_maquinaria_db() -> None:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS maquinaria_fotos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                entidad_tipo TEXT NOT NULL CHECK(entidad_tipo IN ('check','incidencia','revision')),
+                entidad_tipo TEXT NOT NULL CHECK(entidad_tipo IN ('check','incidencia','revision','inc_update')),
                 entidad_id INTEGER NOT NULL,
                 filename TEXT NOT NULL,
                 filepath TEXT NOT NULL,
@@ -126,6 +157,41 @@ def init_maquinaria_db() -> None:
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_fotos_ent ON maquinaria_fotos(entidad_tipo, entidad_id)")
+
+        # Migrar CHECK constraint de maquinaria_fotos para soportar 'inc_update'
+        try:
+            tbl_sql = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='maquinaria_fotos'"
+            ).fetchone()
+            if tbl_sql and "inc_update" not in (tbl_sql[0] or ""):
+                conn.executescript("""
+                    CREATE TABLE IF NOT EXISTS _maq_fotos_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        entidad_tipo TEXT NOT NULL CHECK(entidad_tipo IN ('check','incidencia','revision','inc_update')),
+                        entidad_id INTEGER NOT NULL,
+                        filename TEXT NOT NULL,
+                        filepath TEXT NOT NULL,
+                        created_at TEXT NOT NULL
+                    );
+                    INSERT OR IGNORE INTO _maq_fotos_new SELECT * FROM maquinaria_fotos;
+                    DROP TABLE maquinaria_fotos;
+                    ALTER TABLE _maq_fotos_new RENAME TO maquinaria_fotos;
+                """)
+                conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_fotos_ent ON maquinaria_fotos(entidad_tipo, entidad_id)")
+        except Exception:
+            pass  # tabla ya migrada o no existía
+
+        # ── Actualizaciones / notas de progreso en incidencias ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS maquinaria_incidencia_updates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                incidencia_id INTEGER NOT NULL REFERENCES maquinaria_incidencias(id) ON DELETE CASCADE,
+                texto TEXT NOT NULL,
+                autor_nombre TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_inc_upd ON maquinaria_incidencia_updates(incidencia_id)")
 
         # ── Tareas de mantenimiento programado (manual Orteco HD800-1000) ──
         conn.execute("""
@@ -266,6 +332,8 @@ def init_maquinaria_db() -> None:
             conn.execute("ALTER TABLE maquinaria_incidencias ADD COLUMN telegram_id INTEGER")
         if "operario_nombre" not in inc_cols:
             conn.execute("ALTER TABLE maquinaria_incidencias ADD COLUMN operario_nombre TEXT")
+        if "zona" not in inc_cols:
+            conn.execute("ALTER TABLE maquinaria_incidencias ADD COLUMN zona TEXT")
 
         _seed_maquinas(conn)
         _seed_checklist_templates(conn)
@@ -872,6 +940,44 @@ def obtener_maquina(maq_id: int) -> dict | None:
             "ORDER BY mi.severidad DESC, mi.fecha DESC",
             [maq_id],
         ).fetchall()]
+        # Adjuntar fotos y actualizaciones a cada incidencia abierta
+        for inc in maq["incidencias"]:
+            inc["fotos"] = [dict(f) for f in conn.execute(
+                "SELECT * FROM maquinaria_fotos WHERE entidad_tipo = 'incidencia' AND entidad_id = ?",
+                [inc["id"]],
+            ).fetchall()]
+            inc["updates"] = [dict(u) for u in conn.execute(
+                "SELECT * FROM maquinaria_incidencia_updates WHERE incidencia_id = ? ORDER BY created_at ASC",
+                [inc["id"]],
+            ).fetchall()]
+            for u in inc["updates"]:
+                u["fotos"] = [dict(f) for f in conn.execute(
+                    "SELECT * FROM maquinaria_fotos WHERE entidad_tipo = 'inc_update' AND entidad_id = ?",
+                    [u["id"]],
+                ).fetchall()]
+
+        maq["incidencias_historial"] = [dict(r) for r in conn.execute(
+            "SELECT mi.*, u.nombre AS usuario_nombre FROM maquinaria_incidencias mi "
+            "LEFT JOIN usuarios u ON u.id = mi.usuario_id "
+            "WHERE mi.maquina_id = ? AND mi.estado = 'cerrada' "
+            "ORDER BY mi.cerrada_at DESC, mi.fecha DESC LIMIT 50",
+            [maq_id],
+        ).fetchall()]
+        # Adjuntar fotos y actualizaciones a cada incidencia del historial
+        for inc in maq["incidencias_historial"]:
+            inc["fotos"] = [dict(f) for f in conn.execute(
+                "SELECT * FROM maquinaria_fotos WHERE entidad_tipo = 'incidencia' AND entidad_id = ?",
+                [inc["id"]],
+            ).fetchall()]
+            inc["updates"] = [dict(u) for u in conn.execute(
+                "SELECT * FROM maquinaria_incidencia_updates WHERE incidencia_id = ? ORDER BY created_at ASC",
+                [inc["id"]],
+            ).fetchall()]
+            for u in inc["updates"]:
+                u["fotos"] = [dict(f) for f in conn.execute(
+                    "SELECT * FROM maquinaria_fotos WHERE entidad_tipo = 'inc_update' AND entidad_id = ?",
+                    [u["id"]],
+                ).fetchall()]
 
         maq["revisiones_pendientes"] = _calcular_revisiones_pendientes(
             conn, maq_id, maq["horometro_actual"],
@@ -1214,11 +1320,13 @@ def crear_incidencia(data: dict) -> dict:
     with _conectar() as conn:
         conn.execute(
             "INSERT INTO maquinaria_incidencias (maquina_id, check_id, revision_id, usuario_id, "
-            "fecha, descripcion, severidad, estado, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 'abierta', ?)",
+            "fecha, descripcion, severidad, estado, zona, telegram_id, operario_nombre, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'abierta', ?, ?, ?, ?)",
             [data["maquina_id"], data.get("check_id"), data.get("revision_id"),
              data.get("usuario_id"), data.get("fecha", date.today().isoformat()),
-             data["descripcion"], data.get("severidad", "media"), _now()],
+             data["descripcion"], data.get("severidad", "media"),
+             data.get("zona"), data.get("telegram_id"), data.get("operario_nombre"),
+             _now()],
         )
         iid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         return dict(conn.execute("SELECT * FROM maquinaria_incidencias WHERE id = ?", [iid]).fetchone())
@@ -1233,24 +1341,67 @@ def actualizar_incidencia(inc_id: int, data: dict) -> dict:
                 [data.get("resolucion", ""), _now(), inc_id],
             )
         else:
+            # Construir SET dinámico solo con campos proporcionados
+            sets = []
+            params = []
+            for col in ("estado", "descripcion", "severidad", "zona", "resolucion"):
+                if col in data:
+                    sets.append(f"{col} = ?")
+                    params.append(data[col])
+            if not sets:
+                # nada que actualizar
+                return dict(conn.execute("SELECT * FROM maquinaria_incidencias WHERE id = ?", [inc_id]).fetchone())
+            params.append(inc_id)
             conn.execute(
-                "UPDATE maquinaria_incidencias SET estado = ?, descripcion = ?, severidad = ? WHERE id = ?",
-                [data.get("estado", "abierta"), data.get("descripcion", ""),
-                 data.get("severidad", "media"), inc_id],
+                f"UPDATE maquinaria_incidencias SET {', '.join(sets)} WHERE id = ?",
+                params,
             )
         return dict(conn.execute("SELECT * FROM maquinaria_incidencias WHERE id = ?", [inc_id]).fetchone())
 
 
+def crear_incidencia_update(incidencia_id: int, texto: str, autor_nombre: str = "") -> dict:
+    """Añade una actualización / nota de progreso a una incidencia."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        conn.execute(
+            "INSERT INTO maquinaria_incidencia_updates (incidencia_id, texto, autor_nombre, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            [incidencia_id, texto, autor_nombre or "", _now()],
+        )
+        uid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        return dict(conn.execute("SELECT * FROM maquinaria_incidencia_updates WHERE id = ?", [uid]).fetchone())
+
+
+def listar_incidencia_updates(incidencia_id: int) -> list[dict]:
+    """Devuelve todas las actualizaciones de una incidencia, con sus fotos."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        updates = [dict(r) for r in conn.execute(
+            "SELECT * FROM maquinaria_incidencia_updates WHERE incidencia_id = ? ORDER BY created_at ASC",
+            [incidencia_id],
+        ).fetchall()]
+        for u in updates:
+            u["fotos"] = [dict(f) for f in conn.execute(
+                "SELECT * FROM maquinaria_fotos WHERE entidad_tipo = 'inc_update' AND entidad_id = ?",
+                [u["id"]],
+            ).fetchall()]
+        return updates
+
+
 def listar_incidencias(maquina_id: int | None = None,
                        estado: str | None = None,
+                       desde: str | None = None,
+                       severidad: str | None = None,
                        limit: int = 50) -> list[dict]:
-    """Lista incidencias, opcionalmente filtradas por máquina y/o estado."""
+    """Lista incidencias, opcionalmente filtradas por máquina, estado, fecha y severidad."""
     init_maquinaria_db()
     with _conectar() as conn:
         q = (
-            "SELECT mi.*, m.nombre AS maquina_nombre "
+            "SELECT mi.*, m.nombre AS maquina_nombre, "
+            "(e.nombre || ' ' || COALESCE(e.apellidos, '')) AS operario_nombre "
             "FROM maquinaria_incidencias mi "
             "JOIN maquinas m ON m.id = mi.maquina_id "
+            "LEFT JOIN empleados e ON e.id = m.responsable_id "
             "WHERE 1=1"
         )
         params: list = []
@@ -1260,8 +1411,72 @@ def listar_incidencias(maquina_id: int | None = None,
         if estado:
             q += " AND mi.estado = ?"
             params.append(estado)
+        if desde:
+            q += " AND mi.fecha >= ?"
+            params.append(desde)
+        if severidad:
+            q += " AND mi.severidad = ?"
+            params.append(severidad)
         q += f" ORDER BY mi.created_at DESC LIMIT {limit}"
         return [dict(r) for r in conn.execute(q, params).fetchall()]
+
+
+def stats_incidencias() -> dict:
+    """KPIs de incidencias para el dashboard de maquinaria."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        total = conn.execute("SELECT COUNT(*) FROM maquinaria_incidencias").fetchone()[0]
+        abiertas = conn.execute(
+            "SELECT COUNT(*) FROM maquinaria_incidencias WHERE estado = 'abierta'"
+        ).fetchone()[0]
+        en_curso = conn.execute(
+            "SELECT COUNT(*) FROM maquinaria_incidencias WHERE estado = 'en_curso'"
+        ).fetchone()[0]
+        cerradas = conn.execute(
+            "SELECT COUNT(*) FROM maquinaria_incidencias WHERE estado = 'cerrada'"
+        ).fetchone()[0]
+
+        # Por severidad (solo no cerradas)
+        por_severidad = {}
+        for row in conn.execute(
+            "SELECT severidad, COUNT(*) FROM maquinaria_incidencias "
+            "WHERE estado != 'cerrada' GROUP BY severidad"
+        ).fetchall():
+            por_severidad[row[0]] = row[1]
+
+        # Por máquina (solo no cerradas)
+        por_maquina = [dict(r) for r in conn.execute(
+            "SELECT m.nombre AS maquina_nombre, m.id AS maquina_id, COUNT(*) AS total "
+            "FROM maquinaria_incidencias mi JOIN maquinas m ON m.id = mi.maquina_id "
+            "WHERE mi.estado != 'cerrada' GROUP BY mi.maquina_id ORDER BY total DESC"
+        ).fetchall()]
+
+        # Tiempo medio resolución (días) de las cerradas
+        avg_row = conn.execute(
+            "SELECT AVG(julianday(cerrada_at) - julianday(created_at)) "
+            "FROM maquinaria_incidencias WHERE estado = 'cerrada' AND cerrada_at IS NOT NULL"
+        ).fetchone()
+        tiempo_medio_dias = round(avg_row[0], 1) if avg_row and avg_row[0] else None
+
+        # Últimas 5 incidencias no cerradas (para alertas)
+        urgentes = [dict(r) for r in conn.execute(
+            "SELECT mi.*, m.nombre AS maquina_nombre "
+            "FROM maquinaria_incidencias mi JOIN maquinas m ON m.id = mi.maquina_id "
+            "WHERE mi.estado != 'cerrada' "
+            "ORDER BY CASE mi.severidad WHEN 'seguridad' THEN 0 WHEN 'alta' THEN 1 "
+            "WHEN 'media' THEN 2 ELSE 3 END, mi.created_at DESC LIMIT 5"
+        ).fetchall()]
+
+        return {
+            "total": total,
+            "abiertas": abiertas,
+            "en_curso": en_curso,
+            "cerradas": cerradas,
+            "por_severidad": por_severidad,
+            "por_maquina": por_maquina,
+            "tiempo_medio_dias": tiempo_medio_dias,
+            "urgentes": urgentes,
+        }
 
 
 def get_telegram_id_para_maquina(maquina_id: int) -> int | None:
