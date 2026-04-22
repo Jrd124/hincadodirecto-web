@@ -27,7 +27,15 @@ def api_listar_proyectos():
   tipo_trabajo = (request.args.get("tipo_trabajo") or "").strip() or None
   q = (request.args.get("q") or "").strip() or None
   tercero_id = request.args.get("tercero_id", type=int) or None
-  return jsonify({"proyectos": proyectos_db.listar_proyectos(estado=estado, empresa_id=empresa_id, tipo_trabajo=tipo_trabajo, q=q, tercero_id=tercero_id)})
+  resultado = proyectos_db.listar_proyectos(estado=estado, empresa_id=empresa_id, tipo_trabajo=tipo_trabajo, q=q, tercero_id=tercero_id)
+  # Include terminated projects for historical assignment
+  if request.args.get("incluir_terminados") == "1" and estado != "terminado":
+      terminados = proyectos_db.listar_proyectos(estado="terminado", empresa_id=empresa_id)
+      ids_existentes = {p["id"] for p in resultado}
+      for t in terminados:
+          if t["id"] not in ids_existentes:
+              resultado.append(t)
+  return jsonify({"proyectos": resultado})
 
 
 @proyectos_bp.get("/api/proyectos/<int:proyecto_id>")

@@ -1939,6 +1939,8 @@
     document.getElementById("proy-estado").value = p ? p.estado || "cotizado" : "cotizado";
     document.getElementById("proy-fecha-inicio").value = p ? (p.fecha_inicio_estimada || "").substring(0, 10) : "";
     document.getElementById("proy-fecha-fin").value = p ? (p.fecha_fin_estimada || "").substring(0, 10) : "";
+    document.getElementById("proy-fecha-inicio-real").value = p ? (p.fecha_inicio_real || "").substring(0, 10) : "";
+    document.getElementById("proy-fecha-fin-real").value = p ? (p.fecha_fin_real || "").substring(0, 10) : "";
     document.getElementById("proy-notas").value = p ? p.notas || "" : "";
     // Pricing hinca/perforación
     document.getElementById("proy-tipo-actividad").value = p ? p.tipo_actividad || "hinca" : "hinca";
@@ -2027,6 +2029,8 @@
       estado: document.getElementById("proy-estado").value,
       fecha_inicio_estimada: document.getElementById("proy-fecha-inicio").value || null,
       fecha_fin_estimada: document.getElementById("proy-fecha-fin").value || null,
+      fecha_inicio_real: document.getElementById("proy-fecha-inicio-real").value || null,
+      fecha_fin_real: document.getElementById("proy-fecha-fin-real").value || null,
       notas: document.getElementById("proy-notas").value,
       direccion: document.getElementById("proy-edit-direccion").value || null,
       municipio: document.getElementById("proy-edit-municipio").value || null,

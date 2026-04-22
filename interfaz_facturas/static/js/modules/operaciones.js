@@ -264,7 +264,8 @@ function _renderCuadrante() {
   sel.innerHTML = '<option value="">Todos los proyectos</option>';
   d.proyectos.forEach(function (p) {
     var c = COLORES_PROYECTO[p.color_idx] || COLORES_PROYECTO[0];
-    sel.innerHTML += '<option value="' + p.id + '">' + p.abreviatura + ' — ' + p.nombre + '</option>';
+    var sfx = p.estado === 'terminado' ? ' [T]' : '';
+    sel.innerHTML += '<option value="' + p.id + '">' + p.abreviatura + ' — ' + p.nombre + sfx + '</option>';
   });
   sel.value = prev;
   _operFiltroProyecto = sel.value;
@@ -744,7 +745,10 @@ function _abrirModalMasivo() {
 
   // Proyecto options
   var proyOpts = '<option value="">Seleccionar proyecto...</option>';
-  _operData.proyectos.forEach(function(p) { proyOpts += '<option value="' + p.id + '">' + p.nombre + '</option>'; });
+  _operData.proyectos.forEach(function(p) {
+    var suffix = p.estado === 'terminado' ? ' [Terminado]' : '';
+    proyOpts += '<option value="' + p.id + '">' + (p.codigo || '') + ' ' + p.nombre + suffix + '</option>';
+  });
 
   // Employee rows grouped by function
   function _empRow(e) {

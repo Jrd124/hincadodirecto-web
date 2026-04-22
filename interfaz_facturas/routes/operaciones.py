@@ -125,9 +125,15 @@ def cuadrante():
         except Exception:
             vehiculos = []
 
-        # Proyectos activos (para paleta de colores y asignación)
+        # Proyectos asignables en el mes visualizado: activos + terminados que estaban en curso
         proyectos = [dict(r) for r in conn.execute(
-            "SELECT id, nombre, codigo, estado FROM proyectos WHERE estado IN ('vivo','en_curso','adjudicado') ORDER BY nombre"
+            """SELECT id, nombre, codigo, estado FROM proyectos
+               WHERE estado IN ('vivo','en_curso','adjudicado')
+                  OR (estado = 'terminado'
+                      AND (fecha_inicio_real IS NULL OR fecha_inicio_real <= ?)
+                      AND (fecha_fin_real IS NULL OR fecha_fin_real >= ?))
+               ORDER BY CASE estado WHEN 'vivo' THEN 0 WHEN 'adjudicado' THEN 1 WHEN 'en_curso' THEN 2 ELSE 3 END, nombre""",
+            (fecha_fin, fecha_ini),
         ).fetchall()]
         # Generar abreviatura y color_idx
         for i, p in enumerate(proyectos):

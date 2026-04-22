@@ -371,7 +371,7 @@ function _impCargarSinAsignar() {
       '</div>' +
       '<div id="imp-sin-tabla"><p style="color:#94a3b8;padding:20px;text-align:center;">Cargando...</p></div>';
     // Populate project dropdown for bulk assign
-    fetch("/api/proyectos").then(function(r){return r.json();}).then(function(pd) {
+    fetch("/api/proyectos?incluir_terminados=1").then(function(r){return r.json();}).then(function(pd) {
       var sel = document.getElementById("imp-bulk-proy");
       if (!sel) return;
       (pd.proyectos || pd || []).forEach(function(p) {
@@ -514,7 +514,7 @@ function _gasoilInitTx() {
     });
 
   // Load projects for filter + cache for inline dropdowns
-  fetch("/api/proyectos")
+  fetch("/api/proyectos?incluir_terminados=1")
     .then(function (r) { return r.json(); })
     .then(function (d) {
       _gasoilProyectosList = d.proyectos || d || [];
