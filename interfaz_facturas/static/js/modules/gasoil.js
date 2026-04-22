@@ -5,6 +5,7 @@ var _gasoilTxInit = false;
 var _gasoilTxOffset = 0;
 var _gasoilTxLimit = 200;
 var _gasoilTabActivo = "dashboard";
+var _gasoilProyectosList = []; // cached project list for inline dropdowns
 
 function _gasoilOnPanelShow(panel) {
   // Called when Operaciones > Gasoil is activated
@@ -512,13 +513,14 @@ function _gasoilInitTx() {
       }
     });
 
-  // Load projects for filter
+  // Load projects for filter + cache for inline dropdowns
   fetch("/api/proyectos")
     .then(function (r) { return r.json(); })
     .then(function (d) {
+      _gasoilProyectosList = d.proyectos || d || [];
       var sel = document.getElementById("gasoil-tx-proyecto");
       if (sel) {
-        (d.proyectos || d || []).forEach(function (p) {
+        _gasoilProyectosList.forEach(function (p) {
           sel.innerHTML += '<option value="' + p.id + '">' + (p.codigo || '') + ' ' + (p.nombre || '') + '</option>';
         });
       }
@@ -582,9 +584,22 @@ function _gasoilCargarTx() {
         return;
       }
 
+      // Build project options HTML once for all dropdowns
+      var proyOpts = '<option value="">\u2014 Sin proyecto \u2014</option>';
+      _gasoilProyectosList.forEach(function(p) {
+        proyOpts += '<option value="' + p.id + '">' + (p.codigo || '') + ' ' + (p.nombre || '') + '</option>';
+      });
+
       var html = "";
       txns.forEach(function (t) {
-        var proyLabel = t.proyecto_codigo ? '<span style="background:#EFF6FF;color:#1E40AF;padding:1px 6px;border-radius:999px;font-size:10px;">' + t.proyecto_codigo + '</span> ' + (t.proyecto_nombre || '') : (t.proyecto_id ? '<span style="color:#22c55e;">#' + t.proyecto_id + '</span>' : '<span style="color:#9ca3af;">\u2014</span>');
+        var proyCell;
+        if (t.proyecto_codigo) {
+          proyCell = '<span class="pill-proy-inline" onclick="_gasoilPillToDropdown(this,' + t.id + ')" style="background:#EFF6FF;color:#1E40AF;padding:1px 6px;border-radius:999px;font-size:10px;cursor:pointer;" title="Click para cambiar">' + t.proyecto_codigo + ' ' + (t.proyecto_nombre||'') + '</span>';
+        } else if (t.proyecto_id) {
+          proyCell = '<span class="pill-proy-inline" onclick="_gasoilPillToDropdown(this,' + t.id + ')" style="background:#EFF6FF;color:#1E40AF;padding:1px 6px;border-radius:999px;font-size:10px;cursor:pointer;">#' + t.proyecto_id + '</span>';
+        } else {
+          proyCell = '<select data-tx-id="' + t.id + '" onchange="_gasoilAsignarProyectoInline(this)" style="font-size:11px;padding:2px 4px;border:0.5px solid #D1D5DB;border-radius:4px;max-width:170px;">' + proyOpts + '</select>';
+        }
         var estCorta = (t.estacion_raw || t.estacion_nombre || "").length > 25 ? (t.estacion_raw || t.estacion_nombre || "").substring(0, 25) + "\u2026" : (t.estacion_raw || t.estacion_nombre || "-");
 
         html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">' +
@@ -595,7 +610,7 @@ function _gasoilCargarTx() {
           '<td style="padding:5px 6px;">' + (t.concepto_raw || '') + '</td>' +
           '<td style="padding:5px 6px;text-align:right;">' + (t.litros ? t.litros.toFixed(1) : '-') + '</td>' +
           '<td style="padding:5px 6px;text-align:right;font-weight:500;">' + _gasoilFmtEur(t.importe_final) + '</td>' +
-          '<td style="padding:5px 6px;">' + proyLabel + '</td>' +
+          '<td style="padding:5px 6px;">' + proyCell + '</td>' +
           '</tr>';
       });
       tbody.innerHTML = html;
@@ -1027,6 +1042,37 @@ function _gasoilEditarEstacion(eid) {
   });
 }
 
+// ═══ Inline project assignment in Transacciones table ════════════════════════
+
+function _gasoilAsignarProyectoInline(sel) {
+  var txId = sel.getAttribute("data-tx-id");
+  var proyId = sel.value;
+  if (!proyId) return;
+  fetch("/api/combustible/imputacion/resolver", {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({transaccion_id: parseInt(txId), accion: "cambiar", proyecto_id: parseInt(proyId)})
+  }).then(function(r) { return r.json(); }).then(function() {
+    var opt = sel.options[sel.selectedIndex];
+    var txt = opt ? opt.textContent : '';
+    sel.outerHTML = '<span class="pill-proy-inline" onclick="_gasoilPillToDropdown(this,' + txId + ')" style="background:#EFF6FF;color:#1E40AF;padding:1px 6px;border-radius:999px;font-size:10px;cursor:pointer;" title="Click para cambiar">' + txt + '</span>';
+    if (typeof mostrarToast === "function") mostrarToast("Proyecto asignado", "success");
+  });
+}
+
+function _gasoilPillToDropdown(pill, txId) {
+  var opts = '<option value="">\u2014 Sin proyecto \u2014</option>';
+  _gasoilProyectosList.forEach(function(p) {
+    opts += '<option value="' + p.id + '">' + (p.codigo || '') + ' ' + (p.nombre || '') + '</option>';
+  });
+  var sel = document.createElement("select");
+  sel.setAttribute("data-tx-id", txId);
+  sel.setAttribute("onchange", "_gasoilAsignarProyectoInline(this)");
+  sel.style.cssText = "font-size:11px;padding:2px 4px;border:0.5px solid #D1D5DB;border-radius:4px;max-width:170px;";
+  sel.innerHTML = opts;
+  pill.replaceWith(sel);
+  sel.focus();
+}
+
 // ═══ Expose ═══════════════════════════════════════════════════════════════════
 
 window._gasoilOnPanelShow = _gasoilOnPanelShow;
@@ -1043,6 +1089,8 @@ window._gasoilGeocodificar = _gasoilGeocodificar;
 window._gasoilGeoCompleto = _gasoilGeoCompleto;
 window._gasoilCargarEstaciones = _gasoilCargarEstaciones;
 window._gasoilCargarVehiculos = _gasoilCargarVehiculos;
+window._gasoilAsignarProyectoInline = _gasoilAsignarProyectoInline;
+window._gasoilPillToDropdown = _gasoilPillToDropdown;
 window._impCargarResumen = _impCargarResumen;
 window._impEjecutar = _impEjecutar;
 window._impConfirmarAlta = _impConfirmarAlta;
