@@ -702,6 +702,17 @@ def api_finanzas_dashboard():
   return jsonify(result)
 
 
+@api_general_bp.get("/api/alertas/partes-pendientes")
+def api_alertas_partes_pendientes():
+  from core.alertas_partes import obtener_partes_pendientes
+  from flask import request
+  return jsonify(obtener_partes_pendientes(
+      proyecto_id=request.args.get("proyecto_id", type=int),
+      desde=request.args.get("desde"),
+      hasta=request.args.get("hasta"),
+  ))
+
+
 @api_general_bp.get("/api/empresas")
 def listar_empresas():
   """

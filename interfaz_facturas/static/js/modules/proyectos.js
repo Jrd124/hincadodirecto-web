@@ -493,6 +493,18 @@
 
         // ── TAB: OPERATIVO ──
         var tabOper = '<div id="proy-dash-tab-operativo" class="proy-dash-tab-content" style="display:none;">';
+        // Partes pendientes alert
+        var pp = p.partes_pendientes || [];
+        if (pp.length > 0) {
+          tabOper += '<div style="background:#FEF3C7;border-radius:8px;padding:12px 16px;margin-bottom:12px;">' +
+            '<div style="font-weight:500;color:#92400E;">\u26A0\uFE0F ' + pp.length + ' d\u00edas sin parte de trabajo registrado</div>' +
+            '<div style="font-size:12px;color:#B45309;margin-top:6px;">';
+          pp.slice(0, 10).forEach(function(d) {
+            tabOper += d.dia_semana.substring(0,3) + ' ' + d.fecha.substring(8) + '/' + d.fecha.substring(5,7) + ' (' + d.maquinas.join(', ') + ') \u00b7 ';
+          });
+          if (pp.length > 10) tabOper += '... y ' + (pp.length - 10) + ' m\u00e1s';
+          tabOper += '</div></div>';
+        }
         // Partes table
         tabOper += '<div class="card" style="padding:14px;margin-bottom:16px;"><h4 style="margin:0 0 8px;font-size:0.88rem;font-weight:700;">Partes de trabajo</h4>';
         tabOper += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.8rem;">';
@@ -1946,6 +1958,9 @@
     document.getElementById("proy-edit-provincia-loc").value = p ? p.provincia || "" : "";
     document.getElementById("proy-edit-lat").value = p ? p.ubicacion_lat || "" : "";
     document.getElementById("proy-edit-lon").value = p ? p.ubicacion_lon || "" : "";
+    // Días laborables
+    var diasLab = p ? (p.dias_laborables || "LMXJV") : "LMXJV";
+    document.querySelectorAll(".proy-dia-cb").forEach(function(cb) { cb.checked = diasLab.indexOf(cb.value) >= 0; });
     _proyActualizarGmapsLink();
     _proyToggleActividad();
     _proyCalcResumen();
@@ -2017,6 +2032,7 @@
       municipio: document.getElementById("proy-edit-municipio").value || null,
       ubicacion_lat: document.getElementById("proy-edit-lat").value ? parseFloat(document.getElementById("proy-edit-lat").value) : null,
       ubicacion_lon: document.getElementById("proy-edit-lon").value ? parseFloat(document.getElementById("proy-edit-lon").value) : null,
+      dias_laborables: Array.from(document.querySelectorAll(".proy-dia-cb:checked")).map(function(cb){return cb.value;}).join("") || "LMXJV",
     };
     var esCotizadoNuevo = !id && body.estado === "cotizado";
     var url = id ? "/api/proyectos/" + id : (esCotizadoNuevo ? "/api/proyectos/cotizado" : "/api/proyectos");

@@ -316,6 +316,23 @@ function cargarDashboardDirector() {
       el.innerHTML = h;
     })
     .catch(function () {});
+
+  // Partes pendientes widget (últimos 7 días)
+  var hoy7 = new Date(); var hace7 = new Date(hoy7); hace7.setDate(hace7.getDate() - 7);
+  fetch("/api/alertas/partes-pendientes?desde=" + hace7.toISOString().slice(0,10) + "&hasta=" + hoy7.toISOString().slice(0,10))
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var container = document.getElementById("dir-partes-pendientes");
+      if (!container) return;
+      if (!d.total_pendientes) { container.style.display = "none"; return; }
+      container.style.display = "";
+      var detalle = (d.por_proyecto || []).map(function(p) {
+        return (p.proyecto_codigo || '') + ' ' + (p.proyecto_nombre || '') + ': ' + p.dias_pendientes.length + ' d\u00edas';
+      }).join(' \u00b7 ');
+      container.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+        '<div><div style="font-weight:500;font-size:14px;color:#92400E;">\u26A0\uFE0F ' + d.total_pendientes + ' partes pendientes de registrar</div>' +
+        '<div style="font-size:12px;color:#B45309;margin-top:4px;">' + detalle + '</div></div></div>';
+    }).catch(function(){});
 }
 
 // Helpers del dashboard director
