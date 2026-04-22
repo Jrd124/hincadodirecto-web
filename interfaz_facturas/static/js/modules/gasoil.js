@@ -508,7 +508,7 @@ function _gasoilInitTx() {
       var sel = document.getElementById("gasoil-tx-matricula");
       if (sel) {
         (d.vehiculos || []).forEach(function (v) {
-          sel.innerHTML += '<option value="' + v.matricula + '">' + v.matricula + '</option>';
+          sel.innerHTML += '<option value="' + v.id + '">' + v.matricula + '</option>';
         });
       }
     });
