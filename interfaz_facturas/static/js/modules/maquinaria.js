@@ -236,7 +236,7 @@ window.maqDetalle = function (maqId) {
                 '<span style="font-size:12px;color:var(--color-text-secondary);margin-left:8px;">' + (i.fecha || "").substring(0, 10) + '</span></div>' +
               '<button onclick="event.stopPropagation();maqCerrarIncidencia(' + i.id + ',' + m.id + ')" class="btn-outline" style="font-size:11px;padding:2px 8px;">Cerrar</button>' +
             '</div>' +
-            '<p style="font-size:13px;margin:8px 0 0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">' + _esc(i.descripcion) + '</p>' +
+            '<p style="font-size:13px;margin:8px 0 0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;">' + _esc(i.descripcion) + '</p>' +
             (reporter ? '<div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px;">Reportada por ' + _esc(reporter) + '</div>' : '') +
           '</div>';
         }).join("");
@@ -323,7 +323,7 @@ window.maqDetalle = function (maqId) {
 
         // 2 columns
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">' +
-          '<div style="display:flex;flex-direction:column;gap:14px;">' +
+          '<div style="display:flex;flex-direction:column;gap:14px;min-width:0;">' +
             // Checks
             '<div style="border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;">' +
               '<div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;">' +
@@ -338,7 +338,7 @@ window.maqDetalle = function (maqId) {
               '<div style="padding:12px;max-height:250px;overflow-y:auto;">' + revsHtml + '</div></div>' +
           '</div>' +
           // Incidencias (abiertas + historial)
-          '<div style="display:flex;flex-direction:column;gap:14px;">' +
+          '<div style="display:flex;flex-direction:column;gap:14px;min-width:0;">' +
             // Abiertas
             '<div style="border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;">' +
               '<div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;">' +
