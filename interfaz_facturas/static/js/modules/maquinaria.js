@@ -220,10 +220,12 @@ window.maqDetalle = function (maqId) {
           if (i.fotos && i.fotos.length) {
             fotosHtml = '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">' +
               i.fotos.map(function (f) {
-                var isVid = f.filename && (f.filename.endsWith(".mp4") || f.filename.endsWith(".mov") || f.filename.endsWith(".webm"));
+                var src = "/api/maquinaria/fotos/file/" + _esc(f.nombre_archivo || f.filepath || f.filename || "");
+                var origName = (f.nombre_original || f.filename || "").toLowerCase();
+                var isVid = origName.match(/\.(mp4|mov|webm)$/);
                 return isVid
-                  ? '<a href="/fotos_maquinaria/' + _esc(f.filename) + '" target="_blank" style="width:48px;height:48px;border-radius:4px;background:#1e293b;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;text-decoration:none;">\u25B6</a>'
-                  : '<a href="/fotos_maquinaria/' + _esc(f.filename) + '" target="_blank"><img src="/fotos_maquinaria/' + _esc(f.filename) + '" style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid var(--color-border);"></a>';
+                  ? '<a href="' + src + '" target="_blank" style="width:48px;height:48px;border-radius:4px;background:#1e293b;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;text-decoration:none;">\u25B6</a>'
+                  : '<a href="' + src + '" target="_blank"><img src="' + src + '" style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid var(--color-border);"></a>';
               }).join("") + '</div>';
           }
           var nFotosTag = i.fotos && i.fotos.length ? '<span style="font-size:10px;color:var(--color-text-secondary);margin-left:4px;">\uD83D\uDCF7' + i.fotos.length + '</span>' : '';
@@ -1302,7 +1304,8 @@ window.maqVerCheck = function (checkId, maqId) {
     if (c.fotos && c.fotos.length) {
       fotosHtml = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">' +
         c.fotos.map(function (f) {
-          return '<img src="/uploads/maquinaria/' + _esc(f.filename) + '" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--color-border);cursor:pointer;" ' +
+          var src = "/api/maquinaria/fotos/file/" + _esc(f.nombre_archivo || f.filepath || f.filename || "");
+          return '<img src="' + src + '" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--color-border);cursor:pointer;" ' +
             'onclick="window.open(this.src,\'_blank\')">';
         }).join("") + '</div>';
     }
