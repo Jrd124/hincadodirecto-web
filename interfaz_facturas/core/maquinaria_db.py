@@ -890,6 +890,16 @@ def obtener_maquina(maq_id: int) -> dict | None:
             [maq_id],
         ).fetchall()]
 
+        # Fecha de la última lectura de horómetro (del check más reciente con horómetro)
+        ultima = conn.execute(
+            "SELECT fecha, horometro, created_at FROM maquinaria_checks "
+            "WHERE maquina_id = ? AND horometro IS NOT NULL AND horometro > 0 "
+            "ORDER BY created_at DESC LIMIT 1",
+            [maq_id],
+        ).fetchone()
+        maq["horometro_ultima_lectura"] = ultima["fecha"] if ultima else None
+        maq["horometro_ultima_lectura_at"] = ultima["created_at"] if ultima else None
+
         # Revisiones legacy (maquinaria_revisiones)
         revs_legacy = [dict(r) for r in conn.execute(
             "SELECT mr.*, u.nombre AS usuario_nombre FROM maquinaria_revisiones mr "

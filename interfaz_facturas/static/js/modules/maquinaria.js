@@ -42,7 +42,8 @@ function cargarMaquinaria() {
           '</div>' +
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
             '<div><div style="font-size:11px;color:var(--color-text-secondary);">Hor\u00f3metro</div>' +
-              '<div style="font-size:16px;font-weight:600;">' + (m.horometro_actual || 0).toLocaleString("es-ES") + 'h</div></div>' +
+              '<div style="font-size:16px;font-weight:600;">' + (m.horometro_actual || 0).toLocaleString("es-ES") + 'h</div>' +
+              '<div style="font-size:10px;color:' + (m.horometro_ultima_lectura ? 'var(--color-text-secondary)' : '#DC2626') + ';">' + (m.horometro_ultima_lectura || 'Sin lectura') + '</div></div>' +
             '<div><div style="font-size:11px;color:var(--color-text-secondary);">Proyecto</div>' +
               '<div style="font-size:13px;font-weight:500;">' + (m.proyecto_actual && (m.proyecto_actual.nombre || m.proyecto_actual.codigo) ? _esc(m.proyecto_actual.nombre || m.proyecto_actual.codigo) : (m.proyecto_nombre ? _esc(m.proyecto_nombre) : '\u2014')) + '</div></div>' +
           '</div>' +
@@ -311,7 +312,8 @@ window.maqDetalle = function (maqId) {
           '<div style="background:var(--color-white);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px;">' +
             '<div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:6px;">Hor\u00f3metro</div>' +
             '<div style="font-size:28px;font-weight:700;">' + (m.horometro_actual || 0).toLocaleString("es-ES") + 'h</div>' +
-            '<div style="font-size:12px;color:var(--color-text-secondary);">Inicial: ' + (m.horometro_inicial || 0).toLocaleString("es-ES") + 'h \u00b7 Comisi\u00f3n: ' + (m.fecha_comision ? m.fecha_comision.substring(0, 4) : '\u2014') + '</div></div>' +
+            '<div style="font-size:12px;color:var(--color-text-secondary);">Inicial: ' + (m.horometro_inicial || 0).toLocaleString("es-ES") + 'h \u00b7 Comisi\u00f3n: ' + (m.fecha_comision ? m.fecha_comision.substring(0, 4) : '\u2014') + '</div>' +
+            '<div style="font-size:11px;color:' + (m.horometro_ultima_lectura ? 'var(--color-text-secondary)' : '#DC2626') + ';margin-top:4px;">\u00dalt. lectura: ' + (m.horometro_ultima_lectura || 'Sin lecturas') + '</div></div>' +
           '<div style="background:var(--color-white);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px;">' +
             '<div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:8px;">Revisiones pendientes</div>' + revPend + '</div>' +
           '<div style="background:var(--color-white);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px;">' +
