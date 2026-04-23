@@ -1369,6 +1369,25 @@ def actualizar_incidencia(inc_id: int, data: dict) -> dict:
         return dict(conn.execute("SELECT * FROM maquinaria_incidencias WHERE id = ?", [inc_id]).fetchone())
 
 
+def eliminar_incidencia(inc_id: int) -> bool:
+    """Elimina una incidencia y sus datos asociados (updates, fotos)."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        # Eliminar fotos de updates asociados
+        update_ids = [r["id"] for r in conn.execute(
+            "SELECT id FROM maquinaria_incidencia_updates WHERE incidencia_id = ?", [inc_id]
+        ).fetchall()]
+        for uid in update_ids:
+            conn.execute("DELETE FROM maquinaria_fotos WHERE entidad_tipo = 'inc_update' AND entidad_id = ?", [uid])
+        # Eliminar updates
+        conn.execute("DELETE FROM maquinaria_incidencia_updates WHERE incidencia_id = ?", [inc_id])
+        # Eliminar fotos de la incidencia
+        conn.execute("DELETE FROM maquinaria_fotos WHERE entidad_tipo = 'incidencia' AND entidad_id = ?", [inc_id])
+        # Eliminar la incidencia
+        conn.execute("DELETE FROM maquinaria_incidencias WHERE id = ?", [inc_id])
+        return True
+
+
 def crear_incidencia_update(incidencia_id: int, texto: str, autor_nombre: str = "") -> dict:
     """Añade una actualización / nota de progreso a una incidencia."""
     init_maquinaria_db()

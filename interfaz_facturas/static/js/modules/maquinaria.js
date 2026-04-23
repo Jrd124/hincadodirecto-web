@@ -2016,12 +2016,31 @@ window.maqVerDetalleIncidencia = function (incId, maqId) {
           '<button class="btn-primary" style="width:auto;padding:8px 20px;" onclick="document.getElementById(\'modal-maq-detalle-inc\').remove();maqCerrarIncidencia(' + i.id + ',' + maqId + ')">Cerrar incidencia</button>' +
         '</div>'
       :
-        '<div style="display:flex;justify-content:flex-end;margin-top:16px;">' +
+        '<div style="display:flex;justify-content:space-between;margin-top:16px;">' +
+          '<button style="background:none;border:1px solid #DC2626;color:#DC2626;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;" onclick="maqEliminarIncidencia(' + i.id + ',' + maqId + ')">Eliminar</button>' +
           '<button class="btn-outline" onclick="document.getElementById(\'modal-maq-detalle-inc\').remove()">Cerrar</button>' +
         '</div>'
       ) +
     '</div>';
   document.body.appendChild(modal);
+};
+
+// ═══ Eliminar incidencia (admin, solo históricas/cerradas) ═══
+
+window.maqEliminarIncidencia = function (incId, maqId) {
+  if (!confirm("\u00bfEliminar esta incidencia? Se borrar\u00e1n tambi\u00e9n sus fotos y actualizaciones. Esta acci\u00f3n no se puede deshacer.")) return;
+
+  fetch("/api/maquinaria/incidencias/" + incId, { method: "DELETE" })
+  .then(function (r) { return r.json(); })
+  .then(function (d) {
+    if (d.error) { mostrarToast(d.error, "error"); return; }
+    mostrarToast("Incidencia eliminada", "ok");
+    var modal = document.getElementById("modal-maq-detalle-inc");
+    if (modal) modal.remove();
+    if (window._maqIncMap) delete window._maqIncMap[incId];
+    maqCargarDetalle(maqId);
+  })
+  .catch(function (err) { mostrarToast("Error: " + err.message, "error"); });
 };
 
 // ═══ Editar incidencia (admin) ═══

@@ -337,6 +337,14 @@ def api_actualizar_incidencia(iid):
   return jsonify(result)
 
 
+@maquinaria_bp.delete("/api/maquinaria/incidencias/<int:iid>")
+@login_required
+def api_eliminar_incidencia(iid):
+  """Admin elimina una incidencia (y sus fotos/updates asociados)."""
+  maquinaria_db.eliminar_incidencia(iid)
+  return jsonify({"ok": True, "deleted": iid})
+
+
 @maquinaria_bp.post("/api/maquinaria/incidencias/<int:iid>/updates")
 @login_required
 def api_crear_incidencia_update_admin(iid):
