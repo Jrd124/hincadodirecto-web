@@ -35,6 +35,15 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
+      - name: Sync config files to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_SSH_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          source: "docker-compose.prod.yml,Caddyfile"
+          target: ${{ secrets.PROD_APP_DIR }}
+
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1
         with:
@@ -46,7 +55,7 @@ jobs:
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d
             sleep 10
-            curl -sf http://localhost:8000/api/health || echo "WARN: health check failed"
+            docker exec hincado-erp python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')" || echo "WARN: health check failed"
 
       - name: Verify deployment
         uses: appleboy/ssh-action@v1

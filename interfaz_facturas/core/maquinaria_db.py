@@ -830,8 +830,21 @@ def listar_maquinas(solo_activas: bool = True) -> list:
             import logging
             logging.getLogger("erp").warning("Error cargando asignaciones maquinas: %s", e)
 
+        # Pre-cargar última lectura de horómetro para cada máquina (una sola query)
+        ultima_lecturas = {}
+        for r in conn.execute(
+            "SELECT maquina_id, fecha, created_at FROM maquinaria_checks "
+            "WHERE horometro IS NOT NULL AND horometro > 0 "
+            "ORDER BY created_at DESC"
+        ).fetchall():
+            mid = r["maquina_id"]
+            if mid not in ultima_lecturas:
+                ultima_lecturas[mid] = r["fecha"]
+
         for maq in maquinas:
             mid = maq["id"]
+            maq["horometro_ultima_lectura"] = ultima_lecturas.get(mid)
+
             inc_graves = conn.execute(
                 "SELECT COUNT(*) FROM maquinaria_incidencias "
                 "WHERE maquina_id = ? AND estado != 'cerrada' "
