@@ -187,8 +187,9 @@ def get_or_create_estacion(conn, nombre, marca=None, pais="ES"):
 _TIPO_PRODUCTO_MAP = {
     # Diesel
     "DIESEL STAR": "diesel", "DIESEL OPTIMA": "diesel", "DIESEL E+": "diesel",
-    "DIESEL E+ NEOTECH": "diesel", "GASOLEO": "diesel", "GASOLEOS": "diesel",
-    "GASOLEO OPTIMA": "diesel", "GAS.OPT.STAR": "diesel", "GASÓLEO STAR": "diesel",
+    "DIESEL E+ NEOTECH": "diesel", "DIESEL OPTIM": "diesel", "GASOLEO": "diesel",
+    "GASOLEOS": "diesel", "GASOLEO OPTIMA": "diesel", "GAS.OPT.STAR": "diesel",
+    "GASÓLEO STAR": "diesel",
     # Gasolina
     "SIN PLOMO": "gasolina", "GASOLINA 95": "gasolina", "OPTIMA 95": "gasolina",
     "OPTIMA 98": "gasolina", "EFITEC 95 N (L)": "gasolina", "EFITEC 98 N (L)": "gasolina",
@@ -199,7 +200,7 @@ _TIPO_PRODUCTO_MAP = {
     # Peajes
     "AUTOPISTAS DE PEAJE": "peaje", "PEAJES DE AUTOPISTAS/TUNELES": "peaje",
     # Lubricantes
-    "LUBRICANTES": "lubricante", "ACEITES/LUBES": "lubricante",
+    "LUBRICANTES": "lubricante", "ACEITES/LUBES": "lubricante", "LUBES": "lubricante",
     # Descuentos
     "APORTACION COMERCIAL": "descuento", "DESCUENTO": "descuento",
     "DESCUENTO FIJO": "descuento", "DESCUENTO % DESPUES IMPUESTOS": "descuento",
@@ -309,7 +310,24 @@ def importar_excel_moeve(filepath):
     col_currency = _col(df, "Currency")
     col_discount = _col(df, "Discount")
 
-    logger.info("Moeve columns mapped: date=%s opno=%s reg=%s concept=%s", col_date, col_opno, col_reg, col_concept)
+    logger.info("Moeve columns mapped: date=%s opno=%s reg=%s concept=%s bill=%s", col_date, col_opno, col_reg, col_concept, col_bill)
+
+    # Detect web Excel (mix of Bill='-' and Bill=BA...) vs invoice Excel (all same Bill)
+    total_antes = len(df)
+    if col_bill:
+        bills = df[col_bill].astype(str).str.strip()
+        tiene_dash = (bills == '-').any() | (bills == 'nan').any() | (bills == '').any()
+        tiene_factura = bills.str.startswith('BA').any() | bills.str.match(r'^\d{4}').any()
+        if tiene_dash and tiene_factura:
+            # Web Excel with mixed pre-invoice and invoiced rows → keep only pre-invoice
+            mask = df[col_bill].isna() | (df[col_bill].astype(str).str.strip().isin(['-', '', 'nan']))
+            df = df[mask].copy()
+            logger.info("Moeve web Excel: filtered %d→%d rows (discarded %d invoiced duplicates)", total_antes, len(df), total_antes - len(df))
+            stats["filtradas_factura"] = total_antes - len(df)
+        elif not tiene_dash:
+            logger.info("Moeve invoice Excel: importing all %d rows", len(df))
+        else:
+            logger.info("Moeve web Excel (all pre-invoice): importing all %d rows", len(df))
 
     conn = get_conn()
     try:
@@ -376,15 +394,15 @@ def importar_excel_moeve(filepath):
                 precio_unit = round(transac / litros, 4) if litros > 0 else None
                 importe_final = transac + descuento  # descuento is negative when it's a discount
 
-                # Extra dedup for auto-generated OpNos: check by actual field values
-                if operation_no.startswith("auto_"):
-                    existente = conn.execute(
-                        "SELECT id FROM combustible_transacciones WHERE proveedor='moeve' AND fecha_operacion=? AND concepto_raw=? AND matricula_raw=? AND ABS(COALESCE(litros,0) - ?) < 0.01",
-                        (fecha, concepto, matricula, litros),
-                    ).fetchone()
-                    if existente:
-                        stats["duplicados"] += 1
-                        continue
+                # Cross-Excel dedup: check by fecha+matricula+litros+importe (ignores OpNo and concepto
+                # which differ between web Excel and invoice Excel for the same transaction)
+                existente = conn.execute(
+                    "SELECT id FROM combustible_transacciones WHERE proveedor='moeve' AND fecha_operacion LIKE ? AND matricula_raw=? AND ABS(COALESCE(litros,0) - ?) < 0.01 AND ABS(COALESCE(importe_final,0) - ?) < 0.01",
+                    (fecha[:10] + '%', matricula, litros, importe_final),
+                ).fetchone()
+                if existente:
+                    stats["duplicados"] += 1
+                    continue
 
                 cursor = conn.execute("""
                     INSERT OR IGNORE INTO combustible_transacciones (
