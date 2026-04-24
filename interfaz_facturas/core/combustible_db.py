@@ -185,16 +185,49 @@ def get_or_create_estacion(conn, nombre, marca=None, pais="ES"):
 # ── Moeve Excel parser ──
 
 _TIPO_PRODUCTO_MAP = {
-    "DIESEL STAR": "diesel", "DIESEL OPTIMA": "diesel", "GASOLEO": "diesel", "GASOLEOS": "diesel",
+    # Diesel
+    "DIESEL STAR": "diesel", "DIESEL OPTIMA": "diesel", "DIESEL E+": "diesel",
+    "DIESEL E+ NEOTECH": "diesel", "GASOLEO": "diesel", "GASOLEOS": "diesel",
     "GASOLEO OPTIMA": "diesel", "GAS.OPT.STAR": "diesel", "GASÓLEO STAR": "diesel",
-    "SIN PLOMO": "gasolina", "OPTIMA 95": "gasolina", "OPTIMA 98": "gasolina",
+    # Gasolina
+    "SIN PLOMO": "gasolina", "GASOLINA 95": "gasolina", "OPTIMA 95": "gasolina",
+    "OPTIMA 98": "gasolina", "EFITEC 95 N (L)": "gasolina", "EFITEC 98 N (L)": "gasolina",
     "GNA.SEM PB 95": "gasolina", "GNA. SEM PB 95": "gasolina", "GNA. SEM PB 98": "gasolina",
-    "ECOBLUE GRANEL": "adblue", "ECOBLUE 10 LT": "adblue", "ECOBLUE GARRAFA": "adblue",
+    # AdBlue
+    "ECOBLUE": "adblue", "ECOBLUE GRANEL": "adblue", "ECOBLUE 10 LT": "adblue",
+    "ECOBLUE GARRAFA": "adblue",
+    # Peajes
     "AUTOPISTAS DE PEAJE": "peaje", "PEAJES DE AUTOPISTAS/TUNELES": "peaje",
+    # Lubricantes
     "LUBRICANTES": "lubricante", "ACEITES/LUBES": "lubricante",
-    "OTRAS COMPRAS": "otros", "OTRAS COMPRAS REDUCIDO": "otros",
+    # Descuentos
     "APORTACION COMERCIAL": "descuento", "DESCUENTO": "descuento",
+    "DESCUENTO FIJO": "descuento", "DESCUENTO % DESPUES IMPUESTOS": "descuento",
+    "Descuento Extra SOLRED": "descuento", u"Promoción 5 cts./litro": "descuento",
+    # Otros
+    "OTRAS COMPRAS": "otros", "OTRAS COMPRAS REDUCIDO": "otros", "TIENDA": "otros",
 }
+
+
+def _tipo_producto(concepto):
+    """Map concept to product type with fuzzy fallback for unknown concepts."""
+    tp = _TIPO_PRODUCTO_MAP.get(concepto)
+    if tp:
+        return tp
+    cu = concepto.upper()
+    if "DIESEL" in cu or "GASOLEO" in cu:
+        return "diesel"
+    if "GASOLINA" in cu or "PLOMO" in cu or "EFITEC" in cu:
+        return "gasolina"
+    if "BLUE" in cu:
+        return "adblue"
+    if "PEAJE" in cu or "AUTOPISTA" in cu:
+        return "peaje"
+    if "DESCUENTO" in cu or "APORTACION" in cu or "PROMOCI" in cu:
+        return "descuento"
+    if "LUBRIC" in cu or "ACEITE" in cu:
+        return "lubricante"
+    return "otros"
 
 
 def _detectar_header_row(filepath, sheet_name="data"):
@@ -313,7 +346,7 @@ def importar_excel_moeve(filepath):
                 factura = str(row[col_bill] if col_bill else "").strip()
                 if factura == "nan": factura = ""
 
-                tipo_producto = _TIPO_PRODUCTO_MAP.get(concepto, "otros")
+                tipo_producto = _tipo_producto(concepto)
 
                 def _safe_float(v):
                     if v is None: return 0.0
