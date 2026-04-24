@@ -1,84 +1,70 @@
 #!/bin/bash
-# deploy.sh — Sube el código al servidor y reinicia el ERP
-# Ejecutar desde tu Mac cada vez que quieras publicar cambios.
+# ═══════════════════════════════════════════════════════════════════════
+# deploy.sh — Deploy del ERP a producción
 #
-# Uso:
-#   chmod +x deploy/deploy.sh
+# Ejecutar desde tu Mac después de hacer git push:
 #   ./deploy/deploy.sh
 #
-# Primera vez (con datos):
-#   ./deploy/deploy.sh --con-datos
+# Lo que hace:
+#   1. Se conecta al servidor por SSH
+#   2. Hace git pull para traer los últimos cambios
+#   3. Verifica que el .env existe
+#   4. Rebuilda la imagen Docker con el código nuevo
+#   5. Reinicia el contenedor (sin perder datos)
+#   6. Verifica que el health check responde
 #
+# REQUISITO: haber hecho git push ANTES de ejecutar esto.
+# ═══════════════════════════════════════════════════════════════════════
 set -euo pipefail
 
-SERVER="root@46.225.27.219"
+SERVER="deploy@46.225.27.219"
 REMOTE_DIR="/opt/hincado-erp"
-LOCAL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-CON_DATOS=false
-
-for arg in "$@"; do
-  [[ "$arg" == "--con-datos" ]] && CON_DATOS=true
-done
 
 echo "========================================"
 echo " Hincado ERP — Deploy a producción"
 echo " Servidor: $SERVER"
 echo "========================================"
 
-# ── 1. Subir código con rsync ─────────────────────────────────────────────────
-echo "[1/5] Sincronizando código..."
-rsync -avz --delete \
-    --exclude='.git' \
-    --exclude='__pycache__' \
-    --exclude='*.pyc' \
-    --exclude='.venv' \
-    --exclude='venv' \
-    --exclude='data/' \
-    --exclude='*.log' \
-    --exclude='.env' \
-    "$LOCAL_DIR/" "$SERVER:$REMOTE_DIR/"
+# ── 1. Git pull en el servidor ───────────────────────────────────────
+echo ""
+echo "[1/4] Descargando últimos cambios (git pull)..."
+ssh "$SERVER" "cd $REMOTE_DIR && git pull origin master"
 
-# ── 2. Subir .env de producción ───────────────────────────────────────────────
-echo "[2/5] Subiendo .env..."
-if [ -f "$LOCAL_DIR/interfaz_facturas/.env.production" ]; then
-    scp "$LOCAL_DIR/interfaz_facturas/.env.production" \
-        "$SERVER:$REMOTE_DIR/interfaz_facturas/.env"
-else
-    echo "  ⚠️  No existe .env.production — asegúrate de crear uno (ver instrucciones abajo)"
-    echo "  Por ahora se mantiene el .env existente en el servidor"
-fi
-
-# ── 3. Subir base de datos (solo primera vez o --con-datos) ───────────────────
-if [ "$CON_DATOS" = true ]; then
-    echo "[3/5] Subiendo base de datos con datos importados..."
-    scp "$LOCAL_DIR/data/gestion.db" "$SERVER:$REMOTE_DIR/data/gestion.db"
-    ssh "$SERVER" "chown hincado:hincado $REMOTE_DIR/data/gestion.db"
-    echo "  ✅ Base de datos subida (226 empresas, 76 contactos)"
-else
-    echo "[3/5] Saltando base de datos (usa --con-datos para incluirla)"
-fi
-
-# ── 4. Instalar/actualizar dependencias en el servidor ────────────────────────
-echo "[4/5] Actualizando dependencias Python..."
+# ── 2. Verificar que .env existe ─────────────────────────────────────
+echo ""
+echo "[2/4] Verificando .env..."
 ssh "$SERVER" "
-    cd $REMOTE_DIR/interfaz_facturas
-    python3 -m venv .venv
-    .venv/bin/pip install -q --upgrade pip
-    .venv/bin/pip install -q -r requirements.txt
-    chown -R hincado:hincado $REMOTE_DIR
+  if [ ! -f $REMOTE_DIR/interfaz_facturas/.env ]; then
+    echo '  ERROR: No existe interfaz_facturas/.env'
+    echo '  Copia el .env de respaldo:'
+    echo '    cp /home/deploy/apps/erp/.env $REMOTE_DIR/interfaz_facturas/.env'
+    echo '    echo \"\" >> $REMOTE_DIR/interfaz_facturas/.env'
+    echo '    cat /home/deploy/apps/erp/interfaz_facturas/.env >> $REMOTE_DIR/interfaz_facturas/.env'
+    exit 1
+  fi
+  echo '  .env OK'
 "
 
-# ── 5. Reiniciar servicio ─────────────────────────────────────────────────────
-echo "[5/5] Reiniciando ERP..."
-ssh "$SERVER" "systemctl restart hincado-erp && systemctl status hincado-erp --no-pager -l"
+# ── 3. Rebuild y reiniciar ───────────────────────────────────────────
+echo ""
+echo "[3/4] Rebuilding imagen Docker y reiniciando..."
+ssh "$SERVER" "cd $REMOTE_DIR && docker compose up -d --build"
+
+# ── 4. Health check ──────────────────────────────────────────────────
+echo ""
+echo "[4/4] Esperando que el ERP arranque..."
+sleep 5
+ssh "$SERVER" "docker exec hincado-erp python -c \"import urllib.request; r = urllib.request.urlopen('http://localhost:8000/api/health'); print('  ' + r.read().decode())\"" \
+  && echo "  Health check OK" \
+  || echo "  AVISO: Health check falló. Revisa logs con: ssh $SERVER 'docker compose -f $REMOTE_DIR/docker-compose.yml logs -f erp'"
 
 echo ""
 echo "========================================"
-echo " ✅ Deploy completado"
+echo " Deploy completado"
 echo " URL: https://erp.hincadodirecto.com"
 echo "========================================"
 echo ""
-echo "Comandos útiles en el servidor:"
-echo "  Ver logs en tiempo real:  ssh $SERVER 'journalctl -u hincado-erp -f'"
-echo "  Estado del servicio:      ssh $SERVER 'systemctl status hincado-erp'"
-echo "  Reiniciar manualmente:    ssh $SERVER 'systemctl restart hincado-erp'"
+echo "Comandos útiles:"
+echo "  Ver logs:       ssh $SERVER 'cd $REMOTE_DIR && docker compose logs -f erp'"
+echo "  Reiniciar:      ssh $SERVER 'cd $REMOTE_DIR && docker compose restart erp'"
+echo "  Estado:         ssh $SERVER 'docker ps | grep hincado'"

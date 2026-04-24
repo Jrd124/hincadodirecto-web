@@ -1,24 +1,72 @@
-version: "3.8"
+# ═══════════════════════════════════════════════════════════════════════
+# Hincado ERP — Docker Compose (producción)
+#
+# USO:
+#   Primer deploy:    docker compose up -d --build
+#   Actualizar código: git pull && docker compose up -d --build
+#   Ver logs:          docker compose logs -f erp
+#   Reiniciar:         docker compose restart erp
+#
+# IMPORTANTE:
+#   - El .env DEBE existir en ./interfaz_facturas/.env ANTES de levantar
+#   - Los datos (BD, fotos) viven en el volumen "erp_erp-data"
+#   - Caddy y ERP comparten la red "erp_web" para que se vean entre sí
+# ═══════════════════════════════════════════════════════════════════════
 
 services:
+
   erp:
     build:
       context: ./interfaz_facturas
       dockerfile: Dockerfile
     container_name: hincado-erp
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     volumes:
-      # Datos persistentes: sobreviven a rebuilds/deploys
       - erp-data:/app/data
     env_file:
       - ./interfaz_facturas/.env
     environment:
       - APP_BASE_DIR=/app
+    networks:
+      web:
+        aliases:
+          - erp
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: hincado-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - web
+    depends_on:
+      - erp
+
+# ── Volúmenes ──
+# "erp_erp-data" es el volumen que ya existe con todos los datos de producción.
+# NUNCA borrar este volumen — contiene la BD, fotos, y backups.
 volumes:
   erp-data:
-    # Named volume — Docker lo gestiona en /var/lib/docker/volumes/
-    # Primera vez: se inicializa con el contenido de /app/data de la imagen
-    # Siguientes veces: el volumen existente se monta sin sobrescribir
+    external: true
+    name: erp_erp-data
+  caddy-data:
+    external: true
+    name: erp_caddy-data
+  caddy-config:
+    external: true
+    name: erp_caddy-config
+
+# ── Red ──
+# Red compartida para que Caddy resuelva "erp" por DNS interno de Docker.
+networks:
+  web:
+    external: true
+    name: erp_web
