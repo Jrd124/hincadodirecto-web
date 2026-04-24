@@ -197,6 +197,42 @@ _TIPO_PRODUCTO_MAP = {
 }
 
 
+def _detectar_header_row(filepath, sheet_name="data"):
+    """Detect which row contains the header by looking for known column names."""
+    import pandas as pd
+    try:
+        df_raw = pd.read_excel(filepath, sheet_name=sheet_name, header=None, nrows=5)
+        for i, row in df_raw.iterrows():
+            vals = [str(v).strip().lower() for v in row.values if pd.notna(v)]
+            if any("card" in v for v in vals) and any("date" in v for v in vals):
+                return i
+    except Exception:
+        pass
+    return 0
+
+
+def _generar_operation_no(row, idx, col_opno, col_date, col_reg, col_concept, col_liters):
+    """Generate a stable operation number. Uses OpNo if real, else hash of key fields."""
+    import hashlib
+    import pandas as pd
+
+    opno_raw = row[col_opno] if col_opno else None
+    # Check if it's a real OpNo (not 0, NaN, empty)
+    if opno_raw is not None and not (isinstance(opno_raw, float) and pd.isna(opno_raw)):
+        opno_str = str(int(opno_raw) if isinstance(opno_raw, float) and opno_raw == int(opno_raw) else opno_raw).strip()
+        if opno_str and opno_str not in ("0", "nan", "None", ""):
+            return opno_str
+
+    # Generate stable hash from key fields
+    fecha = str(row.get(col_date, "") if col_date else "").strip()
+    matricula = str(row.get(col_reg, "") if col_reg else "").strip()
+    concepto = str(row.get(col_concept, "") if col_concept else "").strip()
+    litros = str(row.get(col_liters, "") if col_liters else "").strip()
+    key = f"{fecha}|{matricula}|{concepto}|{litros}"
+    hash_id = hashlib.md5(key.encode()).hexdigest()[:12]
+    return f"auto_{hash_id}"
+
+
 def importar_excel_moeve(filepath):
     """Import Moeve XLSX. Idempotent via UNIQUE constraint. Returns stats dict."""
     import logging
@@ -204,7 +240,11 @@ def importar_excel_moeve(filepath):
     logger = logging.getLogger("erp")
 
     init_combustible_db()
-    df = pd.read_excel(filepath, sheet_name="data")
+
+    # Auto-detect header row (supports both invoice Excel and web Excel)
+    header_row = _detectar_header_row(filepath)
+    logger.info("Moeve import: detected header at row %d", header_row)
+    df = pd.read_excel(filepath, sheet_name="data", header=header_row)
     # Normalize column names: strip whitespace
     df.columns = [str(c).strip() for c in df.columns]
     logger.info("Moeve import: %d rows from %s. Columns: %s", len(df), os.path.basename(filepath), list(df.columns))
@@ -267,12 +307,8 @@ def importar_excel_moeve(filepath):
                 concepto = str(row[col_concept] if col_concept else "").strip()
                 if concepto == "nan": concepto = ""
 
-                # Operation number — critical for dedup
-                opno_raw = row[col_opno] if col_opno else None
-                if opno_raw is None or (isinstance(opno_raw, float) and pd.isna(opno_raw)):
-                    operation_no = f"row_{idx}"  # fallback: use row index
-                else:
-                    operation_no = str(int(opno_raw) if isinstance(opno_raw, float) and opno_raw == int(opno_raw) else opno_raw).strip()
+                # Operation number — critical for dedup (stable across web + invoice Excels)
+                operation_no = _generar_operation_no(row, idx, col_opno, col_date, col_reg, col_concept, col_liters)
 
                 factura = str(row[col_bill] if col_bill else "").strip()
                 if factura == "nan": factura = ""
@@ -306,6 +342,16 @@ def importar_excel_moeve(filepath):
 
                 precio_unit = round(transac / litros, 4) if litros > 0 else None
                 importe_final = transac + descuento  # descuento is negative when it's a discount
+
+                # Extra dedup for auto-generated OpNos: check by actual field values
+                if operation_no.startswith("auto_"):
+                    existente = conn.execute(
+                        "SELECT id FROM combustible_transacciones WHERE proveedor='moeve' AND fecha_operacion=? AND concepto_raw=? AND matricula_raw=? AND ABS(COALESCE(litros,0) - ?) < 0.01",
+                        (fecha, concepto, matricula, litros),
+                    ).fetchone()
+                    if existente:
+                        stats["duplicados"] += 1
+                        continue
 
                 cursor = conn.execute("""
                     INSERT OR IGNORE INTO combustible_transacciones (
