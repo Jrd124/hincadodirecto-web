@@ -890,6 +890,16 @@ def obtener_maquina(maq_id: int) -> dict | None:
             [maq_id],
         ).fetchall()]
 
+        # Fecha de la última lectura de horómetro (del check más reciente con horómetro)
+        ultima = conn.execute(
+            "SELECT fecha, horometro, created_at FROM maquinaria_checks "
+            "WHERE maquina_id = ? AND horometro IS NOT NULL AND horometro > 0 "
+            "ORDER BY created_at DESC LIMIT 1",
+            [maq_id],
+        ).fetchone()
+        maq["horometro_ultima_lectura"] = ultima["fecha"] if ultima else None
+        maq["horometro_ultima_lectura_at"] = ultima["created_at"] if ultima else None
+
         # Revisiones legacy (maquinaria_revisiones)
         revs_legacy = [dict(r) for r in conn.execute(
             "SELECT mr.*, u.nombre AS usuario_nombre FROM maquinaria_revisiones mr "
@@ -1357,6 +1367,25 @@ def actualizar_incidencia(inc_id: int, data: dict) -> dict:
                 params,
             )
         return dict(conn.execute("SELECT * FROM maquinaria_incidencias WHERE id = ?", [inc_id]).fetchone())
+
+
+def eliminar_incidencia(inc_id: int) -> bool:
+    """Elimina una incidencia y sus datos asociados (updates, fotos)."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        # Eliminar fotos de updates asociados
+        update_ids = [r["id"] for r in conn.execute(
+            "SELECT id FROM maquinaria_incidencia_updates WHERE incidencia_id = ?", [inc_id]
+        ).fetchall()]
+        for uid in update_ids:
+            conn.execute("DELETE FROM maquinaria_fotos WHERE entidad_tipo = 'inc_update' AND entidad_id = ?", [uid])
+        # Eliminar updates
+        conn.execute("DELETE FROM maquinaria_incidencia_updates WHERE incidencia_id = ?", [inc_id])
+        # Eliminar fotos de la incidencia
+        conn.execute("DELETE FROM maquinaria_fotos WHERE entidad_tipo = 'incidencia' AND entidad_id = ?", [inc_id])
+        # Eliminar la incidencia
+        conn.execute("DELETE FROM maquinaria_incidencias WHERE id = ?", [inc_id])
+        return True
 
 
 def crear_incidencia_update(incidencia_id: int, texto: str, autor_nombre: str = "") -> dict:

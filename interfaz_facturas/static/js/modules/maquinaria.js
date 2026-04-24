@@ -42,7 +42,8 @@ function cargarMaquinaria() {
           '</div>' +
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
             '<div><div style="font-size:11px;color:var(--color-text-secondary);">Hor\u00f3metro</div>' +
-              '<div style="font-size:16px;font-weight:600;">' + (m.horometro_actual || 0).toLocaleString("es-ES") + 'h</div></div>' +
+              '<div style="font-size:16px;font-weight:600;">' + (m.horometro_actual || 0).toLocaleString("es-ES") + 'h</div>' +
+              '<div style="font-size:10px;color:' + (m.horometro_ultima_lectura ? 'var(--color-text-secondary)' : '#DC2626') + ';">' + (m.horometro_ultima_lectura || 'Sin lectura') + '</div></div>' +
             '<div><div style="font-size:11px;color:var(--color-text-secondary);">Proyecto</div>' +
               '<div style="font-size:13px;font-weight:500;">' + (m.proyecto_actual && (m.proyecto_actual.nombre || m.proyecto_actual.codigo) ? _esc(m.proyecto_actual.nombre || m.proyecto_actual.codigo) : (m.proyecto_nombre ? _esc(m.proyecto_nombre) : '\u2014')) + '</div></div>' +
           '</div>' +
@@ -219,10 +220,12 @@ window.maqDetalle = function (maqId) {
           if (i.fotos && i.fotos.length) {
             fotosHtml = '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">' +
               i.fotos.map(function (f) {
-                var isVid = f.filename && (f.filename.endsWith(".mp4") || f.filename.endsWith(".mov") || f.filename.endsWith(".webm"));
+                var safeName = f.filepath || f.filename || "";
+                var origName = (f.filename || safeName).toLowerCase();
+                var isVid = origName.endsWith(".mp4") || origName.endsWith(".mov") || origName.endsWith(".webm");
                 return isVid
-                  ? '<a href="/fotos_maquinaria/' + _esc(f.filename) + '" target="_blank" style="width:48px;height:48px;border-radius:4px;background:#1e293b;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;text-decoration:none;">\u25B6</a>'
-                  : '<a href="/fotos_maquinaria/' + _esc(f.filename) + '" target="_blank"><img src="/fotos_maquinaria/' + _esc(f.filename) + '" style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid var(--color-border);"></a>';
+                  ? '<a href="/fotos_maquinaria/' + _esc(safeName) + '" target="_blank" style="width:48px;height:48px;border-radius:4px;background:#1e293b;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;text-decoration:none;">\u25B6</a>'
+                  : '<a href="/fotos_maquinaria/' + _esc(safeName) + '" target="_blank"><img src="/fotos_maquinaria/' + _esc(safeName) + '" style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid var(--color-border);"></a>';
               }).join("") + '</div>';
           }
           var nFotosTag = i.fotos && i.fotos.length ? '<span style="font-size:10px;color:var(--color-text-secondary);margin-left:4px;">\uD83D\uDCF7' + i.fotos.length + '</span>' : '';
@@ -235,7 +238,7 @@ window.maqDetalle = function (maqId) {
                 '<span style="font-size:12px;color:var(--color-text-secondary);margin-left:8px;">' + (i.fecha || "").substring(0, 10) + '</span></div>' +
               '<button onclick="event.stopPropagation();maqCerrarIncidencia(' + i.id + ',' + m.id + ')" class="btn-outline" style="font-size:11px;padding:2px 8px;">Cerrar</button>' +
             '</div>' +
-            '<p style="font-size:13px;margin:8px 0 0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">' + _esc(i.descripcion) + '</p>' +
+            '<p style="font-size:13px;margin:8px 0 0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word;">' + _esc(i.descripcion) + '</p>' +
             (reporter ? '<div style="font-size:11px;color:var(--color-text-secondary);margin-top:4px;">Reportada por ' + _esc(reporter) + '</div>' : '') +
           '</div>';
         }).join("");
@@ -311,7 +314,8 @@ window.maqDetalle = function (maqId) {
           '<div style="background:var(--color-white);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px;">' +
             '<div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:6px;">Hor\u00f3metro</div>' +
             '<div style="font-size:28px;font-weight:700;">' + (m.horometro_actual || 0).toLocaleString("es-ES") + 'h</div>' +
-            '<div style="font-size:12px;color:var(--color-text-secondary);">Inicial: ' + (m.horometro_inicial || 0).toLocaleString("es-ES") + 'h \u00b7 Comisi\u00f3n: ' + (m.fecha_comision ? m.fecha_comision.substring(0, 4) : '\u2014') + '</div></div>' +
+            '<div style="font-size:12px;color:var(--color-text-secondary);">Inicial: ' + (m.horometro_inicial || 0).toLocaleString("es-ES") + 'h \u00b7 Comisi\u00f3n: ' + (m.fecha_comision ? m.fecha_comision.substring(0, 4) : '\u2014') + '</div>' +
+            '<div style="font-size:11px;color:' + (m.horometro_ultima_lectura ? 'var(--color-text-secondary)' : '#DC2626') + ';margin-top:4px;">\u00dalt. lectura: ' + (m.horometro_ultima_lectura || 'Sin lecturas') + '</div></div>' +
           '<div style="background:var(--color-white);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px;">' +
             '<div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:8px;">Revisiones pendientes</div>' + revPend + '</div>' +
           '<div style="background:var(--color-white);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px;">' +
@@ -321,7 +325,7 @@ window.maqDetalle = function (maqId) {
 
         // 2 columns
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">' +
-          '<div style="display:flex;flex-direction:column;gap:14px;">' +
+          '<div style="display:flex;flex-direction:column;gap:14px;min-width:0;">' +
             // Checks
             '<div style="border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;">' +
               '<div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;">' +
@@ -336,7 +340,7 @@ window.maqDetalle = function (maqId) {
               '<div style="padding:12px;max-height:250px;overflow-y:auto;">' + revsHtml + '</div></div>' +
           '</div>' +
           // Incidencias (abiertas + historial)
-          '<div style="display:flex;flex-direction:column;gap:14px;">' +
+          '<div style="display:flex;flex-direction:column;gap:14px;min-width:0;">' +
             // Abiertas
             '<div style="border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;">' +
               '<div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;">' +
@@ -1300,7 +1304,8 @@ window.maqVerCheck = function (checkId, maqId) {
     if (c.fotos && c.fotos.length) {
       fotosHtml = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">' +
         c.fotos.map(function (f) {
-          return '<img src="/uploads/maquinaria/' + _esc(f.filename) + '" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--color-border);cursor:pointer;" ' +
+          var safeName = f.filepath || f.filename || "";
+          return '<img src="/fotos_maquinaria/' + _esc(safeName) + '" style="width:80px;height:80px;object-fit:cover;border-radius:6px;border:1px solid var(--color-border);cursor:pointer;" ' +
             'onclick="window.open(this.src,\'_blank\')">';
         }).join("") + '</div>';
     }
@@ -1842,8 +1847,8 @@ function _incGalleryHtml(fotos) {
   var html = '<div style="font-weight:600;font-size:13px;margin:16px 0 8px;">Fotos / V\u00eddeos (' + fotos.length + ')</div>' +
     '<div style="display:flex;gap:8px;flex-wrap:wrap;">';
   fotos.forEach(function (f) {
-    var src = "/api/maquinaria/fotos/file/" + _esc(f.nombre_archivo || f.filename || "");
-    var origName = (f.nombre_original || f.filename || "").toLowerCase();
+    var src = "/fotos_maquinaria/" + _esc(f.filepath || f.filename || "");
+    var origName = (f.filename || f.filepath || "").toLowerCase();
     var isVid = origName.match(/\.(mp4|mov|avi|webm)$/);
     if (isVid) {
       html += '<video src="' + src + '" controls preload="metadata" style="max-width:100%;max-height:280px;border-radius:8px;border:1px solid var(--color-border);"></video>';
@@ -2014,12 +2019,31 @@ window.maqVerDetalleIncidencia = function (incId, maqId) {
           '<button class="btn-primary" style="width:auto;padding:8px 20px;" onclick="document.getElementById(\'modal-maq-detalle-inc\').remove();maqCerrarIncidencia(' + i.id + ',' + maqId + ')">Cerrar incidencia</button>' +
         '</div>'
       :
-        '<div style="display:flex;justify-content:flex-end;margin-top:16px;">' +
+        '<div style="display:flex;justify-content:space-between;margin-top:16px;">' +
+          '<button style="background:none;border:1px solid #DC2626;color:#DC2626;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;" onclick="maqEliminarIncidencia(' + i.id + ',' + maqId + ')">Eliminar</button>' +
           '<button class="btn-outline" onclick="document.getElementById(\'modal-maq-detalle-inc\').remove()">Cerrar</button>' +
         '</div>'
       ) +
     '</div>';
   document.body.appendChild(modal);
+};
+
+// ═══ Eliminar incidencia (admin, solo históricas/cerradas) ═══
+
+window.maqEliminarIncidencia = function (incId, maqId) {
+  if (!confirm("\u00bfEliminar esta incidencia? Se borrar\u00e1n tambi\u00e9n sus fotos y actualizaciones. Esta acci\u00f3n no se puede deshacer.")) return;
+
+  fetch("/api/maquinaria/incidencias/" + incId, { method: "DELETE" })
+  .then(function (r) { return r.json(); })
+  .then(function (d) {
+    if (d.error) { mostrarToast(d.error, "error"); return; }
+    mostrarToast("Incidencia eliminada", "ok");
+    var modal = document.getElementById("modal-maq-detalle-inc");
+    if (modal) modal.remove();
+    if (window._maqIncMap) delete window._maqIncMap[incId];
+    maqCargarDetalle(maqId);
+  })
+  .catch(function (err) { mostrarToast("Error: " + err.message, "error"); });
 };
 
 // ═══ Editar incidencia (admin) ═══

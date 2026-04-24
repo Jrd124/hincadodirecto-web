@@ -26,8 +26,8 @@ function _buildGallery(fotos) {
   if (!fotos || fotos.length === 0) return '';
   var html = '<div class="detail-gallery">';
   fotos.forEach(function(f) {
-    var src = "/api/maquinaria/fotos/file/" + (f.nombre_archivo || f.filepath || f.filename || "");
-    var isVideo = (f.nombre_original || f.filename || "").match(/\.(mp4|mov|avi|webm)$/i);
+    var src = "/fotos_maquinaria/" + (f.filepath || f.filename || "");
+    var isVideo = (f.filename || f.filepath || "").match(/\.(mp4|mov|avi|webm)$/i);
     if (isVideo) {
       html += '<div class="detail-gallery-item"><video src="' + src + '" controls preload="metadata" style="width:100%;max-height:300px;border-radius:8px;border:1px solid #e9ecef;"></video></div>';
     } else {
