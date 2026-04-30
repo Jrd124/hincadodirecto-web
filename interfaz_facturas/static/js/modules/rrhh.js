@@ -487,7 +487,7 @@ function _rrhhCerrarModalEmpleado() {
 function _rrhhLimpiarFormEmpleado() {
   document.getElementById("emp-id").value = "";
   ["emp-nombre","emp-apellidos","emp-dni","emp-nss","emp-telefono","emp-email",
-   "emp-puesto","emp-categoria","emp-fecha-alta",
+   "emp-puesto","emp-categoria","emp-fecha-alta","emp-fecha-baja",
    "emp-prl-especifico","emp-prl-basico-cad","emp-prl-especifico-cad",
    "emp-apto-medico-cad","emp-carnet-conducir","emp-carnet-conducir-cad",
    "emp-carnet-maquinaria","emp-carnet-maquinaria-cad","emp-formacion-especifica","emp-notas",
@@ -516,6 +516,7 @@ function _rrhhRellenarFormEmpleado(e) {
   document.getElementById("emp-puesto").value = e.puesto || "";
   document.getElementById("emp-categoria").value = e.categoria || "";
   document.getElementById("emp-fecha-alta").value = e.fecha_alta || "";
+  (document.getElementById("emp-fecha-baja") || {}).value = e.fecha_baja || "";
   document.getElementById("emp-estado").value = e.estado || "activo";
   document.getElementById("emp-prl-basico").checked = e.prl_basico == 1;
   document.getElementById("emp-prl-horas").value = e.prl_basico_horas || "";
@@ -554,6 +555,7 @@ function _rrhhRecogerFormEmpleado() {
     puesto: document.getElementById("emp-puesto").value.trim(),
     categoria: document.getElementById("emp-categoria").value.trim(),
     fecha_alta: document.getElementById("emp-fecha-alta").value,
+    fecha_baja: (document.getElementById("emp-fecha-baja") || {}).value || null,
     estado: document.getElementById("emp-estado").value,
     iban: (document.getElementById("emp-iban") || {}).value || "",
     direccion: (document.getElementById("emp-direccion") || {}).value || "",
