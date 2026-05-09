@@ -3,14 +3,14 @@
 ## Arrancar
 
 ```bash
-cd /home/deploy/apps/erp
-docker compose -f docker-compose.prod.yml up -d
+cd /opt/hincado-erp
+docker compose up -d --build
 ```
 
 ## Parar
 
 ```bash
-docker compose -f docker-compose.prod.yml down
+docker compose down
 ```
 
 ## Ver logs
@@ -25,14 +25,16 @@ docker logs -f hincado-caddy --tail 100
 
 ## Actualizar codigo
 
-Push a `master` dispara el deploy automatico via GitHub Actions.
+Push a `master` dispara el deploy automatico via GitHub Actions
+(`.github/workflows/deploy-prod.yml`): SSH al VPS, `git pull`, rebuild
+local con `docker compose up -d --build`.
 
 Deploy manual en el VPS:
 
 ```bash
-cd /home/deploy/apps/erp
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
+cd /opt/hincado-erp
+git pull origin master
+docker compose up -d --build
 ```
 
 ## Backup manual
@@ -45,7 +47,7 @@ docker compose -f docker-compose.prod.yml up -d
 
 ```bash
 # Parar la app
-docker compose -f docker-compose.prod.yml down
+docker compose down
 
 # Descomprimir backup
 gunzip /home/deploy/backups/erp/gestion_FECHA.db.gz
@@ -54,7 +56,7 @@ gunzip /home/deploy/backups/erp/gestion_FECHA.db.gz
 docker cp /home/deploy/backups/erp/gestion_FECHA.db hincado-erp:/app/data/gestion.db
 
 # Arrancar
-docker compose -f docker-compose.prod.yml up -d
+docker compose up -d --build
 ```
 
 ## Verificar estado
@@ -73,18 +75,14 @@ df -h
 ## Rollback
 
 ```bash
-cd /home/deploy/apps/erp
-# Usar imagen de un commit anterior
-export IMAGE=ghcr.io/jrd124/hincado-erp:SHA_DEL_COMMIT
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
+cd /opt/hincado-erp
+# Volver a un commit anterior y rebuildar
+git checkout SHA_DEL_COMMIT
+docker compose up -d --build
 ```
 
 ## GitHub Secrets necesarios
 
 | Secret | Descripcion |
 |--------|-------------|
-| PROD_HOST | IP del VPS |
-| PROD_SSH_USER | Usuario SSH (deploy) |
-| PROD_SSH_KEY | Clave privada SSH |
-| PROD_APP_DIR | Ruta en el VPS (/home/deploy/apps/erp) |
+| DEPLOY_SSH_KEY | Clave privada SSH del usuario `deploy@46.225.27.219` |

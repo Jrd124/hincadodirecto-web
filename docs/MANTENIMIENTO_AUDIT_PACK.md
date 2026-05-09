@@ -60,7 +60,7 @@ Formato PDF 1 página con:
 ### 1.7 Infraestructura
 
 - Docker (python:3.11-slim) + Gunicorn + Caddy
-- CI/CD: GitHub Actions → ghcr.io → SSH deploy
+- CI/CD: GitHub Actions → SSH → git pull + docker compose build local
 - Rama: `master` (prod), `feature/*` (dev)
 
 ---

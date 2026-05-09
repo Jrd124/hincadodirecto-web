@@ -116,8 +116,7 @@ El worker se reinicia y arranca bien.
 3. Editar `gestion.db` directamente mientras la app corre
 4. Borrar archivos del compose sin verificar qué volúmenes usan
 
-## Archivos obsoletos (se pueden borrar)
+## Archivos auxiliares
 
-- `docker-compose.prod.yml` — versión antigua, no se usa
-- `docker-compose.dev.yml` — no se usa en producción
-- `deploy/deploy.sh` versión antigua con systemctl (ya actualizado)
+- `docker-compose.dev.yml` — para desarrollo local (no se usa en producción)
+- `deploy/deploy.sh` — fallback manual desde Mac (el flujo normal es push a master)
