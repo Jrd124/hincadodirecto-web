@@ -318,7 +318,7 @@ def api_dashboard_director():
       ).fetchone()
       r_inc = conn.execute(
         "SELECT COUNT(DISTINCT maquina_id) as c FROM maquinaria_incidencias "
-        "WHERE estado != 'cerrada' AND severidad IN ('alta','seguridad')"
+        "WHERE estado NOT IN ('cerrada','cerrada_validada','resuelta') AND severidad IN ('alta','seguridad')"
       ).fetchone()
       result["maquinaria"]["en_taller"] = (r_averia["c"] if r_averia else 0) + (r_inc["c"] if r_inc else 0)
 

@@ -385,8 +385,22 @@ def api_incidencias_stats():
 
 @maquinaria_bp.get("/api/maquinaria/incidencias/zonas")
 def api_incidencias_zonas():
-  """Devuelve la lista de zonas/sistemas disponibles para clasificar incidencias."""
+  """Devuelve la lista de zonas/subsistemas disponibles para clasificar incidencias."""
   return jsonify({"zonas": [{"value": z, "label": maquinaria_db.ZONAS_LABELS[z]} for z in maquinaria_db.ZONAS_INCIDENCIA]})
+
+
+@maquinaria_bp.get("/api/maquinaria/incidencias/config")
+def api_incidencias_config():
+  """Devuelve tipos, estados, subsistemas, motivos y transiciones para el frontend."""
+  return jsonify({
+    "tipos": [{"value": t, "label": maquinaria_db.TIPOS_INCIDENCIA_LABELS[t]} for t in maquinaria_db.TIPOS_INCIDENCIA],
+    "estados": maquinaria_db.ESTADOS_INCIDENCIA,
+    "transiciones": maquinaria_db.TRANSICIONES_INCIDENCIA,
+    "subsistemas": [{"value": z, "label": maquinaria_db.ZONAS_LABELS[z]} for z in maquinaria_db.ZONAS_INCIDENCIA],
+    "motivos_downtime": maquinaria_db.MOTIVOS_DOWNTIME,
+    "estados_operativos": maquinaria_db.ESTADOS_OPERATIVOS,
+    "severidades": ["baja", "media", "alta", "seguridad"],
+  })
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

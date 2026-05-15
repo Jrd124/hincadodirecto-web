@@ -3138,6 +3138,13 @@ _SEVERIDAD_LABELS = {
 }
 _ESTADO_INC_LABELS = {
     "abierta": "🔴 Abierta",
+    "en_diagnostico": "🟠 En diagnóstico",
+    "pendiente_pieza": "🟡 Pend. pieza",
+    "pendiente_taller": "🟡 Pend. taller",
+    "en_reparacion": "🔵 En reparación",
+    "resuelta": "🟢 Resuelta",
+    "cerrada_validada": "✅ Cerrada",
+    # Compatibilidad legacy
     "en_curso": "🟡 En revisión",
     "cerrada": "✅ Cerrada",
 }

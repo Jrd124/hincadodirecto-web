@@ -9,15 +9,19 @@ from core.db import conectar as _conectar, now_iso as _now
 
 _initialized = False
 
-# Zonas / sistemas de la máquina para clasificar incidencias
+# Zonas / subsistemas de la máquina para clasificar incidencias (Fase 1)
 ZONAS_INCIDENCIA = [
     "hidraulico",
     "motor",
+    "electrico",
+    "martillo",
+    "guias",
+    "latiguillos",
+    "traslacion",
+    "perforacion",
     "bomba_inyeccion",
-    "martillo_percusion",
     "orugas_rodillos",
     "reductor",
-    "sistema_electrico",
     "estructura_chasis",
     "barrena",
     "cabina",
@@ -28,17 +32,70 @@ ZONAS_INCIDENCIA = [
 ZONAS_LABELS = {
     "hidraulico": "Hidráulico",
     "motor": "Motor",
+    "electrico": "Eléctrico",
+    "martillo": "Martillo",
+    "guias": "Guías",
+    "latiguillos": "Latiguillos",
+    "traslacion": "Traslación",
+    "perforacion": "Perforación",
     "bomba_inyeccion": "Bomba de inyección",
-    "martillo_percusion": "Martillo de percusión",
     "orugas_rodillos": "Orugas / Rodillos",
     "reductor": "Reductor",
-    "sistema_electrico": "Sistema eléctrico",
     "estructura_chasis": "Estructura / Chasis",
     "barrena": "Barrena",
     "cabina": "Cabina",
     "refrigeracion": "Refrigeración",
     "otro": "Otro",
 }
+
+# Tipos de incidencia (Fase 1)
+TIPOS_INCIDENCIA = ["averia", "anomalia", "correctivo", "observacion_preventiva"]
+TIPOS_INCIDENCIA_LABELS = {
+    "averia": "Avería",
+    "anomalia": "Anomalía",
+    "correctivo": "Correctivo",
+    "observacion_preventiva": "Observación preventiva",
+}
+
+# Estados de incidencia (Fase 1 — 7 estados)
+ESTADOS_INCIDENCIA = [
+    "abierta", "en_diagnostico", "pendiente_pieza", "pendiente_taller",
+    "en_reparacion", "resuelta", "cerrada_validada",
+]
+
+# Transiciones permitidas entre estados de incidencia
+TRANSICIONES_INCIDENCIA = {
+    "abierta": ["en_diagnostico", "resuelta"],
+    "en_diagnostico": ["pendiente_pieza", "pendiente_taller", "en_reparacion", "resuelta"],
+    "pendiente_pieza": ["en_reparacion"],
+    "pendiente_taller": ["en_reparacion"],
+    "en_reparacion": ["resuelta"],
+    "resuelta": ["cerrada_validada"],
+    "cerrada_validada": [],  # estado terminal
+    # Compatibilidad: estados legacy
+    "en_curso": ["resuelta", "cerrada_validada", "en_diagnostico"],
+    "cerrada": [],
+}
+
+# Estados operativos de máquina (Fase 1) — ordenados por gravedad (1=máxima)
+ESTADOS_OPERATIVOS = [
+    "decomisionada",               # 1 - fuera de servicio permanente
+    "en_reparacion",               # 2 - intervenida activamente
+    "parada_pendiente_pieza",      # 3 - parada, esperando material
+    "parada_diagnostico",          # 4 - parada, evaluando
+    "pendiente_taller",            # 5 - esperando slot en taller
+    "en_reserva",                  # 6 - no asignada pero disponible
+    "operativa_con_limitaciones",  # 7 - funciona con restricciones
+    "operativa",                   # 8 - todo correcto
+]
+# Mapa estado → prioridad (menor = más grave)
+PRIORIDAD_ESTADO_OPERATIVO = {e: i + 1 for i, e in enumerate(ESTADOS_OPERATIVOS)}
+
+# Motivos de downtime
+MOTIVOS_DOWNTIME = ["averia", "espera_pieza", "espera_taller", "diagnostico"]
+
+# Coste por día parado (configurable, default 900 EUR)
+COSTE_DIA_PARADO = 900
 
 
 def init_maquinaria_db() -> None:
@@ -121,13 +178,58 @@ def init_maquinaria_db() -> None:
                 fecha TEXT NOT NULL,
                 descripcion TEXT NOT NULL,
                 severidad TEXT DEFAULT 'media' CHECK(severidad IN ('baja','media','alta','seguridad')),
-                estado TEXT DEFAULT 'abierta' CHECK(estado IN ('abierta','en_curso','cerrada')),
+                estado TEXT DEFAULT 'abierta' CHECK(estado IN (
+                    'abierta','en_diagnostico','pendiente_pieza','pendiente_taller',
+                    'en_reparacion','resuelta','cerrada_validada',
+                    'en_curso','cerrada'
+                )),
                 resolucion TEXT,
                 cerrada_at TEXT,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                -- Fase 1: campos ampliados
+                hora_deteccion TEXT,
+                horometro_deteccion REAL,
+                proyecto_id INTEGER REFERENCES proyectos(id),
+                operario_detecta TEXT,
+                tipo_incidencia TEXT CHECK(tipo_incidencia IN ('averia','anomalia','correctivo','observacion_preventiva')),
+                subsistema TEXT,
+                sintoma_inicial TEXT,
+                maquina_siguio_operando INTEGER,
+                fecha_hora_parada TEXT,
+                fecha_hora_vuelta TEXT,
+                horas_downtime REAL,
+                motivo_downtime TEXT CHECK(motivo_downtime IN ('averia','espera_pieza','espera_taller','diagnostico')),
+                diagnostico_provisional TEXT,
+                causa_raiz TEXT,
+                accion_tomada TEXT,
+                pieza_sustituida TEXT,
+                repuesto_id INTEGER,
+                taller_id INTEGER,
+                resuelto_en TEXT CHECK(resuelto_en IN ('campo','taller')),
+                espera_pieza INTEGER DEFAULT 0,
+                espera_mecanico INTEGER DEFAULT 0,
+                coste_repuesto REAL DEFAULT 0,
+                coste_servicio REAL DEFAULT 0,
+                coste_downtime REAL DEFAULT 0,
+                es_repetida INTEGER DEFAULT 0,
+                incidencia_anterior_id INTEGER REFERENCES maquinaria_incidencias(id),
+                leccion_aprendida TEXT,
+                accion_preventiva TEXT,
+                es_historico INTEGER DEFAULT 0,
+                fuente_dato TEXT CHECK(fuente_dato IN ('factura','whatsapp','memoria','albaran','otro')),
+                -- Campos existentes migrados
+                telegram_id INTEGER,
+                operario_nombre TEXT,
+                zona TEXT
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_inc_maq ON maquinaria_incidencias(maquina_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_inc_estado ON maquinaria_incidencias(estado)")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_inc_tipo ON maquinaria_incidencias(tipo_incidencia)")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_inc_subsistema ON maquinaria_incidencias(subsistema)")
+
+        # ── Migración: detectar tabla vieja (3 estados) y migrar a 7 estados + campos nuevos ──
+        _migrate_incidencias_fase1(conn)
 
         # ── Tokens de acceso operario (sin login) ──
         conn.execute("""
@@ -312,6 +414,22 @@ def init_maquinaria_db() -> None:
             )
         """)
 
+        # ── Historial de asignaciones máquina-obra (Fase 1) ──
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS maquinaria_asignaciones_obra (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                maquina_id INTEGER NOT NULL REFERENCES maquinas(id) ON DELETE CASCADE,
+                proyecto_id INTEGER NOT NULL REFERENCES proyectos(id),
+                fecha_inicio TEXT NOT NULL,
+                fecha_fin TEXT,
+                ubicacion TEXT,
+                operario_id INTEGER REFERENCES empleados(id),
+                notas TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_asig_obra ON maquinaria_asignaciones_obra(maquina_id)")
+
         # Añadir responsable_id a maquinas si no existe (FK a empleados)
         cols = [r[1] for r in conn.execute("PRAGMA table_info(maquinas)").fetchall()]
         if "responsable_id" not in cols:
@@ -321,24 +439,219 @@ def init_maquinaria_db() -> None:
         if "marca" not in cols:
             conn.execute("ALTER TABLE maquinas ADD COLUMN marca TEXT NOT NULL DEFAULT 'ORTECO'")
 
+        # ── Fase 1: columnas nuevas en maquinas ──
+        if "estado_operativo" not in cols:
+            conn.execute("ALTER TABLE maquinas ADD COLUMN estado_operativo TEXT DEFAULT 'operativa'")
+        if "tipo_maquina" not in cols:
+            conn.execute("ALTER TABLE maquinas ADD COLUMN tipo_maquina TEXT DEFAULT 'hincadora'")
+        if "ano_fabricacion" not in cols:
+            conn.execute("ALTER TABLE maquinas ADD COLUMN ano_fabricacion INTEGER")
+        if "matricula" not in cols:
+            conn.execute("ALTER TABLE maquinas ADD COLUMN matricula TEXT")
+        if "criticidad" not in cols:
+            conn.execute("ALTER TABLE maquinas ADD COLUMN criticidad TEXT DEFAULT 'media'")
+        if "operario_habitual_id" not in cols:
+            conn.execute("ALTER TABLE maquinas ADD COLUMN operario_habitual_id INTEGER REFERENCES empleados(id)")
+        if "override_estado_manual" not in cols:
+            conn.execute("ALTER TABLE maquinas ADD COLUMN override_estado_manual INTEGER DEFAULT 0")
+
         # Añadir marca a maquinaria_maintenance_tasks si no existe
         task_cols = [r[1] for r in conn.execute("PRAGMA table_info(maquinaria_maintenance_tasks)").fetchall()]
         if "marca" not in task_cols:
             conn.execute("ALTER TABLE maquinaria_maintenance_tasks ADD COLUMN marca TEXT NOT NULL DEFAULT 'ORTECO'")
 
-        # Añadir telegram_id a maquinaria_incidencias si no existe (para reportes desde bot)
-        inc_cols = [r[1] for r in conn.execute("PRAGMA table_info(maquinaria_incidencias)").fetchall()]
-        if "telegram_id" not in inc_cols:
-            conn.execute("ALTER TABLE maquinaria_incidencias ADD COLUMN telegram_id INTEGER")
-        if "operario_nombre" not in inc_cols:
-            conn.execute("ALTER TABLE maquinaria_incidencias ADD COLUMN operario_nombre TEXT")
-        if "zona" not in inc_cols:
-            conn.execute("ALTER TABLE maquinaria_incidencias ADD COLUMN zona TEXT")
+        # Migrar asignaciones existentes a tabla historial (si proyecto_id no NULL y no hay registro)
+        _migrate_asignaciones_obra(conn)
 
         _seed_maquinas(conn)
         _seed_checklist_templates(conn)
         _seed_maintenance_tasks(conn)
     _initialized = True
+
+
+# ── Migraciones Fase 1 ─────────────────────────────────────────────────────
+
+
+def _migrate_incidencias_fase1(conn):
+    """Migra la tabla maquinaria_incidencias de 3 estados a 7 estados + campos nuevos.
+
+    Estrategia segura:
+    1. Detectar si la tabla tiene el CHECK viejo (solo 3 estados)
+    2. Crear tabla nueva con schema completo
+    3. Copiar datos (mapeando estados: en_curso→en_diagnostico, cerrada→cerrada_validada)
+    4. Drop vieja, rename nueva
+    5. Recrear índices
+    """
+    tbl_sql = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='maquinaria_incidencias'"
+    ).fetchone()
+    if not tbl_sql or not tbl_sql[0]:
+        return  # tabla no existe, se creará fresca
+
+    sql = tbl_sql[0]
+    # Si ya tiene los 7 estados, no migrar
+    if "en_diagnostico" in sql:
+        # Ya migrada, pero verificar que tiene los campos nuevos via ALTER TABLE
+        inc_cols = [r[1] for r in conn.execute("PRAGMA table_info(maquinaria_incidencias)").fetchall()]
+        _add_missing_incidencia_columns(conn, inc_cols)
+        return
+
+    # Necesita migración completa: tabla vieja con 3 estados
+    import logging
+    logger = logging.getLogger("erp")
+    logger.info("Migrando maquinaria_incidencias: 3 estados → 7 estados + campos Fase 1")
+
+    # Obtener columnas actuales para saber qué copiar
+    old_cols = [r[1] for r in conn.execute("PRAGMA table_info(maquinaria_incidencias)").fetchall()]
+
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS _maq_incidencias_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            maquina_id INTEGER NOT NULL REFERENCES maquinas(id) ON DELETE CASCADE,
+            check_id INTEGER REFERENCES maquinaria_checks(id),
+            revision_id INTEGER REFERENCES maquinaria_revisiones(id),
+            usuario_id INTEGER REFERENCES usuarios(id),
+            fecha TEXT NOT NULL,
+            descripcion TEXT NOT NULL,
+            severidad TEXT DEFAULT 'media' CHECK(severidad IN ('baja','media','alta','seguridad')),
+            estado TEXT DEFAULT 'abierta' CHECK(estado IN (
+                'abierta','en_diagnostico','pendiente_pieza','pendiente_taller',
+                'en_reparacion','resuelta','cerrada_validada',
+                'en_curso','cerrada'
+            )),
+            resolucion TEXT,
+            cerrada_at TEXT,
+            created_at TEXT NOT NULL,
+            hora_deteccion TEXT,
+            horometro_deteccion REAL,
+            proyecto_id INTEGER REFERENCES proyectos(id),
+            operario_detecta TEXT,
+            tipo_incidencia TEXT CHECK(tipo_incidencia IN ('averia','anomalia','correctivo','observacion_preventiva')),
+            subsistema TEXT,
+            sintoma_inicial TEXT,
+            maquina_siguio_operando INTEGER,
+            fecha_hora_parada TEXT,
+            fecha_hora_vuelta TEXT,
+            horas_downtime REAL,
+            motivo_downtime TEXT CHECK(motivo_downtime IN ('averia','espera_pieza','espera_taller','diagnostico')),
+            diagnostico_provisional TEXT,
+            causa_raiz TEXT,
+            accion_tomada TEXT,
+            pieza_sustituida TEXT,
+            repuesto_id INTEGER,
+            taller_id INTEGER,
+            resuelto_en TEXT CHECK(resuelto_en IN ('campo','taller')),
+            espera_pieza INTEGER DEFAULT 0,
+            espera_mecanico INTEGER DEFAULT 0,
+            coste_repuesto REAL DEFAULT 0,
+            coste_servicio REAL DEFAULT 0,
+            coste_downtime REAL DEFAULT 0,
+            es_repetida INTEGER DEFAULT 0,
+            incidencia_anterior_id INTEGER REFERENCES _maq_incidencias_new(id),
+            leccion_aprendida TEXT,
+            accion_preventiva TEXT,
+            es_historico INTEGER DEFAULT 0,
+            fuente_dato TEXT CHECK(fuente_dato IN ('factura','whatsapp','memoria','albaran','otro')),
+            telegram_id INTEGER,
+            operario_nombre TEXT,
+            zona TEXT
+        );
+    """)
+
+    # Copiar datos existentes — solo columnas que existen en la tabla vieja
+    base_cols = ["id", "maquina_id", "check_id", "revision_id", "usuario_id",
+                 "fecha", "descripcion", "severidad", "estado", "resolucion",
+                 "cerrada_at", "created_at"]
+    optional_cols = ["telegram_id", "operario_nombre", "zona"]
+    copy_cols = [c for c in base_cols if c in old_cols]
+    copy_cols += [c for c in optional_cols if c in old_cols]
+
+    cols_str = ", ".join(copy_cols)
+
+    # Mapear zona a subsistema al copiar (zona existente se preserva, subsistema se copia de zona)
+    conn.execute(f"""
+        INSERT INTO _maq_incidencias_new ({cols_str})
+        SELECT {cols_str} FROM maquinaria_incidencias
+    """)
+
+    # Copiar zona a subsistema para registros existentes
+    if "zona" in old_cols:
+        conn.execute("UPDATE _maq_incidencias_new SET subsistema = zona WHERE zona IS NOT NULL")
+
+    # Drop vieja, rename nueva
+    conn.execute("DROP TABLE maquinaria_incidencias")
+    conn.execute("ALTER TABLE _maq_incidencias_new RENAME TO maquinaria_incidencias")
+
+    # Recrear índices
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_inc_maq ON maquinaria_incidencias(maquina_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_inc_estado ON maquinaria_incidencias(estado)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_inc_tipo ON maquinaria_incidencias(tipo_incidencia)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_inc_subsistema ON maquinaria_incidencias(subsistema)")
+
+    logger.info("Migración maquinaria_incidencias completada: %d registros migrados",
+                conn.execute("SELECT COUNT(*) FROM maquinaria_incidencias").fetchone()[0])
+
+
+def _add_missing_incidencia_columns(conn, existing_cols):
+    """Añade columnas nuevas de Fase 1 si faltan (para tablas ya migradas parcialmente)."""
+    new_cols = {
+        "hora_deteccion": "TEXT",
+        "horometro_deteccion": "REAL",
+        "proyecto_id": "INTEGER REFERENCES proyectos(id)",
+        "operario_detecta": "TEXT",
+        "tipo_incidencia": "TEXT",
+        "subsistema": "TEXT",
+        "sintoma_inicial": "TEXT",
+        "maquina_siguio_operando": "INTEGER",
+        "fecha_hora_parada": "TEXT",
+        "fecha_hora_vuelta": "TEXT",
+        "horas_downtime": "REAL",
+        "motivo_downtime": "TEXT",
+        "diagnostico_provisional": "TEXT",
+        "causa_raiz": "TEXT",
+        "accion_tomada": "TEXT",
+        "pieza_sustituida": "TEXT",
+        "repuesto_id": "INTEGER",
+        "taller_id": "INTEGER",
+        "resuelto_en": "TEXT",
+        "espera_pieza": "INTEGER DEFAULT 0",
+        "espera_mecanico": "INTEGER DEFAULT 0",
+        "coste_repuesto": "REAL DEFAULT 0",
+        "coste_servicio": "REAL DEFAULT 0",
+        "coste_downtime": "REAL DEFAULT 0",
+        "es_repetida": "INTEGER DEFAULT 0",
+        "incidencia_anterior_id": "INTEGER",
+        "leccion_aprendida": "TEXT",
+        "accion_preventiva": "TEXT",
+        "es_historico": "INTEGER DEFAULT 0",
+        "fuente_dato": "TEXT",
+        "telegram_id": "INTEGER",
+        "operario_nombre": "TEXT",
+        "zona": "TEXT",
+    }
+    for col, tipo in new_cols.items():
+        if col not in existing_cols:
+            try:
+                conn.execute(f"ALTER TABLE maquinaria_incidencias ADD COLUMN {col} {tipo}")
+            except Exception:
+                pass  # columna ya existe o error de constraint
+
+
+def _migrate_asignaciones_obra(conn):
+    """Migra asignaciones actuales (proyecto_id en maquinas) a tabla historial."""
+    count = conn.execute("SELECT COUNT(*) FROM maquinaria_asignaciones_obra").fetchone()[0]
+    if count > 0:
+        return  # ya hay datos, no migrar
+    now = _now()
+    maquinas_con_proyecto = conn.execute(
+        "SELECT id, proyecto_id, fecha_comision FROM maquinas WHERE proyecto_id IS NOT NULL"
+    ).fetchall()
+    for m in maquinas_con_proyecto:
+        conn.execute(
+            "INSERT INTO maquinaria_asignaciones_obra "
+            "(maquina_id, proyecto_id, fecha_inicio, created_at) VALUES (?, ?, ?, ?)",
+            [m["id"], m["proyecto_id"], m["fecha_comision"] or now[:10], now],
+        )
 
 
 # ── Seed data ────────────────────────────────────────────────────────────────
@@ -847,7 +1160,7 @@ def listar_maquinas(solo_activas: bool = True) -> list:
 
             inc_graves = conn.execute(
                 "SELECT COUNT(*) FROM maquinaria_incidencias "
-                "WHERE maquina_id = ? AND estado != 'cerrada' "
+                "WHERE maquina_id = ? AND estado NOT IN ('cerrada','cerrada_validada','resuelta') "
                 "AND severidad IN ('alta','seguridad')",
                 [mid],
             ).fetchone()[0]
@@ -959,7 +1272,7 @@ def obtener_maquina(maq_id: int) -> dict | None:
         maq["incidencias"] = [dict(r) for r in conn.execute(
             "SELECT mi.*, u.nombre AS usuario_nombre FROM maquinaria_incidencias mi "
             "LEFT JOIN usuarios u ON u.id = mi.usuario_id "
-            "WHERE mi.maquina_id = ? AND mi.estado != 'cerrada' "
+            "WHERE mi.maquina_id = ? AND mi.estado NOT IN ('cerrada','cerrada_validada') "
             "ORDER BY mi.severidad DESC, mi.fecha DESC",
             [maq_id],
         ).fetchall()]
@@ -982,7 +1295,7 @@ def obtener_maquina(maq_id: int) -> dict | None:
         maq["incidencias_historial"] = [dict(r) for r in conn.execute(
             "SELECT mi.*, u.nombre AS usuario_nombre FROM maquinaria_incidencias mi "
             "LEFT JOIN usuarios u ON u.id = mi.usuario_id "
-            "WHERE mi.maquina_id = ? AND mi.estado = 'cerrada' "
+            "WHERE mi.maquina_id = ? AND mi.estado IN ('cerrada','cerrada_validada','resuelta') "
             "ORDER BY mi.cerrada_at DESC, mi.fecha DESC LIMIT 50",
             [maq_id],
         ).fetchall()]
@@ -1005,6 +1318,38 @@ def obtener_maquina(maq_id: int) -> dict | None:
         maq["revisiones_pendientes"] = _calcular_revisiones_pendientes(
             conn, maq_id, maq["horometro_actual"],
         )
+
+        # Fase 1: Historial de asignaciones a obra
+        maq["asignaciones_obra"] = [dict(r) for r in conn.execute(
+            "SELECT a.*, p.nombre AS proyecto_nombre, p.codigo AS proyecto_codigo, "
+            "(e.nombre || ' ' || COALESCE(e.apellidos, '')) AS operario_nombre_asig "
+            "FROM maquinaria_asignaciones_obra a "
+            "LEFT JOIN proyectos p ON p.id = a.proyecto_id "
+            "LEFT JOIN empleados e ON e.id = a.operario_id "
+            "WHERE a.maquina_id = ? ORDER BY a.fecha_inicio DESC LIMIT 20",
+            [maq_id],
+        ).fetchall()]
+
+        # Fase 1: Asignación actual (sin fecha_fin)
+        asig_actual = conn.execute(
+            "SELECT a.*, p.nombre AS proyecto_nombre "
+            "FROM maquinaria_asignaciones_obra a "
+            "LEFT JOIN proyectos p ON p.id = a.proyecto_id "
+            "WHERE a.maquina_id = ? AND a.fecha_fin IS NULL "
+            "ORDER BY a.fecha_inicio DESC LIMIT 1",
+            [maq_id],
+        ).fetchone()
+        maq["asignacion_actual"] = dict(asig_actual) if asig_actual else None
+
+        # Fase 1: Operario habitual (FK a empleados)
+        if maq.get("operario_habitual_id"):
+            op_hab = conn.execute(
+                "SELECT id, nombre, apellidos, telefono FROM empleados WHERE id = ?",
+                [maq["operario_habitual_id"]],
+            ).fetchone()
+            maq["operario_habitual"] = dict(op_hab) if op_hab else None
+        else:
+            maq["operario_habitual"] = None
 
         # Estado calculado en tiempo real desde Operaciones
         from datetime import date
@@ -1101,12 +1446,21 @@ def crear_maquina(data: dict) -> dict:
 
 
 def actualizar_maquina(maq_id: int, data: dict) -> dict:
+    """Actualiza una máquina. Si cambia proyecto_id, gestiona asignaciones automáticamente (RN-07)."""
     init_maquinaria_db()
     with _conectar() as conn:
+        # Leer proyecto_id actual para detectar cambio
+        old = conn.execute("SELECT proyecto_id FROM maquinas WHERE id = ?", [maq_id]).fetchone()
+        old_proyecto_id = old["proyecto_id"] if old else None
+
         campos = []
         valores = []
         for k in ("nombre", "modelo", "numero_serie", "horometro_actual", "estado",
-                   "proyecto_id", "ubicacion", "notas", "activa"):
+                   "proyecto_id", "ubicacion", "notas", "activa",
+                   # Fase 1
+                   "estado_operativo", "tipo_maquina", "ano_fabricacion",
+                   "matricula", "criticidad", "operario_habitual_id",
+                   "override_estado_manual"):
             if k in data:
                 campos.append(f"{k} = ?")
                 valores.append(data[k])
@@ -1115,6 +1469,12 @@ def actualizar_maquina(maq_id: int, data: dict) -> dict:
             valores.append(_now())
             valores.append(maq_id)
             conn.execute(f"UPDATE maquinas SET {', '.join(campos)} WHERE id = ?", valores)
+
+        # RN-07: Si cambió proyecto_id, cerrar asignación anterior y crear nueva
+        new_proyecto_id = data.get("proyecto_id")
+        if "proyecto_id" in data and new_proyecto_id != old_proyecto_id:
+            _gestionar_cambio_asignacion(conn, maq_id, old_proyecto_id, new_proyecto_id)
+
         return dict(conn.execute("SELECT * FROM maquinas WHERE id = ?", [maq_id]).fetchone())
 
 
@@ -1339,47 +1699,175 @@ def eliminar_check(check_id: int) -> bool:
 
 
 def crear_incidencia(data: dict) -> dict:
+    """Crea una incidencia con todos los campos de Fase 1.
+
+    Campos mínimos obligatorios (operario): maquina_id, descripcion (o sintoma_inicial).
+    El resto se rellena en pasos posteriores (triage, ejecución, cierre).
+    """
     init_maquinaria_db()
+    now = _now()
     with _conectar() as conn:
+        # Auto-rellenar proyecto_id desde la máquina si no se proporciona
+        if not data.get("proyecto_id"):
+            maq = conn.execute("SELECT proyecto_id FROM maquinas WHERE id = ?",
+                               [data["maquina_id"]]).fetchone()
+            if maq and maq["proyecto_id"]:
+                data["proyecto_id"] = maq["proyecto_id"]
+
+        # Campos base + Fase 1
+        cols = ["maquina_id", "check_id", "revision_id", "usuario_id",
+                "fecha", "descripcion", "severidad", "estado",
+                "zona", "telegram_id", "operario_nombre", "created_at",
+                # Fase 1 nuevos
+                "hora_deteccion", "horometro_deteccion", "proyecto_id",
+                "operario_detecta", "tipo_incidencia", "subsistema",
+                "sintoma_inicial", "maquina_siguio_operando",
+                "fecha_hora_parada", "es_historico", "fuente_dato"]
+
+        vals = [
+            data["maquina_id"], data.get("check_id"), data.get("revision_id"),
+            data.get("usuario_id"), data.get("fecha", date.today().isoformat()),
+            data.get("descripcion") or data.get("sintoma_inicial", ""),
+            data.get("severidad", "media"), "abierta",
+            data.get("zona") or data.get("subsistema"), data.get("telegram_id"),
+            data.get("operario_nombre"), now,
+            # Fase 1 nuevos
+            data.get("hora_deteccion"), data.get("horometro_deteccion"),
+            data.get("proyecto_id"), data.get("operario_detecta"),
+            data.get("tipo_incidencia"), data.get("subsistema") or data.get("zona"),
+            data.get("sintoma_inicial"), data.get("maquina_siguio_operando"),
+            data.get("fecha_hora_parada"), data.get("es_historico", 0),
+            data.get("fuente_dato"),
+        ]
+
+        placeholders = ", ".join("?" for _ in cols)
+        cols_str = ", ".join(cols)
         conn.execute(
-            "INSERT INTO maquinaria_incidencias (maquina_id, check_id, revision_id, usuario_id, "
-            "fecha, descripcion, severidad, estado, zona, telegram_id, operario_nombre, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 'abierta', ?, ?, ?, ?)",
-            [data["maquina_id"], data.get("check_id"), data.get("revision_id"),
-             data.get("usuario_id"), data.get("fecha", date.today().isoformat()),
-             data["descripcion"], data.get("severidad", "media"),
-             data.get("zona"), data.get("telegram_id"), data.get("operario_nombre"),
-             _now()],
+            f"INSERT INTO maquinaria_incidencias ({cols_str}) VALUES ({placeholders})",
+            vals,
         )
         iid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-        return dict(conn.execute("SELECT * FROM maquinaria_incidencias WHERE id = ?", [iid]).fetchone())
+
+        # Aplicar reglas de negocio RN-01: incidencia alta/seguridad + no sigue operando
+        inc = dict(conn.execute("SELECT * FROM maquinaria_incidencias WHERE id = ?", [iid]).fetchone())
+        if not data.get("es_historico"):
+            _aplicar_regla_estado_operativo_nueva_incidencia(conn, inc)
+
+        return inc
 
 
 def actualizar_incidencia(inc_id: int, data: dict) -> dict:
+    """Actualiza una incidencia con campos de cualquier paso del flujo.
+
+    Soporta:
+    - Cambio de estado con validación de transiciones permitidas
+    - Todos los campos de Fase 1 (triage, ejecución, cierre)
+    - Cálculo automático de horas_downtime y coste_downtime al cerrar (RN-04, RN-05)
+    """
     init_maquinaria_db()
+    now = _now()
+
+    # Todos los campos editables
+    EDITABLE_COLS = (
+        "estado", "descripcion", "severidad", "zona", "resolucion",
+        # Fase 1
+        "hora_deteccion", "horometro_deteccion", "proyecto_id",
+        "operario_detecta", "tipo_incidencia", "subsistema",
+        "sintoma_inicial", "maquina_siguio_operando",
+        "fecha_hora_parada", "fecha_hora_vuelta", "horas_downtime",
+        "motivo_downtime", "diagnostico_provisional", "causa_raiz",
+        "accion_tomada", "pieza_sustituida", "repuesto_id", "taller_id",
+        "resuelto_en", "espera_pieza", "espera_mecanico",
+        "coste_repuesto", "coste_servicio", "coste_downtime",
+        "es_repetida", "incidencia_anterior_id",
+        "leccion_aprendida", "accion_preventiva",
+        "es_historico", "fuente_dato",
+    )
+
     with _conectar() as conn:
-        if data.get("estado") == "cerrada":
-            conn.execute(
-                "UPDATE maquinaria_incidencias SET estado = 'cerrada', resolucion = ?, cerrada_at = ? WHERE id = ?",
-                [data.get("resolucion", ""), _now(), inc_id],
-            )
-        else:
-            # Construir SET dinámico solo con campos proporcionados
-            sets = []
-            params = []
-            for col in ("estado", "descripcion", "severidad", "zona", "resolucion"):
-                if col in data:
-                    sets.append(f"{col} = ?")
-                    params.append(data[col])
-            if not sets:
-                # nada que actualizar
-                return dict(conn.execute("SELECT * FROM maquinaria_incidencias WHERE id = ?", [inc_id]).fetchone())
-            params.append(inc_id)
-            conn.execute(
-                f"UPDATE maquinaria_incidencias SET {', '.join(sets)} WHERE id = ?",
-                params,
-            )
-        return dict(conn.execute("SELECT * FROM maquinaria_incidencias WHERE id = ?", [inc_id]).fetchone())
+        # Obtener estado actual
+        old = conn.execute("SELECT * FROM maquinaria_incidencias WHERE id = ?", [inc_id]).fetchone()
+        if not old:
+            return {"error": "Incidencia no encontrada"}
+        old = dict(old)
+
+        nuevo_estado = data.get("estado")
+
+        # Validar transición de estado si se cambia
+        if nuevo_estado and nuevo_estado != old["estado"]:
+            transiciones = TRANSICIONES_INCIDENCIA.get(old["estado"], [])
+            # Compatibilidad: 'cerrada' → 'cerrada_validada' se acepta siempre
+            if nuevo_estado == "cerrada":
+                nuevo_estado = "cerrada_validada"
+                data["estado"] = "cerrada_validada"
+            if nuevo_estado not in transiciones and nuevo_estado != old["estado"]:
+                return {"error": f"Transición no permitida: {old['estado']} → {nuevo_estado}. "
+                                 f"Transiciones válidas: {transiciones}"}
+
+        # Construir SET dinámico
+        sets = []
+        params = []
+        for col in EDITABLE_COLS:
+            if col in data:
+                sets.append(f"{col} = ?")
+                params.append(data[col])
+
+        # Sincronizar subsistema ↔ zona
+        if "subsistema" in data and "zona" not in data:
+            sets.append("zona = ?")
+            params.append(data["subsistema"])
+        elif "zona" in data and "subsistema" not in data:
+            sets.append("subsistema = ?")
+            params.append(data["zona"])
+
+        # Si se está cerrando (cerrada_validada o resuelta), poner cerrada_at
+        if nuevo_estado in ("cerrada_validada", "resuelta") and not old.get("cerrada_at"):
+            sets.append("cerrada_at = ?")
+            params.append(now)
+
+        if not sets:
+            return old
+
+        params.append(inc_id)
+        conn.execute(
+            f"UPDATE maquinaria_incidencias SET {', '.join(sets)} WHERE id = ?",
+            params,
+        )
+
+        # Re-leer tras update
+        inc = dict(conn.execute("SELECT * FROM maquinaria_incidencias WHERE id = ?", [inc_id]).fetchone())
+
+        # RN-04: Recalcular horas_downtime si hay parada y vuelta
+        if inc.get("fecha_hora_parada") and inc.get("fecha_hora_vuelta"):
+            if not data.get("horas_downtime"):  # solo si no se proporcionó manualmente
+                try:
+                    parada = datetime.fromisoformat(inc["fecha_hora_parada"])
+                    vuelta = datetime.fromisoformat(inc["fecha_hora_vuelta"])
+                    horas = (vuelta - parada).total_seconds() / 3600
+                    if horas >= 0:
+                        conn.execute(
+                            "UPDATE maquinaria_incidencias SET horas_downtime = ? WHERE id = ?",
+                            [round(horas, 2), inc_id],
+                        )
+                        inc["horas_downtime"] = round(horas, 2)
+                except (ValueError, TypeError):
+                    pass
+
+        # RN-05: Calcular coste_downtime si hay horas_downtime
+        if inc.get("horas_downtime") and inc["horas_downtime"] > 0:
+            if not data.get("coste_downtime"):  # solo si no se proporcionó manualmente
+                coste = (inc["horas_downtime"] / 8) * COSTE_DIA_PARADO
+                conn.execute(
+                    "UPDATE maquinaria_incidencias SET coste_downtime = ? WHERE id = ?",
+                    [round(coste, 2), inc_id],
+                )
+                inc["coste_downtime"] = round(coste, 2)
+
+        # Aplicar reglas de estado operativo (si no es histórico)
+        if not inc.get("es_historico") and nuevo_estado:
+            _aplicar_regla_estado_operativo_cambio_incidencia(conn, inc, old["estado"])
+
+        return inc
 
 
 def eliminar_incidencia(inc_id: int) -> bool:
@@ -1464,25 +1952,38 @@ def listar_incidencias(maquina_id: int | None = None,
 
 
 def stats_incidencias() -> dict:
-    """KPIs de incidencias para el dashboard de maquinaria."""
+    """KPIs de incidencias para el dashboard de maquinaria (Fase 1 — 7 estados)."""
     init_maquinaria_db()
+    ESTADOS_CERRADOS = ("cerrada", "cerrada_validada", "resuelta")
     with _conectar() as conn:
         total = conn.execute("SELECT COUNT(*) FROM maquinaria_incidencias").fetchone()[0]
         abiertas = conn.execute(
             "SELECT COUNT(*) FROM maquinaria_incidencias WHERE estado = 'abierta'"
         ).fetchone()[0]
+
+        # En curso: incluye todos los estados intermedios
         en_curso = conn.execute(
-            "SELECT COUNT(*) FROM maquinaria_incidencias WHERE estado = 'en_curso'"
+            "SELECT COUNT(*) FROM maquinaria_incidencias WHERE estado IN "
+            "('en_diagnostico','pendiente_pieza','pendiente_taller','en_reparacion','en_curso')"
         ).fetchone()[0]
+
         cerradas = conn.execute(
-            "SELECT COUNT(*) FROM maquinaria_incidencias WHERE estado = 'cerrada'"
+            "SELECT COUNT(*) FROM maquinaria_incidencias WHERE estado IN "
+            "('cerrada','cerrada_validada','resuelta')"
         ).fetchone()[0]
+
+        # Por estado detallado
+        por_estado = {}
+        for row in conn.execute(
+            "SELECT estado, COUNT(*) FROM maquinaria_incidencias GROUP BY estado"
+        ).fetchall():
+            por_estado[row[0]] = row[1]
 
         # Por severidad (solo no cerradas)
         por_severidad = {}
         for row in conn.execute(
             "SELECT severidad, COUNT(*) FROM maquinaria_incidencias "
-            "WHERE estado != 'cerrada' GROUP BY severidad"
+            "WHERE estado NOT IN ('cerrada','cerrada_validada','resuelta') GROUP BY severidad"
         ).fetchall():
             por_severidad[row[0]] = row[1]
 
@@ -1490,21 +1991,31 @@ def stats_incidencias() -> dict:
         por_maquina = [dict(r) for r in conn.execute(
             "SELECT m.nombre AS maquina_nombre, m.id AS maquina_id, COUNT(*) AS total "
             "FROM maquinaria_incidencias mi JOIN maquinas m ON m.id = mi.maquina_id "
-            "WHERE mi.estado != 'cerrada' GROUP BY mi.maquina_id ORDER BY total DESC"
+            "WHERE mi.estado NOT IN ('cerrada','cerrada_validada','resuelta') "
+            "GROUP BY mi.maquina_id ORDER BY total DESC"
         ).fetchall()]
 
         # Tiempo medio resolución (días) de las cerradas
         avg_row = conn.execute(
             "SELECT AVG(julianday(cerrada_at) - julianday(created_at)) "
-            "FROM maquinaria_incidencias WHERE estado = 'cerrada' AND cerrada_at IS NOT NULL"
+            "FROM maquinaria_incidencias WHERE estado IN ('cerrada','cerrada_validada','resuelta') "
+            "AND cerrada_at IS NOT NULL"
         ).fetchone()
         tiempo_medio_dias = round(avg_row[0], 1) if avg_row and avg_row[0] else None
+
+        # MTTR medio (horas) — solo con datos de downtime
+        mttr_row = conn.execute(
+            "SELECT AVG(horas_downtime) FROM maquinaria_incidencias "
+            "WHERE estado IN ('cerrada','cerrada_validada','resuelta') "
+            "AND horas_downtime IS NOT NULL AND horas_downtime > 0"
+        ).fetchone()
+        mttr_horas = round(mttr_row[0], 1) if mttr_row and mttr_row[0] else None
 
         # Últimas 5 incidencias no cerradas (para alertas)
         urgentes = [dict(r) for r in conn.execute(
             "SELECT mi.*, m.nombre AS maquina_nombre "
             "FROM maquinaria_incidencias mi JOIN maquinas m ON m.id = mi.maquina_id "
-            "WHERE mi.estado != 'cerrada' "
+            "WHERE mi.estado NOT IN ('cerrada','cerrada_validada','resuelta') "
             "ORDER BY CASE mi.severidad WHEN 'seguridad' THEN 0 WHEN 'alta' THEN 1 "
             "WHEN 'media' THEN 2 ELSE 3 END, mi.created_at DESC LIMIT 5"
         ).fetchall()]
@@ -1514,11 +2025,258 @@ def stats_incidencias() -> dict:
             "abiertas": abiertas,
             "en_curso": en_curso,
             "cerradas": cerradas,
+            "por_estado": por_estado,
             "por_severidad": por_severidad,
             "por_maquina": por_maquina,
             "tiempo_medio_dias": tiempo_medio_dias,
+            "mttr_horas": mttr_horas,
             "urgentes": urgentes,
         }
+
+
+# ── Asignaciones máquina-obra (Fase 1) ─────────────────────────────────────
+
+
+def listar_asignaciones_obra(maquina_id: int) -> list[dict]:
+    """Lista el historial de asignaciones de una máquina a obras."""
+    init_maquinaria_db()
+    with _conectar() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT a.*, p.nombre AS proyecto_nombre, p.codigo AS proyecto_codigo, "
+            "(e.nombre || ' ' || COALESCE(e.apellidos, '')) AS operario_nombre "
+            "FROM maquinaria_asignaciones_obra a "
+            "LEFT JOIN proyectos p ON p.id = a.proyecto_id "
+            "LEFT JOIN empleados e ON e.id = a.operario_id "
+            "WHERE a.maquina_id = ? ORDER BY a.fecha_inicio DESC",
+            [maquina_id],
+        ).fetchall()]
+
+
+def crear_asignacion_obra(data: dict) -> dict:
+    """Crea una nueva asignación máquina-obra. Cierra la anterior si existe."""
+    init_maquinaria_db()
+    now = _now()
+    with _conectar() as conn:
+        # Cerrar asignación vigente (sin fecha_fin)
+        conn.execute(
+            "UPDATE maquinaria_asignaciones_obra SET fecha_fin = ? "
+            "WHERE maquina_id = ? AND fecha_fin IS NULL",
+            [data.get("fecha_inicio", date.today().isoformat()), data["maquina_id"]],
+        )
+        # Crear nueva
+        conn.execute(
+            "INSERT INTO maquinaria_asignaciones_obra "
+            "(maquina_id, proyecto_id, fecha_inicio, ubicacion, operario_id, notas, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [data["maquina_id"], data["proyecto_id"],
+             data.get("fecha_inicio", date.today().isoformat()),
+             data.get("ubicacion"), data.get("operario_id"), data.get("notas"), now],
+        )
+        aid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        return dict(conn.execute("SELECT * FROM maquinaria_asignaciones_obra WHERE id = ?", [aid]).fetchone())
+
+
+def _gestionar_cambio_asignacion(conn, maquina_id, old_proyecto_id, new_proyecto_id):
+    """RN-07: Al cambiar proyecto_id, cierra asignación anterior y crea nueva."""
+    hoy = date.today().isoformat()
+    now = _now()
+    # Cerrar asignación anterior
+    if old_proyecto_id:
+        conn.execute(
+            "UPDATE maquinaria_asignaciones_obra SET fecha_fin = ? "
+            "WHERE maquina_id = ? AND fecha_fin IS NULL",
+            [hoy, maquina_id],
+        )
+    # Crear nueva asignación si hay nuevo proyecto
+    if new_proyecto_id:
+        conn.execute(
+            "INSERT INTO maquinaria_asignaciones_obra "
+            "(maquina_id, proyecto_id, fecha_inicio, created_at) VALUES (?, ?, ?, ?)",
+            [maquina_id, new_proyecto_id, hoy, now],
+        )
+
+
+# ── Estado operativo (Fase 1) ──────────────────────────────────────────────
+
+
+def actualizar_estado_operativo_manual(maquina_id: int, estado: str, usuario_id: int | None = None) -> dict:
+    """Admin cambia manualmente el estado operativo de una máquina.
+
+    Si baja la gravedad respecto al sugerido, activa override_estado_manual.
+    """
+    init_maquinaria_db()
+    if estado not in PRIORIDAD_ESTADO_OPERATIVO:
+        return {"error": f"Estado operativo no válido: {estado}. "
+                         f"Valores permitidos: {list(PRIORIDAD_ESTADO_OPERATIVO.keys())}"}
+
+    with _conectar() as conn:
+        old = conn.execute("SELECT estado_operativo FROM maquinas WHERE id = ?",
+                           [maquina_id]).fetchone()
+        if not old:
+            return {"error": "Máquina no encontrada"}
+
+        old_estado = old["estado_operativo"] or "operativa"
+        old_prio = PRIORIDAD_ESTADO_OPERATIVO.get(old_estado, 8)
+        new_prio = PRIORIDAD_ESTADO_OPERATIVO.get(estado, 8)
+
+        # Si baja gravedad (new_prio > old_prio), activar override
+        override = 1 if new_prio > old_prio else 0
+
+        conn.execute(
+            "UPDATE maquinas SET estado_operativo = ?, override_estado_manual = ?, updated_at = ? WHERE id = ?",
+            [estado, override, _now(), maquina_id],
+        )
+        return dict(conn.execute("SELECT * FROM maquinas WHERE id = ?", [maquina_id]).fetchone())
+
+
+# ── KPIs de disponibilidad (Fase 1) ────────────────────────────────────────
+
+
+def calcular_disponibilidad(maquina_id: int, dias: int = 90) -> dict:
+    """Calcula KPIs de disponibilidad para una máquina en un periodo dado.
+
+    Retorna: incidencias_abiertas, incidencias_periodo, horas_downtime,
+    dias_parados, incidencias_por_100h, mttr, coste_acumulado.
+    """
+    init_maquinaria_db()
+    with _conectar() as conn:
+        desde = (date.today() - timedelta(days=dias)).isoformat()
+
+        # Incidencias abiertas (activas ahora)
+        abiertas = conn.execute(
+            "SELECT COUNT(*) FROM maquinaria_incidencias "
+            "WHERE maquina_id = ? AND estado NOT IN ('cerrada','cerrada_validada','resuelta')",
+            [maquina_id],
+        ).fetchone()[0]
+
+        # Incidencias en el periodo
+        periodo = conn.execute(
+            "SELECT COUNT(*) FROM maquinaria_incidencias "
+            "WHERE maquina_id = ? AND fecha >= ?",
+            [maquina_id, desde],
+        ).fetchone()[0]
+
+        # Horas downtime en el periodo
+        dt_row = conn.execute(
+            "SELECT COALESCE(SUM(horas_downtime), 0) FROM maquinaria_incidencias "
+            "WHERE maquina_id = ? AND fecha >= ? AND horas_downtime IS NOT NULL",
+            [maquina_id, desde],
+        ).fetchone()
+        horas_downtime = round(dt_row[0], 1)
+        dias_parados = round(horas_downtime / 8, 1) if horas_downtime > 0 else 0
+
+        # Incidencias por 100h (necesita horómetro)
+        maq = conn.execute("SELECT horometro_actual, horometro_inicial FROM maquinas WHERE id = ?",
+                           [maquina_id]).fetchone()
+        horas_operacion = (maq["horometro_actual"] or 0) - (maq["horometro_inicial"] or 0)
+        total_inc = conn.execute("SELECT COUNT(*) FROM maquinaria_incidencias WHERE maquina_id = ?",
+                                 [maquina_id]).fetchone()[0]
+        inc_por_100h = round((total_inc / horas_operacion) * 100, 2) if horas_operacion > 0 else 0
+
+        # MTTR: tiempo medio de resolución en horas (solo cerradas con downtime)
+        mttr_row = conn.execute(
+            "SELECT AVG(horas_downtime) FROM maquinaria_incidencias "
+            "WHERE maquina_id = ? AND estado IN ('cerrada','cerrada_validada','resuelta') "
+            "AND horas_downtime IS NOT NULL AND horas_downtime > 0",
+            [maquina_id],
+        ).fetchone()
+        mttr = round(mttr_row[0], 1) if mttr_row and mttr_row[0] else 0
+
+        # Coste acumulado
+        coste_row = conn.execute(
+            "SELECT COALESCE(SUM(coste_repuesto), 0) + COALESCE(SUM(coste_servicio), 0) "
+            "+ COALESCE(SUM(coste_downtime), 0) "
+            "FROM maquinaria_incidencias WHERE maquina_id = ? AND fecha >= ?",
+            [maquina_id, desde],
+        ).fetchone()
+        coste_acumulado = round(coste_row[0], 2) if coste_row and coste_row[0] else 0
+
+        return {
+            "maquina_id": maquina_id,
+            "dias": dias,
+            "incidencias_abiertas": abiertas,
+            "incidencias_periodo": periodo,
+            "horas_downtime": horas_downtime,
+            "dias_parados": dias_parados,
+            "incidencias_por_100h": inc_por_100h,
+            "mttr_horas": mttr,
+            "coste_acumulado": coste_acumulado,
+        }
+
+
+# ── Reglas de negocio: estado operativo automático (Fase 1) ────────────────
+
+
+def _aplicar_regla_estado_operativo_nueva_incidencia(conn, inc: dict):
+    """RN-01: Al crear incidencia alta/seguridad + no sigue operando → sugerir parada_diagnostico."""
+    if inc.get("severidad") not in ("alta", "seguridad"):
+        return
+    if inc.get("maquina_siguio_operando") == 1:
+        # RN: sigue operando con incidencia → operativa_con_limitaciones
+        _sugerir_estado_operativo(conn, inc["maquina_id"], "operativa_con_limitaciones")
+        return
+    # No sigue operando o no especificado → parada_diagnostico
+    _sugerir_estado_operativo(conn, inc["maquina_id"], "parada_diagnostico")
+
+
+def _aplicar_regla_estado_operativo_cambio_incidencia(conn, inc: dict, estado_anterior: str):
+    """Reglas RN-02 a RN-05 al cambiar estado de incidencia."""
+    nuevo_estado = inc.get("estado")
+    maq_id = inc["maquina_id"]
+
+    if nuevo_estado == "pendiente_pieza":
+        # RN-02
+        _sugerir_estado_operativo(conn, maq_id, "parada_pendiente_pieza")
+    elif nuevo_estado == "pendiente_taller":
+        _sugerir_estado_operativo(conn, maq_id, "pendiente_taller")
+    elif nuevo_estado == "en_reparacion":
+        _sugerir_estado_operativo(conn, maq_id, "en_reparacion")
+    elif nuevo_estado in ("cerrada_validada", "resuelta"):
+        # Verificar si quedan incidencias abiertas
+        abiertas = conn.execute(
+            "SELECT COUNT(*) FROM maquinaria_incidencias "
+            "WHERE maquina_id = ? AND id != ? "
+            "AND estado NOT IN ('cerrada','cerrada_validada','resuelta')",
+            [maq_id, inc["id"]],
+        ).fetchone()[0]
+        if abiertas == 0:
+            # Todas cerradas → resetear override y proponer operativa
+            # (no se aplica automáticamente, solo se propone)
+            conn.execute(
+                "UPDATE maquinas SET override_estado_manual = 0 WHERE id = ?",
+                [maq_id],
+            )
+
+
+def _sugerir_estado_operativo(conn, maquina_id: int, estado_sugerido: str):
+    """Aplica estado operativo sugerido según matriz de precedencia (sección 7).
+
+    Solo sube gravedad (nunca baja automáticamente).
+    Respeta override manual.
+    """
+    row = conn.execute(
+        "SELECT estado_operativo, override_estado_manual FROM maquinas WHERE id = ?",
+        [maquina_id],
+    ).fetchone()
+    if not row:
+        return
+
+    actual = row["estado_operativo"] or "operativa"
+    override = row["override_estado_manual"] or 0
+
+    # Si hay override manual activo, no cambiar automáticamente
+    if override:
+        return
+
+    prio_actual = PRIORIDAD_ESTADO_OPERATIVO.get(actual, 8)
+    prio_sugerido = PRIORIDAD_ESTADO_OPERATIVO.get(estado_sugerido, 8)
+
+    # Solo subir gravedad (menor número = más grave)
+    if prio_sugerido < prio_actual:
+        conn.execute(
+            "UPDATE maquinas SET estado_operativo = ?, updated_at = ? WHERE id = ?",
+            [estado_sugerido, _now(), maquina_id],
+        )
 
 
 def get_telegram_id_para_maquina(maquina_id: int) -> int | None:
@@ -1719,13 +2477,14 @@ def dashboard_mantenimiento() -> dict:
 
         # Incidencias abiertas
         inc_abiertas = conn.execute(
-            "SELECT COUNT(*) FROM maquinaria_incidencias WHERE estado != 'cerrada'"
+            "SELECT COUNT(*) FROM maquinaria_incidencias "
+            "WHERE estado NOT IN ('cerrada','cerrada_validada','resuelta')"
         ).fetchone()[0]
 
         # Incidencias de seguridad abiertas
         inc_seguridad = conn.execute(
             "SELECT COUNT(*) FROM maquinaria_incidencias "
-            "WHERE estado != 'cerrada' AND severidad = 'seguridad'"
+            "WHERE estado NOT IN ('cerrada','cerrada_validada','resuelta') AND severidad = 'seguridad'"
         ).fetchone()[0]
 
         # Checks esta semana
