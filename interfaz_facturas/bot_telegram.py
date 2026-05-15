@@ -3154,20 +3154,91 @@ _ESTADO_INC_LABELS = {
 #  MAQUINARIA: jobs de notificación proactiva
 # ═══════════════════════════════════════════════════════════════════════════
 
-async def recordatorio_check_semanal(context: ContextTypes.DEFAULT_TYPE):
-    """Viernes 12:00 — recordatorio personalizado por operario.
+# ── Festivos nacionales España (se revisa anualmente) ──
+# Solo festivos nacionales fijos + los más comunes. Comunidades autónomas no incluidos.
+# Formato: (mes, día)
+_FESTIVOS_NACIONALES_FIJOS = [
+    (1, 1),    # Año Nuevo
+    (1, 6),    # Reyes
+    (5, 1),    # Día del Trabajador
+    (8, 15),   # Asunción
+    (10, 12),  # Fiesta Nacional
+    (11, 1),   # Todos los Santos
+    (12, 6),   # Constitución
+    (12, 8),   # Inmaculada
+    (12, 25),  # Navidad
+]
 
-    Incluye:
-      1. Recordatorio de check semanal
-      2. Incidencias abiertas de sus máquinas
-      3. Próxima revisión de cada máquina
+# Festivos móviles (Semana Santa) — se precalculan para cada año
+def _calcular_festivos_moviles(year: int) -> list[tuple[int, int]]:
+    """Calcula Viernes Santo y Jueves Santo para un año dado (algoritmo de Gauss)."""
+    a = year % 19
+    b = year // 100
+    c = year % 100
+    d = b // 4
+    e = b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i = c // 4
+    k = c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = ((h + l - 7 * m + 114) % 31) + 1
+    # Domingo de Pascua
+    from datetime import date as _date, timedelta as _td
+    pascua = _date(year, month, day)
+    jueves_santo = pascua - _td(days=3)
+    viernes_santo = pascua - _td(days=2)
+    return [(jueves_santo.month, jueves_santo.day), (viernes_santo.month, viernes_santo.day)]
+
+
+def _es_festivo(fecha) -> bool:
+    """Comprueba si una fecha es festivo nacional en España."""
+    md = (fecha.month, fecha.day)
+    if md in _FESTIVOS_NACIONALES_FIJOS:
+        return True
+    if md in _calcular_festivos_moviles(fecha.year):
+        return True
+    return False
+
+
+async def recordatorio_check_semanal(context: ContextTypes.DEFAULT_TYPE):
+    """Recordatorio semanal personalizado por operario con link directo al check.
+
+    Se ejecuta L-V a las 12:00, pero solo envía si:
+      - Es viernes y no es festivo, O
+      - Es jueves y el viernes siguiente es festivo.
+    Incluye link directo al formulario de check semanal de cada máquina.
     """
+    from datetime import date as _date, timedelta as _td
+    hoy = _date.today()
+    dia_semana = hoy.weekday()  # 0=Lun .. 4=Vie
+
+    # Lógica festivos: solo enviar si es el "último día laborable de la semana"
+    if dia_semana == 4:  # Viernes
+        if _es_festivo(hoy):
+            return  # ya se envió el jueves (o miércoles si jueves también festivo)
+    elif dia_semana == 3:  # Jueves
+        viernes = hoy + _td(days=1)
+        if not _es_festivo(viernes):
+            return  # el viernes es laborable → se enviará mañana
+    elif dia_semana == 2:  # Miércoles
+        jueves = hoy + _td(days=1)
+        viernes = hoy + _td(days=2)
+        if not (_es_festivo(jueves) and _es_festivo(viernes)):
+            return  # jueves o viernes son laborables → se enviará después
+    else:
+        return  # Lunes/Martes → nunca enviar
+
     from core.maquinaria_db import (
-        listar_maquinas, listar_incidencias,
+        listar_maquinas, listar_incidencias, listar_tokens,
         _calcular_revisiones_pendientes, get_telegram_id_para_maquina,
     )
     from core.db import conectar as _conectar
 
+    base_url = os.getenv("ERP_BASE_URL", "https://erp.hincadodirecto.com")
     operarios = listar_usuarios(rol="operario")
     if not operarios:
         return
@@ -3188,7 +3259,6 @@ async def recordatorio_check_semanal(context: ContextTypes.DEFAULT_TYPE):
         tid = op["telegram_id"]
         mis_maquinas = maquinas_por_operario.get(tid, [])
 
-        # Cabecera (HTML — más robusto que Markdown con texto libre)
         from html import escape as _h
 
         texto = "🔧 <b>Recordatorio semanal de maquinaria</b>\n\n"
@@ -3196,16 +3266,37 @@ async def recordatorio_check_semanal(context: ContextTypes.DEFAULT_TYPE):
         if not mis_maquinas:
             texto += "No tienes máquinas asignadas esta semana."
         else:
+            dia_nombre = ["lunes", "martes", "miércoles", "jueves", "viernes"][dia_semana]
             texto += (
-                "Es viernes — recuerda completar el chequeo semanal "
-                "de tus máquinas antes de terminar la jornada.\n"
+                f"Recuerda completar el chequeo semanal "
+                f"de tus máquinas antes de terminar la jornada.\n"
+                f"Puedes rellenarlo desde el enlace de abajo.\n"
             )
+
+            # Botones inline para cada máquina (se construyen después)
+            botones = []
 
             with _conectar() as conn:
                 for m in mis_maquinas:
                     nombre = _h(m.get("nombre") or m.get("identificador_interno") or "?")
                     horo = m.get("horometro_actual") or 0
                     texto += f"\n━━━ <b>{nombre}</b> ({horo:,.0f}h) ━━━\n"
+
+                    # Buscar token activo para esta máquina
+                    try:
+                        tokens = listar_tokens(maquina_id=m["id"], solo_activos=True)
+                        token_str = tokens[0]["token"] if tokens else None
+                    except Exception:
+                        token_str = None
+
+                    if token_str:
+                        link = f"{base_url}/m/{token_str}"
+                        texto += f"📋 <a href=\"{link}\">Abrir check semanal</a>\n"
+                        botones.append(
+                            [InlineKeyboardButton(f"📋 Check {nombre}", url=link)]
+                        )
+                    else:
+                        texto += "⚠️ <i>Sin enlace de check — contacta con administración</i>\n"
 
                     # Incidencias abiertas
                     try:
@@ -3216,13 +3307,12 @@ async def recordatorio_check_semanal(context: ContextTypes.DEFAULT_TYPE):
 
                     if abiertas:
                         texto += f"⚠️ {len(abiertas)} incidencia(s) abierta(s):\n"
-                        for inc in abiertas[:5]:
+                        for inc in abiertas[:3]:
                             sev = _h(inc.get("severidad", "?"))
-                            desc = _h((inc.get("descripcion") or "")[:60])
-                            estado = _h(inc.get("estado", "?"))
-                            texto += f"  • [{sev}] {desc} <i>({estado})</i>\n"
-                        if len(abiertas) > 5:
-                            texto += f"  ... y {len(abiertas) - 5} más\n"
+                            desc = _h((inc.get("descripcion") or "")[:50])
+                            texto += f"  • [{sev}] {desc}\n"
+                        if len(abiertas) > 3:
+                            texto += f"  ... y {len(abiertas) - 3} más\n"
                     else:
                         texto += "✅ Sin incidencias abiertas\n"
 
@@ -3241,16 +3331,17 @@ async def recordatorio_check_semanal(context: ContextTypes.DEFAULT_TYPE):
                             texto += f"🔴 Revisión <b>{tipo}</b> VENCIDA (debía a {hito:,.0f}h)\n"
                         else:
                             texto += f"🔜 Próxima revisión: <b>{tipo}</b> a {hito:,.0f}h (faltan {faltan:,.0f}h)\n"
-                        if len(revs) > 1:
-                            texto += f"   <i>{len(revs)} revisiones pendientes en total</i>\n"
                     else:
                         texto += "✅ Revisiones al día\n"
+
+        keyboard = InlineKeyboardMarkup(botones) if botones else None
 
         try:
             await context.bot.send_message(
                 chat_id=tid,
                 text=texto,
                 parse_mode=ParseMode.HTML,
+                reply_markup=keyboard,
             )
         except Exception:
             pass
@@ -3664,8 +3755,8 @@ def main():
     jq.run_daily(recordatorio_partes, time=time(18, 0), days=(0, 1, 2, 3, 4))
     # Alerta viernes firmas: 14:00 viernes (Fri=4)
     jq.run_daily(alerta_viernes_firmas, time=time(14, 0), days=(4,))
-    # Maquinaria: recordatorio check semanal — viernes 12:00
-    jq.run_daily(recordatorio_check_semanal, time=time(12, 0), days=(4,))
+    # Maquinaria: recordatorio check semanal — L-V 12:00 (la función decide si enviar según festivos)
+    jq.run_daily(recordatorio_check_semanal, time=time(12, 0), days=(0, 1, 2, 3, 4))
     # Maquinaria: alerta revisiones pendientes — lunes y jueves 8:00
     jq.run_daily(alerta_mantenimiento_pendiente, time=time(8, 0), days=(0, 3))
     # Partes pendientes de registrar: 9:15 L-V
