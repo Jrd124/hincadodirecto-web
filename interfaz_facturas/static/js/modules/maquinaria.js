@@ -1139,7 +1139,54 @@ window.maqVolver = function () {
 
 // ── Check semanal ──
 
+var _checkPendingFiles = [];
+
+window.maqCheckFotosChanged = function (input) {
+  if (!input.files) return;
+  for (var i = 0; i < input.files.length; i++) {
+    _checkPendingFiles.push(input.files[i]);
+  }
+  input.value = "";
+  var preview = document.getElementById("maq-check-fotos-preview");
+  var countEl = document.getElementById("maq-check-fotos-count");
+  if (preview) {
+    preview.innerHTML = _checkPendingFiles.map(function (f, idx) {
+      var url = URL.createObjectURL(f);
+      var isVideo = f.type && f.type.startsWith("video");
+      return '<div style="position:relative;width:64px;height:64px;">' +
+        (isVideo
+          ? '<div style="width:64px;height:64px;border-radius:6px;background:#1e293b;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;">▶</div>'
+          : '<img src="' + url + '" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--color-border);">') +
+        '<button onclick="maqCheckRemoveFoto(' + idx + ')" style="position:absolute;top:-4px;right:-4px;width:18px;height:18px;border-radius:50%;background:#DC2626;color:white;border:none;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>' +
+      '</div>';
+    }).join("");
+  }
+  if (countEl) countEl.textContent = _checkPendingFiles.length ? _checkPendingFiles.length + " archivo" + (_checkPendingFiles.length > 1 ? "s" : "") + " seleccionado" + (_checkPendingFiles.length > 1 ? "s" : "") : "";
+};
+
+window.maqCheckRemoveFoto = function (idx) {
+  _checkPendingFiles.splice(idx, 1);
+  maqCheckFotosChanged({ files: null });
+  // Re-render with current files
+  var preview = document.getElementById("maq-check-fotos-preview");
+  var countEl = document.getElementById("maq-check-fotos-count");
+  if (preview) {
+    preview.innerHTML = _checkPendingFiles.map(function (f, i) {
+      var url = URL.createObjectURL(f);
+      var isVideo = f.type && f.type.startsWith("video");
+      return '<div style="position:relative;width:64px;height:64px;">' +
+        (isVideo
+          ? '<div style="width:64px;height:64px;border-radius:6px;background:#1e293b;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;">▶</div>'
+          : '<img src="' + url + '" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--color-border);">') +
+        '<button onclick="maqCheckRemoveFoto(' + i + ')" style="position:absolute;top:-4px;right:-4px;width:18px;height:18px;border-radius:50%;background:#DC2626;color:white;border:none;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>' +
+      '</div>';
+    }).join("");
+  }
+  if (countEl) countEl.textContent = _checkPendingFiles.length ? _checkPendingFiles.length + " archivo" + (_checkPendingFiles.length > 1 ? "s" : "") + " seleccionado" + (_checkPendingFiles.length > 1 ? "s" : "") : "";
+};
+
 window.maqNuevoCheck = function (maqId) {
+  _checkPendingFiles = [];
   fetch("/api/maquinaria/templates/semanal")
     .then(function (r) { return r.json(); })
     .then(function (data) {
@@ -1175,6 +1222,19 @@ window.maqNuevoCheck = function (maqId) {
             '<div style="padding:8px;overflow-y:auto;flex:1;">' + itemsHtml + '</div></div>' +
           '<div style="margin-bottom:16px;"><label class="form-label">Observaciones</label>' +
             '<textarea id="maq-check-obs" class="form-input" rows="2" placeholder="Notas adicionales..."></textarea></div>' +
+          '<div style="margin-bottom:16px;">' +
+            '<label class="form-label">Fotos</label>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
+              '<button type="button" class="btn-outline" style="padding:6px 14px;font-size:13px;" ' +
+                'onclick="document.getElementById(\'maq-check-fotos-camera\').click()">📷 Hacer foto</button>' +
+              '<button type="button" class="btn-outline" style="padding:6px 14px;font-size:13px;" ' +
+                'onclick="document.getElementById(\'maq-check-fotos-gallery\').click()">🖼️ Subir desde galería</button>' +
+              '<input type="file" id="maq-check-fotos-camera" accept="image/*" capture="environment" style="display:none;" onchange="maqCheckFotosChanged(this)">' +
+              '<input type="file" id="maq-check-fotos-gallery" multiple accept="image/*,video/*" style="display:none;" onchange="maqCheckFotosChanged(this)">' +
+            '</div>' +
+            '<div id="maq-check-fotos-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>' +
+            '<div id="maq-check-fotos-count" style="font-size:12px;color:var(--color-text-secondary);margin-top:4px;"></div>' +
+          '</div>' +
           '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
             '<button class="btn-outline" onclick="document.getElementById(\'modal-maq-check\').remove()">Cancelar</button>' +
             '<button class="btn-primary" style="width:auto;padding:8px 20px;" onclick="maqGuardarCheck(' + maqId + ')">Guardar y cerrar</button>' +
@@ -1197,15 +1257,31 @@ window.maqGuardarCheck = function (maqId) {
     checklist: checklist,
     observaciones: (document.getElementById("maq-check-obs") || {}).value
   };
+  var filesToUpload = _checkPendingFiles.slice();
+  _checkPendingFiles = [];
   fetch("/api/maquinaria/checks", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
   }).then(function (res) {
     if (res.ok) {
       return res.json().then(function (check) {
-        return fetch("/api/maquinaria/checks/" + check.id + "/cerrar", { method: "PUT" });
+        var checkId = check.id;
+        // Upload pending photos sequentially
+        var uploadChain = Promise.resolve();
+        filesToUpload.forEach(function (file) {
+          uploadChain = uploadChain.then(function () {
+            var fd = new FormData();
+            fd.append("entidad_tipo", "check");
+            fd.append("entidad_id", checkId);
+            fd.append("foto", file);
+            return fetch("/api/maquinaria/fotos", { method: "POST", body: fd });
+          });
+        });
+        return uploadChain.then(function () {
+          return fetch("/api/maquinaria/checks/" + checkId + "/cerrar", { method: "PUT" });
+        });
       }).then(function () {
         var m = document.getElementById("modal-maq-check"); if (m) m.remove();
-        mostrarToast("Check semanal registrado", "success");
+        mostrarToast("Check semanal registrado" + (filesToUpload.length ? " con " + filesToUpload.length + " foto(s)" : ""), "success");
         maqDetalle(maqId);
       });
     } else { mostrarToast("Error al guardar", "error"); }
