@@ -29,14 +29,25 @@ function cargarMaquinaria() {
           '<div style="font-size:22px;font-weight:700;color:' + color + ';">' + n + '</div></div>';
       }
 
+      // Sem\u00e1foro disponibilidad (Tarea 1.16)
+      var eoColorsL = { operativa:"#16A34A", operativa_con_limitaciones:"#CA8A04", en_reserva:"#6366F1",
+        pendiente_taller:"#D97706", parada_diagnostico:"#EA580C", parada_pendiente_pieza:"#DC2626",
+        en_reparacion:"#DC2626", decomisionada:"#64748B" };
+      var eoLabelsL = { operativa:"Operativa", operativa_con_limitaciones:"Op. limitada", en_reserva:"En reserva",
+        pendiente_taller:"Pte. taller", parada_diagnostico:"Parada (diag.)", parada_pendiente_pieza:"Parada (pieza)",
+        en_reparacion:"En reparaci\u00f3n", decomisionada:"Decomisionada" };
+
       var cards = maq.map(function (m) {
         var est = m.estado_computado || m.estado;
         var c = estadoColors[est] || "#64748B";
         var lbl = estadoLabels[est] || est;
+        var eoV = m.estado_operativo || "operativa";
+        var eoC = eoColorsL[eoV] || "#64748B";
+        var eoL = eoLabelsL[eoV] || eoV;
         return '<div onclick="maqDetalle(' + m.id + ')" style="background:var(--color-white);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px;cursor:pointer;transition:border-color 0.15s;border-top:3px solid ' + c + ';" ' +
           'onmouseover="this.style.borderColor=\'var(--color-primary)\'" onmouseout="this.style.borderColor=\'var(--color-border)\';this.style.borderTopColor=\'' + c + '\'">' +
           '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:10px;">' +
-            '<div><div style="font-size:18px;font-weight:600;">' + _esc(m.nombre) + '</div>' +
+            '<div><div style="display:flex;align-items:center;gap:6px;"><span style="width:10px;height:10px;border-radius:50%;background:' + eoC + ';flex-shrink:0;box-shadow:0 0 0 2px ' + eoC + '30;" title="' + eoL + '"></span><span style="font-size:18px;font-weight:600;">' + _esc(m.nombre) + '</span></div>' +
               '<div style="font-size:12px;color:var(--color-text-secondary);">' + _esc(m.internal_id) + ' \u00b7 ' + _esc(m.modelo) + '</div></div>' +
             '<span style="font-size:11px;padding:3px 10px;border-radius:99px;background:' + c + '15;color:' + c + ';font-weight:500;">' + lbl + '</span>' +
           '</div>' +
@@ -68,6 +79,100 @@ function cargarMaquinaria() {
         '</div>' +
         // Incidencias banner
         (incStats ? '<div id="maq-inc-banner" style="margin-bottom:20px;">' + _buildIncBanner(incStats) + '</div>' : '') +
+
+        // Dashboard flota ampliado (Tarea 1.19)
+        (function () {
+          // Estado operativo distribution
+          var eoCounts = {};
+          var critCounts = {};
+          maq.forEach(function (m) {
+            var eo = m.estado_operativo || 'operativa';
+            var cr = m.criticidad || 'media';
+            eoCounts[eo] = (eoCounts[eo] || 0) + 1;
+            critCounts[cr] = (critCounts[cr] || 0) + 1;
+          });
+          var total = maq.length || 1;
+
+          var eoOrder = ['operativa','operativa_con_limitaciones','en_reserva','pendiente_taller','parada_diagnostico','parada_pendiente_pieza','en_reparacion','decomisionada'];
+          var eoCols = { operativa:"#16A34A", operativa_con_limitaciones:"#CA8A04", en_reserva:"#6366F1",
+            pendiente_taller:"#D97706", parada_diagnostico:"#EA580C", parada_pendiente_pieza:"#DC2626",
+            en_reparacion:"#DC2626", decomisionada:"#64748B" };
+          var eoLbls = { operativa:"Operativa", operativa_con_limitaciones:"Op. limitada", en_reserva:"En reserva",
+            pendiente_taller:"Pte. taller", parada_diagnostico:"Parada (diag.)", parada_pendiente_pieza:"Parada (pieza)",
+            en_reparacion:"En reparación", decomisionada:"Decomisionada" };
+
+          // Stacked bar for estado operativo
+          var barSegments = '';
+          eoOrder.forEach(function (eo) {
+            var n = eoCounts[eo] || 0;
+            if (n > 0) {
+              var pct = Math.round((n / total) * 100);
+              barSegments += '<div style="width:' + pct + '%;background:' + eoCols[eo] + ';height:100%;min-width:2px;" title="' + eoLbls[eo] + ': ' + n + '"></div>';
+            }
+          });
+
+          var eoLegend = '';
+          eoOrder.forEach(function (eo) {
+            var n = eoCounts[eo] || 0;
+            if (n > 0) {
+              eoLegend += '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--color-text-secondary);">' +
+                '<span style="width:8px;height:8px;border-radius:2px;background:' + eoCols[eo] + ';"></span>' +
+                eoLbls[eo] + ' (' + n + ')</span>';
+            }
+          });
+
+          // Criticidad pills
+          var critOrder = ['critica','alta','media','baja'];
+          var critCols = { baja:"#16A34A", media:"#CA8A04", alta:"#EA580C", critica:"#DC2626" };
+          var critLbls = { baja:"Baja", media:"Media", alta:"Alta", critica:"Crítica" };
+          var critPills = '';
+          critOrder.forEach(function (cr) {
+            var n = critCounts[cr] || 0;
+            if (n > 0) {
+              critPills += '<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:' + critCols[cr] + '08;border-radius:var(--radius-md);border:1px solid ' + critCols[cr] + '20;">' +
+                '<span style="font-size:18px;font-weight:700;color:' + critCols[cr] + ';">' + n + '</span>' +
+                '<span style="font-size:11px;color:' + critCols[cr] + ';font-weight:500;text-transform:uppercase;">' + critLbls[cr] + '</span></div>';
+            }
+          });
+
+          // Operativas vs paradas
+          var nOperativas = (eoCounts['operativa'] || 0) + (eoCounts['operativa_con_limitaciones'] || 0) + (eoCounts['en_reserva'] || 0);
+          var nParadas = total - nOperativas;
+          var pctDisp = Math.round((nOperativas / total) * 100);
+
+          return '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px;">' +
+            // Disponibilidad flota
+            '<div style="background:var(--color-white);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px;">' +
+              '<div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:10px;">Disponibilidad flota</div>' +
+              '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px;">' +
+                '<span style="font-size:32px;font-weight:700;color:' + (pctDisp >= 80 ? '#16A34A' : pctDisp >= 50 ? '#CA8A04' : '#DC2626') + ';">' + pctDisp + '%</span>' +
+                '<span style="font-size:13px;color:var(--color-text-secondary);">' + nOperativas + ' operativas / ' + nParadas + ' paradas</span></div>' +
+              '<div style="height:8px;background:#E2E8F0;border-radius:4px;overflow:hidden;display:flex;">' + barSegments + '</div>' +
+              '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">' + eoLegend + '</div>' +
+            '</div>' +
+            // Criticidad
+            '<div style="background:var(--color-white);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px;">' +
+              '<div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:10px;">Criticidad de flota</div>' +
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' + critPills + '</div>' +
+            '</div>' +
+            // Resumen rápido
+            '<div style="background:var(--color-white);border:1px solid var(--color-border);border-radius:var(--radius-lg);padding:16px;">' +
+              '<div style="font-size:11px;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:10px;">Resumen flota</div>' +
+              '<div style="display:flex;flex-direction:column;gap:8px;">' +
+                '<div style="display:flex;justify-content:space-between;font-size:13px;"><span>Horómetro medio</span><span style="font-weight:600;">' +
+                  Math.round(maq.reduce(function (s, m) { return s + (m.horometro_actual || 0); }, 0) / total).toLocaleString("es-ES") + 'h</span></div>' +
+                '<div style="display:flex;justify-content:space-between;font-size:13px;"><span>Con operario asignado</span><span style="font-weight:600;">' +
+                  maq.filter(function (m) { return m.operario_nombre; }).length + '/' + total + '</span></div>' +
+                '<div style="display:flex;justify-content:space-between;font-size:13px;"><span>Con proyecto activo</span><span style="font-weight:600;">' +
+                  maq.filter(function (m) { return m.proyecto_actual && (m.proyecto_actual.nombre || m.proyecto_actual.codigo); }).length + '/' + total + '</span></div>' +
+                '<div style="display:flex;justify-content:space-between;font-size:13px;"><span>Sin lectura horómetro</span><span style="font-weight:600;color:' +
+                  (maq.filter(function (m) { return !m.horometro_ultima_lectura; }).length > 0 ? '#DC2626' : '#16A34A') + ';">' +
+                  maq.filter(function (m) { return !m.horometro_ultima_lectura; }).length + '</span></div>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        })() +
+
         '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;">' + cards + '</div>';
     });
 }
@@ -118,14 +223,32 @@ function _buildIncBanner(s) {
 window.cargarMaquinaria = cargarMaquinaria;
 
 window.maqDetalle = function (maqId) {
-  fetch("/api/maquinaria/maquinas/" + maqId)
-    .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
-    .then(function (m) {
+  Promise.all([
+    fetch("/api/maquinaria/maquinas/" + maqId).then(function (r) { if (!r.ok) throw new Error(); return r.json(); }),
+    fetch("/api/maquinaria/maquinas/" + maqId + "/disponibilidad").then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+    fetch("/api/maquinaria/maquinas/" + maqId + "/asignaciones").then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+  ]).then(function (results) {
+    var m = results[0];
+    var disp = results[1] || {};
+    var asignData = results[2] || {};
+    var asignaciones = asignData.asignaciones || [];
       var container = document.getElementById("maquinaria-detalle-content");
       var estadoColors = { disponible: "#16A34A", en_proyecto: "#2563EB", en_taller: "#CA8A04", baja: "#DC2626" };
       var estadoLabelsD = { disponible: "Disponible", en_proyecto: "En proyecto", en_taller: "En taller", baja: "De baja" };
       var estComp = m.estado_computado || m.estado;
       var color = estadoColors[estComp] || "#64748B";
+      // Estado operativo (Fase 1A)
+      var eoColors = { operativa:"#16A34A", operativa_con_limitaciones:"#CA8A04", en_reserva:"#6366F1",
+        pendiente_taller:"#D97706", parada_diagnostico:"#EA580C", parada_pendiente_pieza:"#DC2626",
+        en_reparacion:"#DC2626", decomisionada:"#64748B" };
+      var eoLabels = { operativa:"Operativa", operativa_con_limitaciones:"Op. con limitaciones", en_reserva:"En reserva",
+        pendiente_taller:"Pte. taller", parada_diagnostico:"Parada (diag.)", parada_pendiente_pieza:"Parada (pieza)",
+        en_reparacion:"En reparación", decomisionada:"Decomisionada" };
+      var eoVal = m.estado_operativo || "operativa";
+      var eoColor = eoColors[eoVal] || "#64748B";
+      var critColors = { baja:"#16A34A", media:"#CA8A04", alta:"#EA580C", critica:"#DC2626" };
+      var critLabels = { baja:"Baja", media:"Media", alta:"Alta", critica:"Crítica" };
+      var critVal = m.criticidad || "media";
 
       // Revisiones pendientes badges
       var revPend = "";
@@ -284,10 +407,15 @@ window.maqDetalle = function (maqId) {
               '<button onclick="maqVolver()" style="background:none;border:none;cursor:pointer;font-size:18px;padding:0;color:var(--color-text-secondary);">\u2190</button>' +
               '<h1 style="margin:0;font-size:24px;">' + _esc(m.nombre) + '</h1>' +
               '<span style="font-size:12px;padding:3px 10px;border-radius:99px;background:' + color + '15;color:' + color + ';font-weight:500;">' + (estadoLabelsD[estComp] || estComp) + '</span>' +
+              '<span style="font-size:11px;padding:2px 8px;border-radius:99px;background:' + eoColor + '15;color:' + eoColor + ';font-weight:500;border:1px solid ' + eoColor + '30;">' + (eoLabels[eoVal] || eoVal) + '</span>' +
+              '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:' + (critColors[critVal] || '#64748B') + '15;color:' + (critColors[critVal] || '#64748B') + ';font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Crit: ' + (critLabels[critVal] || critVal) + '</span>' +
             '</div>' +
-            '<div style="font-size:14px;color:var(--color-text-secondary);">' + _esc(m.internal_id) + ' \u00b7 ' + _esc(m.modelo) +
+            '<div style="font-size:14px;color:var(--color-text-secondary);">' + _esc(m.internal_id) + ' \u00b7 ' + _esc(m.marca || '') + ' ' + _esc(m.modelo) +
               (m.numero_serie ? ' \u00b7 S/N: ' + _esc(m.numero_serie) : '') +
+              (m.matricula ? ' \u00b7 Mat: ' + _esc(m.matricula) : '') +
+              (m.ano_fabricacion ? ' \u00b7 ' + m.ano_fabricacion : '') +
               (m.proyecto_actual && (m.proyecto_actual.nombre || m.proyecto_actual.codigo) ? ' \u00b7 \uD83D\uDCCD ' + _esc(m.proyecto_actual.nombre || m.proyecto_actual.codigo) : (m.proyecto_nombre ? ' \u00b7 \uD83D\uDCCD ' + _esc(m.proyecto_nombre) : '')) + '</div>' +
+            (m.operario_nombre ? '<div style="font-size:12px;color:var(--color-text-secondary);margin-top:2px;">\uD83D\uDC77 Operario habitual: ' + _esc(m.operario_nombre) + '</div>' : '') +
           '</div>' +
           '<div style="display:flex;gap:8px;">' +
             '<button class="btn-primary" style="width:auto;padding:8px 16px;" onclick="maqNuevoCheck(' + m.id + ')">\uD83D\uDCCB Check semanal</button>' +
@@ -299,7 +427,8 @@ window.maqDetalle = function (maqId) {
                 '<div onclick="maqExportHistory(' + m.id + ',\'pdf\')" style="padding:10px 16px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--color-border);" onmouseover="this.style.background=\'var(--color-bg-secondary)\'" onmouseout="this.style.background=\'\'">Historial de servicio (PDF)</div>' +
                 '<div onclick="maqExportHistory(' + m.id + ',\'xlsx\')" style="padding:10px 16px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--color-border);" onmouseover="this.style.background=\'var(--color-bg-secondary)\'" onmouseout="this.style.background=\'\'">Historial de servicio (Excel)</div>' +
                 '<div onclick="maqCertificadoModal(' + m.id + ')" style="padding:10px 16px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--color-border);" onmouseover="this.style.background=\'var(--color-bg-secondary)\'" onmouseout="this.style.background=\'\'">Certificado CAE / PRL</div>' +
-                '<div onclick="maqExportPassport(' + m.id + ')" style="padding:10px 16px;cursor:pointer;font-size:13px;" onmouseover="this.style.background=\'var(--color-bg-secondary)\'" onmouseout="this.style.background=\'\'">Asset Passport</div>' +
+                '<div onclick="maqExportPassport(' + m.id + ')" style="padding:10px 16px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--color-border);" onmouseover="this.style.background=\'var(--color-bg-secondary)\'" onmouseout="this.style.background=\'\'">Asset Passport</div>' +
+'<div onclick="maqExportDisponibilidad(' + m.id + ')" style="padding:10px 16px;cursor:pointer;font-size:13px;" onmouseover="this.style.background=\'var(--color-bg-secondary)\'" onmouseout="this.style.background=\'\'">Informe Disponibilidad (PDF)</div>' +
               '</div>' +
             '</div>' +
             '<button class="btn-outline" style="padding:8px 16px;" onclick="maqEditarModal(' + m.id + ')">Editar</button>' +
@@ -323,6 +452,39 @@ window.maqDetalle = function (maqId) {
             '<div style="font-size:28px;font-weight:700;color:' + (m.incidencias && m.incidencias.length ? '#DC2626' : '#16A34A') + ';">' + (m.incidencias ? m.incidencias.length : 0) + '</div></div>' +
         '</div>' +
 
+        // KPIs disponibilidad (Tarea 1.13)
+        (function () {
+          var d = disp;
+          var dtHoras = d.horas_downtime || 0;
+          var dtDias = d.dias_parados || 0;
+          var costeDt = dtHoras > 0 ? Math.round((dtHoras / 8) * 900) : 0;
+          var costeTotal = (d.coste_acumulado || 0) + costeDt;
+          var mttr = d.mttr_horas || 0;
+          var inc100h = d.incidencias_por_100h || 0;
+          var dtColor = dtHoras > 24 ? '#DC2626' : dtHoras > 8 ? '#CA8A04' : '#16A34A';
+          var costeColor = costeTotal > 5000 ? '#DC2626' : costeTotal > 1000 ? '#CA8A04' : '#16A34A';
+          var mttrColor = mttr > 48 ? '#DC2626' : mttr > 24 ? '#CA8A04' : '#16A34A';
+          var inc100Color = inc100h > 2 ? '#DC2626' : inc100h > 1 ? '#CA8A04' : '#16A34A';
+          return '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;">' +
+            '<div style="background:var(--color-white);border:1px solid var(--color-border);border-left:3px solid ' + dtColor + ';border-radius:var(--radius-lg);padding:14px 16px;">' +
+              '<div style="font-size:10px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Downtime ' + (d.dias || 90) + 'd</div>' +
+              '<div style="font-size:24px;font-weight:700;color:' + dtColor + ';margin:4px 0;">' + dtHoras + 'h</div>' +
+              '<div style="font-size:11px;color:var(--color-text-secondary);">' + dtDias + ' días parados</div></div>' +
+            '<div style="background:var(--color-white);border:1px solid var(--color-border);border-left:3px solid ' + costeColor + ';border-radius:var(--radius-lg);padding:14px 16px;">' +
+              '<div style="font-size:10px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Coste ' + (d.dias || 90) + 'd</div>' +
+              '<div style="font-size:24px;font-weight:700;color:' + costeColor + ';margin:4px 0;">' + costeTotal.toLocaleString("es-ES") + '€</div>' +
+              '<div style="font-size:11px;color:var(--color-text-secondary);">Repuestos + servicio + parada</div></div>' +
+            '<div style="background:var(--color-white);border:1px solid var(--color-border);border-left:3px solid ' + mttrColor + ';border-radius:var(--radius-lg);padding:14px 16px;">' +
+              '<div style="font-size:10px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.5px;">MTTR</div>' +
+              '<div style="font-size:24px;font-weight:700;color:' + mttrColor + ';margin:4px 0;">' + mttr + 'h</div>' +
+              '<div style="font-size:11px;color:var(--color-text-secondary);">Tiempo medio reparación</div></div>' +
+            '<div style="background:var(--color-white);border:1px solid var(--color-border);border-left:3px solid ' + inc100Color + ';border-radius:var(--radius-lg);padding:14px 16px;">' +
+              '<div style="font-size:10px;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.5px;">Inc/100h</div>' +
+              '<div style="font-size:24px;font-weight:700;color:' + inc100Color + ';margin:4px 0;">' + inc100h + '</div>' +
+              '<div style="font-size:11px;color:var(--color-text-secondary);">Incidencias por 100h operación</div></div>' +
+          '</div>';
+        })() +
+
         // 2 columns
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">' +
           '<div style="display:flex;flex-direction:column;gap:14px;min-width:0;">' +
@@ -339,21 +501,106 @@ window.maqDetalle = function (maqId) {
                 '<span style="font-size:12px;color:var(--color-text-secondary);">' + allRevs.length + ' realizadas</span></div>' +
               '<div style="padding:12px;max-height:250px;overflow-y:auto;">' + revsHtml + '</div></div>' +
           '</div>' +
-          // Incidencias (abiertas + historial)
-          '<div style="display:flex;flex-direction:column;gap:14px;min-width:0;">' +
-            // Abiertas
-            '<div style="border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;">' +
-              '<div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;">' +
-                '<span style="font-size:14px;font-weight:600;">\u26A0\uFE0F Abiertas <span style="font-size:12px;font-weight:400;color:var(--color-text-secondary);">(' + (m.incidencias ? m.incidencias.length : 0) + ')</span></span>' +
-                '<button class="btn-outline" style="font-size:12px;padding:3px 10px;" onclick="maqNuevaIncidencia(' + m.id + ')">+ Nueva</button></div>' +
-              '<div style="padding:12px;max-height:300px;overflow-y:auto;">' + incAbiertasHtml + '</div></div>' +
-            // Historial
-            '<div style="border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;">' +
-              '<div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;">' +
-                '<span style="font-size:14px;font-weight:600;">\uD83D\uDCCB Historial <span style="font-size:12px;font-weight:400;color:var(--color-text-secondary);">(' + historial.length + ')</span></span></div>' +
-              '<div style="max-height:300px;overflow-y:auto;">' + incHistHtml + '</div></div>' +
-          '</div>' +
+          // Incidencias con tabs (Tarea 1.14)
+          (function () {
+            var allInc = (m.incidencias || []).concat(historial);
+            var now = new Date();
+            var d90 = new Date(now.getTime() - 90 * 24 * 3600 * 1000);
+            var inc90 = allInc.filter(function (i) { return i.fecha && new Date(i.fecha) >= d90; });
+
+            function _incRow(i, showEstado) {
+              var sc = sevColors[i.severidad] || "#64748B";
+              var zonaTag = i.zona && zonasLabels[i.zona]
+                ? '<span style="font-size:10px;padding:1px 5px;border-radius:99px;background:#2563EB15;color:#2563EB;margin-left:4px;">' + zonasLabels[i.zona] + '</span>' : '';
+              var nFotos = i.fotos && i.fotos.length ? '<span style="font-size:10px;color:var(--color-text-secondary);margin-left:4px;">\uD83D\uDCF7' + i.fotos.length + '</span>' : '';
+              var nUpd = i.updates && i.updates.length ? '<span style="font-size:10px;color:#3b82f6;margin-left:4px;">\uD83D\uDCAC' + i.updates.length + '</span>' : '';
+              var esCerrada = ['cerrada','cerrada_validada','resuelta'].indexOf(i.estado) >= 0;
+              var estadoTag = showEstado
+                ? (esCerrada
+                    ? '<span style="font-size:10px;padding:2px 6px;border-radius:99px;background:#16A34A15;color:#16A34A;margin-left:8px;">Cerrada</span>'
+                    : '<span style="font-size:10px;padding:2px 6px;border-radius:99px;background:#CA8A0415;color:#CA8A04;margin-left:8px;">' + (i.estado || 'abierta') + '</span>')
+                : '';
+              var reporter = i.operario_nombre || i.usuario_nombre || "";
+              return '<div style="border:1px solid var(--color-border);border-left:3px solid ' + sc + ';border-radius:var(--radius-md);padding:10px 12px;margin-bottom:6px;cursor:pointer;" onclick="maqVerDetalleIncidencia(' + i.id + ',' + m.id + ')">' +
+                '<div style="display:flex;justify-content:space-between;align-items:start;">' +
+                  '<div><span style="font-size:10px;padding:2px 6px;border-radius:99px;background:' + sc + '15;color:' + sc + ';font-weight:500;text-transform:uppercase;">' + i.severidad + '</span>' +
+                    zonaTag + nFotos + nUpd + estadoTag +
+                    '<span style="font-size:11px;color:var(--color-text-secondary);margin-left:6px;">' + (i.fecha || "").substring(0, 10) + '</span></div>' +
+                  (!esCerrada ? '<button onclick="event.stopPropagation();maqCerrarIncidencia(' + i.id + ',' + m.id + ')" class="btn-outline" style="font-size:10px;padding:2px 6px;">Cerrar</button>' : '') +
+                '</div>' +
+                '<p style="font-size:12px;margin:6px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _esc(i.descripcion) + '</p>' +
+                (reporter ? '<div style="font-size:10px;color:var(--color-text-secondary);margin-top:2px;">por ' + _esc(reporter) + '</div>' : '') +
+              '</div>';
+            }
+
+            var openCount = (m.incidencias || []).length;
+            var tabAbiertas = openCount ? (m.incidencias || []).map(function (i) { return _incRow(i, false); }).join("") :
+              '<p style="text-align:center;color:#16A34A;font-size:13px;padding:12px 0;">Sin incidencias abiertas \u2713</p>';
+            var tab90d = inc90.length ? inc90.map(function (i) { return _incRow(i, true); }).join("") :
+              '<p style="text-align:center;color:var(--color-text-secondary);font-size:13px;padding:12px 0;">Sin incidencias en 90 d\u00EDas</p>';
+            var tabTodas = allInc.length ? allInc.map(function (i) { return _incRow(i, true); }).join("") :
+              '<p style="text-align:center;color:var(--color-text-secondary);font-size:13px;padding:12px 0;">Sin incidencias</p>';
+
+            var tabStyle = 'style="padding:6px 14px;font-size:12px;font-weight:500;border:none;border-bottom:2px solid transparent;background:none;cursor:pointer;color:var(--color-text-secondary);"';
+            var tabActiveStyle = 'border-bottom-color:#2563EB;color:#2563EB;';
+            return '<div style="display:flex;flex-direction:column;min-width:0;">' +
+              '<div style="border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;">' +
+                '<div style="padding:6px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;">' +
+                  '<div style="display:flex;gap:0;" id="maq-inc-tabs">' +
+                    '<button ' + tabStyle.replace('transparent', '#2563EB') + ' data-tab="abiertas" onclick="maqSwitchIncTab(\'abiertas\')">\u26A0\uFE0F Abiertas (' + openCount + ')</button>' +
+                    '<button ' + tabStyle + ' data-tab="90d" onclick="maqSwitchIncTab(\'90d\')">90 d\u00EDas (' + inc90.length + ')</button>' +
+                    '<button ' + tabStyle + ' data-tab="todas" onclick="maqSwitchIncTab(\'todas\')">Todas (' + allInc.length + ')</button>' +
+                  '</div>' +
+                  '<button class="btn-outline" style="font-size:11px;padding:3px 10px;" onclick="maqNuevaIncidencia(' + m.id + ')">+ Nueva</button>' +
+                '</div>' +
+                '<div style="max-height:500px;overflow-y:auto;padding:10px;">' +
+                  '<div id="maq-inc-tab-abiertas">' + tabAbiertas + '</div>' +
+                  '<div id="maq-inc-tab-90d" style="display:none;">' + tab90d + '</div>' +
+                  '<div id="maq-inc-tab-todas" style="display:none;">' + tabTodas + '</div>' +
+                '</div>' +
+              '</div>' +
+            '</div>';
+          })() +
         '</div>' +
+
+        // Historial obras timeline (Tarea 1.15)
+        (function () {
+          if (!asignaciones.length) return '';
+          var tlHtml = asignaciones.map(function (a, idx) {
+            var isActive = !a.fecha_fin;
+            var dotColor = isActive ? '#16A34A' : '#94A3B8';
+            var dateRange = (a.fecha_inicio || '?').substring(0, 10) + ' → ' + (a.fecha_fin ? a.fecha_fin.substring(0, 10) : 'Actual');
+            var dias = 0;
+            if (a.fecha_inicio) {
+              var start = new Date(a.fecha_inicio);
+              var end = a.fecha_fin ? new Date(a.fecha_fin) : new Date();
+              dias = Math.round((end - start) / (1000 * 86400));
+            }
+            return '<div style="display:flex;gap:12px;padding:12px 0;' + (idx < asignaciones.length - 1 ? 'border-bottom:1px solid var(--color-border);' : '') + '">' +
+              '<div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:16px;">' +
+                '<span style="width:12px;height:12px;border-radius:50%;background:' + dotColor + ';flex-shrink:0;' + (isActive ? 'box-shadow:0 0 0 3px ' + dotColor + '30;' : '') + '"></span>' +
+                (idx < asignaciones.length - 1 ? '<div style="width:2px;flex:1;background:var(--color-border);"></div>' : '') +
+              '</div>' +
+              '<div style="flex:1;">' +
+                '<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">' +
+                  '<span style="font-size:14px;font-weight:' + (isActive ? '600' : '500') + ';">' + _esc(a.proyecto_nombre || a.proyecto_codigo || 'Proyecto #' + a.proyecto_id) + '</span>' +
+                  (isActive ? '<span style="font-size:10px;padding:2px 6px;border-radius:99px;background:#16A34A15;color:#16A34A;font-weight:500;">Activa</span>' : '') +
+                '</div>' +
+                '<div style="font-size:12px;color:var(--color-text-secondary);">' + dateRange + ' · ' + dias + ' días</div>' +
+                (a.operario_nombre ? '<div style="font-size:11px;color:var(--color-text-secondary);margin-top:2px;">👷 ' + _esc(a.operario_nombre) + '</div>' : '') +
+                (a.ubicacion ? '<div style="font-size:11px;color:var(--color-text-secondary);margin-top:1px;">📍 ' + _esc(a.ubicacion) + '</div>' : '') +
+              '</div>' +
+            '</div>';
+          }).join('');
+          return '<div style="margin-top:20px;">' +
+            '<div style="border:1px solid var(--color-border);border-radius:var(--radius-lg);overflow:hidden;">' +
+              '<div style="padding:10px 16px;background:var(--color-bg-page);border-bottom:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;">' +
+                '<span style="font-size:14px;font-weight:600;">🏗️ Historial de obras</span>' +
+                '<span style="font-size:12px;color:var(--color-text-secondary);">' + asignaciones.length + ' asignaciones</span></div>' +
+              '<div style="padding:12px 16px;max-height:300px;overflow-y:auto;">' + tlHtml + '</div>' +
+            '</div>' +
+          '</div>';
+        })() +
 
         // Charts section
         '<div id="maq-charts-section" style="margin-top:20px;">' +
@@ -463,6 +710,29 @@ window.maqExportPassport = function (maqId) {
   fetch(url).then(function (res) {
     if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || "Error " + res.status); });
     var fname = "asset_passport.pdf";
+    var cd = res.headers.get("Content-Disposition");
+    if (cd) {
+      var match = cd.match(/filename=(.+)/);
+      if (match) fname = match[1];
+    }
+    return res.blob().then(function (blob) {
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = fname;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      mostrarToast("Descargado: " + fname, "success");
+    });
+  }).catch(function (err) { mostrarToast("Error: " + err.message, "error"); });
+};
+
+window.maqExportDisponibilidad = function (maqId) {
+  document.querySelectorAll('[style*="z-index:50"]').forEach(function (d) { d.style.display = "none"; });
+  mostrarToast("Generando informe de disponibilidad...", "info");
+  var url = "/api/maquinaria/maquinas/" + maqId + "/export/disponibilidad";
+  fetch(url).then(function (res) {
+    if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || "Error " + res.status); });
+    var fname = "informe_disponibilidad.pdf";
     var cd = res.headers.get("Content-Disposition");
     if (cd) {
       var match = cd.match(/filename=(.+)/);
@@ -947,34 +1217,83 @@ window.maqGuardarCheck = function (maqId) {
 // ── Archivos pendientes de subir para la incidencia ──
 var _incPendingFiles = [];
 
+// \u2500\u2500 Wizard modal incidencias 4 pasos (Tarea 1.17) \u2500\u2500
+window._incWizardStep = 1;
 window.maqNuevaIncidencia = function (maqId) {
   _incPendingFiles = [];
+  window._incWizardStep = 1;
   var hoy = new Date().toISOString().substring(0, 10);
+  var ahora = new Date().toTimeString().substring(0, 5);
   var modal = document.createElement("div");
   modal.className = "modal-overlay visible";
   modal.id = "modal-maq-incidencia";
   modal.onclick = function (e) { if (e.target === modal) modal.remove(); };
-  modal.innerHTML =
-    '<div class="modal-content" style="max-width:520px;">' +
-      '<h2 style="margin:0 0 16px;">Nueva incidencia</h2>' +
+
+  var stepIndicator =
+    '<div style="display:flex;gap:0;margin-bottom:20px;" id="inc-wiz-steps">' +
+      [["1","Datos"],["2","Diagn\u00f3stico"],["3","Media"],["4","Revisar"]].map(function (s, i) {
+        return '<div data-step="' + (i + 1) + '" style="flex:1;text-align:center;padding:8px 0;border-bottom:3px solid ' + (i === 0 ? '#2563EB' : '#E2E8F0') + ';cursor:pointer;" onclick="maqIncWizGoTo(' + (i + 1) + ')">' +
+          '<div style="font-size:10px;font-weight:600;color:' + (i === 0 ? '#2563EB' : 'var(--color-text-secondary)') + ';">PASO ' + s[0] + '</div>' +
+          '<div style="font-size:12px;color:' + (i === 0 ? '#2563EB' : 'var(--color-text-secondary)') + ';">' + s[1] + '</div></div>';
+      }).join('') +
+    '</div>';
+
+  // Step 1: Datos b\u00E1sicos
+  var step1 =
+    '<div id="inc-wiz-1">' +
       '<div style="display:grid;gap:12px;">' +
-        '<div><label class="form-label">Descripci\u00f3n *</label>' +
-          '<textarea id="maq-inc-desc" class="form-input" rows="3" placeholder="Describe la incidencia..."></textarea></div>' +
+        '<div><label class="form-label">Descripci\u00f3n / S\u00edntoma *</label>' +
+          '<textarea id="maq-inc-desc" class="form-input" rows="3" placeholder="Describe qu\u00E9 se observ\u00f3..."></textarea></div>' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
           '<div><label class="form-label">Severidad</label>' +
             '<select id="maq-inc-sev" class="form-input">' +
               '<option value="baja">Baja</option><option value="media" selected>Media</option>' +
               '<option value="alta">Alta</option><option value="seguridad">Seguridad</option></select></div>' +
+          '<div><label class="form-label">Zona / Sistema</label>' +
+            '<select id="maq-inc-zona" class="form-input"><option value="">-- Seleccionar --</option></select></div>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
           '<div><label class="form-label">Fecha</label>' +
             '<input type="date" id="maq-inc-fecha" class="form-input" value="' + hoy + '"></div>' +
+          '<div><label class="form-label">Hora detecci\u00f3n</label>' +
+            '<input type="time" id="maq-inc-hora" class="form-input" value="' + ahora + '"></div>' +
         '</div>' +
-        '<div><label class="form-label">Zona / Sistema afectado</label>' +
-          '<select id="maq-inc-zona" class="form-input">' +
-            '<option value="">-- Seleccionar --</option></select></div>' +
+        '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--color-bg-secondary);border-radius:var(--radius-md);">' +
+          '<input type="checkbox" id="maq-inc-siguio" style="width:18px;height:18px;">' +
+          '<label for="maq-inc-siguio" style="font-size:13px;cursor:pointer;">La m\u00E1quina sigui\u00f3 operando tras detectar la incidencia</label>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  // Step 2: Diagn\u00f3stico
+  var step2 =
+    '<div id="inc-wiz-2" style="display:none;">' +
+      '<div style="display:grid;gap:12px;">' +
+        '<div><label class="form-label">Tipo de incidencia</label>' +
+          '<select id="maq-inc-tipo" class="form-input">' +
+            '<option value="">-- Seleccionar --</option>' +
+            '<option value="averia">Aver\u00eda</option><option value="desgaste">Desgaste</option>' +
+            '<option value="accidente">Accidente</option><option value="preventivo">Preventivo detectado</option>' +
+            '<option value="electrica">Fallo el\u00E9ctrico</option><option value="hidraulica">Fallo hidr\u00E1ulico</option>' +
+            '<option value="otro">Otro</option></select></div>' +
+        '<div><label class="form-label">Hor\u00f3metro al detectar</label>' +
+          '<input type="number" id="maq-inc-horometro" class="form-input" placeholder="Ej: 4793"></div>' +
+        '<div><label class="form-label">Causa probable</label>' +
+          '<textarea id="maq-inc-causa" class="form-input" rows="2" placeholder="Hip\u00f3tesis de la causa ra\u00edz..."></textarea></div>' +
+        '<div><label class="form-label">Operario que detect\u00f3</label>' +
+          '<input type="text" id="maq-inc-operario" class="form-input" placeholder="Nombre del operario"></div>' +
+      '</div>' +
+    '</div>';
+
+  // Step 3: Media
+  var step3 =
+    '<div id="inc-wiz-3" style="display:none;">' +
+      '<div style="display:grid;gap:12px;">' +
+        '<p style="font-size:13px;color:var(--color-text-secondary);margin:0;">A\u00f1ade fotos o v\u00eddeos para documentar la incidencia. Puedes a\u00f1adir m\u00E1s despu\u00E9s.</p>' +
         '<div><label class="form-label">Fotos / V\u00eddeos</label>' +
           '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
-            '<label style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:1px dashed var(--color-border);border-radius:var(--radius-md);cursor:pointer;font-size:13px;color:var(--color-text-secondary);">' +
-              '<span>\uD83D\uDCF7 A\u00f1adir archivos</span>' +
+            '<label style="display:inline-flex;align-items:center;gap:6px;padding:12px 20px;border:2px dashed var(--color-border);border-radius:var(--radius-md);cursor:pointer;font-size:14px;color:var(--color-text-secondary);width:100%;justify-content:center;">' +
+              '<span>\uD83D\uDCF7 Pulsa para a\u00f1adir archivos</span>' +
               '<input type="file" id="maq-inc-files" multiple accept="image/*,video/*" style="display:none;" onchange="maqIncFilesChanged()">' +
             '</label>' +
             '<span id="maq-inc-files-count" style="font-size:12px;color:var(--color-text-secondary);"></span>' +
@@ -982,12 +1301,28 @@ window.maqNuevaIncidencia = function (maqId) {
           '<div id="maq-inc-files-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>' +
         '</div>' +
       '</div>' +
-      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">' +
-        '<button class="btn-outline" onclick="document.getElementById(\'modal-maq-incidencia\').remove()">Cancelar</button>' +
-        '<button class="btn-primary" id="maq-inc-btn-guardar" style="width:auto;padding:8px 20px;" onclick="maqGuardarIncidencia(' + maqId + ')">Reportar</button>' +
+    '</div>';
+
+  // Step 4: Revisi\u00f3n
+  var step4 =
+    '<div id="inc-wiz-4" style="display:none;">' +
+      '<div id="inc-wiz-summary" style="display:grid;gap:8px;"></div>' +
+    '</div>';
+
+  modal.innerHTML =
+    '<div class="modal-content" style="max-width:560px;max-height:85vh;overflow-y:auto;">' +
+      '<h2 style="margin:0 0 12px;">Nueva incidencia</h2>' +
+      stepIndicator + step1 + step2 + step3 + step4 +
+      '<div style="display:flex;gap:8px;justify-content:space-between;margin-top:16px;padding-top:12px;border-top:1px solid var(--color-border);">' +
+        '<button class="btn-outline" id="inc-wiz-prev" style="display:none;" onclick="maqIncWizPrev()">\u2190 Anterior</button>' +
+        '<div style="margin-left:auto;display:flex;gap:8px;">' +
+          '<button class="btn-outline" onclick="document.getElementById(\'modal-maq-incidencia\').remove()">Cancelar</button>' +
+          '<button class="btn-primary" id="inc-wiz-next" style="width:auto;padding:8px 20px;" onclick="maqIncWizNext(' + maqId + ')">Siguiente \u2192</button>' +
+        '</div>' +
       '</div></div>';
   document.body.appendChild(modal);
-  // Cargar zonas en el select
+
+  // Cargar zonas
   fetch("/api/maquinaria/incidencias/zonas").then(function (r) { return r.json(); }).then(function (d) {
     var sel = document.getElementById("maq-inc-zona");
     if (!sel) return;
@@ -999,6 +1334,90 @@ window.maqNuevaIncidencia = function (maqId) {
     });
   });
 };
+
+window.maqIncWizGoTo = function (step) {
+  if (step < 1 || step > 4) return;
+  // Validate step 1 before leaving it
+  if (window._incWizardStep === 1 && step > 1) {
+    var desc = ((document.getElementById("maq-inc-desc") || {}).value || "").trim();
+    if (!desc) { mostrarToast("La descripci\u00f3n es obligatoria", "error"); return; }
+  }
+  window._incWizardStep = step;
+  for (var i = 1; i <= 4; i++) {
+    var panel = document.getElementById("inc-wiz-" + i);
+    if (panel) panel.style.display = i === step ? "" : "none";
+  }
+  // Update step indicators
+  var tabs = document.getElementById("inc-wiz-steps");
+  if (tabs) {
+    tabs.querySelectorAll("[data-step]").forEach(function (el) {
+      var s = parseInt(el.getAttribute("data-step"));
+      el.style.borderBottomColor = s === step ? "#2563EB" : s < step ? "#16A34A" : "#E2E8F0";
+      el.querySelectorAll("div").forEach(function (d) { d.style.color = s === step ? "#2563EB" : s < step ? "#16A34A" : "var(--color-text-secondary)"; });
+    });
+  }
+  // Show/hide prev button
+  var prev = document.getElementById("inc-wiz-prev");
+  if (prev) prev.style.display = step > 1 ? "" : "none";
+  // Change next button text
+  var next = document.getElementById("inc-wiz-next");
+  if (next) next.textContent = step === 4 ? "Reportar incidencia" : "Siguiente \u2192";
+  // Build summary on step 4
+  if (step === 4) _incBuildSummary();
+};
+
+window.maqIncWizNext = function (maqId) {
+  if (window._incWizardStep < 4) {
+    maqIncWizGoTo(window._incWizardStep + 1);
+  } else {
+    maqGuardarIncidencia(maqId);
+  }
+};
+
+window.maqIncWizPrev = function () {
+  if (window._incWizardStep > 1) maqIncWizGoTo(window._incWizardStep - 1);
+};
+
+function _incBuildSummary() {
+  var el = document.getElementById("inc-wiz-summary");
+  if (!el) return;
+  var sevLabels = { baja:"Baja", media:"Media", alta:"Alta", seguridad:"Seguridad" };
+  var sevColors = { baja:"#64748B", media:"#CA8A04", alta:"#EA580C", seguridad:"#DC2626" };
+  var desc = ((document.getElementById("maq-inc-desc") || {}).value || "").trim();
+  var sev = (document.getElementById("maq-inc-sev") || {}).value || "media";
+  var zona = (document.getElementById("maq-inc-zona") || {});
+  var zonaText = zona.selectedIndex > 0 ? zona.options[zona.selectedIndex].text : "No especificada";
+  var fecha = (document.getElementById("maq-inc-fecha") || {}).value || "";
+  var hora = (document.getElementById("maq-inc-hora") || {}).value || "";
+  var siguio = (document.getElementById("maq-inc-siguio") || {}).checked;
+  var tipo = (document.getElementById("maq-inc-tipo") || {});
+  var tipoText = tipo.selectedIndex > 0 ? tipo.options[tipo.selectedIndex].text : "No especificado";
+  var horometro = (document.getElementById("maq-inc-horometro") || {}).value || "";
+  var causa = ((document.getElementById("maq-inc-causa") || {}).value || "").trim();
+  var operario = ((document.getElementById("maq-inc-operario") || {}).value || "").trim();
+  var nFotos = _incPendingFiles.length;
+  var sc = sevColors[sev] || "#64748B";
+
+  function _row(label, val, color) {
+    return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--color-border);">' +
+      '<span style="font-size:12px;color:var(--color-text-secondary);">' + label + '</span>' +
+      '<span style="font-size:13px;font-weight:500;' + (color ? 'color:' + color + ';' : '') + '">' + val + '</span></div>';
+  }
+
+  el.innerHTML =
+    '<div style="background:' + sc + '08;border:1px solid ' + sc + '20;border-radius:var(--radius-md);padding:12px 16px;margin-bottom:4px;">' +
+      '<div style="font-size:11px;color:' + sc + ';text-transform:uppercase;font-weight:600;">Severidad: ' + (sevLabels[sev] || sev) + '</div>' +
+      '<div style="font-size:14px;margin-top:4px;">' + _esc(desc.substring(0, 120)) + (desc.length > 120 ? '...' : '') + '</div>' +
+    '</div>' +
+    _row("Zona / Sistema", zonaText) +
+    _row("Fecha", fecha + (hora ? ' ' + hora : '')) +
+    _row("Sigui\u00f3 operando", siguio ? "S\u00ed" : "No", siguio ? "#16A34A" : "#DC2626") +
+    (tipoText !== "No especificado" ? _row("Tipo incidencia", tipoText) : '') +
+    (horometro ? _row("Hor\u00f3metro", horometro + "h") : '') +
+    (causa ? _row("Causa probable", _esc(causa.substring(0, 80))) : '') +
+    (operario ? _row("Operario detect\u00f3", _esc(operario)) : '') +
+    _row("Archivos adjuntos", nFotos ? nFotos + " archivo(s)" : "Ninguno");
+}
 
 window.maqIncFilesChanged = function () {
   var input = document.getElementById("maq-inc-files");
@@ -1030,17 +1449,26 @@ window._incRemoveFile = function (idx) {
 window.maqGuardarIncidencia = function (maqId) {
   var desc = ((document.getElementById("maq-inc-desc") || {}).value || "").trim();
   if (!desc) { mostrarToast("La descripci\u00f3n es obligatoria", "error"); return; }
-  var btn = document.getElementById("maq-inc-btn-guardar");
+  var btn = document.getElementById("inc-wiz-next");
   if (btn) { btn.disabled = true; btn.textContent = "Guardando..."; }
   var zona = (document.getElementById("maq-inc-zona") || {}).value || null;
+  var payload = {
+    maquina_id: maqId, descripcion: desc,
+    severidad: (document.getElementById("maq-inc-sev") || {}).value || "media",
+    fecha: (document.getElementById("maq-inc-fecha") || {}).value,
+    zona: zona,
+    hora_deteccion: (document.getElementById("maq-inc-hora") || {}).value || null,
+    maquina_siguio_operando: (document.getElementById("maq-inc-siguio") || {}).checked ? 1 : 0,
+    tipo_incidencia: (document.getElementById("maq-inc-tipo") || {}).value || null,
+    horometro_deteccion: (document.getElementById("maq-inc-horometro") || {}).value ? parseInt((document.getElementById("maq-inc-horometro") || {}).value) : null,
+    sintoma_inicial: desc,
+    operario_detecta: ((document.getElementById("maq-inc-operario") || {}).value || "").trim() || null
+  };
+  // Remove null values
+  Object.keys(payload).forEach(function (k) { if (payload[k] === null || payload[k] === "") delete payload[k]; });
   fetch("/api/maquinaria/incidencias", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      maquina_id: maqId, descripcion: desc,
-      severidad: (document.getElementById("maq-inc-sev") || {}).value || "media",
-      fecha: (document.getElementById("maq-inc-fecha") || {}).value,
-      zona: zona
-    })
+    body: JSON.stringify(payload)
   }).then(function (res) {
     if (!res.ok) throw new Error("Error creando incidencia");
     return res.json();
@@ -1065,7 +1493,7 @@ window.maqGuardarIncidencia = function (maqId) {
     maqDetalle(maqId);
   }).catch(function (e) {
     mostrarToast(e.message || "Error", "error");
-    if (btn) { btn.disabled = false; btn.textContent = "Reportar"; }
+    if (btn) { btn.disabled = false; btn.textContent = "Reportar incidencia"; }
   });
 };
 
@@ -1140,29 +1568,58 @@ window.maqConfirmarCerrarIncidencia = function (incId, maqId) {
 window.maqEditarModal = function (maqId) {
 Promise.all([
     fetch("/api/maquinaria/maquinas/" + maqId).then(function (r) { return r.json(); }),
-    fetch("/api/proyectos").then(function (r) { return r.json(); }).catch(function () { return { proyectos: [] }; })
+    fetch("/api/proyectos").then(function (r) { return r.json(); }).catch(function () { return { proyectos: [] }; }),
+    fetch("/api/empleados?solo_activos=1").then(function (r) { return r.json(); }).catch(function () { return { empleados: [] }; }),
+    fetch("/api/maquinaria/incidencias/config").then(function (r) { return r.json(); }).catch(function () { return { estados_operativos: [] }; })
   ]).then(function (results) {
     var m = results[0];
     var proyectos = results[1].proyectos || [];
+    var empleados = results[2].empleados || [];
+    var config = results[3];
     if (!m || m.error) { mostrarToast("Error al cargar m\u00e1quina", "error"); return; }
     var proyOpts = '<option value="">Sin proyecto</option>' +
       proyectos.map(function (p) {
         return '<option value="' + p.id + '"' + (p.id === m.proyecto_id ? ' selected' : '') + '>' + (p.codigo ? p.codigo + ' \u00b7 ' : '') + _esc(p.nombre) + '</option>';
       }).join("");
+    var operarioOpts = '<option value="">Sin asignar</option>' +
+      empleados.map(function (e) {
+        return '<option value="' + e.id + '"' + (e.id === m.operario_habitual_id ? ' selected' : '') + '>' + _esc(e.nombre || e.username) + '</option>';
+      }).join("");
+    var estadoOpLabels = { decomisionada:"Decomisionada", en_reparacion:"En reparaci\u00f3n", parada_pendiente_pieza:"Parada (pieza)",
+      parada_diagnostico:"Parada (diagn\u00f3stico)", pendiente_taller:"Pendiente taller", en_reserva:"En reserva",
+      operativa_con_limitaciones:"Operativa con limitaciones", operativa:"Operativa" };
+    var estadoOpOpts = (config.estados_operativos || []).map(function (eo) {
+      return '<option value="' + eo + '"' + (eo === m.estado_operativo ? ' selected' : '') + '>' + (estadoOpLabels[eo] || eo) + '</option>';
+    }).join("");
     var modal = document.createElement("div");
     modal.className = "modal-overlay visible";
     modal.id = "modal-maq-editar";
     modal.onclick = function (e) { if (e.target === modal) modal.remove(); };
     modal.innerHTML =
-      '<div class="modal-content" style="max-width:500px;">' +
+      '<div class="modal-content" style="max-width:600px;max-height:90vh;overflow-y:auto;">' +
         '<h2 style="margin:0 0 16px;">Editar ' + _esc(m.nombre) + '</h2>' +
         '<div style="display:grid;gap:12px;">' +
+          // Fila 1: Nombre + Modelo
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
             '<div><label class="form-label">Nombre</label><input type="text" id="maq-ed-nombre" class="form-input" value="' + _esc(m.nombre) + '"></div>' +
             '<div><label class="form-label">Modelo</label><input type="text" id="maq-ed-modelo" class="form-input" value="' + _esc(m.modelo) + '"></div></div>' +
+          // Fila 2: Marca + Tipo
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+            '<div><label class="form-label">Marca</label><input type="text" id="maq-ed-marca" class="form-input" value="' + _esc(m.marca || '') + '"></div>' +
+            '<div><label class="form-label">Tipo</label><select id="maq-ed-tipo" class="form-input">' +
+              '<option value="hincadora"' + (m.tipo_maquina === 'hincadora' ? ' selected' : '') + '>Hincadora</option>' +
+              '<option value="perforadora"' + (m.tipo_maquina === 'perforadora' ? ' selected' : '') + '>Perforadora</option>' +
+              '<option value="grua"' + (m.tipo_maquina === 'grua' ? ' selected' : '') + '>Gr\u00faa</option>' +
+              '<option value="otro"' + (m.tipo_maquina === 'otro' ? ' selected' : '') + '>Otro</option></select></div></div>' +
+          // Fila 3: N\u00ba Serie + Matr\u00edcula
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
             '<div><label class="form-label">N\u00ba Serie</label><input type="text" id="maq-ed-serie" class="form-input" value="' + _esc(m.numero_serie || '') + '"></div>' +
+            '<div><label class="form-label">Matr\u00edcula</label><input type="text" id="maq-ed-matricula" class="form-input" value="' + _esc(m.matricula || '') + '"></div></div>' +
+          // Fila 4: A\u00f1o fabricaci\u00f3n + Hor\u00f3metro
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+            '<div><label class="form-label">A\u00f1o fabricaci\u00f3n</label><input type="number" id="maq-ed-ano" class="form-input" min="1990" max="2030" value="' + (m.ano_fabricacion || '') + '"></div>' +
             '<div><label class="form-label">Hor\u00f3metro actual</label><input type="number" id="maq-ed-horometro" class="form-input" step="any" value="' + (m.horometro_actual || 0) + '"></div></div>' +
+          // Fila 5: Estado + Proyecto
           '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
             '<div><label class="form-label">Estado</label><select id="maq-ed-estado" class="form-input">' +
               '<option value="disponible"' + (m.estado === 'disponible' ? ' selected' : '') + '>Disponible</option>' +
@@ -1170,7 +1627,19 @@ Promise.all([
               '<option value="en_taller"' + (m.estado === 'en_taller' ? ' selected' : '') + '>En taller</option>' +
               '<option value="baja"' + (m.estado === 'baja' ? ' selected' : '') + '>De baja</option></select></div>' +
             '<div><label class="form-label">Proyecto</label><select id="maq-ed-proyecto" class="form-input">' + proyOpts + '</select></div></div>' +
+          // Fila 6: Estado operativo + Criticidad
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+            '<div><label class="form-label">Estado operativo</label><select id="maq-ed-estado-op" class="form-input">' + estadoOpOpts + '</select></div>' +
+            '<div><label class="form-label">Criticidad</label><select id="maq-ed-criticidad" class="form-input">' +
+              '<option value="baja"' + (m.criticidad === 'baja' ? ' selected' : '') + '>Baja</option>' +
+              '<option value="media"' + (m.criticidad === 'media' ? ' selected' : '') + '>Media</option>' +
+              '<option value="alta"' + (m.criticidad === 'alta' ? ' selected' : '') + '>Alta</option>' +
+              '<option value="critica"' + (m.criticidad === 'critica' ? ' selected' : '') + '>Cr\u00edtica</option></select></div></div>' +
+          // Fila 7: Operario habitual
+          '<div><label class="form-label">Operario habitual</label><select id="maq-ed-operario" class="form-input">' + operarioOpts + '</select></div>' +
+          // Fila 8: Ubicaci\u00f3n
           '<div><label class="form-label">Ubicaci\u00f3n</label><input type="text" id="maq-ed-ubicacion" class="form-input" value="' + _esc(m.ubicacion || '') + '" placeholder="Ej: Parque PV Cuenca"></div>' +
+          // Fila 9: Notas
           '<div><label class="form-label">Notas</label><textarea id="maq-ed-notas" class="form-input" rows="2">' + _esc(m.notas || '') + '</textarea></div>' +
         '</div>' +
         '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">' +
@@ -1185,24 +1654,45 @@ Promise.all([
 };
 
 window.maqGuardarEdicion = function (maqId) {
+  var _v = function (id) { return (document.getElementById(id) || {}).value || ""; };
   var data = {
-    nombre: (document.getElementById("maq-ed-nombre") || {}).value,
-    modelo: (document.getElementById("maq-ed-modelo") || {}).value,
-    numero_serie: (document.getElementById("maq-ed-serie") || {}).value,
-    horometro_actual: parseFloat((document.getElementById("maq-ed-horometro") || {}).value) || 0,
-    estado: (document.getElementById("maq-ed-estado") || {}).value,
-    proyecto_id: parseInt((document.getElementById("maq-ed-proyecto") || {}).value) || null,
-    ubicacion: (document.getElementById("maq-ed-ubicacion") || {}).value,
-    notas: (document.getElementById("maq-ed-notas") || {}).value
+    nombre: _v("maq-ed-nombre"),
+    modelo: _v("maq-ed-modelo"),
+    marca: _v("maq-ed-marca"),
+    tipo_maquina: _v("maq-ed-tipo"),
+    numero_serie: _v("maq-ed-serie"),
+    matricula: _v("maq-ed-matricula"),
+    ano_fabricacion: parseInt(_v("maq-ed-ano")) || null,
+    horometro_actual: parseFloat(_v("maq-ed-horometro")) || 0,
+    estado: _v("maq-ed-estado"),
+    proyecto_id: parseInt(_v("maq-ed-proyecto")) || null,
+    criticidad: _v("maq-ed-criticidad"),
+    operario_habitual_id: parseInt(_v("maq-ed-operario")) || null,
+    ubicacion: _v("maq-ed-ubicacion"),
+    notas: _v("maq-ed-notas")
   };
-  fetch("/api/maquinaria/maquinas/" + maqId, {
+  // Si cambi\u00f3 estado_operativo, enviar por endpoint separado
+  var estadoOp = _v("maq-ed-estado-op");
+  var guardar = fetch("/api/maquinaria/maquinas/" + maqId, {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
-  }).then(function (res) {
-    if (res.ok) {
+  });
+  guardar.then(function (res) {
+    if (!res.ok) { mostrarToast("Error al guardar", "error"); return; }
+    // Actualizar estado operativo si se seleccion\u00f3
+    if (estadoOp) {
+      fetch("/api/maquinaria/maquinas/" + maqId + "/estado-operativo", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estado_operativo: estadoOp })
+      }).then(function () {
+        var m = document.getElementById("modal-maq-editar"); if (m) m.remove();
+        mostrarToast("M\u00e1quina actualizada", "success");
+        maqDetalle(maqId);
+      });
+    } else {
       var m = document.getElementById("modal-maq-editar"); if (m) m.remove();
       mostrarToast("M\u00e1quina actualizada", "success");
       maqDetalle(maqId);
-    } else { mostrarToast("Error", "error"); }
+    }
   });
 };
 
@@ -1945,6 +2435,21 @@ window.maqEnviarUpdateAdmin = function (incId, maqId) {
     }
   })
   .catch(function (err) { mostrarToast("Error: " + err.message, "error"); });
+};
+
+// Tab switcher incidencias (Tarea 1.14)
+window.maqSwitchIncTab = function (tab) {
+  var tabs = document.getElementById("maq-inc-tabs");
+  if (tabs) {
+    tabs.querySelectorAll("button").forEach(function (b) {
+      b.style.borderBottomColor = b.getAttribute("data-tab") === tab ? "#2563EB" : "transparent";
+      b.style.color = b.getAttribute("data-tab") === tab ? "#2563EB" : "var(--color-text-secondary)";
+    });
+  }
+  ["abiertas", "90d", "todas"].forEach(function (t) {
+    var el = document.getElementById("maq-inc-tab-" + t);
+    if (el) el.style.display = t === tab ? "" : "none";
+  });
 };
 
 window.maqVerDetalleIncidencia = function (incId, maqId) {

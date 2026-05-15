@@ -1313,3 +1313,246 @@ def generar_asset_passport(maquina_id: int, generado_por: str = None) -> tuple[b
                   "pendientes": n_pend, "compliance": compliance},
     )
     return pdf_bytes, doc_record
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ██  INFORME DE DISPONIBILIDAD — PDF                                       ██
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def generar_informe_disponibilidad(maquina_id: int, dias: int = 90, generado_por: str = None) -> tuple[bytes, dict]:
+    """Genera un Informe de Disponibilidad PDF de 1 página con KPIs de uptime/downtime."""
+    from reportlab.pdfgen import canvas as rl_canvas
+
+    maquinaria_db.init_maquinaria_db()
+
+    # ── Obtener datos ──
+    maq = maquinaria_db.obtener_maquina(maquina_id)
+    if not maq:
+        raise ValueError("Máquina no encontrada")
+
+    disp = maquinaria_db.calcular_disponibilidad(maquina_id, dias)
+    incidencias = maquinaria_db.listar_incidencias(maquina_id=maquina_id, limit=10)
+
+    # ── Colores locales ──
+    _AZ = _AZUL
+    _VE = _VERDE
+    _RO = _ROJO
+    _AM = _AMARILLO
+    _GO = _GRIS_OSCURO
+    _GM = _GRIS_MEDIO
+    _GC = _GRIS_CLARO
+
+    # ── Build PDF ──
+    buffer = io.BytesIO()
+    c = rl_canvas.Canvas(buffer, pagesize=A4)
+    w, h = A4
+    ml, mr = 40, 40
+    cw = w - ml - mr
+
+    # ═══ HEADER BAR ═══
+    bar_h = 65
+    bar_y = h - 40 - bar_h
+    c.setFillColor(_GO)
+    c.rect(0, bar_y, w, bar_h, fill=1, stroke=0)
+    logo_path = _find_logo()
+    if logo_path and logo_path.exists():
+        try:
+            c.drawImage(str(logo_path), ml, bar_y + 12, width=120, height=40,
+                        preserveAspectRatio=True, mask="auto")
+        except Exception:
+            pass
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 18)
+    c.drawRightString(w - mr, bar_y + 38, "INFORME DE DISPONIBILIDAD")
+    c.setFont("Helvetica", 9)
+    c.drawRightString(w - mr, bar_y + 22, f"Generado: {_fecha_es(datetime.now())}")
+    c.setFont("Helvetica", 8)
+    c.drawRightString(w - mr, bar_y + 10, f"Documento interno — {EMPRESA['nombre']}")
+
+    y = bar_y - 20
+
+    # ═══ MACHINE IDENTITY ═══
+    c.setFillColor(_AZ)
+    c.rect(ml, y - 4, cw, 4, fill=1, stroke=0)
+    y -= 18
+    c.setFillColor(_GO)
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(ml, y, maq["nombre"])
+    y -= 16
+    c.setFillColor(_GM)
+    c.setFont("Helvetica", 10)
+    parts = []
+    if maq.get("modelo"):
+        parts.append(maq["modelo"])
+    if maq.get("matricula"):
+        parts.append(f"Matrícula: {maq['matricula']}")
+    horo = maq.get("horometro_actual") or 0
+    parts.append(f"Horómetro: {horo:,.0f}h".replace(",", "."))
+    c.drawString(ml, y, " · ".join(parts))
+    y -= 25
+
+    # ═══ PERIOD INFO ═══
+    c.setFillColor(_GO)
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(ml, y, f"Periodo analizado: Últimos {dias} días")
+    y -= 8
+    c.setStrokeColor(colors.HexColor("#E2E8F0"))
+    c.setLineWidth(0.5)
+    c.line(ml, y, w - mr, y)
+    y -= 15
+
+    # ═══ KPI BOXES (4 boxes) ═══
+    def draw_kpi(x, yy, kw, kh, label, value, color, sublabel=None):
+        c.setStrokeColor(colors.HexColor("#E2E8F0"))
+        c.setLineWidth(0.5)
+        c.setFillColor(colors.white)
+        c.roundRect(x, yy, kw, kh, 4, fill=1, stroke=1)
+        c.setFillColor(color)
+        c.rect(x, yy + kh - 3, kw, 3, fill=1, stroke=0)
+        c.setFillColor(_GM)
+        c.setFont("Helvetica", 8)
+        c.drawString(x + 10, yy + kh - 18, label)
+        c.setFillColor(color)
+        c.setFont("Helvetica-Bold", 20)
+        c.drawString(x + 10, yy + 12, str(value))
+        if sublabel:
+            c.setFillColor(_GM)
+            c.setFont("Helvetica", 7)
+            c.drawString(x + 10, yy + 4, sublabel)
+
+    kh = 58
+    kg = 10
+    kw = (cw - 3 * kg) / 4
+    draw_kpi(ml, y - kh, kw, kh, "HORAS DOWNTIME",
+             f"{disp['horas_downtime']:.1f}h",
+             _RO if disp['horas_downtime'] > 0 else _VE,
+             f"en los últimos {dias} días")
+    draw_kpi(ml + kw + kg, y - kh, kw, kh, "DÍAS PARADOS",
+             f"{disp['dias_parados']:.1f}",
+             _RO if disp['dias_parados'] > 0 else _VE,
+             "jornadas de 8h equiv.")
+    draw_kpi(ml + 2 * (kw + kg), y - kh, kw, kh, "MTTR (HORAS)",
+             f"{disp['mttr_horas']:.1f}",
+             _AM if disp['mttr_horas'] > 0 else _VE,
+             "tiempo medio reparación")
+    draw_kpi(ml + 3 * (kw + kg), y - kh, kw, kh, "INCID. / 100h",
+             f"{disp['incidencias_por_100h']:.2f}",
+             _AM if disp['incidencias_por_100h'] > 0 else _VE,
+             f"total histórico")
+
+    y = y - kh - 20
+
+    # ═══ RESUMEN ECONÓMICO ═══
+    c.setFillColor(_GC)
+    c.roundRect(ml, y - 32, cw, 32, 4, fill=1, stroke=0)
+    c.setFillColor(_GO)
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(ml + 12, y - 14, "COSTE ACUMULADO (periodo)")
+    c.setFillColor(_RO if disp['coste_acumulado'] > 0 else _VE)
+    c.setFont("Helvetica-Bold", 14)
+    c.drawRightString(w - mr - 12, y - 16,
+                      f"{disp['coste_acumulado']:,.2f} €".replace(",", "X").replace(".", ",").replace("X", "."))
+    y -= 52
+
+    # ═══ TABLA INCIDENCIAS RECIENTES ═══
+    c.setFillColor(_GO)
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(ml, y, "Últimas incidencias (máx. 10)")
+    y -= 15
+
+    # Table header
+    col_widths = [65, 200, 65, 65, 70]  # fecha, descripción, severidad, estado, downtime
+    headers = ["Fecha", "Descripción", "Severidad", "Estado", "Downtime (h)"]
+    row_h = 18
+    # Header row
+    c.setFillColor(_GO)
+    c.rect(ml, y - row_h, cw, row_h, fill=1, stroke=0)
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 8)
+    cx = ml
+    for i, hdr in enumerate(headers):
+        c.drawString(cx + 4, y - row_h + 5, hdr)
+        cx += col_widths[i]
+
+    y -= row_h
+
+    if not incidencias:
+        c.setFillColor(_GM)
+        c.setFont("Helvetica", 9)
+        c.drawString(ml + 4, y - 14, "Sin incidencias registradas para esta máquina.")
+    else:
+        sev_colors = {"baja": _VE, "media": _AM, "alta": _RO, "seguridad": _RO}
+        for idx, inc in enumerate(incidencias[:10]):
+            bg = colors.white if idx % 2 == 0 else _GC
+            c.setFillColor(bg)
+            c.rect(ml, y - row_h, cw, row_h, fill=1, stroke=0)
+            c.setFillColor(_GO)
+            c.setFont("Helvetica", 8)
+
+            fecha = (inc.get("fecha") or "—")[:10]
+            desc = inc.get("descripcion") or "—"
+            if len(desc) > 50:
+                desc = desc[:47] + "..."
+            sev = inc.get("severidad") or "—"
+            estado = inc.get("estado") or "—"
+            dt_h = inc.get("horas_downtime")
+            dt_str = f"{dt_h:.1f}" if dt_h else "—"
+
+            cx = ml
+            c.drawString(cx + 4, y - row_h + 5, fecha)
+            cx += col_widths[0]
+            c.drawString(cx + 4, y - row_h + 5, desc)
+            cx += col_widths[1]
+            # Severidad with color
+            sc = sev_colors.get(sev, _GM)
+            c.setFillColor(sc)
+            c.setFont("Helvetica-Bold", 8)
+            c.drawString(cx + 4, y - row_h + 5, sev.upper())
+            cx += col_widths[2]
+            c.setFillColor(_GO)
+            c.setFont("Helvetica", 8)
+            c.drawString(cx + 4, y - row_h + 5, estado.replace("_", " "))
+            cx += col_widths[3]
+            c.drawString(cx + 4, y - row_h + 5, dt_str)
+
+            y -= row_h
+
+    # ═══ FOOTER ═══
+    c.setFont("Helvetica", 7)
+    c.setFillColor(_GM)
+    c.drawCentredString(w / 2, 25,
+        f"{EMPRESA['nombre']} — C.I.F.: {EMPRESA['cif']} — {EMPRESA['registro']}")
+    c.drawCentredString(w / 2, 15,
+        "Este documento es un resumen interno y no constituye certificación oficial. "
+        f"Generado automáticamente el {_fecha_es(datetime.now())}.")
+    c.setStrokeColor(colors.HexColor("#E2E8F0"))
+    c.setLineWidth(0.5)
+    c.line(ml, 35, w - mr, 35)
+
+    c.save()
+    pdf_bytes = buffer.getvalue()
+
+    # ── Guardar y registrar ──
+    _ensure_exports_dir()
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    nombre_limpio = maq["nombre"].replace(" ", "_")
+    filename = f"InformeDisponibilidad_{nombre_limpio}_{ts}.pdf"
+    filepath = str(_EXPORTS_DIR / filename)
+    with open(filepath, "wb") as f:
+        f.write(pdf_bytes)
+
+    titulo = f"Informe de Disponibilidad — {maq['nombre']} ({dias}d)"
+    try:
+        doc_record = _register_doc(
+            maquina_id, "informe_disponibilidad_pdf", titulo, filename, filepath, pdf_bytes,
+            generado_por=generado_por,
+            metadata={"dias": dias, "horas_downtime": disp["horas_downtime"],
+                      "dias_parados": disp["dias_parados"], "mttr": disp["mttr_horas"],
+                      "coste_acumulado": disp["coste_acumulado"]},
+        )
+    except Exception:
+        # DB CHECK constraint may not include this tipo yet (old schema) — return synthetic record
+        doc_record = {"filename": filename, "filepath": filepath, "titulo": titulo,
+                      "tipo": "informe_disponibilidad_pdf", "maquina_id": maquina_id}
+    return pdf_bytes, doc_record

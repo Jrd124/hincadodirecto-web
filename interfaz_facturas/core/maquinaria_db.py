@@ -367,7 +367,10 @@ def init_maquinaria_db() -> None:
                 maquina_id INTEGER REFERENCES maquinas(id),
                 tipo TEXT NOT NULL CHECK(tipo IN (
                     'service_history_pdf', 'service_history_xlsx',
-                    'certificado_cae', 'asset_passport', 'data_room_zip'
+                    'certificado_cae', 'asset_passport', 'data_room_zip',
+                    'ficha_maquina_pdf', 'historial_incidencias_pdf',
+                    'informe_disponibilidad_pdf', 'informe_costes_pdf',
+                    'checklist_pdf', 'otro'
                 )),
                 titulo TEXT NOT NULL,
                 filename TEXT NOT NULL,

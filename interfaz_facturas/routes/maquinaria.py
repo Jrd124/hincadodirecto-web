@@ -145,6 +145,23 @@ def api_generar_asset_passport(mid):
     return jsonify({"error": f"Error generando Asset Passport: {e}"}), 500
 
 
+@maquinaria_bp.get("/api/maquinaria/maquinas/<int:mid>/export/disponibilidad")
+def api_export_disponibilidad(mid):
+  """Genera Informe de Disponibilidad PDF."""
+  from core import maquinaria_exports
+  dias = request.args.get("dias", 90, type=int)
+  user_name = current_user.nombre if current_user.is_authenticated else "admin"
+  try:
+    pdf_bytes, doc_record = maquinaria_exports.generar_informe_disponibilidad(
+        mid, dias=dias, generado_por=user_name)
+    return Response(pdf_bytes, mimetype="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={doc_record['filename']}"})
+  except ValueError as e:
+    return jsonify({"error": str(e)}), 404
+  except Exception as e:
+    return jsonify({"error": f"Error generando informe disponibilidad: {e}"}), 500
+
+
 @maquinaria_bp.get("/api/maquinaria/maquinas/<int:mid>/chart-data")
 def api_chart_data(mid):
   """Returns hourometer chart data as JSON for frontend Chart.js rendering."""

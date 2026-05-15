@@ -894,6 +894,8 @@ var navMaqRepuestos = document.getElementById("nav-maquinaria-repuestos");
 if (navMaqRepuestos) navMaqRepuestos.addEventListener("click", function (e) {
   e.preventDefault();
   activarModulo("maquinaria");
+  var defPanel = document.getElementById("panel-maquinaria");
+  if (defPanel) { defPanel.style.display = 'none'; defPanel.classList.remove('visible'); }
   _mostrarPanel("panel-maquinaria-repuestos");
   if (typeof cargarMaquinariaFase2b === "function") cargarMaquinariaFase2b();
 });
