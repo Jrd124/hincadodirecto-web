@@ -106,6 +106,7 @@ const MODULOS = {
   },
   maquinaria: {
     linkId: "nav-maquinaria-modulo",
+    submenuId: "sidebar-children-maquinaria",
     paneles: { listado: "panel-maquinaria", detalle: "panel-maquinaria-detalle", repuestos: "panel-maquinaria-repuestos" },
     subNavLinks: { listado: "nav-maquinaria-listado", mantenimiento: "nav-maquinaria-mantenimiento", repuestos: "nav-maquinaria-repuestos" },
     defecto: "listado",
@@ -478,6 +479,35 @@ function restaurarDesdeHash() {
         if (sp === "empresas" && typeof _crmCargarEmpresas === "function") _crmCargarEmpresas();
       }
     }
+  } else if (mod === "maquinaria") {
+    activarModulo("maquinaria");
+  } else if (mod === "cae") {
+    activarModulo("cae");
+    caeSubpanel = "inicio";
+    if (partes.length >= 2) {
+      var sp = partes[1];
+      if (["inicio", "documentos", "expedientes", "plantillas", "tareas", "config"].indexOf(sp) >= 0) {
+        caeSubpanel = sp;
+        activarSubpanel("cae", sp);
+      }
+    }
+    if (typeof _caeOnPanelShow === "function") _caeOnPanelShow(caeSubpanel);
+  } else if (mod === "presupuestos") {
+    activarModulo("presupuestos");
+    if (partes.length >= 2) {
+      var sp = partes[1];
+      if (["todos", "nuevo", "catalogo", "plantillas"].indexOf(sp) >= 0) {
+        activarSubpanel("presupuestos", sp);
+      }
+    }
+  } else if (mod === "impuestos") {
+    activarModulo("impuestos");
+  } else if (mod === "seguros") {
+    activarModulo("seguros");
+  } else if (mod === "usuarios") {
+    activarModulo("usuarios");
+  } else if (MODULOS[mod]) {
+    activarModulo(mod);
   }
   actualizarHash();
   } finally { _restaurandoHash = false; }
