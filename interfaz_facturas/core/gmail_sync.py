@@ -41,7 +41,12 @@ GMAIL_ACCOUNT       = os.getenv("GMAIL_ACCOUNT", "direccion@hincadodirecto.com")
 CRM_GMAIL_BATCH_SIZE = int(os.getenv("CRM_GMAIL_BATCH_SIZE", "20"))
 CRM_GMAIL_MAX_THREADS = int(os.getenv("CRM_GMAIL_MAX_THREADS", "10"))
 
-_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+_SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    # gmail.compose: necesario para que core/gmail_actions.py pueda crear
+    # drafts en nombre del usuario (Fase B copiloto IA).
+    "https://www.googleapis.com/auth/gmail.compose",
+]
 
 
 # ── Auth ───────────────────────────────────────────────────────────────────────

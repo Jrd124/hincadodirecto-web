@@ -1982,6 +1982,415 @@
     });
   }
 
+  // ── IA Sales Copilot — Fase A ────────────────────────────────────────────
+  // Botón "✨ IA" en modal oportunidad: abre modal, carga contexto y permite
+  // generar un borrador de email que el usuario copia/pega. NO envía nada.
+  var _iaModalEl = document.getElementById("modal-crm-ia-email");
+  var _iaUltimoContextPack = null;
+  var _iaDisponible = null; // cache precheck
+
+  function _iaPrecheck() {
+    if (_iaDisponible !== null) return Promise.resolve(_iaDisponible);
+    return fetch("/api/crm/ia/email/status")
+      .then(function (r) { return r.json(); })
+      .then(function (d) { _iaDisponible = !!d.disponible; return _iaDisponible; })
+      .catch(function () { _iaDisponible = false; return false; });
+  }
+
+  function _iaAbrirModal() {
+    if (!_iaModalEl) return;
+    var opId = parseInt(document.getElementById("crm-op-edit-id").value) || null;
+    if (!opId) {
+      mostrarToast("Guarda la oportunidad antes de generar un email.", "info");
+      return;
+    }
+    document.getElementById("crm-ia-oportunidad-id").value = opId;
+    // Reset preview
+    var previewWrap = document.getElementById("crm-ia-preview-wrap");
+    if (previewWrap) previewWrap.style.display = "none";
+    document.getElementById("crm-ia-subject").value = "";
+    document.getElementById("crm-ia-body").value = "";
+    document.getElementById("crm-ia-instrucciones").value = "";
+    document.getElementById("crm-ia-copiado").style.display = "none";
+    document.getElementById("crm-ia-contexto-linea").textContent = "Cargando contexto…";
+    document.getElementById("crm-ia-contexto-motor").textContent = "";
+    var hiloSel = document.getElementById("crm-ia-hilo");
+    hiloSel.innerHTML = '<option value="">— Ninguno —</option>';
+
+    _iaModalEl.classList.add("visible");
+    _iaModalEl.setAttribute("aria-hidden", "false");
+
+    // Precheck IA
+    _iaPrecheck().then(function (ok) {
+      var btn = document.getElementById("btn-crm-ia-generar");
+      if (!ok) {
+        btn.disabled = true;
+        btn.textContent = "IA no disponible";
+        mostrarToast("El asistente IA no está configurado (falta OpenAI).", "error");
+      } else {
+        btn.disabled = false;
+        btn.textContent = "Generar borrador";
+      }
+    });
+
+    // Carga context pack para mostrar resumen + poblar hilos
+    fetch("/api/crm/ia/email/contexto", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ oportunidad_id: opId }),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok) {
+          document.getElementById("crm-ia-contexto-linea").textContent =
+            "Error cargando contexto: " + (res.data.error || "desconocido");
+          return;
+        }
+        var cp = res.data.context_pack || {};
+        _iaUltimoContextPack = cp;
+        var op = cp.oportunidad || {};
+        var ec = cp.empresa_contacto || {};
+        var mo = cp.motor || {};
+        var linea =
+          "<strong>" + _esc(op.nombre || "Oportunidad") + "</strong>" +
+          " · " + _esc(ec.empresa_nombre || "—") +
+          (ec.contacto_nombre ? " · " + _esc(ec.contacto_nombre) : "") +
+          (op.importe_estimado ? " · " + _esc(op.importe_estimado) : "") +
+          " · <em>" + _esc(op.estado || "") + "</em>";
+        document.getElementById("crm-ia-contexto-linea").innerHTML = linea;
+
+        var motorBits = [];
+        if (mo.riesgo) motorBits.push("Riesgo: " + _esc(mo.riesgo));
+        if (mo.dias_sin_contacto != null) motorBits.push(mo.dias_sin_contacto + " días sin contacto");
+        if (mo.ultima_interaccion_fecha) motorBits.push("Último: " + _esc(mo.ultima_interaccion_fecha));
+        if (mo.estado_respuesta) motorBits.push(_esc(mo.estado_respuesta));
+        motorBits.push("~" + (res.data.estimacion_tokens || 0) + " tokens contexto");
+        document.getElementById("crm-ia-contexto-motor").textContent = motorBits.join(" · ");
+
+        // Popular hilos: buscamos interacciones con gmail_thread_id en la timeline
+        // (el context pack no las expone por thread_id; recargamos desde endpoint)
+        fetch("/api/crm/interacciones?oportunidad_id=" + opId + "&limit=50")
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            var list = (d.interacciones || []).filter(function (i) {
+              return i.gmail_thread_id;
+            });
+            if (list.length > 0) {
+              list.forEach(function (i) {
+                var opt = document.createElement("option");
+                opt.value = i.gmail_thread_id;
+                var fecha = (i.fecha || "").substring(0, 10);
+                opt.textContent = fecha + " — " + (i.asunto || "(sin asunto)").substring(0, 70);
+                hiloSel.appendChild(opt);
+              });
+            }
+          })
+          .catch(function () {});
+      })
+      .catch(function () {
+        document.getElementById("crm-ia-contexto-linea").textContent = "Error cargando contexto.";
+      });
+  }
+
+  function _iaCerrarModal() {
+    if (!_iaModalEl) return;
+    _iaModalEl.classList.remove("visible");
+    _iaModalEl.setAttribute("aria-hidden", "true");
+  }
+
+  // Estado interno del último draft generado (para Fase B aprobar-en-gmail)
+  var _iaUltimoDraft = null;
+
+  function _iaPintarBorrador(d) {
+    _iaUltimoDraft = d || null;
+    var previewWrap = document.getElementById("crm-ia-preview-wrap");
+    previewWrap.style.display = "";
+    document.getElementById("crm-ia-subject").value = d.subject || "";
+    document.getElementById("crm-ia-body").value = d.body || "";
+    // Reset banner de aprobación al regenerar
+    var apr = document.getElementById("crm-ia-aprobado");
+    if (apr) { apr.style.display = "none"; apr.innerHTML = ""; }
+    var sig = d.siguiente_accion_sugerida ? ("→ Siguiente acción: " + d.siguiente_accion_sugerida) : "";
+    document.getElementById("crm-ia-siguiente").textContent = sig;
+    var conf = d.confianza;
+    var confTxt = "";
+    if (typeof conf === "number") confTxt = "Confianza IA: " + Math.round(conf * 100) + "%";
+    document.getElementById("crm-ia-confianza").textContent = confTxt;
+    var huecos = d.huecos_detectados || [];
+    var huecosEl = document.getElementById("crm-ia-huecos");
+    if (huecos.length > 0) {
+      huecosEl.style.display = "";
+      huecosEl.innerHTML =
+        "⚠️ Huecos detectados (revisar antes de enviar):<ul style='margin:4px 0 0 18px;'>" +
+        huecos.map(function (h) { return "<li>" + _esc(String(h)) + "</li>"; }).join("") +
+        "</ul>";
+    } else {
+      huecosEl.style.display = "none";
+      huecosEl.innerHTML = "";
+    }
+    var meta = [];
+    if (d.id) meta.push("Draft #" + d.id);
+    if (d.model) meta.push(d.model);
+    if (d.tokens_in != null) meta.push(d.tokens_in + " in / " + (d.tokens_out || 0) + " out");
+    document.getElementById("crm-ia-meta").textContent = meta.join(" · ");
+    document.getElementById("crm-ia-copiado").style.display = "none";
+  }
+
+  function _iaGenerar() {
+    var opId = parseInt(document.getElementById("crm-ia-oportunidad-id").value) || null;
+    if (!opId) return;
+    var body = {
+      oportunidad_id: opId,
+      objetivo: document.getElementById("crm-ia-objetivo").value,
+      tono: document.getElementById("crm-ia-tono").value,
+      instrucciones: document.getElementById("crm-ia-instrucciones").value || null,
+      hilo_referencia_id: document.getElementById("crm-ia-hilo").value || null,
+    };
+    var btn = document.getElementById("btn-crm-ia-generar");
+    var textoOrig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Generando…";
+    fetch("/api/crm/ia/email/borrador", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
+      .then(function (res) {
+        btn.disabled = false;
+        btn.textContent = textoOrig;
+        if (!res.ok) {
+          mostrarToast("Error IA: " + (res.data.error || res.status), "error");
+          return;
+        }
+        _iaPintarBorrador(res.data);
+        mostrarToast("Borrador generado.", "success");
+      })
+      .catch(function () {
+        btn.disabled = false;
+        btn.textContent = textoOrig;
+        mostrarToast("Error de conexión con el servidor IA.", "error");
+      });
+  }
+
+  function _iaCopiarTexto(texto) {
+    if (!texto) return Promise.resolve(false);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(texto).then(function () { return true; }).catch(function () { return false; });
+    }
+    // Fallback
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = texto;
+      ta.style.position = "fixed"; ta.style.top = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      return Promise.resolve(true);
+    } catch (e) { return Promise.resolve(false); }
+  }
+
+  function _iaMostrarCopiado(msg) {
+    var el = document.getElementById("crm-ia-copiado");
+    el.textContent = "✓ " + (msg || "Copiado al portapapeles");
+    el.style.display = "";
+    setTimeout(function () { el.style.display = "none"; }, 2200);
+  }
+
+  // Wire up IA modal
+  var _btnOpIa = document.getElementById("btn-crm-op-ia-email");
+  if (_btnOpIa) _btnOpIa.addEventListener("click", _iaAbrirModal);
+  var _btnIaCerrar = document.getElementById("btn-crm-ia-cerrar");
+  if (_btnIaCerrar) _btnIaCerrar.addEventListener("click", _iaCerrarModal);
+  var _btnIaCerrar2 = document.getElementById("btn-crm-ia-cerrar-2");
+  if (_btnIaCerrar2) _btnIaCerrar2.addEventListener("click", _iaCerrarModal);
+  if (_iaModalEl) {
+    _iaModalEl.addEventListener("click", function (e) {
+      if (e.target === _iaModalEl) _iaCerrarModal();
+    });
+  }
+  var _formIa = document.getElementById("form-crm-ia-email");
+  if (_formIa) _formIa.addEventListener("submit", function (e) { e.preventDefault(); _iaGenerar(); });
+  var _btnIaRegen = document.getElementById("btn-crm-ia-regenerar");
+  if (_btnIaRegen) _btnIaRegen.addEventListener("click", _iaGenerar);
+  var _btnIaCopyAll = document.getElementById("btn-crm-ia-copiar");
+  if (_btnIaCopyAll) _btnIaCopyAll.addEventListener("click", function () {
+    var s = document.getElementById("crm-ia-subject").value || "";
+    var b = document.getElementById("crm-ia-body").value || "";
+    _iaCopiarTexto("Asunto: " + s + "\n\n" + b).then(function (ok) {
+      if (ok) _iaMostrarCopiado("Asunto + cuerpo copiado");
+      else mostrarToast("No se pudo copiar", "error");
+    });
+  });
+  var _btnIaCopySubj = document.getElementById("btn-crm-ia-copiar-asunto");
+  if (_btnIaCopySubj) _btnIaCopySubj.addEventListener("click", function () {
+    _iaCopiarTexto(document.getElementById("crm-ia-subject").value || "").then(function (ok) {
+      if (ok) _iaMostrarCopiado("Asunto copiado");
+      else mostrarToast("No se pudo copiar", "error");
+    });
+  });
+  var _btnIaCopyBody = document.getElementById("btn-crm-ia-copiar-body");
+  if (_btnIaCopyBody) _btnIaCopyBody.addEventListener("click", function () {
+    _iaCopiarTexto(document.getElementById("crm-ia-body").value || "").then(function (ok) {
+      if (ok) _iaMostrarCopiado("Cuerpo copiado");
+      else mostrarToast("No se pudo copiar", "error");
+    });
+  });
+
+  // ── Fase B: aprobar borrador → crear draft en Gmail ─────────────────────
+  var _iaAprobarModalEl = document.getElementById("modal-crm-ia-aprobar");
+  var _iaAprobarOrigenContactoSinEmail = false;
+
+  function _iaAprobarAbrir() {
+    if (!_iaUltimoDraft || !_iaUltimoDraft.id) {
+      mostrarToast("Genera primero un borrador.", "info");
+      return;
+    }
+    var dest = _iaUltimoDraft.destinatarios_sugeridos || {};
+    var contactoEmail = dest.contacto_email || "";
+    var empresaEmail = dest.empresa_email || "";
+    var to = contactoEmail || empresaEmail || "";
+    var hint = "";
+    if (contactoEmail) {
+      hint = "Email del contacto del CRM" +
+        (dest.contacto_nombre ? " (" + _esc(dest.contacto_nombre) + ")" : "");
+      _iaAprobarOrigenContactoSinEmail = false;
+    } else if (empresaEmail) {
+      hint = "Email genérico de la empresa" +
+        (dest.empresa_nombre ? " (" + _esc(dest.empresa_nombre) + ")" : "") +
+        " — el contacto no tiene email guardado";
+      _iaAprobarOrigenContactoSinEmail = !!dest.contacto_id;
+    } else {
+      hint = "⚠ No hay email guardado en el contacto ni en la empresa. Escribe uno.";
+      _iaAprobarOrigenContactoSinEmail = !!dest.contacto_id;
+    }
+    document.getElementById("crm-ia-aprobar-to").value = to;
+    document.getElementById("crm-ia-aprobar-to-hint").innerHTML = hint;
+    document.getElementById("crm-ia-aprobar-subject-preview").textContent =
+      document.getElementById("crm-ia-subject").value || _iaUltimoDraft.subject || "";
+
+    // Mostrar checkbox "guardar email al contacto" solo si vamos a teclear uno nuevo
+    var guardarWrap = document.getElementById("crm-ia-aprobar-guardar-wrap");
+    var guardarChk = document.getElementById("crm-ia-aprobar-guardar-contacto");
+    if (_iaAprobarOrigenContactoSinEmail) {
+      guardarWrap.style.display = "";
+      guardarChk.checked = true;
+    } else {
+      guardarWrap.style.display = "none";
+      guardarChk.checked = false;
+    }
+
+    var err = document.getElementById("crm-ia-aprobar-error");
+    err.style.display = "none"; err.textContent = "";
+
+    _iaAprobarModalEl.classList.add("visible");
+    _iaAprobarModalEl.setAttribute("aria-hidden", "false");
+    setTimeout(function () { document.getElementById("crm-ia-aprobar-to").focus(); }, 50);
+  }
+
+  function _iaAprobarCerrar() {
+    if (!_iaAprobarModalEl) return;
+    _iaAprobarModalEl.classList.remove("visible");
+    _iaAprobarModalEl.setAttribute("aria-hidden", "true");
+  }
+
+  function _iaAprobarConfirmar() {
+    if (!_iaUltimoDraft || !_iaUltimoDraft.id) return;
+    var to = (document.getElementById("crm-ia-aprobar-to").value || "").trim();
+    var err = document.getElementById("crm-ia-aprobar-error");
+    err.style.display = "none";
+    if (!to || to.indexOf("@") === -1) {
+      err.textContent = "Introduce un email válido.";
+      err.style.display = "";
+      return;
+    }
+    var subject = document.getElementById("crm-ia-subject").value || "";
+    var body = document.getElementById("crm-ia-body").value || "";
+    var persistir = document.getElementById("crm-ia-aprobar-guardar-contacto").checked &&
+                    _iaAprobarOrigenContactoSinEmail;
+
+    var btn = document.getElementById("btn-crm-ia-aprobar-confirmar");
+    var orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Creando draft…";
+
+    fetch("/api/crm/ia/email/borrador/" + _iaUltimoDraft.id + "/aprobar-en-gmail", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: to,
+        subject_override: subject,
+        body_override: body,
+        persistir_email_contacto: persistir,
+      }),
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); })
+      .then(function (res) {
+        btn.disabled = false;
+        btn.textContent = orig;
+        if (!res.ok) {
+          err.textContent = "Error: " + (res.data.error || res.status);
+          err.style.display = "";
+          return;
+        }
+        _iaAprobarCerrar();
+        // Mostrar banner de éxito en el modal IA
+        var apr = document.getElementById("crm-ia-aprobado");
+        var link = res.data.permalink || "https://mail.google.com/mail/u/0/#drafts";
+        apr.innerHTML = '✅ Draft creado en Gmail. ' +
+          '<a href="' + _esc(link) + '" target="_blank" rel="noopener" style="color:#059669;text-decoration:underline;">Ver en Gmail →</a>';
+        apr.style.display = "";
+        // Marcar el draft como aprobado para que no se vuelva a crear
+        if (_iaUltimoDraft) {
+          _iaUltimoDraft.estado = "aprobado_en_gmail";
+          _iaUltimoDraft.gmail_draft_id = res.data.gmail_draft_id;
+        }
+        // Desactivar botón aprobar (idempotencia visual)
+        var apBtn = document.getElementById("btn-crm-ia-aprobar-gmail");
+        if (apBtn) {
+          apBtn.disabled = true;
+          apBtn.textContent = "✓ Draft creado en Gmail";
+          apBtn.style.opacity = "0.7";
+        }
+        mostrarToast("Draft creado en Gmail.", "success");
+      })
+      .catch(function () {
+        btn.disabled = false;
+        btn.textContent = orig;
+        err.textContent = "Error de conexión.";
+        err.style.display = "";
+      });
+  }
+
+  var _btnIaAprobar = document.getElementById("btn-crm-ia-aprobar-gmail");
+  if (_btnIaAprobar) _btnIaAprobar.addEventListener("click", _iaAprobarAbrir);
+  var _btnIaAprCancel1 = document.getElementById("btn-crm-ia-aprobar-cancelar");
+  if (_btnIaAprCancel1) _btnIaAprCancel1.addEventListener("click", _iaAprobarCerrar);
+  var _btnIaAprCancel2 = document.getElementById("btn-crm-ia-aprobar-cancelar-2");
+  if (_btnIaAprCancel2) _btnIaAprCancel2.addEventListener("click", _iaAprobarCerrar);
+  var _btnIaAprConf = document.getElementById("btn-crm-ia-aprobar-confirmar");
+  if (_btnIaAprConf) _btnIaAprConf.addEventListener("click", _iaAprobarConfirmar);
+  if (_iaAprobarModalEl) {
+    _iaAprobarModalEl.addEventListener("click", function (e) {
+      if (e.target === _iaAprobarModalEl) _iaAprobarCerrar();
+    });
+  }
+
+  // Cuando se regenera un borrador, hay que reactivar el botón Aprobar
+  // (porque se está creando uno nuevo). Se hace al pintar.
+  // Reactivación tras regenerar:
+  var _origIaPintar = _iaPintarBorrador;
+  _iaPintarBorrador = function (d) {
+    _origIaPintar(d);
+    var apBtn = document.getElementById("btn-crm-ia-aprobar-gmail");
+    if (apBtn) {
+      apBtn.disabled = false;
+      apBtn.textContent = "📨 Crear draft en Gmail";
+      apBtn.style.opacity = "1";
+    }
+  };
+
   document.getElementById("btn-eliminar-crm-oportunidad").addEventListener("click", function () {
     var id = parseInt(document.getElementById("crm-op-edit-id").value);
     if (!id) return;

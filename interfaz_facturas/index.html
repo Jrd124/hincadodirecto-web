@@ -2351,9 +2351,133 @@
               <h3 style="margin:0;font-size:0.95rem;color:#1e293b;">
                 📋 Interacciones <span id="crm-op-interacciones-count" style="color:#64748b;font-weight:400;"></span>
               </h3>
-              <button type="button" id="btn-crm-op-nueva-interaccion" class="secondary" style="font-size:0.8rem;padding:4px 10px;">+ Interacción</button>
+              <div style="display:flex;gap:6px;">
+                <button type="button" id="btn-crm-op-ia-email" class="secondary" style="font-size:0.8rem;padding:4px 10px;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;" title="Redactar email con IA">✨ IA</button>
+                <button type="button" id="btn-crm-op-nueva-interaccion" class="secondary" style="font-size:0.8rem;padding:4px 10px;">+ Interacción</button>
+              </div>
             </div>
             <div id="crm-op-interacciones-lista" style="max-height:300px;overflow-y:auto;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal IA: generar borrador de email -->
+      <div id="modal-crm-ia-email" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-content" style="max-width:780px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <h2 style="margin:0;">✨ Redactar email con IA</h2>
+            <button type="button" class="secondary" id="btn-crm-ia-cerrar" style="padding:4px 10px;">×</button>
+          </div>
+
+          <div id="crm-ia-contexto-info" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px;margin-bottom:14px;font-size:0.85rem;color:#475569;">
+            <div id="crm-ia-contexto-linea">—</div>
+            <div id="crm-ia-contexto-motor" style="margin-top:4px;color:#64748b;font-size:0.78rem;"></div>
+          </div>
+
+          <form id="form-crm-ia-email" novalidate>
+            <input type="hidden" id="crm-ia-oportunidad-id" />
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="form-group">
+                <label for="crm-ia-objetivo">Objetivo <span class="required">*</span></label>
+                <select id="crm-ia-objetivo" required>
+                  <option value="follow_up_presupuesto">Seguimiento de presupuesto</option>
+                  <option value="reactivar">Reactivar cliente frío</option>
+                  <option value="cerrar">Cerrar / pedir decisión</option>
+                  <option value="responder">Responder último mensaje</option>
+                  <option value="otro">Otro (ver instrucciones)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="crm-ia-tono">Tono <span class="required">*</span></label>
+                <select id="crm-ia-tono" required>
+                  <option value="cordial">Cordial</option>
+                  <option value="directo">Directo</option>
+                  <option value="formal">Formal</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="crm-ia-hilo">Hilo de referencia (opcional)</label>
+              <select id="crm-ia-hilo">
+                <option value="">— Ninguno (no responder a hilo concreto) —</option>
+              </select>
+              <small style="color:#64748b;">Si eliges un hilo, la IA usará su contenido como referencia.</small>
+            </div>
+
+            <div class="form-group">
+              <label for="crm-ia-instrucciones">Instrucciones adicionales (opcional)</label>
+              <textarea id="crm-ia-instrucciones" rows="2" placeholder="Ej: mencionar plazo de entrega en 4 semanas, pedir firma del presupuesto…" style="width:100%;"></textarea>
+            </div>
+
+            <div class="form-actions" style="margin-bottom:14px;">
+              <button type="submit" class="primary" id="btn-crm-ia-generar">Generar borrador</button>
+              <button type="button" class="secondary" id="btn-crm-ia-cerrar-2">Cerrar</button>
+            </div>
+          </form>
+
+          <div id="crm-ia-preview-wrap" style="display:none;border-top:1px solid #e2e8f0;padding-top:14px;">
+            <div id="crm-ia-huecos" style="display:none;background:#fef3c7;border:1px solid #fbbf24;color:#78350f;padding:8px 10px;border-radius:6px;font-size:0.82rem;margin-bottom:10px;"></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <label style="font-weight:600;font-size:0.85rem;margin:0;">Asunto</label>
+              <span id="crm-ia-confianza" style="font-size:0.75rem;color:#64748b;"></span>
+            </div>
+            <input type="text" id="crm-ia-subject" style="width:100%;margin-bottom:10px;" />
+
+            <label style="font-weight:600;font-size:0.85rem;">Cuerpo</label>
+            <textarea id="crm-ia-body" rows="12" style="width:100%;font-family:ui-monospace,Menlo,monospace;font-size:0.9rem;"></textarea>
+
+            <div id="crm-ia-siguiente" style="margin-top:10px;font-size:0.82rem;color:#475569;"></div>
+            <div id="crm-ia-meta" style="margin-top:6px;font-size:0.72rem;color:#94a3b8;"></div>
+
+            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+              <button type="button" class="primary" id="btn-crm-ia-aprobar-gmail" style="background:#ea4335;border-color:#ea4335;">📨 Crear draft en Gmail</button>
+              <button type="button" class="secondary" id="btn-crm-ia-copiar">📋 Copiar todo</button>
+              <button type="button" class="secondary" id="btn-crm-ia-copiar-asunto">Copiar asunto</button>
+              <button type="button" class="secondary" id="btn-crm-ia-copiar-body">Copiar cuerpo</button>
+              <button type="button" class="secondary" id="btn-crm-ia-regenerar">🔄 Regenerar</button>
+            </div>
+            <div id="crm-ia-copiado" style="margin-top:8px;font-size:0.8rem;color:#059669;display:none;">✓ Copiado al portapapeles</div>
+            <div id="crm-ia-aprobado" style="margin-top:8px;font-size:0.85rem;color:#059669;display:none;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal de confirmación: aprobar y crear draft en Gmail (Fase B) -->
+      <div id="modal-crm-ia-aprobar" class="modal-overlay" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-content" style="max-width:560px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+            <h2 style="margin:0;">📨 Crear borrador en Gmail</h2>
+            <button type="button" class="secondary" id="btn-crm-ia-aprobar-cancelar" style="padding:4px 10px;">×</button>
+          </div>
+          <p style="color:#475569;font-size:0.88rem;margin-top:0;">
+            Se creará un borrador en tu cuenta de Gmail. <strong>No se enviará</strong>; lo encontrarás en tu carpeta de borradores para revisarlo y enviarlo manualmente.
+          </p>
+
+          <div class="form-group">
+            <label for="crm-ia-aprobar-to">Destinatario <span class="required">*</span></label>
+            <input type="email" id="crm-ia-aprobar-to" required style="width:100%;" placeholder="cliente@empresa.com" />
+            <small id="crm-ia-aprobar-to-hint" style="color:#64748b;display:block;margin-top:4px;"></small>
+          </div>
+
+          <div id="crm-ia-aprobar-guardar-wrap" style="display:none;margin-bottom:10px;">
+            <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:#475569;cursor:pointer;">
+              <input type="checkbox" id="crm-ia-aprobar-guardar-contacto" checked />
+              Guardar este email en el contacto del CRM (no estaba registrado)
+            </label>
+          </div>
+
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px;margin-bottom:12px;font-size:0.85rem;">
+            <div style="margin-bottom:4px;"><strong>Asunto:</strong> <span id="crm-ia-aprobar-subject-preview"></span></div>
+            <div style="color:#64748b;font-size:0.75rem;">El cuerpo se tomará del editor de la izquierda con cualquier edición que hayas hecho.</div>
+          </div>
+
+          <div id="crm-ia-aprobar-error" style="display:none;background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;border-radius:6px;padding:8px 10px;font-size:0.82rem;margin-bottom:10px;"></div>
+
+          <div class="form-actions">
+            <button type="button" class="primary" id="btn-crm-ia-aprobar-confirmar" style="background:#ea4335;border-color:#ea4335;">Crear draft en Gmail</button>
+            <button type="button" class="secondary" id="btn-crm-ia-aprobar-cancelar-2">Cancelar</button>
           </div>
         </div>
       </div>
@@ -4083,7 +4207,7 @@
     <script src="/static/js/modules/finanzas.js?v=27"></script>
     <script src="/static/js/modules/proyectos.js?v=34"></script>
     <script src="/static/js/modules/presupuestos.js?v=27"></script>
-    <script src="/static/js/modules/crm.js?v=37"></script>
+    <script src="/static/js/modules/crm.js?v=40"></script>
     <script src="/static/js/modules/maquinaria.js?v=32"></script>
     <script src="/static/js/modules/maquinaria_fase2b.js?v=1"></script>
     <script src="/static/js/modules/certificaciones.js?v=27"></script>

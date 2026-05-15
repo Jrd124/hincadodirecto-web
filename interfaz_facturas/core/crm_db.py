@@ -308,6 +308,48 @@ def init_crm_db() -> None:
                     )
                 except (ValueError, IndexError):
                     pass
+
+        # Migration: CRM IA — drafts de email generados con IA (Fase A copilot).
+        # Tabla aditiva, idempotente. No afecta al resto del CRM.
+        try:
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS crm_email_drafts (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    oportunidad_id  INTEGER,
+                    empresa_id      INTEGER,
+                    contacto_id     INTEGER,
+                    objetivo        TEXT,
+                    tono            TEXT,
+                    instrucciones   TEXT,
+                    hilo_referencia_id TEXT,
+                    subject         TEXT,
+                    body            TEXT,
+                    siguiente_accion_sugerida TEXT,
+                    confianza       REAL,
+                    huecos_detectados TEXT,
+                    estado          TEXT NOT NULL DEFAULT 'generado',
+                    gmail_draft_id  TEXT,
+                    gmail_message_id TEXT,
+                    interaccion_id  INTEGER,
+                    model           TEXT,
+                    tokens_in       INTEGER,
+                    tokens_out      INTEGER,
+                    creado_por      TEXT,
+                    fecha_creacion  TEXT NOT NULL,
+                    fecha_enviado   TEXT,
+                    FOREIGN KEY (oportunidad_id) REFERENCES crm_oportunidades(id) ON DELETE SET NULL,
+                    FOREIGN KEY (empresa_id)     REFERENCES crm_empresas(id)      ON DELETE SET NULL,
+                    FOREIGN KEY (contacto_id)    REFERENCES crm_contactos(id)     ON DELETE SET NULL,
+                    FOREIGN KEY (interaccion_id) REFERENCES crm_interacciones(id) ON DELETE SET NULL
+                );
+                CREATE INDEX IF NOT EXISTS ix_crm_email_drafts_oport
+                    ON crm_email_drafts(oportunidad_id);
+                CREATE INDEX IF NOT EXISTS ix_crm_email_drafts_estado
+                    ON crm_email_drafts(estado);
+            """)
+        except Exception:
+            logger.exception("No se pudo crear tabla crm_email_drafts")
+
     _initialized = True
 
 
@@ -2030,3 +2072,130 @@ def marcar_no_duplicados(tercero_id_1: int, tercero_id_2: int, usuario: str = "s
 def contar_duplicados(tipo: str = "all") -> int:
     """Devuelve solo el número total de grupos de duplicados pendientes."""
     return len(detectar_duplicados(tipo=tipo))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CRM IA – email drafts (Fase A copilot)
+# ─────────────────────────────────────────────────────────────────────────────
+
+import json as _json  # local alias; crm_db ya usa json en otros sitios si existiera
+
+_EMAIL_DRAFT_COLS = (
+    "id, oportunidad_id, empresa_id, contacto_id, objetivo, tono, instrucciones, "
+    "hilo_referencia_id, subject, body, siguiente_accion_sugerida, confianza, "
+    "huecos_detectados, estado, gmail_draft_id, gmail_message_id, interaccion_id, "
+    "model, tokens_in, tokens_out, creado_por, fecha_creacion, fecha_enviado"
+)
+
+
+def _row_a_draft(row) -> dict:
+    """Convierte fila sqlite a dict; deserializa huecos_detectados si es JSON."""
+    d = dict(row)
+    raw = d.get("huecos_detectados")
+    if raw:
+        try:
+            d["huecos_detectados"] = _json.loads(raw)
+        except Exception:
+            d["huecos_detectados"] = []
+    else:
+        d["huecos_detectados"] = []
+    return d
+
+
+def crear_email_draft(data: dict) -> dict:
+    """Persiste un borrador de email generado por IA. Devuelve el draft con id."""
+    init_crm_db()
+    ahora = _now()
+    huecos = data.get("huecos_detectados") or []
+    huecos_json = _json.dumps(huecos, ensure_ascii=False) if huecos else None
+    with _conectar() as conn:
+        cur = conn.execute("""
+            INSERT INTO crm_email_drafts (
+                oportunidad_id, empresa_id, contacto_id,
+                objetivo, tono, instrucciones, hilo_referencia_id,
+                subject, body, siguiente_accion_sugerida, confianza, huecos_detectados,
+                estado, model, tokens_in, tokens_out, creado_por, fecha_creacion
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            data.get("oportunidad_id"),
+            data.get("empresa_id"),
+            data.get("contacto_id"),
+            (data.get("objetivo") or "").strip() or None,
+            (data.get("tono") or "").strip() or None,
+            (data.get("instrucciones") or "").strip() or None,
+            (data.get("hilo_referencia_id") or "").strip() or None,
+            (data.get("subject") or "").strip() or None,
+            data.get("body") or None,
+            (data.get("siguiente_accion_sugerida") or "").strip() or None,
+            data.get("confianza"),
+            huecos_json,
+            (data.get("estado") or "generado").strip(),
+            (data.get("model") or "").strip() or None,
+            data.get("tokens_in"),
+            data.get("tokens_out"),
+            (data.get("creado_por") or "").strip() or None,
+            ahora,
+        ))
+        new_id = cur.lastrowid
+        row = conn.execute(
+            f"SELECT {_EMAIL_DRAFT_COLS} FROM crm_email_drafts WHERE id = ?", (new_id,)
+        ).fetchone()
+    return _row_a_draft(row)
+
+
+def obtener_email_draft(draft_id: int) -> dict | None:
+    init_crm_db()
+    with _conectar() as conn:
+        row = conn.execute(
+            f"SELECT {_EMAIL_DRAFT_COLS} FROM crm_email_drafts WHERE id = ?", (draft_id,)
+        ).fetchone()
+    return _row_a_draft(row) if row else None
+
+
+def listar_email_drafts(
+    oportunidad_id: int | None = None,
+    estado: str | None = None,
+    limit: int = 50,
+) -> list[dict]:
+    init_crm_db()
+    where_parts: list[str] = []
+    params: list[Any] = []
+    if oportunidad_id:
+        where_parts.append("oportunidad_id = ?")
+        params.append(oportunidad_id)
+    if estado:
+        where_parts.append("estado = ?")
+        params.append(estado)
+    where = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
+    with _conectar() as conn:
+        rows = conn.execute(
+            f"SELECT {_EMAIL_DRAFT_COLS} FROM crm_email_drafts "
+            f"{where} ORDER BY fecha_creacion DESC LIMIT ?",
+            params + [limit],
+        ).fetchall()
+    return [_row_a_draft(r) for r in rows]
+
+
+def actualizar_email_draft(draft_id: int, data: dict) -> dict | None:
+    """Actualiza campos editables del draft (subject/body/estado/etc). Ignora claves no permitidas."""
+    init_crm_db()
+    permitidos = {
+        "subject", "body", "siguiente_accion_sugerida", "estado",
+        "gmail_draft_id", "gmail_message_id", "interaccion_id", "fecha_enviado",
+    }
+    sets: list[str] = []
+    params: list[Any] = []
+    for k, v in data.items():
+        if k not in permitidos:
+            continue
+        sets.append(f"{k} = ?")
+        params.append(v)
+    if not sets:
+        return obtener_email_draft(draft_id)
+    params.append(draft_id)
+    with _conectar() as conn:
+        conn.execute(
+            f"UPDATE crm_email_drafts SET {', '.join(sets)} WHERE id = ?",
+            params,
+        )
+    return obtener_email_draft(draft_id)
