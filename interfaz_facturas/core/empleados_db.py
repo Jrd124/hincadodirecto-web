@@ -88,6 +88,10 @@ def init_empleados_db() -> None:
             conn.execute("ALTER TABLE empleados ADD COLUMN iban TEXT")
         if "direccion" not in existing:
             conn.execute("ALTER TABLE empleados ADD COLUMN direccion TEXT")
+        if "latitud" not in existing:
+            conn.execute("ALTER TABLE empleados ADD COLUMN latitud REAL")
+        if "longitud" not in existing:
+            conn.execute("ALTER TABLE empleados ADD COLUMN longitud REAL")
         if "dias_vacaciones_anuales" not in existing:
             conn.execute("ALTER TABLE empleados ADD COLUMN dias_vacaciones_anuales INTEGER DEFAULT 22")
         if "fecha_nacimiento" not in existing:
@@ -287,7 +291,7 @@ _CAMPOS = [
     "prl_especifico", "prl_especifico_caducidad",
     "apto_medico", "apto_medico_caducidad",
     "formacion_especifica", "foto_url", "fecha_antiguedad",
-    "neto_pactado", "iban", "direccion", "dias_vacaciones_anuales",
+    "neto_pactado", "iban", "direccion", "latitud", "longitud", "dias_vacaciones_anuales",
     "fecha_nacimiento", "fecha_baja_inicio", "fecha_baja_fin",
 ]
 

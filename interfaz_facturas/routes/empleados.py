@@ -44,6 +44,12 @@ def api_crear_empleado():
 @empleados_bp.put("/api/empleados/<int:eid>")
 def api_actualizar_empleado(eid):
   data = request.get_json(silent=True) or {}
+  # Geocodificar si la dirección cambió y no vienen coordenadas explícitas
+  if "direccion" in data and data["direccion"] and "latitud" not in data:
+    coords = _geocodificar_direccion(data["direccion"])
+    if coords:
+      data["latitud"] = coords[0]
+      data["longitud"] = coords[1]
   emp = empleados_db.actualizar_empleado(eid, data)
   if not emp:
     return jsonify({"error": "No encontrado"}), 404
@@ -56,6 +62,136 @@ def api_eliminar_empleado(eid):
   if not ok:
     return jsonify({"error": "No encontrado"}), 404
   return jsonify({"ok": True})
+
+
+# ═══ Geocodificación (ORS con fallback Nominatim) ════════════════════════
+
+import json
+import re
+import urllib.parse
+import urllib.request
+
+
+def _limpiar_direccion(d: str) -> str:
+    """Normaliza una dirección española para mejorar la geocodificación.
+    Elimina CP, códigos postales sueltos, paréntesis, abreviaturas comunes, etc."""
+    if not d:
+        return d
+    s = d.strip()
+    # Quitar paréntesis pero mantener contenido: "Botija (Caceres)" → "Botija Caceres"
+    s = s.replace("(", " ").replace(")", " ")
+    # Quitar "CP" / "cp" seguido de código postal (5 dígitos)
+    s = re.sub(r'\b[Cc][Pp]\s*\d{5}\b', '', s)
+    # Quitar "CP" / "cp" suelto
+    s = re.sub(r'\b[Cc][Pp]\b', '', s)
+    # Quitar código postal suelto (5 dígitos al principio o final)
+    s = re.sub(r'\b\d{5}\b', '', s)
+    # "N,2" / "N.2" / "n 2" / "nº2" / "Nº 2" → "2"  (número de portal)
+    s = re.sub(r'\b[Nn][ºo°.]?\s*,?\s*(\d+)', r' \1', s)
+    # Abreviaturas comunes → nombre completo
+    s = re.sub(r'\bAv\.?\s*', 'Avenida ', s)
+    s = re.sub(r'\bC/\.?\s*', 'Calle ', s)
+    s = re.sub(r'\bPza\.?\s*', 'Plaza ', s)
+    s = re.sub(r'\bCtra\.?\s*', 'Carretera ', s)
+    # Múltiples espacios → uno
+    s = re.sub(r'\s+', ' ', s).strip()
+    # Quitar comas duplicadas o trailing
+    s = re.sub(r',\s*,', ',', s)
+    s = s.strip(' ,')
+    return s
+
+
+def _geocode_nominatim(direccion: str):
+    """Fallback gratuito: Nominatim (OpenStreetMap). Sin API key.
+    Devuelve (lat, lon) o None."""
+    q = urllib.parse.quote(direccion.strip())
+    url = (
+        f"https://nominatim.openstreetmap.org/search?q={q}"
+        "&format=json&limit=1&countrycodes=es&accept-language=es"
+    )
+    logger.info("Nominatim request: %s", url)
+    try:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "HincadoERP/1.0 (sergio.garcia@nutriacapital.com)",
+        })
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            raw = resp.read().decode("utf-8")
+            logger.info("Nominatim raw response (first 500 chars): %s", raw[:500])
+            data = json.loads(raw)
+    except Exception as e:
+        logger.warning("Error en Nominatim para '%s': %s (%s)", direccion.strip(), e, type(e).__name__)
+        return None
+    if not data:
+        logger.warning("Nominatim devolvió lista vacía para '%s'", direccion.strip())
+        return None
+    logger.info("Nominatim OK: lat=%s, lon=%s", data[0]["lat"], data[0]["lon"])
+    return (float(data[0]["lat"]), float(data[0]["lon"]))
+
+
+def _geocodificar_direccion(direccion: str):
+    """Geocodifica una dirección.
+    1. Limpia la dirección (abreviaturas, CP, paréntesis, etc.)
+    2. Intenta ORS si hay API key configurada.
+    3. Fallback a Nominatim (OSM, gratuito, sin API key).
+    Devuelve (lat, lng) o None."""
+    if not direccion or not direccion.strip():
+        return None
+
+    limpia = _limpiar_direccion(direccion)
+    logger.info("Dirección original: '%s' → limpia: '%s'", direccion.strip(), limpia)
+
+    # Intento 1: ORS (si hay key)
+    from config import OPENROUTESERVICE_API_KEY
+    if OPENROUTESERVICE_API_KEY:
+        from core.transporte_servicios import geocode_ors
+        result = geocode_ors(limpia, OPENROUTESERVICE_API_KEY)
+        if result:
+            return result
+        logger.info("ORS no encontró '%s', probando Nominatim…", limpia)
+
+    # Intento 2: Nominatim con dirección limpia
+    result = _geocode_nominatim(limpia)
+    if result:
+        return result
+
+    # Intento 3: Nominatim con dirección original (por si la limpieza quitó algo útil)
+    if limpia != direccion.strip():
+        logger.info("Nominatim no encontró la limpia, probando original…")
+        return _geocode_nominatim(direccion.strip())
+
+    return None
+
+
+@empleados_bp.post("/api/empleados/<int:eid>/geocodificar")
+def api_geocodificar_empleado(eid):
+    """Geocodifica la dirección actual del empleado (bajo demanda)."""
+    emp = empleados_db.obtener_empleado(eid)
+    if not emp:
+        return jsonify({"error": "No encontrado"}), 404
+    direccion = (emp.get("direccion") or "").strip()
+    if not direccion:
+        return jsonify({"error": "El empleado no tiene dirección"}), 400
+    logger.info("Geocodificando empleado %s (id=%s): '%s'", emp.get("nombre"), eid, direccion)
+    coords = _geocodificar_direccion(direccion)
+    if not coords:
+        logger.warning("Geocodificación fallida para '%s'", direccion)
+        return jsonify({"error": "No se pudo geocodificar '" + direccion + "'. Prueba formato: Calle X, Localidad, Provincia"}), 422
+    logger.info("Geocodificado OK → lat=%s, lon=%s", coords[0], coords[1])
+    empleados_db.actualizar_empleado(eid, {"latitud": coords[0], "longitud": coords[1]})
+    return jsonify({"latitud": coords[0], "longitud": coords[1]})
+
+
+@empleados_bp.get("/api/empleados/mapa")
+def api_empleados_mapa():
+    """Devuelve empleados activos con coordenadas para el mapa."""
+    empleados_db.init_empleados_db()
+    from core.db import get_conn
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT id, nombre, apellidos, puesto, telefono, direccion, latitud, longitud, foto_url "
+        "FROM empleados WHERE estado = 'activo' AND latitud IS NOT NULL AND longitud IS NOT NULL"
+    ).fetchall()
+    return jsonify([dict(r) for r in rows])
 
 
 # ═══ RRHH — Endpoints de nóminas y resúmenes ═════════════════════════════

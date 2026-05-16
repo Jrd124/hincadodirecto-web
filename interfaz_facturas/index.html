@@ -119,6 +119,7 @@
           </a>
           <div class="sidebar-children" id="sidebar-children-rrhh">
             <a href="#" class="sidebar-child" id="nav-rrhh-equipo">Equipo</a>
+            <a href="#" class="sidebar-child" id="nav-rrhh-mapa-equipo">Mapa equipo</a>
             <a href="#" class="sidebar-child" id="nav-rrhh-nominas">N&oacute;minas</a>
             <a href="#" class="sidebar-child" id="nav-rrhh-verificador">Verificador</a>
             <a href="#" class="sidebar-child" id="nav-rrhh-dietas">Dietas</a>
@@ -1508,7 +1509,7 @@
                   <div class="form-group"><label style="font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Fecha de nacimiento</label><input id="emp-fecha-nacimiento" type="date" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;"></div>
                 </div>
                 <div class="form-group" style="margin-top:10px;"><label style="font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">IBAN / Cuenta corriente</label><input id="emp-iban" type="text" placeholder="ES12 3456 7890 1234 5678 9012" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;"></div>
-                <div class="form-group" style="margin-top:10px;"><label style="font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Direcci&oacute;n</label><input id="emp-direccion" type="text" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;"></div>
+                <div class="form-group" style="margin-top:10px;"><label style="font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:0.5px;">Direcci&oacute;n</label><input id="emp-direccion" type="text" placeholder="Ej: Calle Mayor 12, Villena, Alicante" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.88rem;"></div>
               </div>
               <!-- Secci&oacute;n 2: Informaci&oacute;n Laboral -->
               <div style="border-left:4px solid #10B981;padding:14px 16px;margin-bottom:14px;background:rgba(16,185,129,0.03);border-radius:8px;">
@@ -1597,6 +1598,23 @@
           </div>
         </div>
       </div>
+      <!-- ═══ MAPA EQUIPO ═══ -->
+      <div id="panel-rrhh-mapa-equipo" class="panel-rrhh">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div>
+            <h2 style="margin:0;font-size:1.2rem;font-weight:700;">Mapa del equipo</h2>
+            <p style="margin:4px 0 0;font-size:0.85rem;color:var(--text-secondary);">Ubicaciones de los trabajadores activos</p>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="_rrhhMapaGeocodificarTodos()" class="btn-outline" style="padding:6px 14px;font-size:0.82rem;" title="Geocodificar direcciones sin coordenadas">
+              Geocodificar pendientes
+            </button>
+          </div>
+        </div>
+        <div id="rrhh-mapa-equipo-container" style="width:100%;height:600px;border-radius:var(--radius-md,8px);border:1px solid var(--border,#dee2e6);background:#f0f0f0;"></div>
+        <div id="rrhh-mapa-equipo-sin-direccion" style="margin-top:12px;"></div>
+      </div>
+
       <!-- ═══ NÓMINAS (con importador integrado) ═══ -->
       <div id="panel-rrhh-nominas" class="panel-rrhh">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
@@ -4214,7 +4232,7 @@
     <script src="/static/js/modules/usuarios.js?v=27"></script>
     <script src="/static/js/modules/transporte.js?v=27"></script>
     <script src="/static/js/modules/cae.js?v=28"></script>
-    <script src="/static/js/modules/rrhh.js?v=29"></script>
+    <script src="/static/js/modules/rrhh.js?v=36"></script>
     <script src="/static/js/modules/impuestos.js?v=1"></script>
     <script src="/static/js/modules/eeff.js?v=1"></script>
     <script src="/static/js/modules/albaranes.js?v=1"></script>
@@ -4222,7 +4240,7 @@
     <script src="/static/js/modules/operaciones.js?v=6"></script>
     <script src="/static/js/modules/gasoil.js?v=11"></script>
     <script src="/static/js/modules/alojamiento.js?v=1"></script>
-    <script src="/static/js/app.js?v=42"></script>
+    <script src="/static/js/app.js?v=44"></script>
     <!-- React desactivado temporalmente — reactivar cuando se resuelva el bug de visibilidad CSS
     <script type="module" src="/static/js/react-app.js"></script>
     <script type="module" src="/static/js/react/DashboardDirector.js"></script>

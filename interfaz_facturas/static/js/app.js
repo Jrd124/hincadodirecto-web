@@ -60,8 +60,8 @@ const MODULOS = {
   rrhh: {
     linkId: "nav-rrhh-modulo",
     submenuId: "submenu-rrhh",
-    paneles: { inicio: "panel-rrhh-inicio", equipo: "panel-rrhh-equipo", nominas: "panel-rrhh-nominas", verificador: "panel-rrhh-verificador", dietas: "panel-rrhh-dietas", horasextras: "panel-rrhh-horasextras", vacaciones: "panel-rrhh-vacaciones", adelantos: "panel-rrhh-adelantos", ss: "panel-rrhh-ss", irpf: "panel-rrhh-irpf", costeproyecto: "panel-rrhh-coste-proyecto" },
-    subNavLinks: { equipo: "nav-rrhh-equipo", nominas: "nav-rrhh-nominas", verificador: "nav-rrhh-verificador", dietas: "nav-rrhh-dietas", horasextras: "nav-rrhh-horasextras", vacaciones: "nav-rrhh-vacaciones", adelantos: "nav-rrhh-adelantos", ss: "nav-rrhh-ss", irpf: "nav-rrhh-irpf", costeproyecto: "nav-rrhh-coste-proyecto" },
+    paneles: { inicio: "panel-rrhh-inicio", equipo: "panel-rrhh-equipo", mapaequipo: "panel-rrhh-mapa-equipo", nominas: "panel-rrhh-nominas", verificador: "panel-rrhh-verificador", dietas: "panel-rrhh-dietas", horasextras: "panel-rrhh-horasextras", vacaciones: "panel-rrhh-vacaciones", adelantos: "panel-rrhh-adelantos", ss: "panel-rrhh-ss", irpf: "panel-rrhh-irpf", costeproyecto: "panel-rrhh-coste-proyecto" },
+    subNavLinks: { equipo: "nav-rrhh-equipo", mapaequipo: "nav-rrhh-mapa-equipo", nominas: "nav-rrhh-nominas", verificador: "nav-rrhh-verificador", dietas: "nav-rrhh-dietas", horasextras: "nav-rrhh-horasextras", vacaciones: "nav-rrhh-vacaciones", adelantos: "nav-rrhh-adelantos", ss: "nav-rrhh-ss", irpf: "nav-rrhh-irpf", costeproyecto: "nav-rrhh-coste-proyecto" },
     defecto: "inicio",
   },
   // onboarding: moved to operaciones submenu
@@ -454,7 +454,7 @@ function restaurarDesdeHash() {
   } else if (mod === "rrhh") {
     if (partes.length >= 2) {
       var sp = partes[1];
-      if (["equipo", "nominas", "verificador", "dietas", "adelantos", "ss", "irpf", "costeproyecto"].indexOf(sp) >= 0) {
+      if (["equipo", "mapaequipo", "nominas", "verificador", "dietas", "horasextras", "vacaciones", "adelantos", "ss", "irpf", "costeproyecto"].indexOf(sp) >= 0) {
         rrhhSubpanel = sp;
         activarModulo("rrhh");
         activarSubpanel("rrhh", sp);
@@ -802,8 +802,8 @@ document.getElementById("nav-clientes-listado").addEventListener("click", (e) =>
   });
 });
 
-["equipo","nominas","verificador","dietas","horasextras","vacaciones","adelantos","ss","irpf","costeproyecto"].forEach(function(sp) {
-  var navId = "nav-rrhh-" + (sp === "costeproyecto" ? "coste-proyecto" : sp);
+["equipo","mapaequipo","nominas","verificador","dietas","horasextras","vacaciones","adelantos","ss","irpf","costeproyecto"].forEach(function(sp) {
+  var navId = "nav-rrhh-" + (sp === "costeproyecto" ? "coste-proyecto" : sp === "mapaequipo" ? "mapa-equipo" : sp);
   var el = document.getElementById(navId);
   if (el) el.addEventListener("click", function(e) {
     e.preventDefault();

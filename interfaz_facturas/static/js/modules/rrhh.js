@@ -2,6 +2,9 @@
 // ==  RRHH MODULE - Complete frontend for HR management                       ==
 // ===============================================================================
 
+// Alias de toast — helpers.js exporta `mostrarToast`, aquí usamos `_toast`
+var _toast = typeof mostrarToast === "function" ? mostrarToast : function(msg) { console.log("[TOAST]", msg); };
+
 var _rrhhEmpleadosCache = [];
 var _rrhhPeriodos = [];
 var _rrhhPeriodoIdx = -1;
@@ -66,6 +69,7 @@ function _rrhhOnPanelShow(panel) {
   else if (panel === "adelantos") _rrhhCargarAdelantos();
   else if (panel === "ss") _rrhhCargarSS();
   else if (panel === "irpf") _rrhhCargarIRPF();
+  else if (panel === "mapaequipo") _rrhhCargarMapaEquipo();
   else if (panel === "costeproyecto") _rrhhCargarCosteProyecto();
 }
 
@@ -3323,6 +3327,429 @@ function _rrhhCargarCosteProyecto() {
 }
 
 // ===============================================================================
+// ==  MAPA EQUIPO (Leaflet + OpenStreetMap, misma stack que Transportes)       ==
+// ===============================================================================
+
+var _rrhhMapaInstance = null;
+var _rrhhMapaLayerGroup = null;
+
+function _rrhhCargarMapaEquipo() {
+  var container = document.getElementById("rrhh-mapa-equipo-container");
+  if (!container) return;
+
+  // Verificar que Leaflet está cargado
+  if (typeof L === "undefined") {
+    container.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:12px;color:var(--text-secondary);">' +
+        '<p style="font-size:1rem;font-weight:600;">Leaflet no está disponible</p>' +
+        '<p style="font-size:0.85rem;">Verifica que leaflet.js se carga correctamente.</p>' +
+      '</div>';
+    return;
+  }
+
+  // Inicializar mapa centrado en España (mismo patrón que transportes)
+  if (!_rrhhMapaInstance) {
+    _rrhhMapaInstance = L.map(container).setView([39.5, -3.0], 6);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap",
+    }).addTo(_rrhhMapaInstance);
+    _rrhhMapaLayerGroup = L.layerGroup().addTo(_rrhhMapaInstance);
+  }
+
+  // Cargar empleados con coordenadas
+  fetch("/api/empleados/mapa")
+    .then(function (r) { return r.json(); })
+    .then(function (empleados) {
+      // Limpiar markers anteriores
+      _rrhhMapaLayerGroup.clearLayers();
+
+      var bounds = [];
+
+      empleados.forEach(function (emp) {
+        var lat = emp.latitud;
+        var lng = emp.longitud;
+        var nombre = ((emp.nombre || "") + " " + (emp.apellidos || "")).trim();
+        var initials = (emp.nombre || "?")[0] + (emp.apellidos || "?")[0];
+
+        // Marker circular con iniciales (estilo Hincado)
+        var icon = L.divIcon({
+          className: "",
+          html: '<div style="width:32px;height:32px;border-radius:50%;background:#E8B931;border:2px solid #2C2C2A;' +
+                'display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#2C2C2A;' +
+                'font-family:system-ui;box-shadow:0 2px 6px rgba(0,0,0,0.3);">' +
+                _esc(initials.toUpperCase()) + '</div>',
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+          popupAnchor: [0, -18],
+        });
+
+        var popupHtml =
+          '<div style="font-family:system-ui;min-width:180px;">' +
+            '<div style="font-weight:700;font-size:14px;margin-bottom:4px;">' + _esc(nombre) + '</div>' +
+            (emp.puesto ? '<div style="font-size:12px;color:#666;margin-bottom:4px;">' + _esc(emp.puesto) + '</div>' : '') +
+            (emp.direccion ? '<div style="font-size:12px;color:#888;margin-bottom:4px;">📍 ' + _esc(emp.direccion) + '</div>' : '') +
+            (emp.telefono ? '<div style="font-size:12px;"><a href="tel:' + _esc(emp.telefono) + '">' + _esc(emp.telefono) + '</a></div>' : '') +
+          '</div>';
+
+        var marker = L.marker([lat, lng], { icon: icon }).bindPopup(popupHtml);
+        _rrhhMapaLayerGroup.addLayer(marker);
+        bounds.push([lat, lng]);
+      });
+
+      if (bounds.length > 0) {
+        _rrhhMapaInstance.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+      }
+
+      // Forzar recalcular tamaño del mapa (por si el panel estaba oculto)
+      setTimeout(function () { _rrhhMapaInstance.invalidateSize(); }, 200);
+
+      // Cargar también los que NO tienen coordenadas para mostrar aviso
+      _rrhhCargarSinCoordenadas(empleados.length);
+    })
+    .catch(function (err) {
+      container.innerHTML =
+        '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#dc3545;">' +
+          'Error cargando mapa: ' + err.message +
+        '</div>';
+    });
+}
+
+// Estado para ubicación manual en mapa
+var _rrhhUbicandoEmpId = null;
+var _rrhhUbicandoMarker = null;
+
+function _rrhhCargarSinCoordenadas(conCoordenadas) {
+  fetch("/api/empleados?solo_activos=1")
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var todos = data.empleados || data || [];
+      var sinCoords = todos.filter(function (e) {
+        return !e.latitud || !e.longitud;
+      });
+
+      var wrapper = document.getElementById("rrhh-mapa-equipo-sin-direccion");
+      if (!wrapper) return;
+
+      if (sinCoords.length === 0) {
+        wrapper.innerHTML = '<p style="font-size:0.85rem;color:var(--color-success,#16A34A);margin-top:8px;">✅ Todos los empleados activos tienen ubicación en el mapa.</p>';
+        return;
+      }
+
+      var html = '<div class="card" style="padding:12px;margin-top:8px;">';
+      html += '<div style="font-weight:600;font-size:0.9rem;margin-bottom:8px;color:var(--text-primary);">';
+      html += '⚠️ ' + sinCoords.length + ' empleado(s) sin ubicación en el mapa';
+      html += '</div>';
+      html += '<div style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:10px;">';
+      html += 'Pulsa "Ubicar en mapa" para colocar manualmente la ubicación haciendo clic en el mapa.';
+      html += '</div>';
+
+      html += '<table style="width:100%;border-collapse:collapse;font-size:0.82rem;">';
+      html += '<thead><tr style="background:var(--bg-secondary,#f8f9fa);text-align:left;">';
+      html += '<th style="padding:6px 8px;">Nombre</th>';
+      html += '<th style="padding:6px 8px;">Dirección</th>';
+      html += '<th style="padding:6px 8px;text-align:center;width:220px;">Acción</th>';
+      html += '</tr></thead><tbody>';
+
+      sinCoords.forEach(function (e) {
+        var nombre = _esc(((e.nombre || "") + " " + (e.apellidos || "")).trim());
+        var dir = e.direccion ? _esc(e.direccion) : '<span style="color:#999;">Sin dirección</span>';
+        html += '<tr style="border-bottom:1px solid var(--border,#e9ecef);">';
+        html += '<td style="padding:6px 8px;font-weight:500;">' + nombre + '</td>';
+        html += '<td style="padding:6px 8px;">' + dir + '</td>';
+        html += '<td style="padding:6px 8px;text-align:center;white-space:nowrap;">';
+        // Botón geocodificar (solo si tiene dirección)
+        if (e.direccion && e.direccion.trim()) {
+          html += '<button id="geo-btn-' + e.id + '" onclick="_rrhhGeocodificarUno(' + e.id + ',\'' + _esc(nombre).replace(/'/g, "\\'") + '\', this)" ';
+          html += 'style="padding:3px 10px;font-size:0.78rem;border:1px solid #1D9E75;color:#1D9E75;background:none;border-radius:4px;cursor:pointer;margin-right:4px;">';
+          html += '🔍 Geocodificar</button>';
+        }
+        // Botón ubicar manual
+        html += '<button onclick="_rrhhUbicarEnMapa(' + e.id + ',\'' + _esc(nombre).replace(/'/g, "\\'") + '\')" ';
+        html += 'style="padding:3px 10px;font-size:0.78rem;border:1px solid var(--color-primary,#2563eb);color:var(--color-primary,#2563eb);background:none;border-radius:4px;cursor:pointer;">';
+        html += '📍 Ubicar en mapa</button>';
+        html += '</td></tr>';
+      });
+
+      html += '</tbody></table></div>';
+      wrapper.innerHTML = html;
+    })
+    .catch(function () {});
+}
+
+function _rrhhUbicarEnMapa(empId, empNombre) {
+  if (!_rrhhMapaInstance) return;
+
+  // Cancelar ubicación anterior si había una
+  _rrhhCancelarUbicacion();
+
+  _rrhhUbicandoEmpId = empId;
+
+  // Mostrar banner de instrucciones
+  var banner = document.createElement("div");
+  banner.id = "rrhh-mapa-ubicar-banner";
+  banner.style.cssText = "position:absolute;top:0;left:0;right:0;z-index:1000;background:#E8B931;color:#2C2C2A;padding:10px 16px;font-size:0.9rem;font-weight:600;display:flex;align-items:center;justify-content:space-between;border-radius:8px 8px 0 0;";
+  banner.innerHTML = '📍 Haz clic en el mapa para ubicar a <strong>' + empNombre + '</strong>' +
+    '<button onclick="_rrhhCancelarUbicacion()" style="padding:4px 12px;background:#2C2C2A;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.8rem;">Cancelar</button>';
+
+  var container = document.getElementById("rrhh-mapa-equipo-container");
+  container.style.position = "relative";
+  container.appendChild(banner);
+
+  // Cambiar cursor del mapa
+  container.style.cursor = "crosshair";
+
+  // Listener para clic en mapa
+  _rrhhMapaInstance._rrhhClickHandler = function (e) {
+    var lat = e.latlng.lat;
+    var lng = e.latlng.lng;
+
+    // Mostrar marker temporal
+    if (_rrhhUbicandoMarker) {
+      _rrhhUbicandoMarker.setLatLng([lat, lng]);
+    } else {
+      var icon = L.divIcon({
+        className: "",
+        html: '<div style="width:36px;height:36px;border-radius:50%;background:#1D9E75;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 8px rgba(0,0,0,0.4);">📍</div>',
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+      });
+      _rrhhUbicandoMarker = L.marker([lat, lng], { icon: icon }).addTo(_rrhhMapaInstance);
+    }
+
+    // Actualizar banner con botón Confirmar
+    var bannerEl = document.getElementById("rrhh-mapa-ubicar-banner");
+    if (bannerEl) {
+      bannerEl.innerHTML = '📍 <strong>' + empNombre + '</strong> → ' + lat.toFixed(5) + ', ' + lng.toFixed(5) + '  ' +
+        '<span style="display:flex;gap:6px;">' +
+          '<button onclick="_rrhhConfirmarUbicacion(' + empId + ',' + lat + ',' + lng + ')" style="padding:4px 14px;background:#1D9E75;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.8rem;font-weight:600;">✓ Confirmar</button>' +
+          '<button onclick="_rrhhCancelarUbicacion()" style="padding:4px 12px;background:#2C2C2A;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.8rem;">Cancelar</button>' +
+        '</span>';
+    }
+  };
+  _rrhhMapaInstance.on("click", _rrhhMapaInstance._rrhhClickHandler);
+}
+
+function _rrhhConfirmarUbicacion(empId, lat, lng) {
+  fetch("/api/empleados/" + empId, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ latitud: lat, longitud: lng }),
+  })
+    .then(function (r) {
+      if (!r.ok) throw new Error("Error guardando");
+      return r.json();
+    })
+    .then(function () {
+      _toast("Ubicación guardada");
+      _rrhhCancelarUbicacion();
+      _rrhhCargarMapaEquipo(); // Recargar mapa completo
+    })
+    .catch(function (err) {
+      _toast("Error: " + err.message);
+    });
+}
+
+function _rrhhCancelarUbicacion() {
+  _rrhhUbicandoEmpId = null;
+
+  // Quitar banner
+  var banner = document.getElementById("rrhh-mapa-ubicar-banner");
+  if (banner) banner.remove();
+
+  // Quitar marker temporal
+  if (_rrhhUbicandoMarker) {
+    _rrhhUbicandoMarker.remove();
+    _rrhhUbicandoMarker = null;
+  }
+
+  // Quitar listener
+  if (_rrhhMapaInstance && _rrhhMapaInstance._rrhhClickHandler) {
+    _rrhhMapaInstance.off("click", _rrhhMapaInstance._rrhhClickHandler);
+    _rrhhMapaInstance._rrhhClickHandler = null;
+  }
+
+  // Restaurar cursor
+  var container = document.getElementById("rrhh-mapa-equipo-container");
+  if (container) container.style.cursor = "";
+}
+
+function _rrhhLimpiarDireccion(d) {
+  if (!d) return d;
+  var s = d.trim();
+  // Quitar paréntesis
+  s = s.replace(/[()]/g, " ");
+  // Quitar CP + código postal
+  s = s.replace(/\b[Cc][Pp]\s*\d{5}\b/g, "");
+  // Quitar CP suelto
+  s = s.replace(/\b[Cc][Pp]\b/g, "");
+  // Quitar código postal suelto (5 dígitos)
+  s = s.replace(/\b\d{5}\b/g, "");
+  // N,2 / N.2 / nº2 → 2
+  s = s.replace(/\b[Nn][ºo°.]?\s*,?\s*(\d+)/g, " $1");
+  // Abreviaturas comunes
+  s = s.replace(/\bAv\.?\s*/g, "Avenida ");
+  s = s.replace(/\bC\/\.?\s*/g, "Calle ");
+  s = s.replace(/\bPza\.?\s*/g, "Plaza ");
+  s = s.replace(/\bCtra\.?\s*/g, "Carretera ");
+  // Múltiples espacios
+  s = s.replace(/\s+/g, " ").trim();
+  // Comas duplicadas
+  s = s.replace(/,\s*,/g, ",").replace(/^[, ]+|[, ]+$/g, "");
+  return s;
+}
+
+function _rrhhGeocodificarUno(empId, empNombre, btnEl) {
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.textContent = "Geocodificando…";
+  }
+
+  // Primero obtener la dirección del empleado
+  fetch("/api/empleados/" + empId)
+    .then(function (r) { return r.json(); })
+    .then(function (emp) {
+      var dir = (emp.direccion || "").trim();
+      if (!dir) {
+        _toast("❌ " + empNombre + " no tiene dirección guardada");
+        if (btnEl) { btnEl.disabled = false; btnEl.textContent = "🔍 Geocodificar"; }
+        return;
+      }
+
+      // Limpiar dirección para mejorar resultado
+      var dirLimpia = _rrhhLimpiarDireccion(dir);
+      console.log("[Geocodificar] Original: '" + dir + "' → Limpia: '" + dirLimpia + "'");
+
+      // Geocodificar directamente desde el frontend vía Nominatim (OSM, gratuito)
+      var url = "https://nominatim.openstreetmap.org/search?q=" + encodeURIComponent(dirLimpia) +
+        "&format=json&limit=1&countrycodes=es&accept-language=es";
+
+      return fetch(url, {
+        headers: { "Accept": "application/json" }
+      })
+        .then(function (r2) { return r2.json(); })
+        .then(function (results) {
+          if (!results || results.length === 0) {
+            // Fallback: probar con el backend (ORS)
+            return _rrhhGeocodificarUnoBackend(empId, empNombre, btnEl);
+          }
+          var lat = parseFloat(results[0].lat);
+          var lon = parseFloat(results[0].lon);
+          // Guardar coordenadas en BD
+          return fetch("/api/empleados/" + empId, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ latitud: lat, longitud: lon })
+          }).then(function (r3) {
+            if (!r3.ok) throw new Error("Error guardando coordenadas");
+            _toast("✅ " + empNombre + " geocodificado (" + results[0].display_name.substring(0, 50) + "…)");
+            _rrhhCargarMapaEquipo();
+          });
+        });
+    })
+    .catch(function (err) {
+      console.error("Error geocodificando:", err);
+      // Si Nominatim falla (CORS, red, etc.), intentar vía backend
+      _rrhhGeocodificarUnoBackend(empId, empNombre, btnEl);
+    });
+}
+
+function _rrhhGeocodificarUnoBackend(empId, empNombre, btnEl) {
+  // Fallback: geocodificar vía backend (ORS + Nominatim server-side)
+  fetch("/api/empleados/" + empId + "/geocodificar", { method: "POST" })
+    .then(function (r) {
+      if (r.ok) return r.json().then(function () {
+        _toast("✅ " + empNombre + " geocodificado (vía servidor)");
+        _rrhhCargarMapaEquipo();
+      });
+      return r.json().then(function (data) {
+        var msg = data.error || "Error desconocido";
+        _toast("❌ " + empNombre + ": " + msg);
+        if (btnEl) { btnEl.disabled = false; btnEl.textContent = "🔄 Reintentar"; }
+      });
+    })
+    .catch(function () {
+      _toast("Error de red geocodificando " + empNombre);
+      if (btnEl) { btnEl.disabled = false; btnEl.textContent = "🔄 Reintentar"; }
+    });
+}
+
+function _rrhhGeocodificarNominatimDirect(direccion) {
+  // Limpiar dirección antes de geocodificar
+  var dirLimpia = _rrhhLimpiarDireccion(direccion);
+  var url = "https://nominatim.openstreetmap.org/search?q=" + encodeURIComponent(dirLimpia) +
+    "&format=json&limit=1&countrycodes=es&accept-language=es";
+  return fetch(url, { headers: { "Accept": "application/json" } })
+    .then(function (r) { return r.json(); })
+    .then(function (results) {
+      if (!results || results.length === 0) return null;
+      return { lat: parseFloat(results[0].lat), lon: parseFloat(results[0].lon) };
+    })
+    .catch(function () { return null; });
+}
+
+function _rrhhMapaGeocodificarTodos() {
+  fetch("/api/empleados?solo_activos=1")
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var todos = data.empleados || data || [];
+      var pendientes = todos.filter(function (e) {
+        return e.direccion && e.direccion.trim() && (!e.latitud || !e.longitud);
+      });
+
+      if (pendientes.length === 0) {
+        _toast("Todos los empleados con dirección ya están geocodificados");
+        return;
+      }
+
+      _toast("Geocodificando " + pendientes.length + " empleado(s)…");
+
+      // Secuencial para respetar rate limit de Nominatim (1 req/s)
+      var chain = Promise.resolve();
+      var ok = 0;
+      var fail = 0;
+      var fallidos = [];
+      pendientes.forEach(function (emp) {
+        chain = chain.then(function () {
+          // Pequeña pausa entre requests (Nominatim pide 1 req/s)
+          return new Promise(function (resolve) { setTimeout(resolve, 1100); });
+        }).then(function () {
+          return _rrhhGeocodificarNominatimDirect(emp.direccion.trim())
+            .then(function (coords) {
+              if (coords) {
+                return fetch("/api/empleados/" + emp.id, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ latitud: coords.lat, longitud: coords.lon })
+                }).then(function (r) {
+                  if (r.ok) ok++;
+                  else { fail++; fallidos.push(emp.nombre); }
+                });
+              } else {
+                // Fallback: probar vía backend (ORS)
+                return fetch("/api/empleados/" + emp.id + "/geocodificar", { method: "POST" })
+                  .then(function (r) {
+                    if (r.ok) ok++;
+                    else { fail++; fallidos.push(emp.nombre + " (" + emp.direccion + ")"); }
+                  });
+              }
+            });
+        });
+      });
+
+      chain.then(function () {
+        var msg = ok + " geocodificado(s)";
+        if (fail > 0) msg += ", " + fail + " fallido(s): " + fallidos.join("; ");
+        _toast(msg);
+        _rrhhCargarMapaEquipo();
+      });
+    })
+    .catch(function (err) {
+      _toast("Error: " + err.message);
+    });
+}
+
+
+// ===============================================================================
 // ==  Expose globally (for HTML onclick handlers)                              ==
 // ===============================================================================
 
@@ -3398,6 +3825,12 @@ window._rrhhCargarSS = _rrhhCargarSS;
 window._rrhhSSComparar = _rrhhSSComparar;
 window._rrhhCargarIRPF = _rrhhCargarIRPF;
 window._rrhhCargarCosteProyecto = _rrhhCargarCosteProyecto;
+window._rrhhCargarMapaEquipo = _rrhhCargarMapaEquipo;
+window._rrhhMapaGeocodificarTodos = _rrhhMapaGeocodificarTodos;
+window._rrhhGeocodificarUno = _rrhhGeocodificarUno;
+window._rrhhUbicarEnMapa = _rrhhUbicarEnMapa;
+window._rrhhConfirmarUbicacion = _rrhhConfirmarUbicacion;
+window._rrhhCancelarUbicacion = _rrhhCancelarUbicacion;
 window._rrhhRenderOCRPreview = _rrhhRenderOCRPreview;
 window.fmtEur = fmtEur;
 window.fmtEurFull = fmtEurFull;
