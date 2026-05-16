@@ -8,12 +8,25 @@
 <meta name="author" content="Hincado Directo">
 <meta name="robots" content="index, follow">
 
+<!-- Canonical -->
+<link rel="canonical" href="https://www.hincadodirecto.com/">
+
 <!-- Open Graph (para compartir en redes sociales y WhatsApp) -->
 <meta property="og:title" content="Hincado Directo | Especialistas en Hincado y Perforado Fotovoltaico">
-<meta property="og:description" content="Equipo profesional con más de 20 años de experiencia. Más de 2GW instalado en 4 países. Máxima calidad en cualquier terreno.">
+<meta property="og:description" content="Especialistas en hincado y perforado para parques solares. +2GW instalado en España, Francia, Portugal e Italia. 9 equipos operativos. Presupuesto en 24h.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://www.hincadodirecto.com">
 <meta property="og:locale" content="es_ES">
+<meta property="og:image" content="https://www.hincadodirecto.com/img/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Hincadoras Orteco trabajando en parque solar fotovoltaico">
+
+<!-- Twitter Cards -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Hincado Directo | Especialistas en Hincado y Perforado Fotovoltaico">
+<meta name="twitter:description" content="Especialistas en hincado y perforado para parques solares. +2GW instalado en 4 países. Presupuesto en 24h.">
+<meta name="twitter:image" content="https://www.hincadodirecto.com/img/og-image.jpg">
 
 <!-- Favicon -->
 <link rel="icon" type="image/png" href="img/favicon.png">
@@ -1028,6 +1041,89 @@ nav .container {
 }
 .cta-contact-value a:hover { color: var(--color-accent); }
 
+/* ============ CONTACT FORM ============ */
+.contact-form {
+  max-width: 560px;
+  margin: 2rem auto 0;
+  text-align: left;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+.form-group-full {
+  grid-column: 1 / -1;
+}
+.contact-form input,
+.contact-form select,
+.contact-form textarea {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-light);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  font-weight: 400;
+  transition: border-color 0.3s ease;
+  -webkit-appearance: none;
+  border-radius: 0;
+}
+.contact-form input::placeholder,
+.contact-form textarea::placeholder {
+  color: var(--color-text-dim);
+}
+.contact-form select {
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+.contact-form select:valid {
+  color: var(--color-text);
+}
+.contact-form input:focus,
+.contact-form select:focus,
+.contact-form textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+.contact-form textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+.form-submit {
+  margin-top: 1rem;
+  width: 100%;
+  justify-content: center;
+}
+
+/* ============ WHATSAPP FLOATING BUTTON ============ */
+.whatsapp-float {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  width: 56px;
+  height: 56px;
+  background: #25D366;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(37,211,102,0.4);
+  z-index: 999;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  text-decoration: none;
+}
+.whatsapp-float:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 28px rgba(37,211,102,0.5);
+}
+.whatsapp-float svg {
+  width: 28px;
+  height: 28px;
+  color: #fff;
+}
+
 /* ============ FOOTER ============ */
 footer {
   padding: 3rem 0;
@@ -1091,6 +1187,7 @@ footer .container {
   .stat-item::after { display: none !important; }
   .hero-actions { flex-direction: column; align-items: flex-start; }
   footer .container { flex-direction: column; gap: 1rem; text-align: center; }
+  .form-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -1123,11 +1220,10 @@ footer .container {
     <div class="hero-content">
       <div class="hero-tag" data-i18n="hero.tag">Precisión en cada hinca</div>
       <h1 class="hero-title" data-i18n="hero.title">
-        El trabajo se hace.<br>
-        Y se hace <em>bien</em>.
+        Especialistas en hincado y perforado para <em>parques solares</em>
       </h1>
       <p class="hero-desc" data-i18n="hero.desc">
-        Equipo profesional con más de 20 años de experiencia en hincado y perforado para parques solares. Máxima calidad en cada terreno, en cada proyecto.
+        El trabajo se hace. Y se hace bien. Equipo profesional con más de 20 años de experiencia. Máxima calidad en cada terreno, en cada proyecto.
       </p>
       <div class="hero-actions">
         <a href="#contacto" class="btn-primary" data-i18n="hero.cta">
@@ -1179,7 +1275,7 @@ footer .container {
   <div class="container">
     <div class="section-header animate-on-scroll">
       <div class="section-tag" data-i18n="nav.services">Servicios</div>
-      <h2 class="section-title" data-i18n="services.title">Hincado y perforado con la máxima calidad, en cualquier terreno</h2>
+      <h2 class="section-title" data-i18n="services.title">Hincado fotovoltaico, perforado y predrilling con la máxima calidad</h2>
       <p class="section-subtitle" data-i18n="services.subtitle">Desde los ensayos de terreno hasta la ejecución completa. Un único interlocutor, un estándar de calidad sin concesiones.</p>
     </div>
     <div class="services-grid">
@@ -1230,10 +1326,10 @@ footer .container {
             Sube las fotos a img/equipo/ y añade una línea <img> por cada una.
           -->
           <div class="photo-carousel" data-interval="3000">
-            <img src="img/equipo/equipo-01.jpg" alt="Equipo Hincado Directo en campo" class="active">
-            <img src="img/equipo/equipo-02.jpg" alt="Trabajos de hincado en planta solar">
-            <img src="img/equipo/equipo-03.jpg" alt="Cuadrilla de hincadores profesionales">
-            <img src="img/equipo/equipo-04.jpg" alt="Detalle de perfil hincado en planta solar">
+            <img src="img/equipo/equipo-01.jpg" alt="Equipo Hincado Directo en campo" class="active" loading="lazy">
+            <img src="img/equipo/equipo-02.jpg" alt="Trabajos de hincado en planta solar" loading="lazy">
+            <img src="img/equipo/equipo-03.jpg" alt="Cuadrilla de hincadores profesionales" loading="lazy">
+            <img src="img/equipo/equipo-04.jpg" alt="Detalle de perfil hincado en planta solar" loading="lazy">
             <!-- Añade más fotos aquí: <img src="img/equipo/equipo-05.jpg" alt="Descripción"> -->
           </div>
         </div>
@@ -1244,7 +1340,7 @@ footer .container {
       </div>
       <div class="about-content animate-on-scroll">
         <div class="section-tag" data-i18n="about.tag">Por qué Hincado Directo</div>
-        <h2 class="section-title" style="margin-bottom:1.5rem" data-i18n="about.title">Calidad sin concesiones, en cualquier terreno</h2>
+        <h2 class="section-title" style="margin-bottom:1.5rem" data-i18n="about.title">Más de 2GW instalados: calidad sin concesiones en cualquier terreno</h2>
         <p class="about-text" data-i18n="about.text">
           No somos un proveedor más. Somos el equipo que se compromete con la máxima calidad del servicio sin importar la heterogeneidad del terreno. Cada proyecto es diferente, cada suelo tiene sus retos — y nosotros los resolvemos en campo gracias a nuestro equipo experto con más de dos décadas de experiencia. La confianza se construye obra a obra.
         </p>
@@ -1297,7 +1393,7 @@ footer .container {
     <div class="fleet-showcase">
       <div class="fleet-info animate-on-scroll">
         <div class="section-tag" data-i18n="nav.fleet">Maquinaria</div>
-        <h2 class="section-title" style="margin-bottom:1rem" data-i18n="fleet.title">La mejor herramienta para cada terreno</h2>
+        <h2 class="section-title" style="margin-bottom:1rem" data-i18n="fleet.title">Hincadoras Orteco y perforadoras Faga: la mejor herramienta para cada terreno</h2>
         <p class="section-subtitle" style="margin-bottom:0" data-i18n="fleet.subtitle">Flota propia de 9 máquinas de hincado y perforado. Dos modelos de referencia del sector, adaptados a las últimas regulaciones medioambientales europeas.</p>
         <div class="fleet-spec-list">
           <div class="fleet-spec">
@@ -1328,13 +1424,13 @@ footer .container {
             CARRUSEL MAQUINARIA — Mismo sistema. Añade fotos a img/maquinaria/.
           -->
           <div class="photo-carousel" data-interval="3000">
-            <img src="img/maquinaria/maquina-01.jpg" alt="Orteco 1000 HD en operación" class="active">
-            <img src="img/maquinaria/maquina-02.jpg" alt="Faga MHPH 1000 perforadora-hincadora">
-            <img src="img/maquinaria/maquina-03.jpg" alt="Flota de hincadoras Hincado Directo">
-            <img src="img/maquinaria/maquina-04.jpg" alt="Orteco 1000 HD entre margaritas">
-            <img src="img/maquinaria/maquina-05.jpg" alt="Orteco al atardecer en planta solar">
-            <img src="img/maquinaria/maquina-06.jpg" alt="Orteco HD en campo verde">
-            <img src="img/maquinaria/maquina-07.jpg" alt="Hincadora Orteco en terreno de trabajo">
+            <img src="img/maquinaria/maquina-01.jpg" alt="Orteco 1000 HD en operación" class="active" loading="lazy">
+            <img src="img/maquinaria/maquina-02.jpg" alt="Faga MHPH 1000 perforadora-hincadora" loading="lazy">
+            <img src="img/maquinaria/maquina-03.jpg" alt="Flota de hincadoras Hincado Directo" loading="lazy">
+            <img src="img/maquinaria/maquina-04.jpg" alt="Orteco 1000 HD entre margaritas" loading="lazy">
+            <img src="img/maquinaria/maquina-05.jpg" alt="Orteco al atardecer en planta solar" loading="lazy">
+            <img src="img/maquinaria/maquina-06.jpg" alt="Orteco HD en campo verde" loading="lazy">
+            <img src="img/maquinaria/maquina-07.jpg" alt="Hincadora Orteco en terreno de trabajo" loading="lazy">
             <!-- Añade más fotos aquí: <img src="img/maquinaria/maquina-08.jpg" alt="Descripción"> -->
           </div>
         </div>
@@ -1414,25 +1510,75 @@ footer .container {
       <div class="section-tag" data-i18n="nav.contact">Contacto</div>
       <h2 class="cta-title" data-i18n="cta.title">¿Tiene un proyecto en mente?</h2>
       <p class="cta-desc" data-i18n="cta.desc">Hablemos. Le responderemos en menos de 24 horas con una propuesta adaptada a sus necesidades.</p>
-      <div class="cta-actions">
-        <a href="mailto:direccion@hincadodirecto.com" class="btn-primary" data-i18n="cta.email">
-          Enviar email
+
+      <!-- Formulario de contacto -->
+      <form class="contact-form" action="https://formspree.io/f/xwvygjno" method="POST" id="contactForm">
+        <div class="form-grid">
+          <div class="form-group">
+            <input type="text" name="nombre" placeholder="Nombre y apellidos *" required>
+          </div>
+          <div class="form-group">
+            <input type="text" name="empresa" placeholder="Empresa *" required>
+          </div>
+          <div class="form-group">
+            <input type="email" name="email" placeholder="Email corporativo *" required>
+          </div>
+          <div class="form-group">
+            <input type="tel" name="telefono" placeholder="Teléfono *" required>
+          </div>
+          <div class="form-group form-group-full">
+            <select name="servicio" required>
+              <option value="" disabled selected>Tipo de servicio *</option>
+              <option value="hincado">Hincado fotovoltaico</option>
+              <option value="perforacion">Perforación / Predrilling</option>
+              <option value="pot">Ensayos Pull Out Test (POT)</option>
+              <option value="alquiler-hincadora">Alquiler de hincadora con operador</option>
+              <option value="alquiler-perforadora">Alquiler de perforadora con operador</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+          <div class="form-group form-group-full">
+            <textarea name="mensaje" placeholder="Cuéntenos brevemente su proyecto: ubicación, MW, plazos..." rows="4"></textarea>
+          </div>
+        </div>
+        <input type="text" name="_gotcha" style="display:none">
+        <button type="submit" class="btn-primary form-submit">
+          Solicitar presupuesto
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        </a>
-        <a href="tel:+34641438126" class="btn-secondary">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
-          +34 641 43 81 26
-        </a>
+        </button>
+      </form>
+
+      <div class="cta-contact-info">
+        <div class="cta-contact-item">
+          <div class="cta-contact-label">Email</div>
+          <div class="cta-contact-value"><a href="mailto:direccion@hincadodirecto.com">direccion@hincadodirecto.com</a></div>
+        </div>
+        <div class="cta-contact-item">
+          <div class="cta-contact-label">Teléfono</div>
+          <div class="cta-contact-value"><a href="tel:+34641438126">+34 641 43 81 26</a></div>
+        </div>
+        <div class="cta-contact-item">
+          <div class="cta-contact-label">WhatsApp</div>
+          <div class="cta-contact-value"><a href="https://wa.me/34641438126?text=Hola%2C%20me%20gustar%C3%ADa%20solicitar%20informaci%C3%B3n%20sobre%20sus%20servicios%20de%20hincado." target="_blank" rel="noopener">Escribir por WhatsApp</a></div>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
+<!-- ========== WHATSAPP FLOATING BUTTON ========== -->
+<a href="https://wa.me/34641438126?text=Hola%2C%20me%20gustar%C3%ADa%20solicitar%20informaci%C3%B3n%20sobre%20sus%20servicios%20de%20hincado." class="whatsapp-float" target="_blank" rel="noopener" aria-label="Contactar por WhatsApp">
+  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+</a>
+
 <!-- ========== FOOTER ========== -->
 <footer>
   <div class="container">
     <div class="footer-left" data-i18n="footer.copy">&copy; 2026 <a href="#">Hincado Directo</a>. Todos los derechos reservados.</div>
-    <div class="footer-right" data-i18n="footer.tagline">Precisión en cada hinca</div>
+    <div class="footer-right">
+      <a href="https://es.linkedin.com/company/hincado-directo" target="_blank" rel="noopener" style="color:var(--color-text-dim);text-decoration:none;margin-right:1.5rem;transition:color 0.3s" onmouseover="this.style.color='var(--color-accent)'" onmouseout="this.style.color='var(--color-text-dim)'">LinkedIn</a>
+      <span data-i18n="footer.tagline">Precisión en cada hinca</span>
+    </div>
   </div>
 </footer>
 
@@ -1503,8 +1649,8 @@ const translations = {
     'nav.clients': 'Clientes',
     'nav.contact': 'Contacto',
     'hero.tag': 'Precisión en cada hinca',
-    'hero.title': 'El trabajo se hace.<br>Y se hace <em>bien</em>.',
-    'hero.desc': 'Equipo profesional con más de 20 años de experiencia en hincado y perforado para parques solares. Máxima calidad en cada terreno, en cada proyecto.',
+    'hero.title': 'Especialistas en hincado y perforado para <em>parques solares</em>',
+    'hero.desc': 'El trabajo se hace. Y se hace bien. Equipo profesional con más de 20 años de experiencia. Máxima calidad en cada terreno, en cada proyecto.',
     'hero.cta': 'Solicitar presupuesto <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>',
     'hero.cta2': 'Nuestros servicios',
     'stats.power': 'Potencia instalada',
@@ -1513,7 +1659,7 @@ const translations = {
     'stats.countries_unit': ' países',
     'stats.teams_unit': ' equipos',
     'stats.operational': 'Operativos en campo',
-    'services.title': 'Hincado y perforado con la máxima calidad, en cualquier terreno',
+    'services.title': 'Hincado fotovoltaico, perforado y predrilling con la máxima calidad',
     'services.subtitle': 'Desde los ensayos de terreno hasta la ejecución completa. Un único interlocutor, un estándar de calidad sin concesiones.',
     'services.pot.title': 'Ensayos Pull Out Test',
     'services.pot.desc': 'Pruebas de hincado de perfiles y ensayos POT ante acciones laterales, tracción y compresión con ciclos de carga predefinidos. Datos fiables para dimensionar su cimentación con precisión.',
@@ -1530,7 +1676,7 @@ const translations = {
     'services.rental.tag3': 'Operador incluido',
     'about.since': 'Operando<br>desde',
     'about.tag': 'Por qué Hincado Directo',
-    'about.title': 'Calidad sin concesiones, en cualquier terreno',
+    'about.title': 'Más de 2GW instalados: calidad sin concesiones en cualquier terreno',
     'about.text': 'No somos un proveedor más. Somos el equipo que se compromete con la máxima calidad del servicio sin importar la heterogeneidad del terreno. Cada proyecto es diferente, cada suelo tiene sus retos — y nosotros los resolvemos en campo gracias a nuestro equipo experto con más de dos décadas de experiencia. La confianza se construye obra a obra.',
     'about.f1.title': 'Máxima calidad de servicio',
     'about.f1.desc': 'Nuestro estándar es invariable: la misma excelencia en roca que en arcilla, en llano que en pendiente',
@@ -1540,7 +1686,7 @@ const translations = {
     'about.f3.desc': 'Un equipo especializado que resuelve en campo lo que otros escalan. Veteranos del sector.',
     'about.f4.title': 'Alineamiento total',
     'about.f4.desc': 'Su éxito es el nuestro. Trabajamos como extensión de su equipo, no como un proveedor más.',
-    'fleet.title': 'La mejor herramienta para cada terreno',
+    'fleet.title': 'Hincadoras Orteco y perforadoras Faga: la mejor herramienta para cada terreno',
     'fleet.subtitle': 'Flota propia de 9 máquinas de hincado y perforado. Dos modelos de referencia del sector, adaptados a las últimas regulaciones medioambientales europeas.',
     'fleet.ramming': 'Hincadoras',
     'fleet.drilling': 'Perforadoras-Hincadoras',
@@ -1565,8 +1711,8 @@ const translations = {
     'nav.clients': 'Clients',
     'nav.contact': 'Contact',
     'hero.tag': 'Precision in every pile',
-    'hero.title': 'The job gets done.<br>And it gets done <em>right</em>.',
-    'hero.desc': 'Professional team with over 20 years of experience in pile driving and drilling for solar plants. Top quality in every terrain, every project.',
+    'hero.title': 'Specialists in pile driving and drilling for <em>solar parks</em>',
+    'hero.desc': 'The job gets done. And it gets done right. Professional team with over 20 years of experience. Top quality in every terrain, every project.',
     'hero.cta': 'Request a quote <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>',
     'hero.cta2': 'Our services',
     'stats.power': 'Installed capacity',
@@ -1575,7 +1721,7 @@ const translations = {
     'stats.countries_unit': ' countries',
     'stats.teams_unit': ' teams',
     'stats.operational': 'Operational in the field',
-    'services.title': 'Pile driving and drilling with the highest quality, in any terrain',
+    'services.title': 'Photovoltaic pile driving, drilling and predrilling with the highest quality',
     'services.subtitle': 'From soil testing to full execution. A single point of contact, an uncompromising quality standard.',
     'services.pot.title': 'Pull Out Tests',
     'services.pot.desc': 'Profile pile driving tests and POT tests under lateral, tension and compression loads with predefined load cycles. Reliable data to dimension your foundation with precision.',
@@ -1592,7 +1738,7 @@ const translations = {
     'services.rental.tag3': 'Operator included',
     'about.since': 'Operating<br>since',
     'about.tag': 'Why Hincado Directo',
-    'about.title': 'Uncompromising quality, in any terrain',
+    'about.title': 'Over 2GW installed: uncompromising quality in any terrain',
     'about.text': 'We are not just another supplier. We are the team committed to the highest quality of service regardless of terrain heterogeneity. Every project is different, every soil has its challenges — and we solve them in the field thanks to our expert team with over two decades of experience. Trust is built job by job.',
     'about.f1.title': 'Top quality service',
     'about.f1.desc': 'Our standard is unwavering: the same excellence in rock as in clay, on flat ground as on slopes',
@@ -1602,7 +1748,7 @@ const translations = {
     'about.f3.desc': 'A specialized team that solves in the field what others escalate. Industry veterans.',
     'about.f4.title': 'Total alignment',
     'about.f4.desc': 'Your success is ours. We work as an extension of your team, not just another supplier.',
-    'fleet.title': 'The right tool for every terrain',
+    'fleet.title': 'Orteco pile drivers and Faga drill-rammers: the right tool for every terrain',
     'fleet.subtitle': 'Own fleet of 9 pile driving and drilling machines. Two industry-reference models, compliant with the latest European environmental regulations.',
     'fleet.ramming': 'Pile drivers',
     'fleet.drilling': 'Drill-rammers',
