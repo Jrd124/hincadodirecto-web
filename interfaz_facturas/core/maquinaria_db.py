@@ -223,13 +223,15 @@ def init_maquinaria_db() -> None:
                 zona TEXT
             )
         """)
+        # ── Migración: detectar tabla vieja (3 estados) y migrar a 7 estados + campos nuevos ──
+        # IMPORTANTE: ejecutar ANTES de crear índices, porque la tabla puede existir
+        # sin las columnas nuevas (tipo_incidencia, subsistema, etc.) y CREATE INDEX fallaría.
+        _migrate_incidencias_fase1(conn)
+
         conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_inc_maq ON maquinaria_incidencias(maquina_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_inc_estado ON maquinaria_incidencias(estado)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_inc_tipo ON maquinaria_incidencias(tipo_incidencia)")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_maq_inc_subsistema ON maquinaria_incidencias(subsistema)")
-
-        # ── Migración: detectar tabla vieja (3 estados) y migrar a 7 estados + campos nuevos ──
-        _migrate_incidencias_fase1(conn)
 
         # ── Tokens de acceso operario (sin login) ──
         conn.execute("""
